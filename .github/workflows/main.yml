@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  lint-report:
+    name: Lint report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install tox
+        run: pip install tox
+      - name: Run tests using tox
+        run: tox -e lint
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install tox
+        run: pip install tox
+      - name: Run tests using tox
+        run: tox -e static
+
+  unit-tests-with-coverage:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install tox
+        run: pip install tox
+      - name: Run tests using tox
+        run: tox -e unit
+
+  integration-test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+      - name: Enable LoadBalancer
+        run: /usr/bin/sg microk8s -c "microk8s enable metallb:10.0.1.1-10.0.1.3"
+      - name: Run integration tests
+        run: tox -e integration

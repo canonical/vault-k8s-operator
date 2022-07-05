@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+authorise-charm:
+  description: Authorise the Vault charm to interact with Vault.
+  properties:
+    token:
+      type: string
+      description: Token to use to authorise charm.
+  required:
+  - token
+generate-certificate:
+  description: Generate a certificate against the Vault PKI.
+  properties:
+    common_name:
+      type: string
+      description: >-
+        CN field of the new certificate
+    sans:
+      type: string
+      description: >-
+        Space delimited list of Subject Alternate Name/IP addresse(s).
+      default: ""
