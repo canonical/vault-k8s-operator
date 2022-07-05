@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: vault-k8s
+summary: A tool for managing secrets
+description: |
+  Vault secures, stores, and tightly controls access to
+  tokens, passwords, certificates, API keys, and other
+  secrets in modern computing. Vault handles leasing, key
+  revocation, key rolling, and auditing. Through a unified
+  API, users can access an encrypted Key/Value store and
+  network encryption-as-a-service, or generate AWS IAM/STS
+  credentials, SQL/NoSQL databases, X.509 certificates,
+  SSH credentials, and more.
+
+containers:
+  vault:
+    resource: vault-image
+    mounts:
+      - storage: vault-storage
+        location: /srv
+
+resources:
+  vault-image:
+    type: oci-image
+    description: OCI image for Vault
+    upstream-source: vault:1.11.0
+
+storage:
+  vault-storage:
+    type: filesystem
+    minimum-size: 10G
+
+provides:
+  certificates:
+    interface: tls-certificates
+
+peers:
+  peers:
+    interface: vault-peer

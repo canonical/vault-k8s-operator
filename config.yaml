@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  default_lease_ttl:
+    type: string
+    default: "168h"
+    description: Specifies the default lease duration for Vault's tokens and secrets.
+  max_lease_ttl:
+    type: string
+    default: "720h"
+    description: Specifies the maximum possible lease duration for Vault's tokens and secrets.
