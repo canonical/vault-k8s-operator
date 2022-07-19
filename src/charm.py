@@ -10,7 +10,10 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+    ServicePort,
+)
 from charms.tls_certificates_interface.v0.tls_certificates import (
     Cert,
     TLSCertificatesProvides,
@@ -58,7 +61,7 @@ class VaultCharm(CharmBase):
         )
         self.service_patcher = KubernetesServicePatch(
             charm=self,
-            ports=[("vault", 8200)],
+            ports=[ServicePort(name="vault", port=8200)],
             service_type="LoadBalancer",
         )
 
