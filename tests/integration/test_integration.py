@@ -11,7 +11,6 @@ import pytest
 import requests.exceptions  # type: ignore[import]
 import yaml
 from juju.errors import JujuError  # type: ignore[import]
-from pytest_operator.plugin import OpsTest  # type: ignore[import]  # noqa: F401
 
 from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault

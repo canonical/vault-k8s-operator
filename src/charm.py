@@ -14,9 +14,11 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from charms.tls_certificates_interface.v0.tls_certificates import (
-    Cert,
-    TLSCertificatesProvides,
+from charms.tls_certificates_interface.v1.tls_certificates import (
+    CertificateCreationRequestEvent,
+    TLSCertificatesProvidesV1,
+    generate_csr,
+    generate_private_key,
 )
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import StoredState
@@ -41,17 +43,18 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._stored.set_default(role_id="", secret_id="")  # type: ignore[union-attr, arg-type]
-        self.tls_certificates = TLSCertificatesProvides(self, "certificates")
+        self._stored.set_default(role_id="", secret_id="")
+        self.tls_certificates = TLSCertificatesProvidesV1(self, "certificates")
         self.vault = Vault(
             url=f"http://localhost:{self.VAULT_PORT}",
-            role_id=self._stored.role_id,  # type: ignore[union-attr, arg-type]
-            secret_id=self._stored.secret_id,  # type: ignore[union-attr, arg-type]
+            role_id=self._stored.role_id,
+            secret_id=self._stored.secret_id,
         )
         self._service_name = self._container_name = "vault"
         self._container = self.unit.get_container(self._container_name)
         self.framework.observe(
-            self.tls_certificates.on.certificate_request, self._on_certificate_request
+            self.tls_certificates.on.certificate_creation_request,
+            self._on_certificate_creation_request,
         )
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -65,7 +68,7 @@ class VaultCharm(CharmBase):
             service_type="LoadBalancer",
         )
 
-    def _on_certificate_request(self, event) -> None:
+    def _on_certificate_creation_request(self, event: CertificateCreationRequestEvent) -> None:
         """Handler triggered whenever there is a request made from a requirer charm to vault.
 
         Args:
@@ -75,15 +78,13 @@ class VaultCharm(CharmBase):
             None
         """
         certificate = self.vault.issue_certificate(
-            cert_type=event.cert_type, common_name=event.common_name, sans=event.sans
+            certificate_signing_request=event.certificate_signing_request
         )
         self.tls_certificates.set_relation_certificate(
-            certificate=Cert(
-                cert=certificate["certificate"],
-                key=certificate["private_key"],
-                ca=certificate["issuing_ca"],
-                common_name=event.common_name,
-            ),
+            certificate_signing_request=event.certificate_signing_request,
+            certificate=certificate["certificate"],
+            ca=certificate["issuing_ca"],
+            chain=certificate["ca_chain"],
             relation_id=event.relation_id,
         )
 
@@ -204,8 +205,8 @@ class VaultCharm(CharmBase):
                 self.vault.create_local_charm_policy()
                 self.vault.create_local_charm_access_approle()
             role_id, secret_id = self.vault.get_approle_auth_data()
-            self._stored.role_id = role_id  # type: ignore[union-attr]
-            self._stored.secret_id = secret_id  # type: ignore[union-attr]
+            self._stored.role_id = role_id
+            self._stored.secret_id = secret_id
             self.unit.status = ActiveStatus()
 
     def _on_generate_certificate_action(self, event: ActionEvent) -> None:
@@ -217,9 +218,12 @@ class VaultCharm(CharmBase):
         Returns:
             None
         """
-        certificate = self.vault.issue_certificate(
-            cert_type="server", common_name=event.params["common_name"], sans=event.params["sans"]
+        private_key = generate_private_key()
+        csr = generate_csr(
+            private_key=private_key, subject=event.params["common_name"], sans=event.params["sans"]
         )
+        certificate = self.vault.issue_certificate(certificate_signing_request=csr.decode())
+        logger.info(f"Certificate: {certificate}")
         event.set_results(
             {
                 "certificate": certificate["certificate"],

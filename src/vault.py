@@ -5,12 +5,13 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import ipaddress
-import json
 import logging
 from typing import List, Optional, Tuple
 
 import hvac  # type: ignore[import]
 import requests  # type: ignore[import]
+
+from certificate_signing_request import CertificateSigningRequest
 
 CHARM_POLICY_NAME = "local-charm-policy"
 CHARM_ACCESS_ROLE = "local-charm-access"
@@ -263,53 +264,33 @@ class Vault:
         )
         logger.info(f"Wrote role for PKI access: {role}")
 
-    def issue_certificate(
-        self,
-        common_name: str,
-        cert_type: str,
-        sans: str = None,
-    ) -> dict:
-        """Issues a key and certificate to a requesting charm.
+    def issue_certificate(self, certificate_signing_request: str) -> dict:
+        """Issues a certificate based on a provided CSR.
 
         Args:
-            common_name (str): Server (or client) common name
-            cert_type (str): Certificate type ("client" or "server")
-            sans (str): List of subject alternative names json formatted.
+            certificate_signing_request: Certificate Signing Request
 
         Returns:
-            dict: Certificate
+            dict: certificate data
         """
-        if cert_type == "server":
-            role = CHARM_PKI_ROLE
-        elif cert_type == "client":
-            role = CHARM_PKI_ROLE_CLIENT
-        else:
-            raise RuntimeError("Unsupported cert_type: " "{}".format(cert_type))
+        csr_object = CertificateSigningRequest(certificate_signing_request)
         config = {
-            "common_name": common_name,
+            "common_name": csr_object.common_name,
+            "csr": certificate_signing_request,
+            "format": "pem",
         }
-        if sans:
-            sans_list = json.loads(sans)
-            ip_sans, alt_names = self._sort_sans(sans_list)
-            if ip_sans:
-                config["ip_sans"] = ",".join(ip_sans)
-            if alt_names:
-                config["alt_names"] = ",".join(alt_names)
-        certificate = self._issue_certificate(role=role, **config)
-        return certificate
+        logger.info(f"config: {config}")
+        return self._issue_certificate(role="server", **config)
 
     def _issue_certificate(self, role: str, **config) -> dict:
-        """Issues certificate based on provided config.
+        """Issues a certificate based on a provided CSR.
 
         Args:
-            role (str): Role used to create certificate.
-            **config: Config passed as keyword arguments
-
-        Returns:
-            dict: Contains certificate
+            role (str): Vault role
         """
         try:
-            response = self._client.write(path="{}/issue/{}".format(CHARM_PKI_MP, role), **config)
+            response = self._client.write(path=f"{CHARM_PKI_MP}/sign/{role}", **config)
+            logger.info(f"Response: {response}")
             logger.info("Issued certificate with: {}".format(config))
         except hvac.exceptions.InvalidRequest as e:
             raise RuntimeError(str(e)) from e
