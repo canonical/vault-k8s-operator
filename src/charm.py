@@ -228,10 +228,10 @@ class VaultCharm(CharmBase):
         certificate = self.vault.issue_certificate(certificate_signing_request=csr.decode())
         event.set_results(
             {
-                "private_key": private_key.decode(),
+                "private-key": private_key.decode(),
                 "certificate": certificate["certificate"],
-                "ca_chain": certificate["ca_chain"],
-                "issuing_ca": certificate["issuing_ca"],
+                "ca-chain": certificate["ca_chain"],
+                "issuing-ca": certificate["issuing_ca"],
             }
         )
 
