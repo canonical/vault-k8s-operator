@@ -163,7 +163,7 @@ class TestVaultK8s:
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)
 
         action = await vault_unit.run_action(
-            action_name="generate-certificate", common_name="whatever", sans=""
+            action_name="generate-certificate", cn="whatever", sans=""
         )
 
         action_output = await ops_test.model.get_action_output(

@@ -13,7 +13,7 @@ for the related charm, enabling the related charm to manage its own TLS keys loc
 
 Deploy the charm:
 ```bash
-juju deploy vault-k8s
+juju deploy vault-k8s --trust
 ```
 
 ### TLS Certificates

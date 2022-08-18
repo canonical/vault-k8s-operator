@@ -13,10 +13,10 @@ authorise-charm:
 generate-certificate:
   description: Generate a certificate against the Vault PKI.
   properties:
-    common_name:
+    cn:
       type: string
       description: >-
-        CN field of the new certificate
+        CN (Common Name) field of the new certificate
     sans:
       type: string
       description: >-

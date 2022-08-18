@@ -279,8 +279,7 @@ class Vault:
             "csr": certificate_signing_request,
             "format": "pem",
         }
-        logger.info(f"config: {config}")
-        return self._issue_certificate(role="server", **config)
+        return self._issue_certificate(role=CHARM_PKI_ROLE, **config)
 
     def _issue_certificate(self, role: str, **config) -> dict:
         """Issues a certificate based on a provided CSR.
@@ -290,12 +289,11 @@ class Vault:
         """
         try:
             response = self._client.write(path=f"{CHARM_PKI_MP}/sign/{role}", **config)
-            logger.info(f"Response: {response}")
-            logger.info("Issued certificate with: {}".format(config))
         except hvac.exceptions.InvalidRequest as e:
             raise RuntimeError(str(e)) from e
         if not response["data"]:
             raise RuntimeError(response.get("warnings", "unknown error"))
+        logger.info(f"Issued certificate with role {role} for config: {config}")
         return response["data"]
 
     @staticmethod

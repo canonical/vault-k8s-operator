@@ -20,7 +20,7 @@ from charms.tls_certificates_interface.v1.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from ops.charm import ActionEvent, CharmBase
+from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
@@ -88,7 +88,7 @@ class VaultCharm(CharmBase):
             relation_id=event.relation_id,
         )
 
-    def _on_config_changed(self, event) -> None:
+    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggerred whenever there is a config-changed event.
 
         Args:
@@ -212,6 +212,9 @@ class VaultCharm(CharmBase):
     def _on_generate_certificate_action(self, event: ActionEvent) -> None:
         """Generates TLS Certificate.
 
+        Generates a private key, creates a CSR based on user provided parameters and asks
+        Vault for a certificate.
+
         Args:
             event: Juju event.
 
@@ -220,15 +223,15 @@ class VaultCharm(CharmBase):
         """
         private_key = generate_private_key()
         csr = generate_csr(
-            private_key=private_key, subject=event.params["common_name"], sans=event.params["sans"]
+            private_key=private_key, subject=event.params["cn"], sans=event.params["sans"]
         )
         certificate = self.vault.issue_certificate(certificate_signing_request=csr.decode())
-        logger.info(f"Certificate: {certificate}")
         event.set_results(
             {
+                "private_key": private_key.decode(),
                 "certificate": certificate["certificate"],
-                "private-key": certificate["private_key"],
-                "ca": certificate["issuing_ca"],
+                "ca_chain": certificate["ca_chain"],
+                "issuing_ca": certificate["issuing_ca"],
             }
         )
 

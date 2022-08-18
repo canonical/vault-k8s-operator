@@ -119,7 +119,7 @@ class TestVault(unittest.TestCase):
         vault.issue_certificate(certificate_signing_request=csr.decode())
 
         patch_write.assert_called_with(
-            path="charm-pki-local/sign/server",
+            path="charm-pki-local/sign/local",
             common_name=common_name,
             csr=csr.decode(),
             format="pem",
