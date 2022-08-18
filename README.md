@@ -7,6 +7,8 @@ In addition to deploying and initializing Vault, this charm provides a relation
 for other charms to request that Vault's Certificate Authority (CA) sign a certificate 
 for the related charm, enabling the related charm to manage its own TLS keys locally.
 
+> **Note**: This charm does not support high-availability / scaling .
+
 ## Usage
 
 ### Deploy
