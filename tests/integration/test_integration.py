@@ -171,7 +171,7 @@ class TestVaultK8s:
         )
         print("Action output")
         print(action_output)
-        assert action_output["Code"] == "0"
+        assert action_output["return-code"] == "0"
         assert "ca-chain" in action_output and action_output["ca-chain"] is not None
         assert "issuing-ca" in action_output and action_output["issuing-ca"] is not None
         assert "certificate" in action_output and action_output["certificate"] is not None
