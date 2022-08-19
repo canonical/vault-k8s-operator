@@ -243,7 +243,6 @@ class Vault:
 
         Args:
             role (str): Role
-            server_flag (bool): Whether this role can create server certificates.
             **kwargs: Other keyword arguments
 
         Returns:
@@ -267,24 +266,23 @@ class Vault:
             "csr": certificate_signing_request,
             "format": "pem",
         }
-        # if csr_object.certificate_type == "server":
-        #     role = CHARM_PKI_ROLE
+        return self._issue_certificate(**config)
 
-        return self._issue_certificate(role=CHARM_PKI_ROLE, **config)
-
-    def _issue_certificate(self, role: str, **config) -> dict:
+    def _issue_certificate(self, **config) -> dict:
         """Issues a certificate based on a provided CSR.
 
         Args:
             role (str): Vault role
         """
         try:
-            response = self._client.write(path=f"{CHARM_PKI_MOUNT_POINT}/sign/{role}", **config)
+            response = self._client.write(
+                path=f"{CHARM_PKI_MOUNT_POINT}/sign/{CHARM_PKI_ROLE}", **config
+            )
         except hvac.exceptions.InvalidRequest as e:
             raise RuntimeError(str(e)) from e
         if not response["data"]:
             raise RuntimeError(response.get("warnings", "unknown error"))
-        logger.info(f"Issued certificate with role {role} for config: {config}")
+        logger.info(f"Issued certificate with role {CHARM_PKI_ROLE} for config: {config}")
         return response["data"]
 
     @staticmethod
