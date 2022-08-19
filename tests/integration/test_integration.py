@@ -169,8 +169,10 @@ class TestVaultK8s:
         action_output = await ops_test.model.get_action_output(
             action_uuid=action.entity_id, wait=60
         )
-
+        print("Action output")
+        print(action_output)
         assert action_output["Code"] == "0"
-        assert "ca" in action_output and action_output["ca"] is not None
+        assert "ca-chain" in action_output and action_output["ca-chain"] is not None
+        assert "issuing-ca" in action_output and action_output["issuing-ca"] is not None
         assert "certificate" in action_output and action_output["certificate"] is not None
         assert "private-key" in action_output and action_output["private-key"] is not None
