@@ -68,59 +68,52 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch(
-        "charms.tls_certificates_interface.v0.tls_certificates.TLSCertificatesProvides.set_relation_certificate"  # noqa: E501,W505
+        "charms.tls_certificates_interface.v1.tls_certificates.TLSCertificatesProvidesV1.set_relation_certificate"  # noqa: E501,W505
     )
     @patch("vault.Vault.issue_certificate")
     def test_given_certificate_request_contains_correct_information_when_certificate_request_then_vault_is_called(  # noqa: E501
         self, patch_issue_certs, _
     ):
-        cert_type = "server"
-        common_name = "whatever.com"
-        sans: list = []
+        certificate_signing_request = "whatever csr"
 
         event = Mock()
-        event.cert_type = cert_type
-        event.common_name = common_name
-        event.sans = sans
+        event.certificate_signing_request = certificate_signing_request
 
-        self.harness.charm._on_certificate_request(event=event)
+        self.harness.charm._on_certificate_creation_request(event=event)
 
-        calls = [call(cert_type=cert_type, common_name=common_name, sans=sans)]
+        calls = [call(certificate_signing_request=certificate_signing_request)]
         patch_issue_certs.assert_has_calls(calls=calls)
 
     @patch(
-        "charms.tls_certificates_interface.v0.tls_certificates.TLSCertificatesProvides.set_relation_certificate"  # noqa: E501, W505
+        "charms.tls_certificates_interface.v1.tls_certificates.TLSCertificatesProvidesV1.set_relation_certificate"  # noqa: E501, W505
     )
     @patch("vault.Vault.issue_certificate")
     def test_given_vault_answers_with_certificate_when_certificate_request_then_certificates_are_added_to_relation_data(  # noqa: E501
         self, patch_issue_certs, patch_set_relation_certs
     ):
+        certificate_signing_request = "whatever csr"
         certificate = "whatever certificate"
         relation_id = 3
-        private_key = "whatever private key"
         issuing_ca = "whatever issuing ca"
-        common_name = "whatever.com"
+        ca_chain = "whatever ca chain"
         patch_issue_certs.return_value = {
             "certificate": certificate,
-            "private_key": private_key,
             "issuing_ca": issuing_ca,
+            "ca_chain": ca_chain,
         }
         event = Mock()
-        event.cert_type = "server"
-        event.common_name = common_name
-        event.sans = []
+
+        event.certificate_signing_request = certificate_signing_request
         event.relation_id = relation_id
 
-        self.harness.charm._on_certificate_request(event=event)
+        self.harness.charm._on_certificate_creation_request(event=event)
 
         calls = [
             call(
-                certificate={
-                    "cert": certificate,
-                    "key": private_key,
-                    "ca": issuing_ca,
-                    "common_name": common_name,
-                },
+                certificate=certificate,
+                certificate_signing_request=certificate_signing_request,
+                ca=issuing_ca,
+                chain=ca_chain,
                 relation_id=relation_id,
             )
         ]
@@ -130,7 +123,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_ready", new_callable=PropertyMock)
     @patch("vault.Vault.generate_root_certificate")
     @patch("vault.Vault.create_local_charm_access_approle")
-    @patch("vault.Vault.write_roles")
+    @patch("vault.Vault.write_charm_pki_role")
     @patch("vault.Vault.enable_secrets_engine")
     @patch("vault.Vault.approle_login")
     @patch("vault.Vault.create_local_charm_policy")
@@ -182,3 +175,24 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_authorise_charm_action(event)
 
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
+
+    @patch("vault.Vault.issue_certificate")
+    def test_given_when_on_generate_certificate_action_then(self, patch_issue_certificate):
+        common_name = "whatever common name"
+        certificate = "whatever certificate"
+        ca_chain = "whatever ca chain"
+        issuing_ca = "whatever issuing ca"
+        patch_issue_certificate.return_value = {
+            "certificate": certificate,
+            "ca_chain": ca_chain,
+            "issuing_ca": issuing_ca,
+        }
+        event = Mock()
+        event.params = {"cn": common_name, "sans": ""}
+
+        self.harness.charm._on_generate_certificate_action(event=event)
+
+        args, kwargs = event.set_results.call_args
+        assert args[0]["certificate"] == certificate
+        assert args[0]["ca-chain"] == ca_chain
+        assert args[0]["issuing-ca"] == issuing_ca

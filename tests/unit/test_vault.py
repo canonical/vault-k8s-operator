@@ -2,9 +2,10 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import json
 import unittest
 from unittest.mock import call, patch
+
+from certificates import generate_csr, generate_private_key
 
 from vault import Vault
 
@@ -35,17 +36,16 @@ class TestVault(unittest.TestCase):
         patch_enable_auth_method.assert_not_called()
 
     @patch("hvac.Client.write")
-    def test_given_default_role_parameters_when_write_roles_then_two_roles_are_created(
+    def test_given_default_role_parameters_when_write_charm_pki_role_then_role_are_created(
         self, patch_write
     ):
         vault = Vault(url="http://whatever-url")
 
-        vault.write_roles()
+        vault.write_charm_pki_role()
 
         calls = [
             call(
                 "charm-pki-local/roles/local",
-                server_flag=True,
                 allow_any_name=True,
                 allowed_domains=None,
                 allow_bare_domains=False,
@@ -53,19 +53,6 @@ class TestVault(unittest.TestCase):
                 allow_glob_domains=True,
                 enforce_hostnames=False,
                 max_ttl="87598h",
-                client_flag=True,
-            ),
-            call(
-                "charm-pki-local/roles/local-client",
-                server_flag=False,
-                allow_any_name=True,
-                allowed_domains=None,
-                allow_bare_domains=False,
-                allow_subdomains=False,
-                allow_glob_domains=True,
-                enforce_hostnames=False,
-                max_ttl="87598h",
-                client_flag=True,
             ),
         ]
         patch_write.assert_has_calls(calls=calls)
@@ -103,80 +90,25 @@ class TestVault(unittest.TestCase):
 
     @patch("hvac.Client.read")
     @patch("hvac.Client.write")
-    def test_given_common_name_when_issue_certificate_then_vault_issue_api_is_called(
+    def test_given_csr_when_issue_certificate_then_vault_issue_api_is_called(
         self, patch_write, patch_read
     ):
-        patch_read.return_value = "whatever"
         common_name = "whatever common name"
+        private_key = generate_private_key()
+        csr = generate_csr(private_key=private_key, subject=common_name)
+        patch_read.return_value = "whatever"
         patch_write.return_value = {
             "data": {"certificate": "whatever certificate", "key": "whatever key"}
         }
         vault = Vault(url="http://whatever-url")
 
-        vault.issue_certificate(common_name=common_name, cert_type="server")
-
-        patch_write.assert_called_with(path="charm-pki-local/issue/local", common_name=common_name)
-
-    @patch("hvac.Client.read")
-    @patch("hvac.Client.write")
-    def test_given_common_name_and_ip_sans_when_issue_certificate_then_vault_issue_api_is_called(
-        self, patch_write, patch_read
-    ):
-        patch_read.return_value = "whatever"
-        common_name = "whatever common name"
-        sans = json.dumps(["1.2.3.4", "5.6.7.8"])
-        patch_write.return_value = {
-            "data": {"certificate": "whatever certificate", "key": "whatever key"}
-        }
-        vault = Vault(url="http://whatever-url")
-
-        vault.issue_certificate(common_name=common_name, sans=sans, cert_type="server")
+        vault.issue_certificate(certificate_signing_request=csr.decode())
 
         patch_write.assert_called_with(
-            path="charm-pki-local/issue/local", common_name=common_name, ip_sans="1.2.3.4,5.6.7.8"
-        )
-
-    @patch("hvac.Client.read")
-    @patch("hvac.Client.write")
-    def test_given_common_name_and_alt_names_when_issue_certificate_then_vault_issue_api_is_called(
-        self, patch_write, patch_read
-    ):
-        patch_read.return_value = "whatever"
-        common_name = "whatever common name"
-        sans = json.dumps(["banana.com", "pizza.ca"])
-        patch_write.return_value = {
-            "data": {"certificate": "whatever certificate", "key": "whatever key"}
-        }
-        vault = Vault(url="http://whatever-url")
-
-        vault.issue_certificate(common_name=common_name, sans=sans, cert_type="server")
-
-        patch_write.assert_called_with(
-            path="charm-pki-local/issue/local",
+            path="charm-pki-local/sign/local",
             common_name=common_name,
-            alt_names="banana.com,pizza.ca",
-        )
-
-    @patch("hvac.Client.read")
-    @patch("hvac.Client.write")
-    def test_given_common_name_ip_sans_and_alt_names_when_issue_certificate_then_vault_issue_api_is_called(  # noqa: E501
-        self, patch_write, patch_read
-    ):
-        patch_read.return_value = "whatever"
-        common_name = "whatever common name"
-        sans = json.dumps(["banana.com", "pizza.ca", "1.2.3.4"])
-        patch_write.return_value = {
-            "data": {"certificate": "whatever certificate", "key": "whatever key"}
-        }
-        vault = Vault(url="http://whatever-url")
-
-        vault.issue_certificate(common_name=common_name, sans=sans, cert_type="server")
-
-        patch_write.assert_called_with(
-            path="charm-pki-local/issue/local",
-            common_name=common_name,
-            alt_names="banana.com,pizza.ca",
-            ip_sans="1.2.3.4",
+            csr=csr.decode(),
+            format="pem",
         )
 
     @patch("hvac.Client.read")
@@ -184,11 +116,13 @@ class TestVault(unittest.TestCase):
     def test_given_certificate_created_when_issue_certificate_then_certificate_is_returned(
         self, patch_write, patch_read
     ):
+        private_key = generate_private_key()
+        csr = generate_csr(private_key=private_key, subject="whatever")
         patch_read.return_value = "whatever"
         certificate_data = {"certificate": "whatever certificate", "key": "whatever key"}
         patch_write.return_value = {"data": certificate_data}
         vault = Vault(url="http://whatever-url")
 
-        certificate = vault.issue_certificate(common_name="whatever", cert_type="server")
+        certificate = vault.issue_certificate(certificate_signing_request=csr.decode())
 
         self.assertEqual(certificate_data, certificate)

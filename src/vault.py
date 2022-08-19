@@ -5,19 +5,20 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import ipaddress
-import json
 import logging
 from typing import List, Optional, Tuple
 
 import hvac  # type: ignore[import]
 import requests  # type: ignore[import]
 
+from certificate_signing_request import CertificateSigningRequest
+
 CHARM_POLICY_NAME = "local-charm-policy"
 CHARM_ACCESS_ROLE = "local-charm-access"
 
-CHARM_PKI_MP = "charm-pki-local"
+CHARM_PKI_MOUNT_POINT = "charm-pki-local"
 CHARM_PKI_ROLE = "local"
-CHARM_PKI_ROLE_CLIENT = "local-client"
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class Vault:
         if not self._is_backend_mounted:
             logger.info("Vault is not ready - Backend not mounted")
             return False
-        if not self._client.read("{}/roles/{}".format(CHARM_PKI_MP, CHARM_PKI_ROLE)):
+        if not self._client.read("{}/roles/{}".format(CHARM_PKI_MOUNT_POINT, CHARM_PKI_ROLE)):
             logger.info(f"Vault is not ready - Role {CHARM_PKI_ROLE} not created")
             return False
         logger.info("Vault is ready")
@@ -145,7 +146,7 @@ class Vault:
         )
         return role_id_response["data"]["role_id"], secret_id_response["data"]["secret_id"]
 
-    def write_roles(
+    def write_charm_pki_role(
         self,
         allow_any_name=True,
         allowed_domains=None,
@@ -155,7 +156,7 @@ class Vault:
         enforce_hostnames=False,
         max_ttl="87598h",
     ):
-        """Writes 2 roles in Vault for the charm to be capable of issuing certificates.
+        """Writes role in Vault for the charm to be capable of issuing certificates.
 
         Args:
             allow_any_name (bool): Specifies if clients can request certs for any CN.
@@ -176,7 +177,6 @@ class Vault:
         """
         self._write_role(
             role=CHARM_PKI_ROLE,
-            server_flag=True,
             allow_any_name=allow_any_name,
             allowed_domains=allowed_domains,
             allow_bare_domains=allow_bare_domains,
@@ -184,19 +184,6 @@ class Vault:
             allow_glob_domains=allow_glob_domains,
             enforce_hostnames=enforce_hostnames,
             max_ttl=max_ttl,
-            client_flag=True,
-        )
-        self._write_role(
-            role=CHARM_PKI_ROLE_CLIENT,
-            server_flag=False,
-            allow_any_name=allow_any_name,
-            allowed_domains=allowed_domains,
-            allow_bare_domains=allow_bare_domains,
-            allow_subdomains=allow_subdomains,
-            allow_glob_domains=allow_glob_domains,
-            enforce_hostnames=enforce_hostnames,
-            max_ttl=max_ttl,
-            client_flag=True,
         )
 
     def generate_root_certificate(self, ttl: str = "87599h") -> str:
@@ -209,11 +196,13 @@ class Vault:
             str: Public key of the root certificate.
         """
         config = {
-            "common_name": ("Vault Root Certificate Authority " "({})".format(CHARM_PKI_MP)),
+            "common_name": (
+                "Vault Root Certificate Authority " "({})".format(CHARM_PKI_MOUNT_POINT)
+            ),
             "ttl": ttl,
         }
         root_certificate = self._client.write(
-            "{}/root/generate/internal".format(CHARM_PKI_MP), **config
+            "{}/root/generate/internal".format(CHARM_PKI_MOUNT_POINT), **config
         )
         if not root_certificate["data"]:
             raise Exception(root_certificate.get("warnings", "unknown error"))
@@ -233,10 +222,10 @@ class Vault:
         self._client.sys.enable_secrets_engine(
             backend_type="pki",
             description="Charm created PKI backend",
-            path=CHARM_PKI_MP,
+            path=CHARM_PKI_MOUNT_POINT,
             config={"default_lease_ttl": ttl or "8759h", "max_lease_ttl": max_ttl or "87600h"},
         )
-        logger.info(f"Enabled PKI secrets engine on mount path: {CHARM_PKI_MP}")
+        logger.info(f"Enabled PKI secrets engine on mount path: {CHARM_PKI_MOUNT_POINT}")
 
     @property
     def _is_backend_mounted(self) -> bool:
@@ -245,76 +234,57 @@ class Vault:
         Returns:
             bool: Whether mount point is in use
         """
-        return "{}/".format(CHARM_PKI_MP) in self._client.sys.list_mounted_secrets_engines()
+        return (
+            "{}/".format(CHARM_PKI_MOUNT_POINT) in self._client.sys.list_mounted_secrets_engines()
+        )
 
-    def _write_role(self, role: str, server_flag: bool, **kwargs) -> None:
+    def _write_role(self, role: str, **kwargs) -> None:
         """Writes role in Vault.
 
         Args:
             role (str): Role
             server_flag (bool): Whether this role can create server certificates.
-            **kwargs:
+            **kwargs: Other keyword arguments
 
         Returns:
             None
         """
-        self._client.write(
-            "{}/roles/{}".format(CHARM_PKI_MP, role), server_flag=server_flag, **kwargs
-        )
+        self._client.write("{}/roles/{}".format(CHARM_PKI_MOUNT_POINT, role), **kwargs)
         logger.info(f"Wrote role for PKI access: {role}")
 
-    def issue_certificate(
-        self,
-        common_name: str,
-        cert_type: str,
-        sans: str = None,
-    ) -> dict:
-        """Issues a key and certificate to a requesting charm.
+    def issue_certificate(self, certificate_signing_request: str) -> dict:
+        """Issues a certificate based on a provided CSR.
 
         Args:
-            common_name (str): Server (or client) common name
-            cert_type (str): Certificate type ("client" or "server")
-            sans (str): List of subject alternative names json formatted.
+            certificate_signing_request: Certificate Signing Request
 
         Returns:
-            dict: Certificate
+            dict: certificate data
         """
-        if cert_type == "server":
-            role = CHARM_PKI_ROLE
-        elif cert_type == "client":
-            role = CHARM_PKI_ROLE_CLIENT
-        else:
-            raise RuntimeError("Unsupported cert_type: " "{}".format(cert_type))
+        csr_object = CertificateSigningRequest(certificate_signing_request)
         config = {
-            "common_name": common_name,
+            "common_name": csr_object.common_name,
+            "csr": certificate_signing_request,
+            "format": "pem",
         }
-        if sans:
-            sans_list = json.loads(sans)
-            ip_sans, alt_names = self._sort_sans(sans_list)
-            if ip_sans:
-                config["ip_sans"] = ",".join(ip_sans)
-            if alt_names:
-                config["alt_names"] = ",".join(alt_names)
-        certificate = self._issue_certificate(role=role, **config)
-        return certificate
+        # if csr_object.certificate_type == "server":
+        #     role = CHARM_PKI_ROLE
+
+        return self._issue_certificate(role=CHARM_PKI_ROLE, **config)
 
     def _issue_certificate(self, role: str, **config) -> dict:
-        """Issues certificate based on provided config.
+        """Issues a certificate based on a provided CSR.
 
         Args:
-            role (str): Role used to create certificate.
-            **config: Config passed as keyword arguments
-
-        Returns:
-            dict: Contains certificate
+            role (str): Vault role
         """
         try:
-            response = self._client.write(path="{}/issue/{}".format(CHARM_PKI_MP, role), **config)
-            logger.info("Issued certificate with: {}".format(config))
+            response = self._client.write(path=f"{CHARM_PKI_MOUNT_POINT}/sign/{role}", **config)
         except hvac.exceptions.InvalidRequest as e:
             raise RuntimeError(str(e)) from e
         if not response["data"]:
             raise RuntimeError(response.get("warnings", "unknown error"))
+        logger.info(f"Issued certificate with role {role} for config: {config}")
         return response["data"]
 
     @staticmethod
