@@ -36,7 +36,7 @@ class TestVault(unittest.TestCase):
         patch_enable_auth_method.assert_not_called()
 
     @patch("hvac.Client.write")
-    def test_given_default_role_parameters_when_write_charm_pki_role_then_role_are_created(
+    def test_given_default_role_parameters_when_write_charm_pki_role_then_role_is_created(
         self, patch_write
     ):
         vault = Vault(url="http://whatever-url")
