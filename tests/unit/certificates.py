@@ -59,8 +59,8 @@ def generate_csr(
             using the tls-certificates relation.
         email_address (str): Email address.
         country_name (str): Country Name.
-        private_key_password (bytes): Private key password
-        sans (list): List of subject alternative names
+        private_key_password (bytes): Private key password.
+        sans (list): List of subject alternative names.
         additional_critical_extensions (list): List if critical additional extension objects.
             Object must be a x509 ExtensionType.
 
