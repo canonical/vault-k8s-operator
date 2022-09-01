@@ -10,7 +10,7 @@ from certificate_signing_request import CertificateSigningRequest
 
 
 class TestVault(unittest.TestCase):
-    def test_given_csr_with_common_name_when_get_common_name_then_common_name_is_retured(self):
+    def test_given_csr_with_common_name_when_get_common_name_then_common_name_is_returned(self):
         subject = "whatever.com"
         private_key = generate_private_key()
         csr = generate_csr(private_key=private_key, subject=subject)
