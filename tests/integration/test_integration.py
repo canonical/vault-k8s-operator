@@ -11,7 +11,6 @@ import pytest
 import requests.exceptions  # type: ignore[import]
 import yaml
 from juju.errors import JujuError  # type: ignore[import]
-from pytest_operator.plugin import OpsTest  # type: ignore[import]  # noqa: F401
 
 from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault
@@ -164,14 +163,14 @@ class TestVaultK8s:
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)
 
         action = await vault_unit.run_action(
-            action_name="generate-certificate", common_name="whatever", sans=""
+            action_name="generate-certificate", cn="whatever", sans=""
         )
 
         action_output = await ops_test.model.get_action_output(
             action_uuid=action.entity_id, wait=60
         )
-
-        assert action_output["Code"] == "0"
-        assert "ca" in action_output and action_output["ca"] is not None
+        assert action_output["return-code"] == 0
+        assert "ca-chain" in action_output and action_output["ca-chain"] is not None
+        assert "issuing-ca" in action_output and action_output["issuing-ca"] is not None
         assert "certificate" in action_output and action_output["certificate"] is not None
         assert "private-key" in action_output and action_output["private-key"] is not None
