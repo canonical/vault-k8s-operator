@@ -40,7 +40,7 @@ class VaultNotReadyError(VaultError):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, role_id: str = None, secret_id: str = None):
+    def __init__(self, url: str, role_id: Optional[str] = None, secret_id: Optional[str] = None):
         self._client = hvac.Client(url=url)
         if role_id and secret_id:
             self.approle_login(role_id=role_id, secret_id=secret_id)
@@ -209,7 +209,9 @@ class Vault:
         logger.info("Generated root CA")
         return root_certificate["data"]["certificate"]
 
-    def enable_secrets_engine(self, ttl: str = None, max_ttl: str = None) -> None:
+    def enable_secrets_engine(
+        self, ttl: Optional[str] = None, max_ttl: Optional[str] = None
+    ) -> None:
         """Enables Vault's secret engine if the backend is mounted.
 
         Args:
