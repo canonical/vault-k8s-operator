@@ -25,6 +25,7 @@ jobs:
           credentials: "${{ secrets.CHARMHUB_TOKEN }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           channel: "${{ steps.channel.outputs.name }}"
+          upload-image: "false"
 
       - name: Archive charmcraft logs
         if: failure()
