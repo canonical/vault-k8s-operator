@@ -10,7 +10,7 @@ from typing import Tuple
 import pytest
 import requests.exceptions  # type: ignore[import]
 import yaml
-from juju.errors import JujuError  # type: ignore[import]
+from juju.errors import JujuError
 
 from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault
