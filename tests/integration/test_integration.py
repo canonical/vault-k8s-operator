@@ -10,7 +10,7 @@ from typing import Tuple
 import pytest
 import requests.exceptions  # type: ignore[import]
 import yaml
-from juju.errors import JujuError  # type: ignore[import]
+from juju.errors import JujuError
 
 from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault
@@ -90,6 +90,7 @@ class TestVaultK8s:
             resources=resources,
             application_name=APPLICATION_NAME,
             trust=True,
+            series="focal",
         )
 
     async def post_deployment_tasks(self, namespace: str) -> str:

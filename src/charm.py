@@ -47,8 +47,8 @@ class VaultCharm(CharmBase):
         self.tls_certificates = TLSCertificatesProvidesV1(self, "certificates")
         self.vault = Vault(
             url=f"http://localhost:{self.VAULT_PORT}",
-            role_id=self._stored.role_id,
-            secret_id=self._stored.secret_id,
+            role_id=self._stored.role_id,  # type: ignore[arg-type]
+            secret_id=self._stored.secret_id,  # type: ignore[arg-type]
         )
         self._service_name = self._container_name = "vault"
         self._container = self.unit.get_container(self._container_name)
@@ -225,7 +225,7 @@ class VaultCharm(CharmBase):
         csr = generate_csr(
             private_key=private_key,
             subject=event.params["cn"],
-            sans=event.params["sans"],
+            sans=event.params["sans"],  # type: ignore[arg-type]
         )
         certificate = self.vault.issue_certificate(certificate_signing_request=csr.decode())
         event.set_results(
