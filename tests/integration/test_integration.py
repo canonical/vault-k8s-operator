@@ -90,6 +90,7 @@ class TestVaultK8s:
             resources=resources,
             application_name=APPLICATION_NAME,
             trust=True,
+            series="focal",
         )
 
     async def post_deployment_tasks(self, namespace: str) -> str:

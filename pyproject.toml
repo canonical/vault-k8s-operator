@@ -48,6 +48,10 @@ module = ["charms.*", "ops.*", "kubernetes.*", "flatten_json.*", "git.*"]
 ignore_missing_imports = true
 follow_imports = "silent"
 
+[[tool.mypy.overrides]]
+module = ["charms.*"]
+follow_imports = "silent"
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
