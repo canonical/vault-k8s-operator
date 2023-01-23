@@ -26,7 +26,7 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     async def charm(self, ops_test):
         ops_test.destructive_mode = False
-        charm = "./vault-k8s_ubuntu-20.04-amd64.charm"
+        charm = await ops_test.build_charm(".")
         return charm
 
     @pytest.fixture()
