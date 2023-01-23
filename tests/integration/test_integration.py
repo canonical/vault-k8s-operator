@@ -26,7 +26,7 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     async def charm(self, ops_test):
         ops_test.destructive_mode = False
-        charm = await ops_test.build_charm(".")
+        charm = "./vault-k8s_ubuntu-20.04-amd64.charm"
         return charm
 
     @pytest.fixture()
@@ -138,6 +138,7 @@ class TestVaultK8s:
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)
 
         vault_token = await self.post_deployment_tasks(namespace=ops_test.model_name)
+        logger.warning(vault_token)
 
         await vault_unit.run_action(action_name="authorise-charm", token=vault_token)
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)
