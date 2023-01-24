@@ -81,7 +81,6 @@ class TestVaultK8s:
         await self.deploy_charm(ops_test, charm)
 
     @pytest.mark.abort_on_fail
-    @pytest.fixture(scope="module")
     async def post_deployment_tasks(self, ops_test: OpsTest) -> str:
         """Runs post deployment tasks as explained in the README.md.
 
@@ -111,7 +110,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_no_config_when_post_deployment_tasks_and_authorise_charm_then_status_is_active(  # noqa: E501
-        self, ops_test: OpsTest, build_and_deploy, post_deployment_tasks
+        self, ops_test: OpsTest, build_and_deploy
     ):
         """This test follows the README.md deployment and post-deployment tasks.
 
@@ -122,14 +121,14 @@ class TestVaultK8s:
         """
         vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
 
-        vault_token = post_deployment_tasks
+        vault_token = await self.post_deployment_tasks(ops_test)
         await vault_unit.run_action(action_name="authorise-charm", token=vault_token)
 
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)  # type: ignore[union-attr]
 
     @pytest.mark.abort_on_fail
     async def test_given_status_is_active_when_run_issue_certificate_action_then_certificates_are_issued(  # noqa: E501
-        self, ops_test: OpsTest, build_and_deploy, post_deployment_tasks
+        self, ops_test: OpsTest, build_and_deploy
     ):
         """This test runs the "generate-certificate" Juju action.
 
