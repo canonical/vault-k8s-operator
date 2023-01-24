@@ -105,9 +105,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_no_config_when_deploy_then_status_is_blocked(  # noqa: E501
-        self,
-        ops_test: OpsTest,
-        build_and_deploy,
+        self, ops_test: OpsTest, build_and_deploy
     ):
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)  # type: ignore[union-attr]
 
