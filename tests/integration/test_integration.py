@@ -10,7 +10,6 @@ from typing import Tuple
 import pytest
 import requests.exceptions  # type: ignore[import]
 import yaml
-from juju.errors import JujuError
 
 from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault
@@ -22,34 +21,19 @@ APPLICATION_NAME = "vault-k8s"
 
 
 class TestVaultK8s:
-    @pytest.fixture(scope="module")
     @pytest.mark.abort_on_fail
-    async def charm(self, ops_test):
-        ops_test.destructive_mode = False
-        charm = await ops_test.build_charm(".")
-        return charm
-
-    @pytest.fixture()
-    async def cleanup(self, ops_test):
-        try:
-            await ops_test.model.remove_application(
-                app_name=APPLICATION_NAME, block_until_done=True
-            )
-        except JujuError:
-            pass
-
     @staticmethod
     async def wait_for_load_balancer_address(kubernetes: Kubernetes, timeout: float = 60):
         initial_time = time.time()
         while time.time() - initial_time < timeout:
-            load_balancer_address = kubernetes.get_load_balancer_address(
+            if load_balancer_address := kubernetes.get_load_balancer_address(
                 service_name=APPLICATION_NAME
-            )
-            if load_balancer_address:
+            ):
                 return load_balancer_address
             time.sleep(5)
         raise TimeoutError("Timed out waiting for Loadbalancer address to be available.")
 
+    @pytest.mark.abort_on_fail
     @staticmethod
     async def initialize_vault(vault: Vault, timeout: int = 60) -> Tuple[str, str]:
         """Initializes Vault.
@@ -71,6 +55,7 @@ class TestVaultK8s:
                 logger.info("Vault not yet ready - Waiting")
         raise TimeoutError("Timed out waiting for Vault to be ready.")
 
+    @pytest.mark.abort_on_fail
     @staticmethod
     async def deploy_charm(ops_test, charm: Path) -> None:
         """Deploys charm.
@@ -93,7 +78,16 @@ class TestVaultK8s:
             series="focal",
         )
 
-    async def post_deployment_tasks(self, namespace: str) -> str:
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def build_and_deploy(self, ops_test):
+        ops_test.destructive_mode = False
+        charm = await ops_test.build_charm(".")
+        await self.deploy_charm(ops_test, charm)
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def post_deployment_tasks(self, ops_test) -> str:
         """Runs post deployment tasks as explained in the README.md.
 
         Retrieves Vault's LoadBalancer address, initializes Vault and generates a token for
@@ -105,7 +99,7 @@ class TestVaultK8s:
         Returns:
             str: Generated token.
         """
-        kubernetes = Kubernetes(namespace=namespace)
+        kubernetes = Kubernetes(namespace=ops_test.model_name)
         load_balancer_address = await self.wait_for_load_balancer_address(kubernetes=kubernetes)
         vault = Vault(url=f"http://{load_balancer_address}:8200")
         unseal_key, root_token = await self.initialize_vault(vault=vault)
@@ -114,15 +108,17 @@ class TestVaultK8s:
         generated_token = vault.generate_token(ttl="5m")
         return generated_token
 
-    async def test_given_no_config_when_deploy_then_status_is_waiting(  # noqa: E501
-        self, ops_test, charm, cleanup
+    @pytest.mark.abort_on_fail
+    async def test_given_no_config_when_deploy_then_status_is_blocked(  # noqa: E501
+        self,
+        ops_test,
+        build_and_deploy,
     ):
-        await self.deploy_charm(ops_test, charm)
-
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)
 
+    @pytest.mark.abort_on_fail
     async def test_given_no_config_when_post_deployment_tasks_and_authorise_charm_then_status_is_active(  # noqa: E501
-        self, ops_test, charm, cleanup
+        self, ops_test, build_and_deploy, post_deployment_tasks
     ):
         """This test follows the README.MD deployment and post-deployment tasks.
 
@@ -133,18 +129,17 @@ class TestVaultK8s:
         Returns:
             None
         """
-        await self.deploy_charm(ops_test, charm)
         vault_unit = ops_test.model.units["vault-k8s/0"]
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)
 
-        vault_token = await self.post_deployment_tasks(namespace=ops_test.model_name)
-        logger.warning(vault_token)
-
+        vault_token = post_deployment_tasks
         await vault_unit.run_action(action_name="authorise-charm", token=vault_token)
+
         await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)
 
+    @pytest.mark.abort_on_fail
     async def test_given_status_is_active_when_run_issue_certificate_action_then_certificates_are_issued(  # noqa: E501
-        self, ops_test, charm, cleanup
+        self, ops_test, build_and_deploy, post_deployment_tasks
     ):
         """This test runs the "generate-certificate" Juju action.
 
@@ -155,14 +150,7 @@ class TestVaultK8s:
         Returns:
             None
         """
-        await self.deploy_charm(ops_test, charm)
         vault_unit = ops_test.model.units["vault-k8s/0"]
-        await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)
-
-        vault_token = await self.post_deployment_tasks(namespace=ops_test.model_name)
-
-        await vault_unit.run_action(action_name="authorise-charm", token=vault_token)
-        await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)
 
         action = await vault_unit.run_action(
             action_name="generate-certificate", cn="whatever", sans=""
