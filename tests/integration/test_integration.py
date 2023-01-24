@@ -21,7 +21,6 @@ APPLICATION_NAME = "vault-k8s"
 
 
 class TestVaultK8s:
-    @pytest.mark.abort_on_fail
     @staticmethod
     async def wait_for_load_balancer_address(kubernetes: Kubernetes, timeout: float = 60):
         initial_time = time.time()
@@ -33,7 +32,6 @@ class TestVaultK8s:
             time.sleep(5)
         raise TimeoutError("Timed out waiting for Loadbalancer address to be available.")
 
-    @pytest.mark.abort_on_fail
     @staticmethod
     async def initialize_vault(vault: Vault, timeout: int = 60) -> Tuple[str, str]:
         """Initializes Vault.
@@ -55,7 +53,6 @@ class TestVaultK8s:
                 logger.info("Vault not yet ready - Waiting")
         raise TimeoutError("Timed out waiting for Vault to be ready.")
 
-    @pytest.mark.abort_on_fail
     @staticmethod
     async def deploy_charm(ops_test, charm: Path) -> None:
         """Deploys charm.
