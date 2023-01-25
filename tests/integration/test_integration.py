@@ -102,7 +102,6 @@ class TestVaultK8s:
         charm = await ops_test.build_charm(".")
         await self.deploy_charm(ops_test, charm)
 
-    @pytest.mark.abort_on_fail
     async def post_deployment_tasks(self, ops_test: OpsTest) -> str:
         """Runs post deployment tasks as explained in the README.md.
 
