@@ -46,5 +46,6 @@ jobs:
           provider: microk8s
       - name: Enable LoadBalancer
         run: /usr/bin/sg microk8s -c "microk8s enable metallb:10.0.1.1-10.0.1.3"
+
       - name: Run integration tests
         run: tox -e integration
