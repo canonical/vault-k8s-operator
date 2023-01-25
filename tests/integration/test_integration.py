@@ -5,7 +5,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pytest
 import requests.exceptions  # type: ignore[import]
@@ -23,7 +23,21 @@ APPLICATION_NAME = "vault-k8s"
 
 class TestVaultK8s:
     @staticmethod
-    async def wait_for_load_balancer_address(kubernetes: Kubernetes, timeout: float = 60):
+    async def wait_for_load_balancer_address(
+        kubernetes: Kubernetes, timeout: int = 60
+    ) -> Optional[str]:
+        """Waits for LoadBalancer address to be available and returns it.
+
+        Args:
+            kubernetes: Kubernetes object.
+            timeout: Timeout (seconds).
+
+        Retunrs:
+            str: LoadBalancer address.
+
+        Raises:
+            TimeoutError: Whether LoadBalancer address is not available after timeout.
+        """
         initial_time = time.time()
         while time.time() - initial_time < timeout:
             if load_balancer_address := kubernetes.get_load_balancer_address(
@@ -34,16 +48,19 @@ class TestVaultK8s:
         raise TimeoutError("Timed out waiting for Loadbalancer address to be available.")
 
     @staticmethod
-    async def initialize_vault(vault: Vault, timeout: int = 60) -> Tuple[str, str]:
+    async def initialize_vault(vault: Vault, timeout: int = 60) -> Optional[Tuple[str, str]]:
         """Initializes Vault.
 
         Args:
             vault: Vault object.
-            timeout: Timeout (seconds)
+            timeout: Timeout (seconds).
 
         Returns:
-            str: Vault's Unseal key
-            str: Vault's Root token
+            str: Vault's Unseal key.
+            str: Vault's Root token,
+
+        Raises:
+            TimeoutError: Whether Vault is not ready after timeout.
         """
         initial_time = time.time()
         while time.time() - initial_time < timeout:
@@ -59,7 +76,7 @@ class TestVaultK8s:
         """Deploys charm.
 
         Args:
-            ops_test: Ops test Framework
+            ops_test: Ops test Framework.
             charm: Charm path.
         """
         resources = {
@@ -76,6 +93,11 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def build_and_deploy(self, ops_test: OpsTest):
+        """Builds and deploys vault-k8s charm.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
         ops_test.destructive_mode = False
         charm = await ops_test.build_charm(".")
         await self.deploy_charm(ops_test, charm)
@@ -88,7 +110,7 @@ class TestVaultK8s:
         the charm.
 
         Args:
-            ops_test: Ops test Framework
+            ops_test: Ops test Framework.
 
         Returns:
             str: Generated token.
@@ -96,7 +118,7 @@ class TestVaultK8s:
         kubernetes = Kubernetes(namespace=ops_test.model_name)  # type: ignore[arg-type]
         load_balancer_address = await self.wait_for_load_balancer_address(kubernetes=kubernetes)
         vault = Vault(url=f"http://{load_balancer_address}:8200")
-        unseal_key, root_token = await self.initialize_vault(vault=vault)
+        unseal_key, root_token = await self.initialize_vault(vault=vault)  # type: ignore[misc]
         vault.set_token(root_token)
         vault.unseal(unseal_key=unseal_key)
         generated_token = vault.generate_token(ttl="5m")
@@ -115,9 +137,9 @@ class TestVaultK8s:
         """This test follows the README.md deployment and post-deployment tasks.
 
         Args:
-            ops_test: Ops test Framework
-            build_and_deploy: Pytest fixture
-            post_deployment_tasks: Pytest fixture
+            ops_test: Ops test Framework.
+            build_and_deploy: Pytest fixture.
+            post_deployment_tasks: Pytest fixture.
         """
         vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
 
@@ -133,9 +155,9 @@ class TestVaultK8s:
         """This test runs the "generate-certificate" Juju action.
 
         Args:
-            ops_test: Ops test Framework
-            build_and_deploy: Pytest fixture
-            post_deployment_tasks: Pytest fixture
+            ops_test: Ops test Framework.
+            build_and_deploy: Pytest fixture.
+            post_deployment_tasks: Pytest fixture.
         """
         vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
 
