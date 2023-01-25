@@ -10,7 +10,7 @@ from ops.model import ActiveStatus, BlockedStatus
 
 from charm import VaultCharm
 
-testing.SIMULATE_CAN_CONNECT = True
+testing.SIMULATE_CAN_CONNECT = True  # type: ignore[attr-defined]
 
 
 class TestCharm(unittest.TestCase):

@@ -9,7 +9,7 @@ import logging
 from typing import List, Optional, Tuple
 
 import hvac  # type: ignore[import]
-import requests  # type: ignore[import]
+import requests
 
 from certificate_signing_request import CertificateSigningRequest
 

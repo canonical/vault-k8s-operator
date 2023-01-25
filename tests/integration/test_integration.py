@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import pytest
-import requests.exceptions  # type: ignore[import]
+import requests.exceptions
 import yaml
 from pytest_operator.plugin import OpsTest
 
@@ -32,11 +32,11 @@ class TestVaultK8s:
             kubernetes: Kubernetes object.
             timeout: Timeout (seconds).
 
-        Retunrs:
+        Returns:
             str: LoadBalancer address.
 
         Raises:
-            TimeoutError: Whether LoadBalancer address is not available after timeout.
+            TimeoutError: If LoadBalancer address is not available after timeout.
         """
         initial_time = time.time()
         while time.time() - initial_time < timeout:
@@ -57,10 +57,10 @@ class TestVaultK8s:
 
         Returns:
             str: Vault's Unseal key.
-            str: Vault's Root token,
+            str: Vault's Root token.
 
         Raises:
-            TimeoutError: Whether Vault is not ready after timeout.
+            TimeoutError: If Vault is not ready after timeout.
         """
         initial_time = time.time()
         while time.time() - initial_time < timeout:
@@ -128,7 +128,9 @@ class TestVaultK8s:
     async def test_given_no_config_when_deploy_then_status_is_blocked(  # noqa: E501
         self, ops_test: OpsTest, build_and_deploy
     ):
-        await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="blocked", timeout=1000)  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME], status="blocked", timeout=1000
+        )
 
     @pytest.mark.abort_on_fail
     async def test_given_no_config_when_post_deployment_tasks_and_authorise_charm_then_status_is_active(  # noqa: E501
@@ -139,14 +141,15 @@ class TestVaultK8s:
         Args:
             ops_test: Ops test Framework.
             build_and_deploy: Pytest fixture.
-            post_deployment_tasks: Pytest fixture.
         """
         vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
 
         vault_token = await self.post_deployment_tasks(ops_test)
         await vault_unit.run_action(action_name="authorise-charm", token=vault_token)
 
-        await ops_test.model.wait_for_idle(apps=[APPLICATION_NAME], status="active", timeout=1000)  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME], status="active", timeout=1000
+        )
 
     @pytest.mark.abort_on_fail
     async def test_given_status_is_active_when_run_issue_certificate_action_then_certificates_are_issued(  # noqa: E501
@@ -157,7 +160,6 @@ class TestVaultK8s:
         Args:
             ops_test: Ops test Framework.
             build_and_deploy: Pytest fixture.
-            post_deployment_tasks: Pytest fixture.
         """
         vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
 
