@@ -49,3 +49,15 @@ jobs:
 
       - name: Run integration tests
         run: tox -e integration
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: charmcraft-logs
+          path: /home/runner/.local/state/charmcraft/log/*.log
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: juju-crashdump
+          path: juju-crashdump-*.tar.xz
