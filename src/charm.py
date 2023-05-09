@@ -17,8 +17,6 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 from charms.tls_certificates_interface.v1.tls_certificates import (
     CertificateCreationRequestEvent,
     TLSCertificatesProvidesV1,
-    generate_csr,
-    generate_private_key,
 )
 from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent
 from ops.framework import StoredState
