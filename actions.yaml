@@ -10,15 +10,3 @@ authorise-charm:
       description: Token to use to authorise charm.
   required:
   - token
-generate-certificate:
-  description: Generate a certificate against the Vault PKI.
-  properties:
-    cn:
-      type: string
-      description: >-
-        CN (Common Name) field of the new certificate
-    sans:
-      type: string
-      description: >-
-        Space delimited list of Subject Alternate Name/IP addresse(s).
-      default: ""
