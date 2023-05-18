@@ -175,24 +175,3 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_authorise_charm_action(event)
 
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
-
-    @patch("vault.Vault.issue_certificate")
-    def test_given_when_on_generate_certificate_action_then(self, patch_issue_certificate):
-        common_name = "whatever common name"
-        certificate = "whatever certificate"
-        ca_chain = "whatever ca chain"
-        issuing_ca = "whatever issuing ca"
-        patch_issue_certificate.return_value = {
-            "certificate": certificate,
-            "ca_chain": ca_chain,
-            "issuing_ca": issuing_ca,
-        }
-        event = Mock()
-        event.params = {"cn": common_name, "sans": ""}
-
-        self.harness.charm._on_generate_certificate_action(event=event)
-
-        args, kwargs = event.set_results.call_args
-        assert args[0]["certificate"] == certificate
-        assert args[0]["ca-chain"] == ca_chain
-        assert args[0]["issuing-ca"] == issuing_ca

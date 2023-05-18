@@ -17,8 +17,6 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 from charms.tls_certificates_interface.v1.tls_certificates import (
     CertificateCreationRequestEvent,
     TLSCertificatesProvidesV1,
-    generate_csr,
-    generate_private_key,
 )
 from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent
 from ops.framework import StoredState
@@ -59,9 +57,6 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.authorise_charm_action, self._on_authorise_charm_action)
-        self.framework.observe(
-            self.on.generate_certificate_action, self._on_generate_certificate_action
-        )
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=8200)],
@@ -208,34 +203,6 @@ class VaultCharm(CharmBase):
             self._stored.role_id = role_id
             self._stored.secret_id = secret_id
             self.unit.status = ActiveStatus()
-
-    def _on_generate_certificate_action(self, event: ActionEvent) -> None:
-        """Generates TLS Certificate.
-
-        Generates a private key, creates a CSR based on user provided parameters and asks
-        Vault for a certificate.
-
-        Args:
-            event: Juju event.
-
-        Returns:
-            None
-        """
-        private_key = generate_private_key()
-        csr = generate_csr(
-            private_key=private_key,
-            subject=event.params["cn"],
-            sans=event.params["sans"],  # type: ignore[arg-type]
-        )
-        certificate = self.vault.issue_certificate(certificate_signing_request=csr.decode())
-        event.set_results(
-            {
-                "private-key": private_key.decode(),
-                "certificate": certificate["certificate"],
-                "ca-chain": certificate["ca_chain"],
-                "issuing-ca": certificate["issuing_ca"],
-            }
-        )
 
 
 if __name__ == "__main__":

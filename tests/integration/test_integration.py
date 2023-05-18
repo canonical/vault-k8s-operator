@@ -149,28 +149,3 @@ class TestVaultK8s:
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME], status="active", timeout=1000
         )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_status_is_active_when_run_issue_certificate_action_then_certificates_are_issued(  # noqa: E501
-        self, ops_test: OpsTest, build_and_deploy
-    ):
-        """This test runs the "generate-certificate" Juju action.
-
-        Args:
-            ops_test: Ops test Framework.
-            build_and_deploy: Pytest fixture.
-        """
-        vault_unit = ops_test.model.units["vault-k8s/0"]  # type: ignore[union-attr]
-
-        action = await vault_unit.run_action(
-            action_name="generate-certificate", cn="whatever", sans=""
-        )
-
-        action_output = await ops_test.model.get_action_output(  # type: ignore[union-attr]
-            action_uuid=action.entity_id, wait=60
-        )
-        assert action_output["return-code"] == 0
-        assert "ca-chain" in action_output and action_output["ca-chain"] is not None
-        assert "issuing-ca" in action_output and action_output["issuing-ca"] is not None
-        assert "certificate" in action_output and action_output["certificate"] is not None
-        assert "private-key" in action_output and action_output["private-key"] is not None
