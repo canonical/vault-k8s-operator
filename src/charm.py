@@ -14,9 +14,9 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from charms.tls_certificates_interface.v1.tls_certificates import (
+from charms.tls_certificates_interface.v2.tls_certificates import (
     CertificateCreationRequestEvent,
-    TLSCertificatesProvidesV1,
+    TLSCertificatesProvidesV2,
 )
 from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent
 from ops.framework import StoredState
@@ -42,7 +42,7 @@ class VaultCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._stored.set_default(role_id="", secret_id="")
-        self.tls_certificates = TLSCertificatesProvidesV1(self, "certificates")
+        self.tls_certificates = TLSCertificatesProvidesV2(self, "certificates")
         self.vault = Vault(
             url=f"http://localhost:{self.VAULT_PORT}",
             role_id=self._stored.role_id,  # type: ignore[arg-type]
@@ -205,5 +205,5 @@ class VaultCharm(CharmBase):
             self.unit.status = ActiveStatus()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main(VaultCharm)

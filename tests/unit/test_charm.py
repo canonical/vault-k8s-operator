@@ -68,7 +68,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch(
-        "charms.tls_certificates_interface.v1.tls_certificates.TLSCertificatesProvidesV1.set_relation_certificate"  # noqa: E501,W505
+        "charms.tls_certificates_interface.v2.tls_certificates.TLSCertificatesProvidesV2.set_relation_certificate"  # noqa: E501,W505
     )
     @patch("vault.Vault.issue_certificate")
     def test_given_certificate_request_contains_correct_information_when_certificate_request_then_vault_is_called(  # noqa: E501
@@ -85,7 +85,7 @@ class TestCharm(unittest.TestCase):
         patch_issue_certs.assert_has_calls(calls=calls)
 
     @patch(
-        "charms.tls_certificates_interface.v1.tls_certificates.TLSCertificatesProvidesV1.set_relation_certificate"  # noqa: E501, W505
+        "charms.tls_certificates_interface.v2.tls_certificates.TLSCertificatesProvidesV2.set_relation_certificate"  # noqa: E501, W505
     )
     @patch("vault.Vault.issue_certificate")
     def test_given_vault_answers_with_certificate_when_certificate_request_then_certificates_are_added_to_relation_data(  # noqa: E501
@@ -124,7 +124,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.generate_root_certificate")
     @patch("vault.Vault.create_local_charm_access_approle")
     @patch("vault.Vault.write_charm_pki_role")
-    @patch("vault.Vault.enable_secrets_engine")
+    @patch("vault.Vault.enable_pki_secrets_engine")
     @patch("vault.Vault.approle_login")
     @patch("vault.Vault.create_local_charm_policy")
     @patch("vault.Vault.enable_approle_auth")

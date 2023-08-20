@@ -71,7 +71,7 @@ class TestVault(unittest.TestCase):
 
     @patch("hvac.api.system_backend.mount.Mount.list_mounted_secrets_engines")
     @patch("hvac.api.system_backend.mount.Mount.enable_secrets_engine")
-    def test_given_backend_not_mounted_when_enable_secrets_engine_then_secrets_engine_is_enabled(
+    def test_given_backend_not_mounted_when_enable_pki_secrets_engine_then_secrets_engine_is_enabled(  # noqa: E501
         self,
         patch_enable_secrets_engine,
         patch_list_mounted_secrets_engine,
@@ -79,7 +79,7 @@ class TestVault(unittest.TestCase):
         patch_list_mounted_secrets_engine.return_value = dict()
         vault = Vault(url="http://whatever-url")
 
-        vault.enable_secrets_engine()
+        vault.enable_pki_secrets_engine()
 
         patch_enable_secrets_engine.assert_called_with(
             backend_type="pki",
