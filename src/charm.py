@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm for Vault running on Kubernetes.
@@ -84,7 +84,7 @@ class VaultCharm(CharmBase):
         )
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
-        """Handler triggerred whenever there is a config-changed event.
+        """Handler triggered whenever there is a config-changed event.
 
         Args:
             event: Juju event
@@ -193,7 +193,7 @@ class VaultCharm(CharmBase):
         if self.unit.is_leader():
             self.vault.set_token(token=event.params["token"])
             if not self.vault.is_ready:
-                self.vault.enable_secrets_engine()
+                self.vault.enable_pki_secrets_engine()
                 self.vault.generate_root_certificate()
                 self.vault.write_charm_pki_role()
                 self.vault.enable_approle_auth()
