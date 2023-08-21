@@ -12,7 +12,6 @@ import requests.exceptions
 import yaml
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.kubernetes import Kubernetes
 from tests.integration.vault import Vault
 
 logger = logging.getLogger(__name__)
@@ -21,32 +20,22 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APPLICATION_NAME = "vault-k8s"
 
 
+async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
+    """Get unit's IP address for any application.
+
+    Args:
+        ops_test: OpsTest
+        app_name: string name of application
+        unit_num: integer number of a juju unit
+
+    Returns:
+        str: Unit's IP address
+    """
+    status = await ops_test.model.get_status()  # type: ignore[union-attr]
+    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+
+
 class TestVaultK8s:
-    @staticmethod
-    async def wait_for_load_balancer_address(
-        kubernetes: Kubernetes, timeout: int = 60
-    ) -> Optional[str]:
-        """Waits for LoadBalancer address to be available and returns it.
-
-        Args:
-            kubernetes: Kubernetes object.
-            timeout: Timeout (seconds).
-
-        Returns:
-            str: LoadBalancer address.
-
-        Raises:
-            TimeoutError: If LoadBalancer address is not available after timeout.
-        """
-        initial_time = time.time()
-        while time.time() - initial_time < timeout:
-            if load_balancer_address := kubernetes.get_load_balancer_address(
-                service_name=APPLICATION_NAME
-            ):
-                return load_balancer_address
-            time.sleep(5)
-        raise TimeoutError("Timed out waiting for Loadbalancer address to be available.")
-
     @staticmethod
     async def initialize_vault(vault: Vault, timeout: int = 60) -> Optional[Tuple[str, str]]:
         """Initializes Vault.
@@ -105,8 +94,7 @@ class TestVaultK8s:
     async def post_deployment_tasks(self, ops_test: OpsTest) -> str:
         """Runs post deployment tasks as explained in the README.md.
 
-        Retrieves Vault's LoadBalancer address, initializes Vault and generates a token for
-        the charm.
+        Retrieves Vault's unit address, initializes Vault and generates a token for the charm.
 
         Args:
             ops_test: Ops test Framework.
@@ -114,9 +102,8 @@ class TestVaultK8s:
         Returns:
             str: Generated token.
         """
-        kubernetes = Kubernetes(namespace=ops_test.model_name)  # type: ignore[arg-type]
-        load_balancer_address = await self.wait_for_load_balancer_address(kubernetes=kubernetes)
-        vault = Vault(url=f"http://{load_balancer_address}:8200")
+        unit_address = await get_unit_address(ops_test, app_name=APPLICATION_NAME, unit_num=0)
+        vault = Vault(url=f"http://{unit_address}:8200")
         unseal_key, root_token = await self.initialize_vault(vault=vault)  # type: ignore[misc]
         vault.set_token(root_token)
         vault.unseal(unseal_key=unseal_key)
@@ -124,7 +111,7 @@ class TestVaultK8s:
         return generated_token
 
     @pytest.mark.abort_on_fail
-    async def test_given_no_config_when_deploy_then_status_is_blocked(  # noqa: E501
+    async def test_given_no_config_when_deploy_then_status_is_blocked(
         self, ops_test: OpsTest, build_and_deploy
     ):
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
