@@ -51,11 +51,10 @@ sudo snap install vault
 ### Initialise Vault
 
 Identify the vault unit by setting the ``VAULT_ADDR`` environment variable
-based on the IP address of the unit. This can be discovered from `kubectl get services`
-output (column 'EXTERNAL-IP'). Here we'll use '10.0.0.126':
+based on the IP address of the unit. 
 
 ```bash
-export VAULT_ADDR="http://10.0.0.126:8200"
+export VAULT_ADDR="http://10.1.182.39:8200"
 ```
 
 Initialise Vault by specifying the number of unseal keys that should get
@@ -161,7 +160,7 @@ Vault initialization and unsealing can be done using Vault's Python API client:
 import hvac
 
 # Setup
-vault = hvac.Client(url="http://10.0.0.126:8200")
+vault = hvac.Client(url="http://10.1.182.39:8200")
 
 # Initialise
 initialize_response = vault.sys.initialize(secret_shares=1, secret_threshold=1)

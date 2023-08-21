@@ -59,8 +59,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.authorise_charm_action, self._on_authorise_charm_action)
         self.service_patcher = KubernetesServicePatch(
             charm=self,
-            ports=[ServicePort(name="vault", port=8200)],
-            service_type="LoadBalancer",
+            ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
 
     def _on_certificate_creation_request(self, event: CertificateCreationRequestEvent) -> None:
