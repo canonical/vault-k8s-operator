@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Contains all the specificities to communicate with Vault through its API."""
 
-import ipaddress
 import logging
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import hvac  # type: ignore[import]
 import requests
 
 from certificate_signing_request import CertificateSigningRequest
 
+CHARM_POLICY_FILE = "charm_policy.hcl"
+CHARM_POLICY_PATH = f"src/{CHARM_POLICY_FILE}"
 CHARM_POLICY_NAME = "local-charm-policy"
 CHARM_ACCESS_ROLE = "local-charm-access"
 
@@ -47,20 +48,12 @@ class Vault:
 
     @property
     def token(self) -> Optional[str]:
-        """Returns Vault's token.
-
-        Returns:
-            str: Vault token.
-        """
+        """Returns Vault's token."""
         return self._client.token
 
     @property
     def is_ready(self) -> bool:
-        """Returns whether Vault is ready.
-
-        Returns:
-            bool: Whether Vault is ready.
-        """
+        """Returns whether Vault is ready for interaction."""
         if not self._is_backend_mounted:
             logger.info("Vault is not ready - Backend not mounted")
             return False
@@ -71,25 +64,11 @@ class Vault:
         return True
 
     def set_token(self, token: str) -> None:
-        """Sets the Vault token.
-
-        Args:
-            token (str): Vault token
-
-        Returns:
-            None
-        """
+        """Sets the Vault token for authentication."""
         self._client.token = token
 
     def approle_login(self, role_id: str, secret_id: str) -> None:
-        """Logs in to Vault via API.
-
-        Args:
-            role_id: Role ID.
-
-        Returns:
-            None
-        """
+        """Authenticate with Vault using the AppRole authentication method."""
         try:
             login_response = self._client.auth.approle.login(
                 role_id=role_id, secret_id=secret_id, use_token=False
@@ -99,32 +78,20 @@ class Vault:
             logger.error("Login Failed - Can't connect to Vault")
 
     def enable_approle_auth(self) -> None:
-        """Enables AppRole auth method.
-
-        Returns:
-            None
-        """
+        """Enable the AppRole authentication method in Vault, if not already enabled."""
         if "approle/" not in self._client.sys.list_auth_methods():
             self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method")
 
     def create_local_charm_policy(self) -> None:
-        """Add a new policy for the charm.
-
-        Returns:
-            None
-        """
-        with open("src/charm_policy.hcl", "r") as f:
+        """Adds a new charm policy to Vault using the predefined charm policy definition."""
+        with open(CHARM_POLICY_PATH, "r") as f:
             charm_policy = f.read()
         self._client.sys.create_or_update_policy(name=CHARM_POLICY_NAME, policy=charm_policy)
         logger.info(f"Created charm policy: {CHARM_POLICY_NAME}")
 
     def create_local_charm_access_approle(self) -> None:
-        """Creates approle for charm.
-
-        Returns:
-            None
-        """
+        """Create or update an AppRole in Vault with specific permissions for charm access."""
         self._client.auth.approle.create_or_update_approle(
             role_name=CHARM_ACCESS_ROLE,
             token_ttl="60s",
@@ -134,7 +101,7 @@ class Vault:
         logger.info(f"Created approle {CHARM_ACCESS_ROLE}")
 
     def get_approle_auth_data(self) -> Tuple[str, str]:
-        """Returns Approle authentication data (role_id and secret_id).
+        """Retrieve the role ID and secret ID for the AppRole authentication method.
 
         Returns:
             str: Role ID
@@ -155,8 +122,8 @@ class Vault:
         allow_glob_domains=True,
         enforce_hostnames=False,
         max_ttl="87598h",
-    ):
-        """Writes role in Vault for the charm to be capable of issuing certificates.
+    ) -> None:
+        """Write a role in Vault for the charm to be capable of issuing certificates.
 
         Args:
             allow_any_name (bool): Specifies if clients can request certs for any CN.
@@ -187,7 +154,7 @@ class Vault:
         )
 
     def generate_root_certificate(self, ttl: str = "87599h") -> str:
-        """Generating root CA certificate and private key and returning certificate.
+        """Generate an internal root CA certificate and private key, and return the certificate.
 
         Args:
             ttl: Time to live
@@ -196,9 +163,7 @@ class Vault:
             str: Public key of the root certificate.
         """
         config = {
-            "common_name": (
-                "Vault Root Certificate Authority " "({})".format(CHARM_PKI_MOUNT_POINT)
-            ),
+            "common_name": f"Vault Root Certificate Authority ({CHARM_PKI_MOUNT_POINT})",
             "ttl": ttl,
         }
         root_certificate = self._client.write(
@@ -209,10 +174,10 @@ class Vault:
         logger.info("Generated root CA")
         return root_certificate["data"]["certificate"]
 
-    def enable_secrets_engine(
+    def enable_pki_secrets_engine(
         self, ttl: Optional[str] = None, max_ttl: Optional[str] = None
     ) -> None:
-        """Enables Vault's secret engine if the backend is mounted.
+        """Enable Vault's PKI secrets engine on the specified mount point.
 
         Args:
             ttl (str): Time to live.
@@ -254,7 +219,7 @@ class Vault:
         logger.info(f"Wrote role for PKI access: {role}")
 
     def issue_certificate(self, certificate_signing_request: str) -> dict:
-        """Issues a certificate based on a provided CSR.
+        """Issue a certificate based on a provided Certificate Signing Request (CSR).
 
         Args:
             certificate_signing_request: Certificate Signing Request
@@ -275,6 +240,9 @@ class Vault:
 
         Args:
             role (str): Vault role
+
+        Returns:
+            dict: certificate data
         """
         try:
             response = self._client.write(
@@ -286,23 +254,3 @@ class Vault:
             raise RuntimeError(response.get("warnings", "unknown error"))
         logger.info(f"Issued certificate with role {CHARM_PKI_ROLE} for config: {config}")
         return response["data"]
-
-    @staticmethod
-    def _sort_sans(sans: list) -> Tuple[List, List]:
-        """Split SANs into IP SANs and name SANs.
-
-        Args:
-            sans (list): List of SANs
-
-        Returns:
-            A tuple containing, a list of IP SAN's and a list of name SAN's.
-        """
-        ip_sans = set()
-        for san in sans:
-            try:
-                ipaddress.ip_address(san)
-                ip_sans.add(san)
-            except ValueError:
-                pass
-        alt_names = set(sans).difference(ip_sans)
-        return sorted(list(ip_sans)), sorted(list(alt_names))
