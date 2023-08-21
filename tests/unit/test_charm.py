@@ -16,7 +16,7 @@ testing.SIMULATE_CAN_CONNECT = True  # type: ignore[attr-defined]
 class TestCharm(unittest.TestCase):
     @patch(
         "charm.KubernetesServicePatch",
-        lambda charm, ports, service_type: None,
+        lambda charm, ports: None,
     )
     def setUp(self):
         self.harness = testing.Harness(VaultCharm)
