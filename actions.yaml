@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-authorise-charm:
-  description: Authorise the Vault charm to interact with Vault.
-  properties:
-    token:
-      type: string
-      description: Token to use to authorise charm.
-  required:
-  - token
+get-root-token:
+  description: Returns Vault's root token.

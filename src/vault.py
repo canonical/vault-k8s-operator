@@ -5,7 +5,8 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-from typing import Optional, Tuple
+from time import sleep, time
+from typing import List, Optional, Tuple
 
 import hvac  # type: ignore[import]
 import requests
@@ -46,21 +47,80 @@ class Vault:
         if role_id and secret_id:
             self.approle_login(role_id=role_id, secret_id=secret_id)
 
-    @property
-    def token(self) -> Optional[str]:
-        """Returns Vault's token."""
-        return self._client.token
+    def bootstrap(self) -> Tuple[str, str]:
+        """Bootstraps Vault.
 
-    @property
+        This method should only be called once at the very beginning of the lifecycle of a Vault.
+
+        Returns:
+            A tuple containing the root token and the unseal key.
+        """
+        self.wait_to_be_ready()
+        self.enable_pki_secrets_engine()
+        self.generate_root_certificate()
+        self.write_charm_pki_role()
+        self.enable_approle_auth()
+        self.create_local_charm_policy()
+        self.create_local_charm_access_approle()
+        return self.get_approle_auth_data()
+
     def is_ready(self) -> bool:
         """Returns whether Vault is ready for interaction."""
-        if not self._is_backend_mounted:
-            logger.info("Vault is not ready - Backend not mounted")
+        if not self._client.sys.is_initialized():
             return False
-        if not self._client.read("{}/roles/{}".format(CHARM_PKI_MOUNT_POINT, CHARM_PKI_ROLE)):
-            logger.info(f"Vault is not ready - Role {CHARM_PKI_ROLE} not created")
+        if self._client.sys.is_sealed():
             return False
-        logger.info("Vault is ready")
+        health_status = self._client.sys.read_health_status()
+        if health_status.status_code != 200:
+            return False
+        return True
+
+    def initialize(
+        self, secret_shares: int = 1, secret_threshold: int = 1
+    ) -> Tuple[str, List[str]]:
+        """Initialize Vault.
+
+        Returns:
+            A tuple containing the root token and the unseal keys.
+        """
+        initialize_response = self._client.sys.initialize(
+            secret_shares=secret_shares, secret_threshold=secret_threshold
+        )
+        return initialize_response["root_token"], initialize_response["keys"]
+
+    def is_sealed(self) -> bool:
+        """Returns whether Vault is sealed."""
+        return self._client.sys.is_sealed()
+
+    def unseal(self, unseal_keys: List[str]) -> None:
+        """Unseal Vault."""
+        for unseal_key in unseal_keys:
+            self._client.sys.submit_unseal_key(unseal_key)
+
+    def wait_to_be_ready(self, timeout: int = 30):
+        """Wait for vault to be ready."""
+        start_time = time()
+        while time() - start_time < timeout:
+            if self.is_ready():
+                return
+            sleep(100)
+        raise TimeoutError("Timed out waiting for vault to be ready")
+
+    def wait_for_api_available(self, timeout: int = 30) -> None:
+        """Wait for vault to be ready."""
+        start_time = time()
+        while time() - start_time < timeout:
+            if self.is_api_available():
+                return
+            sleep(2)
+        raise TimeoutError("Timed out waiting for vault to be available")
+
+    def is_api_available(self) -> bool:
+        """Returns whether Vault is available."""
+        try:
+            self._client.sys.read_health_status()
+        except requests.exceptions.ConnectionError:
+            return False
         return True
 
     def set_token(self, token: str) -> None:
@@ -193,17 +253,6 @@ class Vault:
             config={"default_lease_ttl": ttl or "8759h", "max_lease_ttl": max_ttl or "87600h"},
         )
         logger.info(f"Enabled PKI secrets engine on mount path: {CHARM_PKI_MOUNT_POINT}")
-
-    @property
-    def _is_backend_mounted(self) -> bool:
-        """Check if the supplied backend is mounted.
-
-        Returns:
-            bool: Whether mount point is in use
-        """
-        return (
-            "{}/".format(CHARM_PKI_MOUNT_POINT) in self._client.sys.list_mounted_secrets_engines()
-        )
 
     def _write_role(self, role: str, **kwargs) -> None:
         """Writes role in Vault.
