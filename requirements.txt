@@ -4,4 +4,3 @@ jsonschema
 lightkube
 lightkube-models
 requests
-cryptography

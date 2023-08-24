@@ -5,7 +5,7 @@
 import json
 import unittest
 from typing import List
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
@@ -109,7 +109,6 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind address to be available"),
         )
 
-    @patch("vault.Vault.bootstrap")
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.set_token")
     @patch("vault.Vault.initialize")
@@ -122,7 +121,6 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize,
         patch_vault_set_token,
         patch_vault_unseal,
-        patch_bootstrap,
     ):
         root_token = "root token content"
         unseal_keys = ["unseal key 1"]
@@ -131,7 +129,6 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_vault_initialize.return_value = root_token, unseal_keys
-        patch_bootstrap.return_value = "approle role id", "approle secret id"
         self._set_peer_relation()
         self.harness.charm.on.install.emit()
 
@@ -139,23 +136,20 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize.assert_called_once()
         patch_vault_set_token.assert_called_once_with(token=root_token)
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
-        patch_bootstrap.assert_called_once()
 
-    @patch("vault.Vault.bootstrap")
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.wait_for_api_available", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_binding_address_when_install_then_pebble_is_planned(
-        self, patch_get_binding, patch_vault_initialize, patch_bootstrap
+        self, patch_get_binding, patch_vault_initialize
     ):
         bind_address = "1.2.1.2"
         patch_get_binding.return_value = MockBinding(bind_address=bind_address)
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_vault_initialize.return_value = "root token content", "unseal key content"
-        patch_bootstrap.return_value = "approle role id", "approle secret id"
         self._set_peer_relation()
 
         expected_plan = {
@@ -184,20 +178,18 @@ class TestCharm(unittest.TestCase):
         updated_plan = self.harness.get_container_pebble_plan("vault").to_dict()
         self.assertEqual(updated_plan, expected_plan)
 
-    @patch("vault.Vault.bootstrap")
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.wait_for_api_available", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_binding_address_when_install_then_status_is_active(
-        self, patch_get_binding, patch_vault_initialize, patch_bootstrap
+        self, patch_get_binding, patch_vault_initialize
     ):
         patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_vault_initialize.return_value = "root token content", "unseal key content"
-        patch_bootstrap.return_value = "approle role id", "approle secret id"
         self._set_peer_relation()
 
         self.harness.charm.on.install.emit()
@@ -332,78 +324,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
 
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
-
-    @patch(
-        "charms.tls_certificates_interface.v2.tls_certificates.TLSCertificatesProvidesV2.set_relation_certificate"  # noqa: E501,W505
-    )
-    @patch("vault.Vault.issue_certificate")
-    def test_given_certificate_request_contains_correct_information_when_certificate_request_then_vault_is_called(  # noqa: E501
-        self, patch_issue_certs, _
-    ):
-        certificate_signing_request = "whatever csr"
-
-        event = Mock()
-        event.certificate_signing_request = certificate_signing_request
-        peer_relation_id = self._set_peer_relation()
-        self._set_vault_approle_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            approle_role_id="approle role id",
-            approle_secret_id="approle secret id",
-        )
-
-        self.harness.charm._on_certificate_creation_request(event=event)
-
-        calls = [call(certificate_signing_request=certificate_signing_request)]
-        patch_issue_certs.assert_has_calls(calls=calls)
-
-    @patch(
-        "charms.tls_certificates_interface.v2.tls_certificates.TLSCertificatesProvidesV2.set_relation_certificate"  # noqa: E501, W505
-    )
-    @patch("vault.Vault.issue_certificate")
-    def test_given_vault_answers_with_certificate_when_certificate_request_then_certificates_are_added_to_relation_data(  # noqa: E501
-        self, patch_issue_certs, patch_set_relation_certs
-    ):
-        certificate_signing_request = "whatever csr"
-        certificate = "whatever certificate"
-        relation_id = 3
-        issuing_ca = "whatever issuing ca"
-        ca_chain = "whatever ca chain"
-        patch_issue_certs.return_value = {
-            "certificate": certificate,
-            "issuing_ca": issuing_ca,
-            "ca_chain": ca_chain,
-        }
-        event = Mock()
-        event.certificate_signing_request = certificate_signing_request
-        event.relation_id = relation_id
-        peer_relation_id = self._set_peer_relation()
-        self._set_vault_approle_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            approle_role_id="approle role id",
-            approle_secret_id="approle secret id",
-        )
-
-        self.harness.charm._on_certificate_creation_request(event=event)
-
-        calls = [
-            call(
-                certificate=certificate,
-                certificate_signing_request=certificate_signing_request,
-                ca=issuing_ca,
-                chain=ca_chain,
-                relation_id=relation_id,
-            )
-        ]
-        patch_set_relation_certs.assert_has_calls(calls=calls)
-
-    def test_given_approle_secret_not_available_when_on_certificate_creation_request_then_defered(
-        self,
-    ):
-        event = Mock()
-
-        self.harness.charm._on_certificate_creation_request(event=event)
-
-        event.defer.assert_called_once_with()
 
     def test_given_root_token_not_available_when_get_root_token_action_then_fails(self):
         action_event = Mock()

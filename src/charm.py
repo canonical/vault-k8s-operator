@@ -15,10 +15,6 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from charms.tls_certificates_interface.v2.tls_certificates import (
-    CertificateCreationRequestEvent,
-    TLSCertificatesProvidesV2,
-)
 from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent, InstallEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, ModelError, WaitingStatus
@@ -40,14 +36,9 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.tls_certificates = TLSCertificatesProvidesV2(self, "certificates")
         self._service_name = self._container_name = "vault"
         self._container = self.unit.get_container(self._container_name)
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(
-            self.tls_certificates.on.certificate_creation_request,
-            self._on_certificate_creation_request,
-        )
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.get_root_token_action, self._on_get_root_token_action)
@@ -79,10 +70,6 @@ class VaultCharm(CharmBase):
         self._set_peer_relation_vault_initialization_secret(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
-        role_id, secret_id = vault.bootstrap()
-        self._set_peer_relation_vault_approle_secret(
-            vault_role_id=role_id, vault_secret_id=secret_id
-        )
         self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
@@ -117,29 +104,6 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         self.unit.status = ActiveStatus()
-
-    def _on_certificate_creation_request(self, event: CertificateCreationRequestEvent) -> None:
-        """Handler triggered whenever there is a request made from a requirer charm to vault.
-
-        Args:
-            event: CertificateCreationRequestEvent
-        """
-        role_id, secret_id = self._get_peer_relation_vault_approle_secret()
-        if not role_id or not secret_id:
-            logger.warning("Vault approle secret not available")
-            event.defer()
-            return
-        vault = Vault(url=self._api_address, role_id=role_id, secret_id=secret_id)
-        certificate = vault.issue_certificate(
-            certificate_signing_request=event.certificate_signing_request
-        )
-        self.tls_certificates.set_relation_certificate(
-            certificate_signing_request=event.certificate_signing_request,
-            certificate=certificate["certificate"],
-            ca=certificate["issuing_ca"],
-            chain=certificate["ca_chain"],
-            relation_id=event.relation_id,
-        )
 
     @property
     def _api_address(self) -> str:
@@ -183,34 +147,6 @@ class VaultCharm(CharmBase):
         juju_secret = self.model.get_secret(id=juju_secret_id)
         content = juju_secret.get_content()
         return content["roottoken"], json.loads(content["unsealkeys"])
-
-    def _get_peer_relation_vault_approle_secret(self) -> Tuple[Optional[str], Optional[str]]:
-        """Get the vault approle secret from the peer relation.
-
-        Returns:
-            Tuple[Optional[str], Optional[str]]: The role id and secret id.
-        """
-        if not self._is_peer_relation_created():
-            return None, None
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        juju_secret_id = peer_relation.data[peer_relation.app].get("vault-approle-secret-id")  # type: ignore[union-attr, index]  # noqa: E501
-        if not juju_secret_id:
-            return None, None
-        juju_secret = self.model.get_secret(id=juju_secret_id)
-        content = juju_secret.get_content()
-        return content["roleid"], content["secretid"]
-
-    def _set_peer_relation_vault_approle_secret(self, vault_role_id: str, vault_secret_id: str):
-        """Set the vault approle secret in the peer relation."""
-        if not self._is_peer_relation_created():
-            return None, None
-        juju_secret_content = {
-            "roleid": vault_role_id,
-            "secretid": vault_secret_id,
-        }
-        juju_secret = self.app.add_secret(juju_secret_content)
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-approle-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""

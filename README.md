@@ -18,17 +18,6 @@ Deploy the charm:
 juju deploy vault-k8s --trust
 ```
 
-### TLS Certificates
-To use Vault to sign certificates for another charm:
-
-```bash
-juju deploy <your charm>
-juju add-relation vault-k8s <your charm>
-```
-
-The requirer charm should use the `tls-certificates` relation and leverage the tls-certificates 
-[library](https://charmhub.io/tls-certificates-interface/).
-
 ## Interact with Vault
 
 Install the Vault client:

@@ -32,10 +32,6 @@ storage:
     type: filesystem
     minimum-size: 10G
 
-provides:
-  certificates:
-    interface: tls-certificates
-
 peers:
   vault-peers:
     interface: vault-peer
