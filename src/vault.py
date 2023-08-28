@@ -11,15 +11,6 @@ from typing import List, Tuple
 import hvac  # type: ignore[import]
 import requests
 
-CHARM_POLICY_FILE = "charm_policy.hcl"
-CHARM_POLICY_PATH = f"src/{CHARM_POLICY_FILE}"
-CHARM_POLICY_NAME = "local-charm-policy"
-CHARM_ACCESS_ROLE = "local-charm-access"
-
-CHARM_PKI_MOUNT_POINT = "charm-pki-local"
-CHARM_PKI_ROLE = "local"
-
-
 logger = logging.getLogger(__name__)
 
 

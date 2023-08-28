@@ -67,7 +67,7 @@ class VaultCharm(CharmBase):
         vault = Vault(url=self._api_address)
         vault.wait_for_api_available()
         root_token, unseal_keys = vault.initialize()
-        self._set_peer_relation_vault_initialization_secret(root_token, unseal_keys)
+        self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
         self.unit.status = ActiveStatus()
@@ -91,7 +91,7 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for peer relation")
             event.defer()
             return
-        root_token, unseal_keys = self._get_peer_relation_vault_initialization_secret()
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         if not root_token or not unseal_keys:
             self.unit.status = WaitingStatus("Waiting for vault initialization secret")
             event.defer()
@@ -109,7 +109,7 @@ class VaultCharm(CharmBase):
     def _api_address(self) -> str:
         return f"http://{self._bind_address}:{self.VAULT_PORT}"
 
-    def _set_peer_relation_vault_initialization_secret(
+    def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
     ) -> None:
         """Set the vault initialization secret in the peer relation.
@@ -128,7 +128,7 @@ class VaultCharm(CharmBase):
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
-    def _get_peer_relation_vault_initialization_secret(
+    def _get_initialization_secret_from_peer_relation(
         self,
     ) -> Tuple[Optional[str], Optional[List[str]]]:
         """Get the vault initialization secret from the peer relation.
@@ -241,7 +241,7 @@ class VaultCharm(CharmBase):
 
     def _on_get_root_token_action(self, event: ActionEvent):
         """Return the root token to the user."""
-        root_token, _ = self._get_peer_relation_vault_initialization_secret()
+        root_token, _ = self._get_initialization_secret_from_peer_relation()
         if not root_token:
             event.fail(message="Vault token not available")
         event.set_results(results={"root-token": root_token})
