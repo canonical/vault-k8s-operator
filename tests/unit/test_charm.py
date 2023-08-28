@@ -55,22 +55,6 @@ class TestCharm(unittest.TestCase):
             key_values=key_values,
         )
 
-    def _set_vault_approle_secret_in_peer_relation(
-        self, relation_id: int, approle_role_id: str, approle_secret_id: str
-    ) -> None:
-        """Set the vault approle secret in the peer relation."""
-        content = {
-            "roleid": approle_role_id,
-            "secretid": approle_secret_id,
-        }
-        secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
-        key_values = {"vault-approle-secret-id": secret_id}
-        self.harness.update_relation_data(
-            app_or_unit=self.app_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
-
     def test_given_cant_connect_to_workload_when_install_then_status_is_waiting(self):
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=False)
