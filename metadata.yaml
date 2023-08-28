@@ -35,3 +35,7 @@ storage:
 peers:
   vault-peers:
     interface: vault-peer
+
+assumes:
+  - juju >= 3.1
+  - k8s-api

@@ -15,7 +15,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent, InstallEvent
+from ops.charm import CharmBase, ConfigChangedEvent, InstallEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, ModelError, WaitingStatus
 from ops.pebble import Layer
@@ -41,7 +41,6 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.get_root_token_action, self._on_get_root_token_action)
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
@@ -238,13 +237,6 @@ class VaultCharm(CharmBase):
         """
         command = ["chown", "100:1000", VAULT_STORAGE_PATH]
         self._container.exec(command=command)
-
-    def _on_get_root_token_action(self, event: ActionEvent):
-        """Return the root token to the user."""
-        root_token, _ = self._get_initialization_secret_from_peer_relation()
-        if not root_token:
-            event.fail(message="Vault token not available")
-        event.set_results(results={"root-token": root_token})
 
 
 if __name__ == "__main__":  # pragma: no cover

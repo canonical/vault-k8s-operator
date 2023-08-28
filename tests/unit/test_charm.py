@@ -308,24 +308,3 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
 
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
-
-    def test_given_root_token_not_available_when_get_root_token_action_then_fails(self):
-        action_event = Mock()
-
-        self.harness.charm._on_get_root_token_action(action_event)
-
-        action_event.fail.assert_called_once_with(message="Vault token not available")
-
-    def test_given_root_token_available_when_get_root_token_action_then_result_returned(self):
-        action_event = Mock()
-        root_token = "whatever root token content"
-        relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=relation_id,
-            root_token=root_token,
-            unseal_keys=["unseal key content"],
-        )
-
-        self.harness.charm._on_get_root_token_action(action_event)
-
-        action_event.set_results.assert_called_once_with(results={"root-token": root_token})

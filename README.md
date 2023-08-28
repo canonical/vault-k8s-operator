@@ -18,7 +18,31 @@ Deploy the charm:
 juju deploy vault-k8s --trust
 ```
 
-## Interact with Vault
+### Retrieve Vault's Root token
+
+Retrieve the Juju secrets list:
+
+```bash
+user@ubuntu:~$ juju secrets
+ID                    Owner      Rotation  Revision  Last updated
+cjma4gdp3des7ac9uedg  vault-k8s  never            1  11 seconds ago
+```
+
+Read the secret content:
+
+```bash
+user@ubuntu:~$ juju show-secret cjma4gdp3des7ac9uedg --reveal
+cjma4gdp3des7ac9uedg:
+  revision: 1
+  owner: vault-k8s
+  created: 2023-08-28T13:33:54Z
+  updated: 2023-08-28T13:33:54Z
+  content:
+    roottoken: hvs.Z3CuzSQno3XMuUgUcm1CmjQK
+    unsealkeys: '["11bd448ccfec24db29ed5c14fdfe3d169589f5c5c6b57870e31d738aec623856"]'
+```
+
+### Interact with Vault
 
 Install the Vault client:
 
@@ -26,16 +50,10 @@ Install the Vault client:
 sudo snap install vault
 ```
 
-Retrieve the Vault root token from the unit:
-
-```bash
-juju run vault-k8s/0 get-root-token
-```
-
 Set the vault token for use in the client:
 
 ```bash
-export VAULT_TOKEN="<root-token>"
+export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
 Identify the vault unit by setting the `VAULT_ADDR` environment variable based on the IP address of the unit.
