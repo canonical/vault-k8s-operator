@@ -69,7 +69,7 @@ class Vault:
         raise TimeoutError("Timed out waiting for vault to be ready")
 
     def wait_for_api_available(self, timeout: int = 30) -> None:
-        """Wait for vault to be ready."""
+        """Wait for vault to be available."""
         start_time = time()
         while time() - start_time < timeout:
             if self.is_api_available():
