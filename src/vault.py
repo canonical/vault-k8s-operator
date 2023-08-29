@@ -30,7 +30,7 @@ class Vault:
         """Returns whether Vault is ready for interaction."""
         if not self._client.sys.is_initialized():
             return False
-        if self._client.sys.is_sealed():
+        if self.is_sealed():
             return False
         health_status = self._client.sys.read_health_status()
         if health_status.status_code != 200:
