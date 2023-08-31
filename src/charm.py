@@ -9,19 +9,15 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 
 import json
 import logging
+from typing import List, Optional, Tuple
 
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from charms.tls_certificates_interface.v2.tls_certificates import (
-    CertificateCreationRequestEvent,
-    TLSCertificatesProvidesV2,
-)
-from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent
-from ops.framework import StoredState
+from ops.charm import CharmBase, ConfigChangedEvent, InstallEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, MaintenanceStatus, ModelError, WaitingStatus
 from ops.pebble import Layer
 
 from vault import Vault
@@ -29,58 +25,51 @@ from vault import Vault
 logger = logging.getLogger(__name__)
 
 VAULT_STORAGE_PATH = "/srv"
+PEER_RELATION_NAME = "vault-peers"
 
 
 class VaultCharm(CharmBase):
-    """Main class for to handle Juju events."""
+    """Main class for to handle Juju events for the vault-k8s charm."""
 
     VAULT_PORT = 8200
     VAULT_CLUSTER_PORT = 8201
 
-    _stored = StoredState()
-
     def __init__(self, *args):
         super().__init__(*args)
-        self._stored.set_default(role_id="", secret_id="")
-        self.tls_certificates = TLSCertificatesProvidesV2(self, "certificates")
-        self.vault = Vault(
-            url=f"http://localhost:{self.VAULT_PORT}",
-            role_id=self._stored.role_id,  # type: ignore[arg-type]
-            secret_id=self._stored.secret_id,  # type: ignore[arg-type]
-        )
         self._service_name = self._container_name = "vault"
         self._container = self.unit.get_container(self._container_name)
-        self.framework.observe(
-            self.tls_certificates.on.certificate_creation_request,
-            self._on_certificate_creation_request,
-        )
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.authorise_charm_action, self._on_authorise_charm_action)
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
 
-    def _on_certificate_creation_request(self, event: CertificateCreationRequestEvent) -> None:
-        """Handler triggered whenever there is a request made from a requirer charm to vault.
-
-        Args:
-            event: Juju event
-
-        Returns:
-            None
-        """
-        certificate = self.vault.issue_certificate(
-            certificate_signing_request=event.certificate_signing_request
-        )
-        self.tls_certificates.set_relation_certificate(
-            certificate_signing_request=event.certificate_signing_request,
-            certificate=certificate["certificate"],
-            ca=certificate["issuing_ca"],
-            chain=certificate["ca_chain"],
-            relation_id=event.relation_id,
-        )
+    def _on_install(self, event: InstallEvent):
+        if not self.unit.is_leader():
+            return
+        if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
+            event.defer()
+            return
+        if not self._is_peer_relation_created():
+            self.unit.status = WaitingStatus("Waiting for peer relation to be created")
+            event.defer()
+            return
+        if not self._bind_address:
+            self.unit.status = WaitingStatus("Waiting for bind address to be available")
+            event.defer()
+            return
+        self.unit.status = MaintenanceStatus("Initializing vault")
+        self._set_pebble_plan()
+        vault = Vault(url=self._api_address)
+        vault.wait_for_api_available()
+        root_token, unseal_keys = vault.initialize()
+        self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
+        vault.set_token(token=root_token)
+        vault.unseal(unseal_keys=unseal_keys)
+        self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
@@ -91,33 +80,102 @@ class VaultCharm(CharmBase):
         Returns:
             None
         """
+        if not self.unit.is_leader():
+            return
         if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
             return
+        if not self._is_peer_relation_created():
+            self.unit.status = WaitingStatus("Waiting for peer relation")
+            event.defer()
+            return
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        if not root_token or not unseal_keys:
+            self.unit.status = WaitingStatus("Waiting for vault initialization secret")
+            event.defer()
+            return
+        self._set_pebble_plan()
+        self._patch_storage_ownership()
+        vault = Vault(url=self._api_address)
+        vault.set_token(token=root_token)
+        vault.wait_for_api_available()
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=unseal_keys)
+        self.unit.status = ActiveStatus()
+
+    @property
+    def _api_address(self) -> str:
+        return f"http://{self._bind_address}:{self.VAULT_PORT}"
+
+    def _set_initialization_secret_in_peer_relation(
+        self, root_token: str, unseal_keys: List[str]
+    ) -> None:
+        """Set the vault initialization secret in the peer relation.
+
+        Args:
+            root_token: The root token.
+            unseal_keys: The unseal keys.
+        """
+        if not self._is_peer_relation_created():
+            raise RuntimeError("Peer relation not created")
+        juju_secret_content = {
+            "roottoken": root_token,
+            "unsealkeys": json.dumps(unseal_keys),
+        }
+        juju_secret = self.app.add_secret(juju_secret_content)
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+
+    def _get_initialization_secret_from_peer_relation(
+        self,
+    ) -> Tuple[Optional[str], Optional[List[str]]]:
+        """Get the vault initialization secret from the peer relation.
+
+        Returns:
+            Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
+        """
+        if not self._is_peer_relation_created():
+            return None, None
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
+            "vault-initialization-secret-id"
+        )
+        if not juju_secret_id:
+            return None, None
+        juju_secret = self.model.get_secret(id=juju_secret_id)
+        content = juju_secret.get_content()
+        return content["roottoken"], json.loads(content["unsealkeys"])
+
+    def _is_peer_relation_created(self) -> bool:
+        """Check if the peer relation is created."""
+        return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _set_pebble_plan(self) -> None:
+        """Set the pebble plan if different from the currently applied one."""
         plan = self._container.get_plan()
         layer = self._vault_layer
         if plan.services != layer.services:
-            self.unit.status = MaintenanceStatus(
-                f"Configuring pebble layer for {self._service_name}"
-            )
             self._container.add_layer(self._container_name, layer, combine=True)
-            logger.info("Added updated layer 'vault' to Pebble plan")
             self._container.replan()
-            logger.info("Replanned pebble Layer")
-        self._patch_storage_ownership()
-        self.unit.status = BlockedStatus("Waiting for `authorise-charm` action to be triggered.")
 
     @property
-    def _bind_address(self) -> str:
+    def _bind_address(self) -> Optional[str]:
         """Fetches bind address from peer relation and returns it.
 
         Returns:
             str: Bind address
         """
-        peer_relation = self.model.get_relation("peers")
-        return str(
-            self.model.get_binding(peer_relation).network.bind_address  # type: ignore[arg-type, union-attr]  # noqa: E501
-        )
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not peer_relation:
+            return None
+        try:
+            binding = self.model.get_binding(peer_relation)
+            if not binding:
+                return None
+            return str(binding.network.bind_address)
+        except ModelError:
+            return None
 
     @property
     def _vault_layer(self) -> Layer:
@@ -179,29 +237,6 @@ class VaultCharm(CharmBase):
         """
         command = ["chown", "100:1000", VAULT_STORAGE_PATH]
         self._container.exec(command=command)
-
-    def _on_authorise_charm_action(self, event: ActionEvent) -> None:
-        """Create a role allowing the charm to perform certain vault actions.
-
-        Args:
-            event: Juju event
-
-        Returns:
-            None
-        """
-        if self.unit.is_leader():
-            self.vault.set_token(token=event.params["token"])
-            if not self.vault.is_ready:
-                self.vault.enable_pki_secrets_engine()
-                self.vault.generate_root_certificate()
-                self.vault.write_charm_pki_role()
-                self.vault.enable_approle_auth()
-                self.vault.create_local_charm_policy()
-                self.vault.create_local_charm_access_approle()
-            role_id, secret_id = self.vault.get_approle_auth_data()
-            self._stored.role_id = role_id
-            self._stored.secret_id = secret_id
-            self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":  # pragma: no cover

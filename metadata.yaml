@@ -32,10 +32,10 @@ storage:
     type: filesystem
     minimum-size: 10G
 
-provides:
-  certificates:
-    interface: tls-certificates
-
 peers:
-  peers:
+  vault-peers:
     interface: vault-peer
+
+assumes:
+  - juju >= 3.1
+  - k8s-api

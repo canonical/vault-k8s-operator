@@ -5,21 +5,11 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-from typing import Optional, Tuple
+from time import sleep, time
+from typing import List, Tuple
 
 import hvac  # type: ignore[import]
 import requests
-
-from certificate_signing_request import CertificateSigningRequest
-
-CHARM_POLICY_FILE = "charm_policy.hcl"
-CHARM_POLICY_PATH = f"src/{CHARM_POLICY_FILE}"
-CHARM_POLICY_NAME = "local-charm-policy"
-CHARM_ACCESS_ROLE = "local-charm-access"
-
-CHARM_PKI_MOUNT_POINT = "charm-pki-local"
-CHARM_PKI_ROLE = "local"
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,227 +20,71 @@ class VaultError(Exception):
     pass
 
 
-class VaultNotReadyError(VaultError):
-    """Exception raised for units in error state."""
-
-    def __init__(self, reason):
-        message = "Vault is not ready ({})".format(reason)
-        super(VaultNotReadyError, self).__init__(message)
-
-
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, role_id: Optional[str] = None, secret_id: Optional[str] = None):
+    def __init__(self, url: str):
         self._client = hvac.Client(url=url)
-        if role_id and secret_id:
-            self.approle_login(role_id=role_id, secret_id=secret_id)
 
-    @property
-    def token(self) -> Optional[str]:
-        """Returns Vault's token."""
-        return self._client.token
-
-    @property
     def is_ready(self) -> bool:
         """Returns whether Vault is ready for interaction."""
-        if not self._is_backend_mounted:
-            logger.info("Vault is not ready - Backend not mounted")
+        if not self._client.sys.is_initialized():
             return False
-        if not self._client.read("{}/roles/{}".format(CHARM_PKI_MOUNT_POINT, CHARM_PKI_ROLE)):
-            logger.info(f"Vault is not ready - Role {CHARM_PKI_ROLE} not created")
+        if self.is_sealed():
             return False
-        logger.info("Vault is ready")
+        health_status = self._client.sys.read_health_status()
+        if health_status.status_code != 200:
+            return False
+        return True
+
+    def initialize(
+        self, secret_shares: int = 1, secret_threshold: int = 1
+    ) -> Tuple[str, List[str]]:
+        """Initialize Vault.
+
+        Returns:
+            A tuple containing the root token and the unseal keys.
+        """
+        initialize_response = self._client.sys.initialize(
+            secret_shares=secret_shares, secret_threshold=secret_threshold
+        )
+        return initialize_response["root_token"], initialize_response["keys"]
+
+    def is_sealed(self) -> bool:
+        """Returns whether Vault is sealed."""
+        return self._client.sys.is_sealed()
+
+    def unseal(self, unseal_keys: List[str]) -> None:
+        """Unseal Vault."""
+        for unseal_key in unseal_keys:
+            self._client.sys.submit_unseal_key(unseal_key)
+
+    def wait_to_be_ready(self, timeout: int = 30):
+        """Wait for vault to be ready."""
+        start_time = time()
+        while time() - start_time < timeout:
+            if self.is_ready():
+                return
+            sleep(2)
+        raise TimeoutError("Timed out waiting for vault to be ready")
+
+    def wait_for_api_available(self, timeout: int = 30) -> None:
+        """Wait for vault to be available."""
+        start_time = time()
+        while time() - start_time < timeout:
+            if self.is_api_available():
+                return
+            sleep(2)
+        raise TimeoutError("Timed out waiting for vault to be available")
+
+    def is_api_available(self) -> bool:
+        """Returns whether Vault is available."""
+        try:
+            self._client.sys.read_health_status()
+        except requests.exceptions.ConnectionError:
+            return False
         return True
 
     def set_token(self, token: str) -> None:
         """Sets the Vault token for authentication."""
         self._client.token = token
-
-    def approle_login(self, role_id: str, secret_id: str) -> None:
-        """Authenticate with Vault using the AppRole authentication method."""
-        try:
-            login_response = self._client.auth.approle.login(
-                role_id=role_id, secret_id=secret_id, use_token=False
-            )
-            self.set_token(token=login_response["auth"]["client_token"])
-        except requests.exceptions.ConnectionError:
-            logger.error("Login Failed - Can't connect to Vault")
-
-    def enable_approle_auth(self) -> None:
-        """Enable the AppRole authentication method in Vault, if not already enabled."""
-        if "approle/" not in self._client.sys.list_auth_methods():
-            self._client.sys.enable_auth_method("approle")
-            logger.info("Enabled approle auth method")
-
-    def create_local_charm_policy(self) -> None:
-        """Adds a new charm policy to Vault using the predefined charm policy definition."""
-        with open(CHARM_POLICY_PATH, "r") as f:
-            charm_policy = f.read()
-        self._client.sys.create_or_update_policy(name=CHARM_POLICY_NAME, policy=charm_policy)
-        logger.info(f"Created charm policy: {CHARM_POLICY_NAME}")
-
-    def create_local_charm_access_approle(self) -> None:
-        """Create or update an AppRole in Vault with specific permissions for charm access."""
-        self._client.auth.approle.create_or_update_approle(
-            role_name=CHARM_ACCESS_ROLE,
-            token_ttl="60s",
-            token_max_ttl="60s",
-            token_policies=[CHARM_POLICY_NAME],
-        )
-        logger.info(f"Created approle {CHARM_ACCESS_ROLE}")
-
-    def get_approle_auth_data(self) -> Tuple[str, str]:
-        """Retrieve the role ID and secret ID for the AppRole authentication method.
-
-        Returns:
-            str: Role ID
-            str: Secret ID
-        """
-        role_id_response = self._client.auth.approle.read_role_id(role_name=CHARM_ACCESS_ROLE)
-        secret_id_response = self._client.auth.approle.generate_secret_id(
-            role_name=CHARM_ACCESS_ROLE
-        )
-        return role_id_response["data"]["role_id"], secret_id_response["data"]["secret_id"]
-
-    def write_charm_pki_role(
-        self,
-        allow_any_name=True,
-        allowed_domains=None,
-        allow_bare_domains=False,
-        allow_subdomains=False,
-        allow_glob_domains=True,
-        enforce_hostnames=False,
-        max_ttl="87598h",
-    ) -> None:
-        """Write a role in Vault for the charm to be capable of issuing certificates.
-
-        Args:
-            allow_any_name (bool): Specifies if clients can request certs for any CN.
-            allowed_domains (list): List of CNs for which clients can request certs.
-            allow_bare_domains (bool): Specifies if clients can request certs for CNs exactly
-                matching those in allowed_domains.
-            allow_subdomains (bool): Specifies if clients can request certificates with CNs that
-                are subdomains of those in allowed_domains, including wildcard subdomains.
-            allow_glob_domains (bool): Specifies whether CNs in allowed-domains can contain glob
-                patterns (e.g., 'ftp*.example.com'), in which case clients will be able to request
-                certificates for any CN matching the glob pattern.
-            enforce_hostnames (bool): Specifies if only valid host names are allowed for CNs, DNS
-                SANs, and the host part of email addresses.
-            max_ttl (str): Specifies the maximum Time To Live for generated certs.
-
-        Returns:
-            None
-        """
-        self._write_role(
-            role=CHARM_PKI_ROLE,
-            allow_any_name=allow_any_name,
-            allowed_domains=allowed_domains,
-            allow_bare_domains=allow_bare_domains,
-            allow_subdomains=allow_subdomains,
-            allow_glob_domains=allow_glob_domains,
-            enforce_hostnames=enforce_hostnames,
-            max_ttl=max_ttl,
-        )
-
-    def generate_root_certificate(self, ttl: str = "87599h") -> str:
-        """Generate an internal root CA certificate and private key, and return the certificate.
-
-        Args:
-            ttl: Time to live
-
-        Returns:
-            str: Public key of the root certificate.
-        """
-        config = {
-            "common_name": f"Vault Root Certificate Authority ({CHARM_PKI_MOUNT_POINT})",
-            "ttl": ttl,
-        }
-        root_certificate = self._client.write(
-            "{}/root/generate/internal".format(CHARM_PKI_MOUNT_POINT), **config
-        )
-        if not root_certificate["data"]:
-            raise Exception(root_certificate.get("warnings", "unknown error"))
-        logger.info("Generated root CA")
-        return root_certificate["data"]["certificate"]
-
-    def enable_pki_secrets_engine(
-        self, ttl: Optional[str] = None, max_ttl: Optional[str] = None
-    ) -> None:
-        """Enable Vault's PKI secrets engine on the specified mount point.
-
-        Args:
-            ttl (str): Time to live.
-            max_ttl (str): Max Time to live.
-
-        Returns:
-            None
-        """
-        self._client.sys.enable_secrets_engine(
-            backend_type="pki",
-            description="Charm created PKI backend",
-            path=CHARM_PKI_MOUNT_POINT,
-            config={"default_lease_ttl": ttl or "8759h", "max_lease_ttl": max_ttl or "87600h"},
-        )
-        logger.info(f"Enabled PKI secrets engine on mount path: {CHARM_PKI_MOUNT_POINT}")
-
-    @property
-    def _is_backend_mounted(self) -> bool:
-        """Check if the supplied backend is mounted.
-
-        Returns:
-            bool: Whether mount point is in use
-        """
-        return (
-            "{}/".format(CHARM_PKI_MOUNT_POINT) in self._client.sys.list_mounted_secrets_engines()
-        )
-
-    def _write_role(self, role: str, **kwargs) -> None:
-        """Writes role in Vault.
-
-        Args:
-            role (str): Role
-            **kwargs: Other keyword arguments
-
-        Returns:
-            None
-        """
-        self._client.write("{}/roles/{}".format(CHARM_PKI_MOUNT_POINT, role), **kwargs)
-        logger.info(f"Wrote role for PKI access: {role}")
-
-    def issue_certificate(self, certificate_signing_request: str) -> dict:
-        """Issue a certificate based on a provided Certificate Signing Request (CSR).
-
-        Args:
-            certificate_signing_request: Certificate Signing Request
-
-        Returns:
-            dict: certificate data
-        """
-        csr_object = CertificateSigningRequest(certificate_signing_request)
-        config = {
-            "common_name": csr_object.common_name,
-            "csr": certificate_signing_request,
-            "format": "pem",
-        }
-        return self._issue_certificate(**config)
-
-    def _issue_certificate(self, **config) -> dict:
-        """Issues a certificate based on a provided CSR.
-
-        Args:
-            role (str): Vault role
-
-        Returns:
-            dict: certificate data
-        """
-        try:
-            response = self._client.write(
-                path=f"{CHARM_PKI_MOUNT_POINT}/sign/{CHARM_PKI_ROLE}", **config
-            )
-        except hvac.exceptions.InvalidRequest as e:
-            raise RuntimeError(str(e)) from e
-        if not response["data"]:
-            raise RuntimeError(response.get("warnings", "unknown error"))
-        logger.info(f"Issued certificate with role {CHARM_PKI_ROLE} for config: {config}")
-        return response["data"]
