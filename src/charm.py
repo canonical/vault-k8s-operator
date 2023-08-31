@@ -15,7 +15,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from ops.charm import CharmBase, ConfigChangedEvent, InstallEvent
+from ops.charm import CharmBase, ConfigChangedEvent, InstallEvent, RelationJoinedEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, ModelError, WaitingStatus
 from ops.pebble import Layer
@@ -24,7 +24,7 @@ from vault import Vault
 
 logger = logging.getLogger(__name__)
 
-VAULT_STORAGE_PATH = "/srv"
+VAULT_RAFT_DATA_PATH = "/vault/raft"
 PEER_RELATION_NAME = "vault-peers"
 
 
@@ -44,6 +44,9 @@ class VaultCharm(CharmBase):
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
+        )
+        self.framework.observe(
+            self.on[PEER_RELATION_NAME].relation_created, self._on_peer_relation_created
         )
 
     def _on_install(self, event: InstallEvent):
@@ -80,8 +83,6 @@ class VaultCharm(CharmBase):
         Returns:
             None
         """
-        if not self.unit.is_leader():
-            return
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
@@ -96,13 +97,16 @@ class VaultCharm(CharmBase):
             event.defer()
             return
         self._set_pebble_plan()
-        self._patch_storage_ownership()
         vault = Vault(url=self._api_address)
         vault.set_token(token=root_token)
         vault.wait_for_api_available()
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         self.unit.status = ActiveStatus()
+
+    def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
+        """Handle relation-joined event for the replicas relation."""
+        self._set_peer_relation_unit_address()
 
     @property
     def _api_address(self) -> str:
@@ -199,15 +203,15 @@ class VaultCharm(CharmBase):
         Returns:
             Layer: Pebble Layer
         """
-        backends = {"file": {"path": VAULT_STORAGE_PATH}}
         vault_config = {
-            "backend": backends,
+            "ui": True,
+            "storage": {"raft": self._get_raft_config()},
             "listener": {"tcp": {"tls_disable": True, "address": f"[::]:{self.VAULT_PORT}"}},
             "default_lease_ttl": self.model.config["default_lease_ttl"],
             "max_lease_ttl": self.model.config["max_lease_ttl"],
             "disable_mlock": True,
             "cluster_addr": f"http://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
-            "api_addr": f"http://{self._bind_address}:{self.VAULT_PORT}",
+            "api_addr": self._api_address,
         }
 
         return Layer(
@@ -229,14 +233,37 @@ class VaultCharm(CharmBase):
             }
         )
 
-    def _patch_storage_ownership(self) -> None:
-        """Fix up storage permissions (broken on AWS and GCP otherwise)'.
+    def _set_peer_relation_unit_address(self) -> None:
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        peer_relation.data[self.unit].update({"unit-address": self._api_address})
 
-        Returns:
-            None
-        """
-        command = ["chown", "100:1000", VAULT_STORAGE_PATH]
-        self._container.exec(command=command)
+    def _get_peer_relation_unit_addresses(self) -> List[str]:
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not peer_relation:
+            return []
+        return [peer_relation.data[peer]["unit-address"] for peer in peer_relation.units]
+
+    def _other_peer_unit_addresses(self) -> List[str]:
+        return [
+            unit_address for unit_address in self._get_peer_relation_unit_addresses() if
+            unit_address != self._api_address
+        ]
+
+    def _get_raft_config(self) -> dict:
+        retry_join = [
+            {"leader_api_addr": unit_address} for unit_address in self._other_peer_unit_addresses()
+        ]
+        raft_config = {
+            "path": VAULT_RAFT_DATA_PATH,
+            "node_id": self._node_id,
+        }
+        if retry_join:
+            raft_config["retry_join"] = retry_join
+        return raft_config
+
+    @property
+    def _node_id(self):
+        return f"{self.model.name}-{self.unit.name}"
 
 
 if __name__ == "__main__":  # pragma: no cover

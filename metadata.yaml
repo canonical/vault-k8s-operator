@@ -18,8 +18,8 @@ containers:
   vault:
     resource: vault-image
     mounts:
-      - storage: vault-storage
-        location: /srv
+      - storage: vault-raft
+        location: /vault/raft
 
 resources:
   vault-image:
