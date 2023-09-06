@@ -15,9 +15,21 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
-from ops.charm import CharmBase, ConfigChangedEvent, InstallEvent, RelationJoinedEvent
+from ops.charm import (
+    CharmBase,
+    ConfigChangedEvent,
+    InstallEvent,
+    RelationJoinedEvent,
+    RemoveEvent,
+)
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, ModelError, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    MaintenanceStatus,
+    ModelError,
+    SecretNotFoundError,
+    WaitingStatus,
+)
 from ops.pebble import Layer
 
 from vault import Vault
@@ -38,16 +50,17 @@ class VaultCharm(CharmBase):
         super().__init__(*args)
         self._service_name = self._container_name = "vault"
         self._container = self.unit.get_container(self._container_name)
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created, self._on_peer_relation_created
         )
+        self.framework.observe(self.on.remove, self._on_remove)
 
     def _on_install(self, event: InstallEvent):
         if not self.unit.is_leader():
@@ -67,7 +80,10 @@ class VaultCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Initializing vault")
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
-        vault.wait_for_api_available()
+        if not vault.is_api_available():
+            self.unit.status = WaitingStatus("Waiting for vault to be available")
+            event.defer()
+            return
         root_token, unseal_keys = vault.initialize()
         self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
@@ -96,17 +112,55 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for vault initialization secret")
             event.defer()
             return
+        if not self.unit.is_leader() and len(self._other_peer_unit_addresses()) == 0:
+            self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
+            event.defer()
+            return
+        self.unit.status = MaintenanceStatus("Preparing vault")
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
         vault.set_token(token=root_token)
-        vault.wait_for_api_available()
+        if not vault.is_api_available():
+            self.unit.status = WaitingStatus("Waiting for vault to be available")
+            event.defer()
+            return
+        if not vault.is_initialized():
+            self.unit.status = WaitingStatus("Waiting for vault to be initialized")
+            event.defer()
+            return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
+        self._set_peer_relation_unit_address()
         self.unit.status = ActiveStatus()
 
     def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
         """Handle relation-joined event for the replicas relation."""
         self._set_peer_relation_unit_address()
+
+    def _on_remove(self, event: RemoveEvent):
+        """Handler triggered when the charm is removed.
+
+        Removes the vault service and the raft data and removes the node from the raft cluster.
+        """
+        if not self._container.can_connect():
+            return
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        if root_token:
+            vault = Vault(url=self._api_address)
+            vault.set_token(token=root_token)
+            if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
+                vault.remove_raft_node(node_id=self._node_id)
+        if self._vault_service_is_running():
+            self._container.stop(self._service_name)
+        self._container.remove_path(path=f"{VAULT_RAFT_DATA_PATH}/*", recursive=True)
+
+    def _vault_service_is_running(self) -> bool:
+        """Check if the vault service is running."""
+        try:
+            self._container.get_service(service_name=self._service_name)
+        except ModelError:
+            return False
+        return True
 
     @property
     def _api_address(self) -> str:
@@ -147,7 +201,10 @@ class VaultCharm(CharmBase):
         )
         if not juju_secret_id:
             return None, None
-        juju_secret = self.model.get_secret(id=juju_secret_id)
+        try:
+            juju_secret = self.model.get_secret(id=juju_secret_id)
+        except SecretNotFoundError:
+            return None, None
         content = juju_secret.get_content()
         return content["roottoken"], json.loads(content["unsealkeys"])
 
@@ -162,6 +219,7 @@ class VaultCharm(CharmBase):
         if plan.services != layer.services:
             self._container.add_layer(self._container_name, layer, combine=True)
             self._container.replan()
+            logger.info("Pebble layer added")
 
     @property
     def _bind_address(self) -> Optional[str]:
@@ -235,18 +293,25 @@ class VaultCharm(CharmBase):
 
     def _set_peer_relation_unit_address(self) -> None:
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not peer_relation:
+            raise RuntimeError("Peer relation not created")
         peer_relation.data[self.unit].update({"unit-address": self._api_address})
 
     def _get_peer_relation_unit_addresses(self) -> List[str]:
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        unit_addresses = []
         if not peer_relation:
             return []
-        return [peer_relation.data[peer]["unit-address"] for peer in peer_relation.units]
+        for peer in peer_relation.units:
+            if "unit-address" in peer_relation.data[peer]:
+                unit_addresses.append(peer_relation.data[peer]["unit-address"])
+        return unit_addresses
 
     def _other_peer_unit_addresses(self) -> List[str]:
         return [
-            unit_address for unit_address in self._get_peer_relation_unit_addresses() if
-            unit_address != self._api_address
+            unit_address
+            for unit_address in self._get_peer_relation_unit_addresses()
+            if unit_address != self._api_address
         ]
 
     def _get_raft_config(self) -> dict:

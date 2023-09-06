@@ -33,6 +33,7 @@ class TestVaultK8s:
             application_name=APPLICATION_NAME,
             trust=True,
             series="jammy",
+            num_units=5,
         )
 
     @pytest.mark.abort_on_fail
@@ -51,6 +52,28 @@ class TestVaultK8s:
     async def test_given_default_config_when_deploy_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy
     ):
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME], status="active", timeout=1000
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
+        self,
+        ops_test: OpsTest,
+    ):
+        await ops_test.model.applications[APPLICATION_NAME].scale(6)
+
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME], status="active", timeout=1000
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
+        self,
+        ops_test: OpsTest,
+    ):
+        await ops_test.model.applications[APPLICATION_NAME].scale(3)
+
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME], status="active", timeout=1000
         )

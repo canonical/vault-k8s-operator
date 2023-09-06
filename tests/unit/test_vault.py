@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import call, patch
 
 import requests
 
@@ -95,44 +95,6 @@ class TestVault(unittest.TestCase):
             [call(unseal_key) for unseal_key in unseal_keys]
         )
 
-    @patch("vault.Vault.is_ready")
-    def test_given_is_ready_when_wait_to_be_ready_then_returns(self, patch_is_ready):
-        patch_is_ready.return_value = True
-
-        vault = Vault(url="http://whatever-url")
-
-        vault.wait_to_be_ready(timeout=1)
-
-    @patch("vault.Vault.is_ready")
-    @patch("vault.sleep", new=Mock)
-    def test_given_is_not_ready_when_wait_to_be_ready_then_timeout_error(self, patch_is_ready):
-        patch_is_ready.return_value = False
-        vault = Vault(url="http://whatever-url")
-
-        with self.assertRaises(TimeoutError):
-            vault.wait_to_be_ready(timeout=1)
-
-    @patch("vault.Vault.is_api_available")
-    def test_given_api_available_when_wait_for_api_available_then_returns(
-        self, patch_is_api_available
-    ):
-        patch_is_api_available.return_value = True
-        vault = Vault(url="http://whatever-url")
-
-        vault.wait_for_api_available(timeout=1)
-
-    @patch("vault.sleep", new=Mock)
-    @patch("vault.Vault.is_api_available")
-    def test_given_api_not_available_when_wait_for_api_available_then_timeouterror(
-        self,
-        patch_is_api_available,
-    ):
-        patch_is_api_available.return_value = False
-        vault = Vault(url="http://whatever-url")
-
-        with self.assertRaises(TimeoutError):
-            vault.wait_for_api_available(timeout=1)
-
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_connection_error_when_is_api_available_then_return_false(
         self, patch_health_status
@@ -148,3 +110,27 @@ class TestVault(unittest.TestCase):
         vault = Vault(url="http://whatever-url")
 
         self.assertTrue(vault.is_api_available())
+
+    @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
+    def test_given_node_in_peer_list_when_node_in_raft_peers_then_returns_true(
+        self, patch_health_status
+    ):
+        node_id = "whatever node id"
+        vault = Vault(url="http://whatever-url")
+        patch_health_status.return_value = {
+            "data": {"config": {"servers": [{"node_id": node_id}]}}
+        }
+
+        self.assertTrue(vault.node_in_raft_peers(node_id=node_id))
+
+    @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
+    def test_given_node_not_in_peer_list_when_node_in_raft_peers_then_returns_false(
+        self, patch_health_status
+    ):
+        node_id = "whatever node id"
+        vault = Vault(url="http://whatever-url")
+        patch_health_status.return_value = {
+            "data": {"config": {"servers": [{"node_id": "not our node"}]}}
+        }
+
+        self.assertFalse(vault.node_in_raft_peers(node_id=node_id))

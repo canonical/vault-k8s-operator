@@ -28,7 +28,7 @@ resources:
     upstream-source: vault:1.13.3
 
 storage:
-  vault-storage:
+  vault-raft:
     type: filesystem
     minimum-size: 10G
 

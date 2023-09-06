@@ -15,7 +15,7 @@ for the related charm, enabling the related charm to manage its own TLS keys loc
 
 Deploy the charm:
 ```bash
-juju deploy vault-k8s --trust
+juju deploy vault-k8s -n 5 --trust
 ```
 
 ### Retrieve Vault's Root token

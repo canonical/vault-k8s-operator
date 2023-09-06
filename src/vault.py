@@ -5,7 +5,6 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-from time import sleep, time
 from typing import List, Tuple
 
 import hvac  # type: ignore[import]
@@ -48,7 +47,12 @@ class Vault:
         initialize_response = self._client.sys.initialize(
             secret_shares=secret_shares, secret_threshold=secret_threshold
         )
+        logger.info("Vault is initialized")
         return initialize_response["root_token"], initialize_response["keys"]
+
+    def is_initialized(self) -> bool:
+        """Returns whether Vault is initialized."""
+        return self._client.sys.is_initialized()
 
     def is_sealed(self) -> bool:
         """Returns whether Vault is sealed."""
@@ -58,24 +62,7 @@ class Vault:
         """Unseal Vault."""
         for unseal_key in unseal_keys:
             self._client.sys.submit_unseal_key(unseal_key)
-
-    def wait_to_be_ready(self, timeout: int = 30):
-        """Wait for vault to be ready."""
-        start_time = time()
-        while time() - start_time < timeout:
-            if self.is_ready():
-                return
-            sleep(2)
-        raise TimeoutError("Timed out waiting for vault to be ready")
-
-    def wait_for_api_available(self, timeout: int = 30) -> None:
-        """Wait for vault to be available."""
-        start_time = time()
-        while time() - start_time < timeout:
-            if self.is_api_available():
-                return
-            sleep(2)
-        raise TimeoutError("Timed out waiting for vault to be available")
+        logger.info("Vault is unsealed")
 
     def is_api_available(self) -> bool:
         """Returns whether Vault is available."""
@@ -88,3 +75,16 @@ class Vault:
     def set_token(self, token: str) -> None:
         """Sets the Vault token for authentication."""
         self._client.token = token
+
+    def remove_raft_node(self, node_id: str) -> None:
+        """Remove raft peer."""
+        self._client.sys.remove_raft_node(server_id=node_id)
+        logger.info(f"Removed raft node {node_id}")
+
+    def node_in_raft_peers(self, node_id: str) -> bool:
+        """Check if node is in raft peers."""
+        raft_config = self._client.sys.read_raft_config()
+        for peer in raft_config["data"]["config"]["servers"]:
+            if peer["node_id"] == node_id:
+                return True
+        return False
