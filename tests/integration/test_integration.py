@@ -61,7 +61,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
     ):
-        await ops_test.model.applications[APPLICATION_NAME].scale(6)
+        await ops_test.model.applications[APPLICATION_NAME].scale(6)  # type: ignore[union-attr]
 
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME], status="active", timeout=1000
@@ -72,7 +72,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
     ):
-        await ops_test.model.applications[APPLICATION_NAME].scale(3)
+        await ops_test.model.applications[APPLICATION_NAME].scale(3)  # type: ignore[union-attr]
 
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME], status="active", timeout=1000
