@@ -324,7 +324,7 @@ class VaultCharm(CharmBase):
         retry_join = [
             {"leader_api_addr": unit_address} for unit_address in self._other_peer_unit_addresses()
         ]
-        raft_config = {
+        raft_config: Dict[str, Any] = {
             "path": VAULT_RAFT_DATA_PATH,
             "node_id": self._node_id,
         }
