@@ -11,60 +11,6 @@ from vault import Vault
 
 
 class TestVault(unittest.TestCase):
-    @patch("hvac.api.system_backend.Init.is_initialized")
-    def test_given_vault_not_initialized_when_is_ready_then_return_false(
-        self, patch_is_initialized
-    ):
-        patch_is_initialized.return_value = False
-
-        vault = Vault(url="http://whatever-url")
-
-        self.assertFalse(vault.is_ready())
-
-    @patch("hvac.api.system_backend.seal.Seal.is_sealed")
-    @patch("hvac.api.system_backend.Init.is_initialized")
-    def test_given_vault_is_sealed_when_is_ready_then_return_false(
-        self, patch_is_initialized, patch_is_sealed
-    ):
-        patch_is_initialized.return_value = True
-        patch_is_sealed.return_value = True
-
-        vault = Vault(url="http://whatever-url")
-
-        self.assertFalse(vault.is_ready())
-
-    @patch("hvac.api.system_backend.health.Health.read_health_status")
-    @patch("hvac.api.system_backend.seal.Seal.is_sealed")
-    @patch("hvac.api.system_backend.init.Init.is_initialized")
-    def test_given_vault_health_returns_40x_when_is_ready_then_return_false(
-        self, patch_is_initialized, patch_is_sealed, patch_read_health_status
-    ):
-        patch_is_initialized.return_value = True
-        patch_is_sealed.return_value = False
-        health_status_response = requests.Response()
-        health_status_response.status_code = 404
-        patch_read_health_status.return_value = health_status_response
-
-        vault = Vault(url="http://whatever-url")
-
-        self.assertFalse(vault.is_ready())
-
-    @patch("hvac.api.system_backend.health.Health.read_health_status")
-    @patch("hvac.api.system_backend.seal.Seal.is_sealed")
-    @patch("hvac.api.system_backend.init.Init.is_initialized")
-    def test_given_vault_health_returns_200_when_is_ready_then_return_true(
-        self, patch_is_initialized, patch_is_sealed, patch_read_health_status
-    ):
-        patch_is_initialized.return_value = True
-        patch_is_sealed.return_value = False
-        health_status_response = requests.Response()
-        health_status_response.status_code = 200
-        patch_read_health_status.return_value = health_status_response
-
-        vault = Vault(url="http://whatever-url")
-
-        self.assertTrue(vault.is_ready())
-
     @patch("hvac.api.system_backend.init.Init.initialize")
     def test_given_shares_and_threshold_when_initialize_then_root_token_and_unseal_key_returned(
         self, patch_initialize

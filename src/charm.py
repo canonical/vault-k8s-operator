@@ -339,7 +339,7 @@ class VaultCharm(CharmBase):
                     "leader_api_addr": "http://1.2.3.4:8200"
                 },
                 {
-                    "leader_api_addr": "http://1.2.3.4:8200"
+                    "leader_api_addr": "http://5.6.7.8:8200"
                 }
             ]
         }

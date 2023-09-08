@@ -25,17 +25,6 @@ class Vault:
     def __init__(self, url: str):
         self._client = hvac.Client(url=url)
 
-    def is_ready(self) -> bool:
-        """Returns whether Vault is ready for interaction."""
-        if not self._client.sys.is_initialized():
-            return False
-        if self.is_sealed():
-            return False
-        health_status = self._client.sys.read_health_status()
-        if health_status.status_code != 200:
-            return False
-        return True
-
     def initialize(
         self, secret_shares: int = 1, secret_threshold: int = 1
     ) -> Tuple[str, List[str]]:
