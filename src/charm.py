@@ -63,7 +63,10 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.remove, self._on_remove)
 
     def _on_install(self, event: InstallEvent):
-        """Handler triggered when the charm is installed."""
+        """Handler triggered when the charm is installed.
+
+        Sets pebble plan, initializes vault, and unseals vault.
+        """
         if not self.unit.is_leader():
             return
         if not self._container.can_connect():
@@ -94,11 +97,8 @@ class VaultCharm(CharmBase):
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
 
-        Args:
-            event: Juju event
-
-        Returns:
-            None
+        Configures pebble layer, sets the unit address in the peer relation, starts the vault
+        service, and unseals Vault.
         """
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
@@ -165,7 +165,10 @@ class VaultCharm(CharmBase):
 
     @property
     def _api_address(self) -> str:
-        """Returns the API address."""
+        """Returns the API address.
+
+        Example: "http://1.2.3.4:8200"
+        """
         return f"http://{self._bind_address}:{self.VAULT_PORT}"
 
     def _set_initialization_secret_in_peer_relation(
@@ -246,7 +249,9 @@ class VaultCharm(CharmBase):
         """Returns pebble layer to start Vault.
 
         Vault config options:
-            backend: Configures the storage backend where Vault data is stored.
+            ui: Enables the built-in static web UI.
+            storage: Configures the storage backend, which represents the location for the
+                durable storage of Vault's information.
             listener: Configures how Vault is listening for API requests.
             default_lease_ttl: Specifies the default lease duration for Vault's tokens and secrets.
             max_lease_ttl: Specifies the maximum possible lease duration for Vault's tokens and
@@ -312,7 +317,10 @@ class VaultCharm(CharmBase):
         return unit_addresses
 
     def _other_peer_unit_addresses(self) -> List[str]:
-        """Returns list of other peer unit addresses."""
+        """Returns list of other peer unit addresses.
+
+        We exclude our own unit address from the list.
+        """
         return [
             unit_address
             for unit_address in self._get_peer_relation_unit_addresses()
@@ -320,7 +328,22 @@ class VaultCharm(CharmBase):
         ]
 
     def _get_raft_config(self) -> Dict[str, Any]:
-        """Returns raft config for vault."""
+        """Returns raft config for vault.
+
+        Example of raft config:
+        {
+            "path": "/vault/raft",
+            "node_id": "vault-k8s-0",
+            "retry_join": [
+                {
+                    "leader_api_addr": "http://1.2.3.4:8200"
+                },
+                {
+                    "leader_api_addr": "http://1.2.3.4:8200"
+                }
+            ]
+        }
+        """
         retry_join = [
             {"leader_api_addr": unit_address} for unit_address in self._other_peer_unit_addresses()
         ]
@@ -334,6 +357,10 @@ class VaultCharm(CharmBase):
 
     @property
     def _node_id(self) -> str:
+        """Returns node id for vault.
+
+        Example of node id: "vault-k8s-0"
+        """
         return f"{self.model.name}-{self.unit.name}"
 
 
