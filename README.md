@@ -3,11 +3,8 @@
 This charm deploys [Vault][vault-upstream], a tool for securely managing
 secrets used in modern computing (e.g. passwords, certificates, API keys).
 
-In addition to deploying and initializing Vault, this charm provides a relation
-for other charms to request that Vault's Certificate Authority (CA) sign a certificate 
-for the related charm, enabling the related charm to manage its own TLS keys locally.
-
-> **Note**: This charm does not support high-availability / scaling .
+In addition to deploying and initializing Vault, this charm supports high availability mode using
+the Raft backend.
 
 ## Usage
 

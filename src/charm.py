@@ -9,7 +9,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
@@ -63,6 +63,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.remove, self._on_remove)
 
     def _on_install(self, event: InstallEvent):
+        """Handler triggered when the charm is installed."""
         if not self.unit.is_leader():
             return
         if not self._container.can_connect():
@@ -164,6 +165,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _api_address(self) -> str:
+        """Returns the API address."""
         return f"http://{self._bind_address}:{self.VAULT_PORT}"
 
     def _set_initialization_secret_in_peer_relation(
@@ -292,12 +294,14 @@ class VaultCharm(CharmBase):
         )
 
     def _set_peer_relation_unit_address(self) -> None:
+        """Set the unit address in the peer relation."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         if not peer_relation:
             raise RuntimeError("Peer relation not created")
         peer_relation.data[self.unit].update({"unit-address": self._api_address})
 
     def _get_peer_relation_unit_addresses(self) -> List[str]:
+        """Returns list of peer unit addresses."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         unit_addresses = []
         if not peer_relation:
@@ -308,13 +312,15 @@ class VaultCharm(CharmBase):
         return unit_addresses
 
     def _other_peer_unit_addresses(self) -> List[str]:
+        """Returns list of other peer unit addresses."""
         return [
             unit_address
             for unit_address in self._get_peer_relation_unit_addresses()
             if unit_address != self._api_address
         ]
 
-    def _get_raft_config(self) -> dict:
+    def _get_raft_config(self) -> Dict[str, Any]:
+        """Returns raft config for vault."""
         retry_join = [
             {"leader_api_addr": unit_address} for unit_address in self._other_peer_unit_addresses()
         ]
@@ -327,7 +333,7 @@ class VaultCharm(CharmBase):
         return raft_config
 
     @property
-    def _node_id(self):
+    def _node_id(self) -> str:
         return f"{self.model.name}-{self.unit.name}"
 
 
