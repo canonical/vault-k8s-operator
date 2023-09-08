@@ -9,7 +9,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 
 import json
 import logging
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
