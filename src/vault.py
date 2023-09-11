@@ -68,7 +68,7 @@ class Vault:
     def remove_raft_node(self, node_id: str) -> None:
         """Remove raft peer."""
         self._client.sys.remove_raft_node(server_id=node_id)
-        logger.info(f"Removed raft node {node_id}")
+        logger.info("Removed raft node %s", node_id)
 
     def node_in_raft_peers(self, node_id: str) -> bool:
         """Check if node is in raft peers."""
