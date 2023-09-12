@@ -18,8 +18,8 @@ containers:
   vault:
     resource: vault-image
     mounts:
-      - storage: vault-storage
-        location: /srv
+      - storage: vault-raft
+        location: /vault/raft
 
 resources:
   vault-image:
@@ -28,7 +28,7 @@ resources:
     upstream-source: vault:1.13.3
 
 storage:
-  vault-storage:
+  vault-raft:
     type: filesystem
     minimum-size: 10G
 
