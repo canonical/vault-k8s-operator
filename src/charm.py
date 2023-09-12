@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+import requests
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -92,7 +93,6 @@ class VaultCharm(CharmBase):
         self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
-        self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
@@ -113,7 +113,7 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for vault initialization secret")
             event.defer()
             return
-        if not self.unit.is_leader() and len(self._other_peer_unit_addresses()) == 0:
+        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             event.defer()
             return
@@ -131,12 +131,12 @@ class VaultCharm(CharmBase):
             return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
-        self._set_peer_relation_unit_address()
+        self._set_peer_relation_node_api_address()
         self.unit.status = ActiveStatus()
 
     def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
         """Handle relation-joined event for the replicas relation."""
-        self._set_peer_relation_unit_address()
+        self._set_peer_relation_node_api_address()
 
     def _on_remove(self, event: RemoveEvent):
         """Handler triggered when the charm is removed.
@@ -149,8 +149,11 @@ class VaultCharm(CharmBase):
         if root_token:
             vault = Vault(url=self._api_address)
             vault.set_token(token=root_token)
-            if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
-                vault.remove_raft_node(node_id=self._node_id)
+            try:
+                if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
+                    vault.remove_raft_node(node_id=self._node_id)
+            except (requests.exceptions.ConnectionError, requests.exceptions.TooManyRedirects):
+                pass
         if self._vault_service_is_running():
             self._container.stop(self._service_name)
         self._container.remove_path(path=f"{VAULT_RAFT_DATA_PATH}/*", recursive=True)
@@ -275,7 +278,7 @@ class VaultCharm(CharmBase):
             "default_lease_ttl": self.model.config["default_lease_ttl"],
             "max_lease_ttl": self.model.config["max_lease_ttl"],
             "disable_mlock": True,
-            "cluster_addr": f"http://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
+            "cluster_addr": f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
             "api_addr": self._api_address,
         }
 
@@ -298,33 +301,33 @@ class VaultCharm(CharmBase):
             }
         )
 
-    def _set_peer_relation_unit_address(self) -> None:
+    def _set_peer_relation_node_api_address(self) -> None:
         """Set the unit address in the peer relation."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         if not peer_relation:
             raise RuntimeError("Peer relation not created")
-        peer_relation.data[self.unit].update({"unit-address": self._api_address})
+        peer_relation.data[self.unit].update({"node_api_address": self._api_address})
 
-    def _get_peer_relation_unit_addresses(self) -> List[str]:
+    def _get_peer_relation_node_api_addresses(self) -> List[str]:
         """Returns list of peer unit addresses."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        unit_addresses = []
+        node_api_addresses = []
         if not peer_relation:
             return []
         for peer in peer_relation.units:
-            if "unit-address" in peer_relation.data[peer]:
-                unit_addresses.append(peer_relation.data[peer]["unit-address"])
-        return unit_addresses
+            if "node_api_address" in peer_relation.data[peer]:
+                node_api_addresses.append(peer_relation.data[peer]["node_api_address"])
+        return node_api_addresses
 
-    def _other_peer_unit_addresses(self) -> List[str]:
+    def _other_peer_node_api_addresses(self) -> List[str]:
         """Returns list of other peer unit addresses.
 
         We exclude our own unit address from the list.
         """
         return [
-            unit_address
-            for unit_address in self._get_peer_relation_unit_addresses()
-            if unit_address != self._api_address
+            node_api_address
+            for node_api_address in self._get_peer_relation_node_api_addresses()
+            if node_api_address != self._api_address
         ]
 
     def _get_raft_config(self) -> Dict[str, Any]:
@@ -345,7 +348,8 @@ class VaultCharm(CharmBase):
         }
         """
         retry_join = [
-            {"leader_api_addr": unit_address} for unit_address in self._other_peer_unit_addresses()
+            {"leader_api_addr": node_api_address}
+            for node_api_address in self._other_peer_node_api_addresses()
         ]
         raft_config: Dict[str, Any] = {
             "path": VAULT_RAFT_DATA_PATH,

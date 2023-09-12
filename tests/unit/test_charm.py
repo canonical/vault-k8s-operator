@@ -57,9 +57,9 @@ class TestCharm(unittest.TestCase):
             key_values=key_values,
         )
 
-    def _set_other_unit_api_address_in_peer_relation(self, relation_id: int, unit_name: str):
-        """Set the other unit api address in the peer relation."""
-        key_values = {"unit-address": "http://5.2.1.9:8200"}
+    def _set_other_node_api_address_in_peer_relation(self, relation_id: int, unit_name: str):
+        """Set the other node api address in the peer relation."""
+        key_values = {"node_api_address": "http://5.2.1.9:8200"}
         self.harness.update_relation_data(
             app_or_unit=unit_name,
             relation_id=relation_id,
@@ -157,7 +157,7 @@ class TestCharm(unittest.TestCase):
             "default_lease_ttl": "168h",
             "max_lease_ttl": "720h",
             "disable_mlock": True,
-            "cluster_addr": f"http://{bind_address}:8201",
+            "cluster_addr": f"https://{bind_address}:8201",
             "api_addr": f"http://{bind_address}:8200",
         }
         expected_plan = {
@@ -178,25 +178,6 @@ class TestCharm(unittest.TestCase):
 
         updated_plan = self.harness.get_container_pebble_plan("vault").to_dict()
         self.assertEqual(updated_plan, expected_plan)
-
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_api_available")
-    @patch("ops.model.Model.get_binding")
-    def test_given_binding_address_when_install_then_status_is_active(
-        self, patch_get_binding, patch_is_api_available, patch_vault_initialize
-    ):
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
-        patch_is_api_available.return_value = True
-        self.harness.set_leader(is_leader=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        patch_vault_initialize.return_value = "root token content", "unseal key content"
-        self._set_peer_relation()
-
-        self.harness.charm.on.install.emit()
-
-        self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
@@ -252,7 +233,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault initialization secret"),
         )
 
-    def test_given_other_unit_addresses_not_available_when_config_changed_then_status_is_waiting(
+    def test_given_other_node_api_addresses_not_available_when_config_changed_then_status_is_waiting(  # noqa: E501
         self,
     ):
         self.harness.set_leader(is_leader=False)
@@ -308,7 +289,7 @@ class TestCharm(unittest.TestCase):
             "default_lease_ttl": "168h",
             "max_lease_ttl": "720h",
             "disable_mlock": True,
-            "cluster_addr": f"http://{bind_address}:8201",
+            "cluster_addr": f"https://{bind_address}:8201",
             "api_addr": f"http://{bind_address}:8200",
         }
         expected_plan = {
@@ -413,7 +394,7 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
-        self._set_other_unit_api_address_in_peer_relation(
+        self._set_other_node_api_address_in_peer_relation(
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
         )
@@ -449,7 +430,7 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
-        self._set_other_unit_api_address_in_peer_relation(
+        self._set_other_node_api_address_in_peer_relation(
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
         )
