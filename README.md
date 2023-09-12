@@ -15,6 +15,8 @@ Deploy the charm:
 juju deploy vault-k8s -n 5 --trust
 ```
 
+We recommend deploying Vault with an odd number of units.
+
 ### Retrieve Vault's Root token
 
 Retrieve the Juju secrets list:

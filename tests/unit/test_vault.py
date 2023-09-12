@@ -58,7 +58,7 @@ class TestVault(unittest.TestCase):
         self.assertTrue(vault.is_api_available())
 
     @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
-    def test_given_node_in_peer_list_when_node_in_raft_peers_then_returns_true(
+    def test_given_node_in_peer_list_when_is_node_in_raft_peers_then_returns_true(
         self, patch_health_status
     ):
         node_id = "whatever node id"
@@ -67,10 +67,10 @@ class TestVault(unittest.TestCase):
             "data": {"config": {"servers": [{"node_id": node_id}]}}
         }
 
-        self.assertTrue(vault.node_in_raft_peers(node_id=node_id))
+        self.assertTrue(vault.is_node_in_raft_peers(node_id=node_id))
 
     @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
-    def test_given_node_not_in_peer_list_when_node_in_raft_peers_then_returns_false(
+    def test_given_node_not_in_peer_list_when_is_node_in_raft_peers_then_returns_false(
         self, patch_health_status
     ):
         node_id = "whatever node id"
@@ -79,4 +79,26 @@ class TestVault(unittest.TestCase):
             "data": {"config": {"servers": [{"node_id": "not our node"}]}}
         }
 
-        self.assertFalse(vault.node_in_raft_peers(node_id=node_id))
+        self.assertFalse(vault.is_node_in_raft_peers(node_id=node_id))
+
+    @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
+    def test_given_1_node_in_raft_cluster_when_get_num_raft_peers_then_returns_1(
+        self, patch_health_status
+    ):
+        patch_health_status.return_value = {
+            "data": {
+                "config": {
+                    "servers": [
+                        {"node_id": "node 1"},
+                        {"node_id": "node 2"},
+                        {"node_id": "node 3"},
+                    ]
+                }
+            }
+        }
+
+        vault = Vault(url="http://whatever-url")
+
+        vault.get_num_raft_peers()
+
+        self.assertEqual(3, vault.get_num_raft_peers())

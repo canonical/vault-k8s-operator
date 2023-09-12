@@ -70,10 +70,15 @@ class Vault:
         self._client.sys.remove_raft_node(server_id=node_id)
         logger.info("Removed raft node %s", node_id)
 
-    def node_in_raft_peers(self, node_id: str) -> bool:
+    def is_node_in_raft_peers(self, node_id: str) -> bool:
         """Check if node is in raft peers."""
         raft_config = self._client.sys.read_raft_config()
         for peer in raft_config["data"]["config"]["servers"]:
             if peer["node_id"] == node_id:
                 return True
         return False
+
+    def get_num_raft_peers(self) -> int:
+        """Returns the number of raft peers."""
+        raft_config = self._client.sys.read_raft_config()
+        return len(raft_config["data"]["config"]["servers"])

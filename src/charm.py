@@ -30,13 +30,13 @@ from ops.model import (
     SecretNotFoundError,
     WaitingStatus,
 )
-from ops.pebble import Layer
+from ops.pebble import ChangeError, Layer, PathError
 
 from vault import Vault
 
 logger = logging.getLogger(__name__)
 
-VAULT_RAFT_DATA_PATH = "/vault/raft"
+VAULT_STORAGE_PATH = "/vault/raft"
 PEER_RELATION_NAME = "vault-peers"
 
 
@@ -67,11 +67,12 @@ class VaultCharm(CharmBase):
 
         Sets pebble plan, initializes vault, and unseals vault.
         """
-        if not self.unit.is_leader():
-            return
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
+            return
+        self._delete_vault_data()
+        if not self.unit.is_leader():
             return
         if not self._is_peer_relation_created():
             self.unit.status = WaitingStatus("Waiting for peer relation to be created")
@@ -145,14 +146,35 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             return
         root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
-        if root_token:
+        if self._bind_address and root_token:
             vault = Vault(url=self._api_address)
             vault.set_token(token=root_token)
-            if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
+            if (
+                vault.is_api_available()
+                and vault.is_node_in_raft_peers(node_id=self._node_id)
+                and vault.get_num_raft_peers() > 1
+            ):
                 vault.remove_raft_node(node_id=self._node_id)
         if self._vault_service_is_running():
-            self._container.stop(self._service_name)
-        self._container.remove_path(path=f"{VAULT_RAFT_DATA_PATH}/*", recursive=True)
+            try:
+                self._container.stop(self._service_name)
+            except ChangeError:
+                logger.warning("Failed to stop Vault service")
+                pass
+        self._delete_vault_data()
+
+    def _delete_vault_data(self) -> None:
+        """Delete Vault's data."""
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
+            logger.info("Removed Vault's main database")
+        except PathError:
+            logger.info("No Vault database to remove")
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
+            logger.info("Removed Vault's Raft database")
+        except PathError:
+            logger.info("No Vault raft database to remove")
 
     def _vault_service_is_running(self) -> bool:
         """Check if the vault service is running."""
@@ -348,7 +370,7 @@ class VaultCharm(CharmBase):
             for node_api_address in self._other_peer_node_api_addresses()
         ]
         raft_config: Dict[str, Any] = {
-            "path": VAULT_RAFT_DATA_PATH,
+            "path": VAULT_STORAGE_PATH,
             "node_id": self._node_id,
         }
         if retry_join:

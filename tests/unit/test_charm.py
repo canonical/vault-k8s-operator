@@ -5,7 +5,7 @@
 import json
 import unittest
 from typing import List
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
@@ -64,6 +64,19 @@ class TestCharm(unittest.TestCase):
             app_or_unit=unit_name,
             relation_id=relation_id,
             key_values=key_values,
+        )
+
+    @patch("ops.model.Container.remove_path")
+    def test_given_can_connect_to_workload_when_install_then_existing_data_is_removed(
+        self, patch_remove_path
+    ):
+        self.harness.set_leader(is_leader=False)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.charm.on.install.emit()
+
+        patch_remove_path.assert_has_calls(
+            calls=[call(path="/vault/raft/vault.db"), call(path="/vault/raft/raft/raft.db")]
         )
 
     def test_given_cant_connect_to_workload_when_install_then_status_is_waiting(self):
@@ -451,21 +464,30 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm.on.remove.emit()
 
-        patch_remove_path.assert_called_with(path="/vault/raft/*", recursive=True)
+        patch_remove_path.assert_has_calls(
+            calls=[call(path="/vault/raft/vault.db"), call(path="/vault/raft/raft/raft.db")]
+        )
 
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.get_num_raft_peers")
     @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.node_in_raft_peers")
+    @patch("vault.Vault.is_node_in_raft_peers")
     @patch("vault.Vault.remove_raft_node")
     @patch("ops.model.Container.remove_path", new=Mock)
     def test_given_node_in_raft_when_on_remove_then_node_is_removed_from_raft(
         self,
         patch_remove_raft_node,
-        patch_node_in_raft_peers,
+        patch_is_node_in_raft_peers,
         patch_is_api_available,
+        patch_get_num_raft_peers,
+        patch_get_binding,
     ):
+        patch_get_num_raft_peers.return_value = 2
+        bind_address = "1.2.3.4"
+        patch_get_binding.return_value = MockBinding(bind_address=bind_address)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = True
-        patch_node_in_raft_peers.return_value = True
+        patch_is_node_in_raft_peers.return_value = True
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
@@ -478,18 +500,18 @@ class TestCharm(unittest.TestCase):
         patch_remove_raft_node.assert_called_with(node_id=f"{self.model_name}-{self.app_name}/0")
 
     @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.node_in_raft_peers")
+    @patch("vault.Vault.is_node_in_raft_peers")
     @patch("vault.Vault.remove_raft_node")
     @patch("ops.model.Container.remove_path", new=Mock)
     def test_given_node_not_in_raft_when_on_remove_then_node_is_not_removed_from_raft(
         self,
         patch_remove_raft_node,
-        patch_node_in_raft_peers,
+        patch_is_node_in_raft_peers,
         patch_is_api_available,
     ):
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = True
-        patch_node_in_raft_peers.return_value = False
+        patch_is_node_in_raft_peers.return_value = False
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
@@ -502,7 +524,7 @@ class TestCharm(unittest.TestCase):
         patch_remove_raft_node.assert_not_called()
 
     @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.node_in_raft_peers")
+    @patch("vault.Vault.is_node_in_raft_peers")
     @patch("vault.Vault.remove_raft_node", new=Mock)
     @patch("ops.model.Container.get_service", new=Mock)
     @patch("ops.model.Container.stop")
@@ -510,12 +532,12 @@ class TestCharm(unittest.TestCase):
     def test_given_service_is_running_when_on_remove_then_service_is_stopped(
         self,
         patch_stop_service,
-        patch_node_in_raft_peers,
+        patch_is_node_in_raft_peers,
         patch_is_api_available,
     ):
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = True
-        patch_node_in_raft_peers.return_value = False
+        patch_is_node_in_raft_peers.return_value = False
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
