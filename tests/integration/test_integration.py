@@ -66,7 +66,7 @@ class TestVaultK8s:
         build_and_deploy,
     ):
         num_units = 7
-        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]
+        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]  # noqa: E501
 
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME],
@@ -82,7 +82,7 @@ class TestVaultK8s:
         build_and_deploy,
     ):
         num_units = 3
-        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]
+        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]  # noqa: E501
 
         await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
             apps=[APPLICATION_NAME],

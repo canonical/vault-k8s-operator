@@ -11,7 +11,6 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -149,11 +148,8 @@ class VaultCharm(CharmBase):
         if root_token:
             vault = Vault(url=self._api_address)
             vault.set_token(token=root_token)
-            try:
-                if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
-                    vault.remove_raft_node(node_id=self._node_id)
-            except (requests.exceptions.ConnectionError, requests.exceptions.TooManyRedirects):
-                pass
+            if vault.is_api_available() and vault.node_in_raft_peers(node_id=self._node_id):
+                vault.remove_raft_node(node_id=self._node_id)
         if self._vault_service_is_running():
             self._container.stop(self._service_name)
         self._container.remove_path(path=f"{VAULT_RAFT_DATA_PATH}/*", recursive=True)
