@@ -56,7 +56,11 @@ def generate_vault_certificates(subject: str, sans_ip: str) -> Tuple[str, str, s
         Tuple[str, str, str]: Private key, certificate, CA certificate
     """
     ca_private_key = generate_private_key()
-    ca_certificate = generate_ca(private_key=ca_private_key, subject="Vault self signed CA")
+    ca_certificate = generate_ca(
+        private_key=ca_private_key,
+        subject="Vault self signed CA",
+        validity=365 * 50,
+    )
     vault_private_key = generate_private_key()
     csr = generate_csr(private_key=vault_private_key, subject=subject, sans_ip=[sans_ip])
     vault_certificate = generate_certificate(
