@@ -271,7 +271,6 @@ class VaultCharm(CharmBase):
     ) -> bool:
         """Check if the certificates are pushed to the workload."""
         if not self._container.exists(path=TLS_CERT_FILE_PATH):
-            print("HELLO")
             return False
         if not self._container.exists(path=TLS_KEY_FILE_PATH):
             return False
@@ -311,6 +310,7 @@ class VaultCharm(CharmBase):
         juju_secret = self.app.add_secret(juju_secret_content, label="vault-certificate")
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         peer_relation.data[self.app].update({"vault-certificates-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        logger.info("Vault certificate secret set in peer relation")
 
     def _get_certificates_secret_in_peer_relation(
         self,
@@ -441,7 +441,6 @@ class VaultCharm(CharmBase):
                     "address": f"[::]:{self.VAULT_PORT}",
                     "tls_cert_file": TLS_CERT_FILE_PATH,
                     "tls_key_file": TLS_KEY_FILE_PATH,
-                    # "tls_disable_client_certs": True,
                 }
             },
             "default_lease_ttl": self.model.config["default_lease_ttl"],
