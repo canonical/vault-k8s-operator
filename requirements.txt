@@ -4,3 +4,5 @@ jsonschema
 lightkube
 lightkube-models
 requests
+jsonschema
+cryptography

@@ -14,5 +14,8 @@ bases:
 parts:
   charm:
     build-packages:
-      - rustc
       - cargo
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
+      - rustc

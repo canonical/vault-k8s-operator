@@ -4,6 +4,7 @@
 
 import json
 import unittest
+from io import StringIO
 from typing import List
 from unittest.mock import Mock, call, patch
 
@@ -51,6 +52,23 @@ class TestCharm(unittest.TestCase):
         }
         secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
         key_values = {"vault-initialization-secret-id": secret_id}
+        self.harness.update_relation_data(
+            app_or_unit=self.app_name,
+            relation_id=relation_id,
+            key_values=key_values,
+        )
+
+    def _set_certificate_secret_in_peer_relation(
+        self, relation_id: int, certificate: str, private_key: str, ca_certificate: str
+    ) -> None:
+        """Set the certificate secret in the peer relation."""
+        content = {
+            "certificate": certificate,
+            "privatekey": private_key,
+            "cacertificate": ca_certificate,
+        }
+        secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+        key_values = {"vault-certificates-secret-id": secret_id}
         self.harness.update_relation_data(
             app_or_unit=self.app_name,
             relation_id=relation_id,
@@ -117,6 +135,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind address to be available"),
         )
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.set_token")
     @patch("vault.Vault.initialize")
@@ -145,6 +164,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_set_token.assert_called_once_with(token=root_token)
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
     @patch("vault.Vault.initialize")
@@ -166,12 +186,18 @@ class TestCharm(unittest.TestCase):
             "storage": {
                 "raft": {"path": "/vault/raft", "node_id": f"{self.model_name}-{self.app_name}/0"}
             },
-            "listener": {"tcp": {"tls_disable": True, "address": "[::]:8200"}},
+            "listener": {
+                "tcp": {
+                    "address": "[::]:8200",
+                    "tls_cert_file": "/vault/certs/cert.pem",
+                    "tls_key_file": "/vault/certs/key.pem",
+                }
+            },
             "default_lease_ttl": "168h",
             "max_lease_ttl": "720h",
             "disable_mlock": True,
             "cluster_addr": f"https://{bind_address}:8201",
-            "api_addr": f"http://{bind_address}:8200",
+            "api_addr": f"https://{bind_address}:8200",
         }
         expected_plan = {
             "services": {
@@ -182,7 +208,7 @@ class TestCharm(unittest.TestCase):
                     "startup": "enabled",
                     "environment": {
                         "VAULT_LOCAL_CONFIG": json.dumps(expected_vault_config),
-                        "VAULT_API_ADDR": "http://[::]:8200",
+                        "VAULT_API_ADDR": "https://[::]:8200",
                     },
                 }
             },
@@ -192,6 +218,7 @@ class TestCharm(unittest.TestCase):
         updated_plan = self.harness.get_container_pebble_plan("vault").to_dict()
         self.assertEqual(updated_plan, expected_plan)
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
     def test_given_vault_not_available_when_install_then_status_is_waiting(
@@ -209,6 +236,117 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.unit.status,
             WaitingStatus("Waiting for vault to be available"),
         )
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Container.push", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_certificates")
+    def test_given_can_connect_when_install_then_certificate_secret_stored_in_peer_relation(
+        self,
+        patch_generate_certs,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        certificate = "certificate content"
+        private_key = "private key content"
+        ca_certificate = "ca certificate content"
+        patch_generate_certs.return_value = private_key, certificate, ca_certificate
+        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        relation_id = self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.charm.on.install.emit()
+
+        relation_data = self.harness.get_relation_data(
+            relation_id=relation_id, app_or_unit=self.app_name
+        )
+        self.assertIn("vault-certificates-secret-id", relation_data)
+        secret_id = relation_data["vault-certificates-secret-id"]
+        secret = self.harness.model.get_secret(id=secret_id)
+        secret_content = secret.get_content()
+        self.assertEqual(secret_content["certificate"], certificate)
+        self.assertEqual(secret_content["privatekey"], private_key)
+        self.assertEqual(secret_content["cacertificate"], ca_certificate)
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Container.push")
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_certificates")
+    def test_given_can_connect_when_install_then_certificate_pushed_to_workload(
+        self,
+        patch_generate_certs,
+        patch_get_binding,
+        patch_push,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        certificate = "certificate content"
+        private_key = "private key content"
+        ca_certificate = "ca certificate content"
+        patch_generate_certs.return_value = private_key, certificate, ca_certificate
+        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.charm.on.install.emit()
+
+        patch_push.assert_has_calls(
+            calls=[
+                call(path="/vault/certs/cert.pem", source=certificate),
+                call(path="/vault/certs/key.pem", source=private_key),
+                call(path="/vault/certs/ca.pem", source=ca_certificate),
+            ]
+        )
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Container.exists")
+    @patch("ops.model.Container.pull")
+    @patch("ops.model.Container.push")
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_certificates")
+    def test_given_certificates_pushed_when_install_then_certificate_not_pushed_to_workload(
+        self,
+        patch_generate_certs,
+        patch_get_binding,
+        patch_push,
+        patch_pull,
+        patch_exists,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        certificate = "certificate content"
+        private_key = "private key content"
+        ca_certificate = "ca certificate content"
+        patch_exists.return_value = True
+        patch_pull.side_effect = [
+            StringIO(certificate),
+            StringIO(private_key),
+            StringIO(ca_certificate),
+        ]
+        patch_generate_certs.return_value = private_key, certificate, ca_certificate
+        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.charm.on.install.emit()
+
+        patch_push.assert_not_called()
 
     def test_given_cant_connect_to_workload_when_config_changed_then_status_is_waiting(self):
         self.harness.set_leader(is_leader=True)
@@ -265,6 +403,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for other units to provide their addresses"),
         )
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
@@ -289,6 +428,12 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal key content"],
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         patch_get_binding.return_value = MockBinding(bind_address=bind_address)
 
         self.harness.charm.on.config_changed.emit()
@@ -296,14 +441,20 @@ class TestCharm(unittest.TestCase):
         expected_vault_config = {
             "ui": True,
             "storage": {
-                "raft": {"path": "/vault/raft", "node_id": f"{self.model_name}-{self.app_name}/0"}
+                "raft": {"path": "/vault/raft", "node_id": f"{self.model_name}-{self.app_name}/0"},
             },
-            "listener": {"tcp": {"tls_disable": True, "address": "[::]:8200"}},
+            "listener": {
+                "tcp": {
+                    "address": "[::]:8200",
+                    "tls_cert_file": "/vault/certs/cert.pem",
+                    "tls_key_file": "/vault/certs/key.pem",
+                }
+            },
             "default_lease_ttl": "168h",
             "max_lease_ttl": "720h",
             "disable_mlock": True,
             "cluster_addr": f"https://{bind_address}:8201",
-            "api_addr": f"http://{bind_address}:8200",
+            "api_addr": f"https://{bind_address}:8200",
         }
         expected_plan = {
             "services": {
@@ -314,7 +465,7 @@ class TestCharm(unittest.TestCase):
                     "startup": "enabled",
                     "environment": {
                         "VAULT_LOCAL_CONFIG": json.dumps(expected_vault_config),
-                        "VAULT_API_ADDR": "http://[::]:8200",
+                        "VAULT_API_ADDR": "https://[::]:8200",
                     },
                 }
             },
@@ -324,6 +475,7 @@ class TestCharm(unittest.TestCase):
             expected_plan,
         )
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
@@ -347,12 +499,19 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal key content"],
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
 
         self.harness.charm.on.config_changed.emit()
 
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.is_sealed")
@@ -379,12 +538,19 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=unseal_keys,
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
 
         self.harness.charm.on.config_changed.emit()
 
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.is_sealed", new=Mock)
@@ -407,6 +573,12 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         self._set_other_node_api_address_in_peer_relation(
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
@@ -420,6 +592,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault to be available"),
         )
 
+    @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.is_sealed", new=Mock)
@@ -443,6 +616,12 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         self._set_other_node_api_address_in_peer_relation(
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
@@ -455,6 +634,94 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.unit.status,
             WaitingStatus("Waiting for vault to be initialized"),
         )
+
+    def test_given_vault_certificate_not_available_when_config_changed_then_status_is_waiting(
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for vault certificate to be available"),
+        )
+
+    @patch("ops.model.Container.push")
+    def test_given_vault_certificate_available_when_config_changed_then_pushed_to_workload(
+        self, patch_push
+    ):
+        certificate = "certificate content"
+        private_key = "private key content"
+        ca_certificate = "ca certificate content"
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate=certificate,
+            private_key=private_key,
+            ca_certificate=ca_certificate,
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        patch_push.assert_has_calls(
+            calls=[
+                call(path="/vault/certs/cert.pem", source=certificate),
+                call(path="/vault/certs/key.pem", source=private_key),
+                call(path="/vault/certs/ca.pem", source=ca_certificate),
+            ]
+        )
+
+    @patch("ops.model.Container.exists")
+    @patch("ops.model.Container.pull")
+    @patch("ops.model.Container.push")
+    def test_given_certificates_already_pushed_available_when_config_changed_then_not_pushed(
+        self,
+        patch_push,
+        patch_pull,
+        patch_exists,
+    ):
+        patch_exists.return_value = True
+        certificate = "certificate content"
+        private_key = "private key content"
+        ca_certificate = "ca certificate content"
+        patch_pull.side_effect = [
+            StringIO(certificate),
+            StringIO(private_key),
+            StringIO(ca_certificate),
+        ]
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate=certificate,
+            private_key=private_key,
+            ca_certificate=ca_certificate,
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        patch_push.assert_not_called()
 
     @patch("ops.model.Container.remove_path")
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(

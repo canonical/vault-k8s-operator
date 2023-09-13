@@ -15,6 +15,12 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
+from charms.tls_certificates_interface.v2.tls_certificates import (
+    generate_ca,
+    generate_certificate,
+    generate_csr,
+    generate_private_key,
+)
 from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
@@ -37,7 +43,29 @@ from vault import Vault
 logger = logging.getLogger(__name__)
 
 VAULT_STORAGE_PATH = "/vault/raft"
+TLS_CERT_FILE_PATH = "/vault/certs/cert.pem"
+TLS_KEY_FILE_PATH = "/vault/certs/key.pem"
+TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
+
+
+def generate_vault_certificates(subject: str, sans_ip: str) -> Tuple[str, str, str]:
+    """Generate Vault certificates valid for 50 years.
+
+    Returns:
+        Tuple[str, str, str]: Private key, certificate, CA certificate
+    """
+    ca_private_key = generate_private_key()
+    ca_certificate = generate_ca(private_key=ca_private_key, subject="Vault self signed CA")
+    vault_private_key = generate_private_key()
+    csr = generate_csr(private_key=vault_private_key, subject=subject, sans_ip=[sans_ip])
+    vault_certificate = generate_certificate(
+        ca=ca_certificate,
+        ca_key=ca_private_key,
+        csr=csr,
+        validity=365 * 50,
+    )
+    return vault_private_key.decode(), vault_certificate.decode(), ca_certificate.decode()
 
 
 class VaultCharm(CharmBase):
@@ -83,6 +111,25 @@ class VaultCharm(CharmBase):
             event.defer()
             return
         self.unit.status = MaintenanceStatus("Initializing vault")
+        private_key, certificate, ca_certificate = self._get_certificates_secret_in_peer_relation()
+        if not private_key or not certificate or not ca_certificate:
+            private_key, certificate, ca_certificate = generate_vault_certificates(
+                subject=self._certificate_subject,
+                sans_ip=self._bind_address,
+            )
+            self._set_certificates_secret_in_peer_relation(
+                private_key=private_key, certificate=certificate, ca_certificate=ca_certificate
+            )
+        if not self._certificate_pushed_to_workload(
+            certificate=certificate,
+            private_key=private_key,
+            ca_certificate=ca_certificate,
+        ):
+            self._push_certificates_to_workload(
+                certificate=certificate,
+                private_key=private_key,
+                ca_certificate=ca_certificate,
+            )
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
         if not vault.is_api_available():
@@ -117,6 +164,21 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             event.defer()
             return
+        private_key, certificate, ca_certificate = self._get_certificates_secret_in_peer_relation()
+        if not private_key or not certificate or not ca_certificate:
+            self.unit.status = WaitingStatus("Waiting for vault certificate to be available")
+            event.defer()
+            return
+        if not self._certificate_pushed_to_workload(
+            private_key=private_key,
+            certificate=certificate,
+            ca_certificate=ca_certificate,
+        ):
+            self._push_certificates_to_workload(
+                private_key=private_key,
+                certificate=certificate,
+                ca_certificate=ca_certificate,
+            )
         self.unit.status = MaintenanceStatus("Preparing vault")
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
@@ -188,9 +250,91 @@ class VaultCharm(CharmBase):
     def _api_address(self) -> str:
         """Returns the API address.
 
-        Example: "http://1.2.3.4:8200"
+        Example: "https://1.2.3.4:8200"
         """
-        return f"http://{self._bind_address}:{self.VAULT_PORT}"
+        return f"https://{self._bind_address}:{self.VAULT_PORT}"
+
+    def _push_certificates_to_workload(
+        self,
+        private_key: str,
+        certificate: str,
+        ca_certificate: str,
+    ) -> None:
+        """Push the certificates to the workload."""
+        self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
+        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
+        self._container.push(path=TLS_CA_FILE_PATH, source=ca_certificate)
+        logger.info("Pushed certificates to workload")
+
+    def _certificate_pushed_to_workload(
+        self, private_key: str, certificate: str, ca_certificate: str
+    ) -> bool:
+        """Check if the certificates are pushed to the workload."""
+        if not self._container.exists(path=TLS_CERT_FILE_PATH):
+            print("HELLO")
+            return False
+        if not self._container.exists(path=TLS_KEY_FILE_PATH):
+            return False
+        if not self._container.exists(path=TLS_CA_FILE_PATH):
+            return False
+        existing_certificate = self._container.pull(path=TLS_CERT_FILE_PATH)
+        if existing_certificate.read() != certificate:
+            return False
+        existing_private_key = self._container.pull(path=TLS_KEY_FILE_PATH)
+        if existing_private_key.read() != private_key:
+            return False
+        existing_ca_certificate = self._container.pull(path=TLS_CA_FILE_PATH)
+        if existing_ca_certificate.read() != ca_certificate:
+            return False
+        return True
+
+    def _set_certificates_secret_in_peer_relation(
+        self,
+        private_key: str,
+        certificate: str,
+        ca_certificate: str,
+    ) -> None:
+        """Set the vault certificate secret in the peer relation.
+
+        Args:
+            private_key: Private key
+            certificate: certificate
+            ca_certificate: CA certificate
+        """
+        if not self._is_peer_relation_created():
+            raise RuntimeError("Peer relation not created")
+        juju_secret_content = {
+            "privatekey": private_key,
+            "certificate": certificate,
+            "cacertificate": ca_certificate,
+        }
+        juju_secret = self.app.add_secret(juju_secret_content, label="vault-certificate")
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        peer_relation.data[self.app].update({"vault-certificates-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+
+    def _get_certificates_secret_in_peer_relation(
+        self,
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Get the vault certificate secret from the peer relation.
+
+        Returns:
+            Tuple[Optional[str], Optional[str], Optional[str]]: The private key, certificate and
+                CA certificate.
+        """
+        if not self._is_peer_relation_created():
+            return None, None, None
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
+            "vault-certificates-secret-id"
+        )
+        if not juju_secret_id:
+            return None, None, None
+        try:
+            juju_secret = self.model.get_secret(id=juju_secret_id)
+        except SecretNotFoundError:
+            return None, None, None
+        content = juju_secret.get_content()
+        return content["privatekey"], content["certificate"], content["cacertificate"]
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
@@ -207,7 +351,7 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        juju_secret = self.app.add_secret(juju_secret_content)
+        juju_secret = self.app.add_secret(juju_secret_content, label="vault-initialization")
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
@@ -292,7 +436,14 @@ class VaultCharm(CharmBase):
         vault_config = {
             "ui": True,
             "storage": {"raft": self._get_raft_config()},
-            "listener": {"tcp": {"tls_disable": True, "address": f"[::]:{self.VAULT_PORT}"}},
+            "listener": {
+                "tcp": {
+                    "address": f"[::]:{self.VAULT_PORT}",
+                    "tls_cert_file": TLS_CERT_FILE_PATH,
+                    "tls_key_file": TLS_KEY_FILE_PATH,
+                    # "tls_disable_client_certs": True,
+                }
+            },
             "default_lease_ttl": self.model.config["default_lease_ttl"],
             "max_lease_ttl": self.model.config["max_lease_ttl"],
             "disable_mlock": True,
@@ -312,7 +463,7 @@ class VaultCharm(CharmBase):
                         "startup": "enabled",
                         "environment": {
                             "VAULT_LOCAL_CONFIG": json.dumps(vault_config),
-                            "VAULT_API_ADDR": f"http://[::]:{self.VAULT_PORT}",
+                            "VAULT_API_ADDR": f"https://[::]:{self.VAULT_PORT}",
                         },
                     }
                 },
@@ -357,16 +508,21 @@ class VaultCharm(CharmBase):
             "node_id": "vault-k8s-0",
             "retry_join": [
                 {
-                    "leader_api_addr": "http://1.2.3.4:8200"
+                    "leader_api_addr": "https://1.2.3.4:8200",
+                    "leader_ca_cert_file": "/vault/certs/ca.pem",
                 },
                 {
-                    "leader_api_addr": "http://5.6.7.8:8200"
+                    "leader_api_addr": "https://5.6.7.8:8200",
+                    "leader_ca_cert_file": "/vault/certs/ca.pem",
                 }
             ]
         }
         """
         retry_join = [
-            {"leader_api_addr": node_api_address}
+            {
+                "leader_api_addr": node_api_address,
+                "leader_ca_cert_file": TLS_CA_FILE_PATH,
+            }
             for node_api_address in self._other_peer_node_api_addresses()
         ]
         raft_config: Dict[str, Any] = {
@@ -384,6 +540,10 @@ class VaultCharm(CharmBase):
         Example of node id: "vault-k8s-0"
         """
         return f"{self.model.name}-{self.unit.name}"
+
+    @property
+    def _certificate_subject(self) -> str:
+        return f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
 
 if __name__ == "__main__":  # pragma: no cover
