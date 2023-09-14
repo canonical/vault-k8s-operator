@@ -23,7 +23,7 @@ class Vault:
     """Class to interact with Vault through its API."""
 
     def __init__(self, url: str):
-        self._client = hvac.Client(url=url)
+        self._client = hvac.Client(url=url, verify=False)
 
     def initialize(
         self, secret_shares: int = 1, secret_threshold: int = 1

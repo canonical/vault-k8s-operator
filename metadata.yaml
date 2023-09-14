@@ -20,6 +20,8 @@ containers:
     mounts:
       - storage: vault-raft
         location: /vault/raft
+      - storage: certs
+        location: /vault/certs
 
 resources:
   vault-image:
@@ -31,6 +33,9 @@ storage:
   vault-raft:
     type: filesystem
     minimum-size: 10G
+  certs:
+    type: filesystem
+    minimum-size: 50M
 
 peers:
   vault-peers:
