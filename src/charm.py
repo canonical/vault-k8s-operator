@@ -49,6 +49,17 @@ TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
 
 
+class PeerSecretError(Exception):
+    """Exception raised when a peer secret is not found."""
+
+    def __init__(
+        self, secret_name: str, message: str = "Could not retrieve secret from peer relation"
+    ):
+        self.secret_name = secret_name
+        self.message = message
+        super().__init__(self.message)
+
+
 def generate_vault_certificates(subject: str, sans_ip: str) -> Tuple[str, str, str]:
     """Generate Vault certificates valid for 50 years.
 
@@ -115,8 +126,14 @@ class VaultCharm(CharmBase):
             event.defer()
             return
         self.unit.status = MaintenanceStatus("Initializing vault")
-        private_key, certificate, ca_certificate = self._get_certificates_secret_in_peer_relation()
-        if not private_key or not certificate or not ca_certificate:
+        try:
+            (
+                private_key,
+                certificate,
+                ca_certificate,
+            ) = self._get_certificates_secret_in_peer_relation()
+        except PeerSecretError:
+            logger.info("Vault certificate secret not set in peer relation")
             private_key, certificate, ca_certificate = generate_vault_certificates(
                 subject=self._certificate_subject,
                 sans_ip=self._bind_address,
@@ -159,8 +176,9 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for peer relation")
             event.defer()
             return
-        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
-        if not root_token or not unseal_keys:
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
             self.unit.status = WaitingStatus("Waiting for vault initialization secret")
             event.defer()
             return
@@ -168,8 +186,13 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             event.defer()
             return
-        private_key, certificate, ca_certificate = self._get_certificates_secret_in_peer_relation()
-        if not private_key or not certificate or not ca_certificate:
+        try:
+            (
+                private_key,
+                certificate,
+                ca_certificate,
+            ) = self._get_certificates_secret_in_peer_relation()
+        except PeerSecretError:
             self.unit.status = WaitingStatus("Waiting for vault certificate to be available")
             event.defer()
             return
@@ -211,23 +234,27 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
-        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
-        if self._bind_address and root_token:
-            vault = Vault(url=self._api_address)
-            vault.set_token(token=root_token)
-            if (
-                vault.is_api_available()
-                and vault.is_node_in_raft_peers(node_id=self._node_id)
-                and vault.get_num_raft_peers() > 1
-            ):
-                vault.remove_raft_node(node_id=self._node_id)
-        if self._vault_service_is_running():
-            try:
-                self._container.stop(self._service_name)
-            except ChangeError:
-                logger.warning("Failed to stop Vault service")
-                pass
-        self._delete_vault_data()
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            if self._bind_address:
+                vault = Vault(url=self._api_address)
+                vault.set_token(token=root_token)
+                if (
+                    vault.is_api_available()
+                    and vault.is_node_in_raft_peers(node_id=self._node_id)
+                    and vault.get_num_raft_peers() > 1
+                ):
+                    vault.remove_raft_node(node_id=self._node_id)
+        except PeerSecretError:
+            logger.info("Vault initialization secret not set in peer relation")
+        finally:
+            if self._vault_service_is_running():
+                try:
+                    self._container.stop(self._service_name)
+                except ChangeError:
+                    logger.warning("Failed to stop Vault service")
+                    pass
+            self._delete_vault_data()
 
     def _delete_vault_data(self) -> None:
         """Delete Vault's data."""
@@ -318,27 +345,23 @@ class VaultCharm(CharmBase):
 
     def _get_certificates_secret_in_peer_relation(
         self,
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ) -> Tuple[str, str, str]:
         """Get the vault certificate secret from the peer relation.
 
         Returns:
             Tuple[Optional[str], Optional[str], Optional[str]]: The private key, certificate and
                 CA certificate.
         """
-        if not self._is_peer_relation_created():
-            return None, None, None
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-            "vault-certificates-secret-id"
-        )
-        if not juju_secret_id:
-            return None, None, None
         try:
+            peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+            juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
+                "vault-certificates-secret-id"
+            )
             juju_secret = self.model.get_secret(id=juju_secret_id)
-        except SecretNotFoundError:
-            return None, None, None
-        content = juju_secret.get_content()
-        return content["privatekey"], content["certificate"], content["cacertificate"]
+            content = juju_secret.get_content()
+            return content["privatekey"], content["certificate"], content["cacertificate"]
+        except (TypeError, SecretNotFoundError, AttributeError):
+            raise PeerSecretError(secret_name="vault-certificates-secret-id")
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
@@ -359,28 +382,22 @@ class VaultCharm(CharmBase):
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
-    def _get_initialization_secret_from_peer_relation(
-        self,
-    ) -> Tuple[Optional[str], Optional[List[str]]]:
+    def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
 
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        if not self._is_peer_relation_created():
-            return None, None
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-            "vault-initialization-secret-id"
-        )
-        if not juju_secret_id:
-            return None, None
         try:
+            peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+            juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
+                "vault-initialization-secret-id"
+            )
             juju_secret = self.model.get_secret(id=juju_secret_id)
-        except SecretNotFoundError:
-            return None, None
-        content = juju_secret.get_content()
-        return content["roottoken"], json.loads(content["unsealkeys"])
+            content = juju_secret.get_content()
+            return content["roottoken"], json.loads(content["unsealkeys"])
+        except (TypeError, SecretNotFoundError, AttributeError):
+            raise PeerSecretError(secret_name="vault-initialization-secret-id")
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""

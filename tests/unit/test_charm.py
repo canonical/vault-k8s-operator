@@ -689,7 +689,7 @@ class TestCharm(unittest.TestCase):
     @patch("ops.model.Container.exists")
     @patch("ops.model.Container.pull")
     @patch("ops.model.Container.push")
-    def test_given_certificates_already_pushed_available_when_config_changed_then_not_pushed(
+    def test_given_certificates_already_pushed_when_config_changed_then_not_pushed(
         self,
         patch_push,
         patch_pull,
