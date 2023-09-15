@@ -21,6 +21,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
@@ -33,6 +34,8 @@ from ops.model import (
     ActiveStatus,
     MaintenanceStatus,
     ModelError,
+    Relation,
+    Secret,
     SecretNotFoundError,
     WaitingStatus,
 )
@@ -47,6 +50,8 @@ TLS_CERT_FILE_PATH = "/vault/certs/cert.pem"
 TLS_KEY_FILE_PATH = "/vault/certs/key.pem"
 TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
+KV_RELATION_NAME = "vault-kv"
+KV_SECRET_PREFIX = "kv_creds_"
 
 
 class PeerSecretError(Exception):
@@ -99,6 +104,7 @@ class VaultCharm(CharmBase):
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
+        self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -106,6 +112,9 @@ class VaultCharm(CharmBase):
             self.on[PEER_RELATION_NAME].relation_created, self._on_peer_relation_created
         )
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(
+            self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
+        )
 
     def _on_install(self, event: InstallEvent):
         """Handler triggered when the charm is installed.
@@ -165,6 +174,7 @@ class VaultCharm(CharmBase):
         self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
+        vault.enable_approle_auth()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
@@ -224,6 +234,7 @@ class VaultCharm(CharmBase):
             return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
+        vault.enable_approle_auth()
         self._set_peer_relation_node_api_address()
         self.unit.status = ActiveStatus()
 
@@ -260,6 +271,99 @@ class VaultCharm(CharmBase):
                     pass
             self._delete_vault_data()
 
+    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
+        """Handler triggered when a new vault-kv client is attached."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can configure a vault-kv client, skipping")
+            return
+
+        if not self._is_peer_relation_created():
+            self.unit.status = WaitingStatus("Waiting for peer relation")
+            event.defer()
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            self.unit.status = WaitingStatus("Waiting for vault initialization secret")
+            event.defer()
+            return
+
+        relation = self.model.get_relation(event.relation_name, event.relation_id)
+
+        if relation is None or relation.app is None:
+            logger.debug("Relation or remote application is None, skipping")
+            return
+
+        vault = Vault(url=self._api_address)
+        vault.set_token(token=root_token)
+
+        if not vault.is_api_available():
+            self.unit.status = WaitingStatus("Waiting for vault to be available")
+            event.defer()
+            return
+
+        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
+        vault.configure_kv_mount(mount)
+        self.vault_kv.set_mount(relation, mount)
+        vault_url = self._get_relation_api_address(relation)
+        if vault_url is not None:
+            self.vault_kv.set_vault_url(relation, vault_url)
+
+        for unit in relation.units:
+            egress_subnet = relation.data[unit].get("egress_subnet")
+            nonce = relation.data[unit].get("nonce")
+            if egress_subnet is None or nonce is None:
+                logger.debug(
+                    "Skipping configuring access for unit %r, egress_subnet or nonce are missing",
+                    unit.name,
+                )
+                continue
+            policy_name = role_name = mount + "-" + unit.name.replace("/", "-")
+            vault.configure_kv_policy(policy_name, mount)
+            role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+            unit_secret = self.vault_kv.get_unit_credentials(relation, nonce)
+            secret = self._create_or_update_kv_secret(
+                vault,
+                relation,
+                role_id,
+                role_name,
+                egress_subnet,
+                unit_secret,
+            )
+            if secret is not None:
+                self.vault_kv.set_unit_credentials(relation, nonce, secret)
+
+    def _create_or_update_kv_secret(
+        self,
+        vault: Vault,
+        relation: Relation,
+        role_id: str,
+        role_name: str,
+        egress_subnet: str,
+        secret_id: Optional[str],
+    ) -> Optional[Secret]:
+        """Create or update a KV secret for a unit."""
+        label = KV_SECRET_PREFIX + role_name
+        try:
+            secret = self.model.get_secret(id=secret_id, label=label)
+            credentials = secret.get_content()
+            role_secret_id_data = vault.read_role_secret(role_name, credentials["role-secret-id"])
+            # if unit subnet is already in cidr_list, skip
+            if egress_subnet in role_secret_id_data["cidr_list"]:
+                return None
+            credentials["role-secret-id"] = vault.generate_role_secret_id(
+                role_name, [egress_subnet]
+            )
+            secret.set_content(credentials)
+        except SecretNotFoundError:
+            role_secret_id = vault.generate_role_secret_id(role_name, [egress_subnet])
+            secret = self.app.add_secret(
+                {"role-id": role_id, "role-secret-id": role_secret_id},
+                label=label,
+            )
+        secret.grant(relation)
+        return secret
+
     def _delete_vault_data(self) -> None:
         """Delete Vault's data."""
         try:
@@ -280,6 +384,16 @@ class VaultCharm(CharmBase):
         except ModelError:
             return False
         return True
+
+    def _get_relation_api_address(self, relation: Relation) -> Optional[str]:
+        """Fetches api address from relation and returns it.
+
+        Example: "https://10.152.183.20:8200"
+        """
+        binding = self.model.get_binding(relation)
+        if binding is None:
+            return None
+        return f"https://{binding.network.ingress_address}:{self.VAULT_PORT}"
 
     @property
     def _api_address(self) -> str:
