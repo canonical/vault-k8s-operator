@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-report:
+    uses: canonical/vault-k8s-operator/.github/workflows/lint-report.yaml@main
+
+  static-analysis:
+    uses: canonical/vault-k8s-operator/.github/workflows/static-analysis.yaml@main
+
+  unit-tests-with-coverage:
+    uses: canonical/vault-k8s-operator/.github/workflows/unit-test.yaml@main
+
+  integration-test:
+    uses: canonical/vault-k8s-operator/.github/workflows/integration-test.yaml@main
+    with:
+      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
+
+  publish-charm:
+    name: Publish Charm
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+      - integration-test
+    if: ${{ github.ref_name == 'main' }}
+    uses: canonical/vault-k8s-operator/.github/workflows/publish-charm.yaml@main
+    with:
+      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
+    secrets: inherit
+
