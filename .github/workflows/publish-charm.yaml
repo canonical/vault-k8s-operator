@@ -1,4 +1,4 @@
-name: publish-charm
+name: Publish charm
 
 on:
   workflow_call:

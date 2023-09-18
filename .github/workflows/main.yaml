@@ -10,28 +10,28 @@ on:
 
 jobs:
   lint-report:
-    uses: canonical/vault-k8s-operator/.github/workflows/lint-report.yaml@main
+    uses: ./.github/workflows/lint-report.yaml
 
   static-analysis:
-    uses: canonical/vault-k8s-operator/.github/workflows/static-analysis.yaml@main
+    name: Static analysis
+    uses: ./.github/workflows/static-analysis.yaml
 
   unit-tests-with-coverage:
-    uses: canonical/vault-k8s-operator/.github/workflows/unit-test.yaml@main
+    uses: ./.github/workflows/unit-test.yaml
 
   integration-test:
-    uses: canonical/vault-k8s-operator/.github/workflows/integration-test.yaml@main
+    uses: ./.github/workflows/integration-test.yaml
     with:
       charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
 
   publish-charm:
-    name: Publish Charm
     needs:
       - lint-report
       - static-analysis
       - unit-tests-with-coverage
       - integration-test
     if: ${{ github.ref_name == 'main' }}
-    uses: canonical/vault-k8s-operator/.github/workflows/publish-charm.yaml@main
+    uses: ./.github/workflows/publish-charm.yaml
     with:
       charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
     secrets: inherit
