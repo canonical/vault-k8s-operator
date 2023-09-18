@@ -2,6 +2,11 @@ name: integration-test
 
 on:
   workflow_call:
+    inputs:
+      charm-file-name:
+        description: Tested charm file name
+        required: true
+        type: string
 
 jobs:
   integration-test:
