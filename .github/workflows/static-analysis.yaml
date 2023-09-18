@@ -1,4 +1,4 @@
-name: Static analysis
+name: static-analysis
 
 on:
   workflow_call:

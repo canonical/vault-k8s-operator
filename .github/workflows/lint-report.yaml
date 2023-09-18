@@ -1,4 +1,4 @@
-name: Lint report
+name: lint-report
 
 on:
   workflow_call:
