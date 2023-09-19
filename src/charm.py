@@ -288,6 +288,16 @@ class VaultCharm(CharmBase):
             event.defer()
             return
 
+        try:
+            (
+                _,
+                _,
+                ca_certificate,
+            ) = self._get_certificates_secret_in_peer_relation()
+        except PeerSecretError:
+            self.unit.status = WaitingStatus("Waiting for vault certificate to be available")
+            event.defer()
+            return
         relation = self.model.get_relation(event.relation_name, event.relation_id)
 
         if relation is None or relation.app is None:
@@ -308,6 +318,7 @@ class VaultCharm(CharmBase):
         vault_url = self._get_relation_api_address(relation)
         if vault_url is not None:
             self.vault_kv.set_vault_url(relation, vault_url)
+        self.vault_kv.set_ca_certificate(relation, ca_certificate)
 
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")

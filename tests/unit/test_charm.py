@@ -919,6 +919,12 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
         (
             app_name,
             host_ip,
@@ -995,6 +1001,12 @@ class TestCharm(unittest.TestCase):
             relation_id=peer_relation_id,
             root_token="root token content",
             unseal_keys=["unseal_keys"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
         )
         (
             app_name,

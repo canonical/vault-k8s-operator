@@ -260,6 +260,7 @@ class TestVaultKvRequires(unittest.TestCase):
             remote_app,
             {
                 "vault_url": "https://vault.example.com",
+                "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
                 "credentials": json.dumps({self.harness.charm.interface.nonce: "dummy"}),
             },

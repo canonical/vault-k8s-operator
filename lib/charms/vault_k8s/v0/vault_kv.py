@@ -34,7 +34,7 @@ class ExampleRequirerCharm(CharmBase):
         self.interface = vault_kv.VaultKvRequires(
             self,
             "vault-kv",
-            "banana",
+            "my-suffix",
             self._stored.nonce,
         )
 
@@ -58,6 +58,7 @@ class ExampleRequirerCharm(CharmBase):
         if relation is None:
             return
         vault_url = self.interface.vault_url(relation)
+        ca_certificate = self.interface.ca_certificate(relation)
         mount = self.interface.mount(relation)
 
         unit_credentials = self.interface.unit_credentials(relation)
@@ -67,14 +68,21 @@ class ExampleRequirerCharm(CharmBase):
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
 
-        self._configure(vault_url, mount, role_id, role_secret_id)
+        self._configure(vault_url, ca_certificate, mount, role_id, role_secret_id)
 
         self.unit.status = ActiveStatus()
 
     def _on_gone_away(self, event: vault_kv.VaultKvGoneAwayEvent):
         self.unit.status = BlockedStatus("Waiting for vault-kv relation")
 
-    def _configure(self, vault_url: str, mount: str, role_id: str, role_secret_id: str):
+    def _configure(
+            self,
+            vault_url: str,
+            ca_certificate: str,
+            mount: str,
+            role_id: str,
+            role_secret_id: str,
+        ):
         pass
 
     def _on_update_status(self, event):
@@ -193,6 +201,13 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["vault_url"] = vault_url
 
+    def set_ca_certificate(self, relation: ops.Relation, ca_certificate: str):
+        """Set the ca_certificate on the relation."""
+        if not self.charm.unit.is_leader():
+            return
+
+        relation.data[self.charm.app]["ca_certificate"] = ca_certificate
+
     def set_mount(self, relation: ops.Relation, mount: str):
         """Set the mount on the relation."""
         if not self.charm.unit.is_leader():
@@ -268,6 +283,7 @@ class VaultKvReadyEvent(ops.EventBase):
         relation_id: int,
         relation_name: str,
         vault_url: str,
+        ca_certificate: str,
         mount: str,
         credentials_secret: str,
     ):
@@ -275,6 +291,7 @@ class VaultKvReadyEvent(ops.EventBase):
         self.relation_id = relation_id
         self.relation_name = relation_name
         self.vault_url = vault_url
+        self.ca_certificate = ca_certificate
         self.mount = mount
         self.credentials_secret = credentials_secret
 
@@ -284,6 +301,7 @@ class VaultKvReadyEvent(ops.EventBase):
             "relation_id": self.relation_id,
             "relation_name": self.relation_name,
             "vault_url": self.vault_url,
+            "ca_certificate": self.ca_certificate,
             "mount": self.mount,
             "credentials_secret": self.credentials_secret,
         }
@@ -294,6 +312,7 @@ class VaultKvReadyEvent(ops.EventBase):
         self.relation_id = snapshot["relation_id"]
         self.relation_name = snapshot["relation_name"]
         self.vault_url = snapshot["vault_url"]
+        self.ca_certificate = snapshot["ca_certificate"]
         self.mount = snapshot["mount"]
         self.credentials_secret = snapshot["credentials_secret"]
 
@@ -371,13 +390,15 @@ class VaultKvRequires(ops.Object):
             return
 
         vault_url = self.vault_url(event.relation)
+        ca_certificate = self.ca_certificate(event.relation)
         mount = self.mount(event.relation)
         unit_credentials_secret = self.unit_credentials(event.relation)
-        if all((vault_url, mount, unit_credentials_secret)):
+        if all((vault_url, ca_certificate, mount, unit_credentials_secret)):
             self.on.ready.emit(
                 event.relation.id,
                 event.relation.name,
                 vault_url,
+                ca_certificate,
                 mount,
                 unit_credentials_secret,
             )
@@ -407,6 +428,12 @@ class VaultKvRequires(ops.Object):
         if relation.app is None:
             return None
         return relation.data[relation.app].get("vault_url")
+
+    def ca_certificate(self, relation: ops.Relation) -> Optional[str]:
+        """Return the ca_certificate from the relation."""
+        if relation.app is None:
+            return None
+        return relation.data[relation.app].get("ca_certificate")
 
     def mount(self, relation: ops.Relation) -> Optional[str]:
         """Return the mount from the relation."""
