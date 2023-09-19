@@ -60,7 +60,7 @@ class PeerSecretError(Exception):
         super().__init__(self.message)
 
 
-def generate_vault_certificates(subject: str, sans_ip: str) -> Tuple[str, str, str]:
+def generate_vault_certificates(subject: str, sans_ip: List[str]) -> Tuple[str, str, str]:
     """Generate Vault certificates valid for 50 years.
 
     Returns:
@@ -73,7 +73,9 @@ def generate_vault_certificates(subject: str, sans_ip: str) -> Tuple[str, str, s
         validity=365 * 50,
     )
     vault_private_key = generate_private_key()
-    csr = generate_csr(private_key=vault_private_key, subject=subject, sans_ip=[sans_ip])
+    csr = generate_csr(
+        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=[subject]
+    )
     vault_certificate = generate_certificate(
         ca=ca_certificate,
         ca_key=ca_private_key,
@@ -121,8 +123,10 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for peer relation to be created")
             event.defer()
             return
-        if not self._bind_address:
-            self.unit.status = WaitingStatus("Waiting for bind address to be available")
+        if not self._bind_address or not self._ingress_address:
+            self.unit.status = WaitingStatus(
+                "Waiting for bind and ingress addresses to be available"
+            )
             event.defer()
             return
         self.unit.status = MaintenanceStatus("Initializing vault")
@@ -136,7 +140,7 @@ class VaultCharm(CharmBase):
             logger.info("Vault certificate secret not set in peer relation")
             private_key, certificate, ca_certificate = generate_vault_certificates(
                 subject=self._certificate_subject,
-                sans_ip=self._bind_address,
+                sans_ip=[self._bind_address, self._ingress_address],
             )
             self._set_certificates_secret_in_peer_relation(
                 private_key=private_key, certificate=certificate, ca_certificate=ca_certificate
@@ -427,6 +431,24 @@ class VaultCharm(CharmBase):
             if not binding:
                 return None
             return str(binding.network.bind_address)
+        except ModelError:
+            return None
+
+    @property
+    def _ingress_address(self) -> Optional[str]:
+        """Fetches ingress address from peer relation and returns it.
+
+        Returns:
+            str: Ingress address
+        """
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not peer_relation:
+            return None
+        try:
+            binding = self.model.get_binding(peer_relation)
+            if not binding:
+                return None
+            return str(binding.network.ingress_address)
         except ModelError:
             return None
 

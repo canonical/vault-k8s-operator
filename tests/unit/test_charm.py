@@ -15,13 +15,14 @@ from charm import VaultCharm
 
 
 class MockNetwork:
-    def __init__(self, bind_address: str):
+    def __init__(self, bind_address: str, ingress_address: str):
         self.bind_address = bind_address
+        self.ingress_address = ingress_address
 
 
 class MockBinding:
-    def __init__(self, bind_address: str):
-        self.network = MockNetwork(bind_address=bind_address)
+    def __init__(self, bind_address: str, ingress_address: str):
+        self.network = MockNetwork(bind_address=bind_address, ingress_address=ingress_address)
 
 
 class TestCharm(unittest.TestCase):
@@ -120,7 +121,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Model.get_binding")
-    def test_given_bind_address_not_available_when_install_then_status_is_waiting(
+    def test_given_binding_addresses_not_available_when_install_then_status_is_waiting(
         self, patch_get_binding
     ):
         self._set_peer_relation()
@@ -132,7 +133,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for bind address to be available"),
+            WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
     @patch("ops.model.Container.push", new=Mock)
@@ -141,7 +142,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
-    def test_given_binding_address_when_install_then_vault_is_initialized(
+    def test_given_binding_addresses_when_install_then_vault_is_initialized(
         self,
         patch_get_binding,
         patch_is_api_available,
@@ -152,7 +153,10 @@ class TestCharm(unittest.TestCase):
         root_token = "root token content"
         unseal_keys = ["unseal key 1"]
         bind_address = "1.2.1.2"
-        patch_get_binding.return_value = MockBinding(bind_address=bind_address)
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = True
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
@@ -170,11 +174,14 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
-    def test_given_binding_address_when_install_then_pebble_is_planned(
+    def test_given_binding_addresses_when_install_then_pebble_is_planned(
         self, patch_get_binding, patch_is_api_available, patch_vault_initialize
     ):
         bind_address = "1.2.1.2"
-        patch_get_binding.return_value = MockBinding(bind_address=bind_address)
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = True
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
@@ -227,7 +234,11 @@ class TestCharm(unittest.TestCase):
         self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = False
 
         self.harness.charm.on.install.emit()
@@ -254,7 +265,11 @@ class TestCharm(unittest.TestCase):
         private_key = "private key content"
         ca_certificate = "ca certificate content"
         patch_generate_certs.return_value = private_key, certificate, ca_certificate
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = True
         patch_vault_initialize.return_value = "root token content", "unseal key content"
         relation_id = self._set_peer_relation()
@@ -292,7 +307,11 @@ class TestCharm(unittest.TestCase):
         private_key = "private key content"
         ca_certificate = "ca certificate content"
         patch_generate_certs.return_value = private_key, certificate, ca_certificate
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = True
         patch_vault_initialize.return_value = "root token content", "unseal key content"
         self._set_peer_relation()
@@ -337,7 +356,11 @@ class TestCharm(unittest.TestCase):
             StringIO(ca_certificate),
         ]
         patch_generate_certs.return_value = private_key, certificate, ca_certificate
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.1.2")
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         patch_is_api_available.return_value = True
         patch_vault_initialize.return_value = "root token content", "unseal key content"
         self._set_peer_relation()
@@ -417,6 +440,7 @@ class TestCharm(unittest.TestCase):
         patch_get_binding,
     ):
         bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
         patch_vault_is_sealed.return_value = False
         patch_is_api_available.return_value = True
         patch_is_initialized.return_value = True
@@ -434,7 +458,9 @@ class TestCharm(unittest.TestCase):
             private_key="private key content",
             ca_certificate="ca certificate content",
         )
-        patch_get_binding.return_value = MockBinding(bind_address=bind_address)
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
 
         self.harness.charm.on.config_changed.emit()
 
@@ -505,7 +531,11 @@ class TestCharm(unittest.TestCase):
             private_key="private key content",
             ca_certificate="ca certificate content",
         )
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
 
         self.harness.charm.on.config_changed.emit()
 
@@ -544,7 +574,11 @@ class TestCharm(unittest.TestCase):
             private_key="private key content",
             ca_certificate="ca certificate content",
         )
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
 
         self.harness.charm.on.config_changed.emit()
 
@@ -583,7 +617,11 @@ class TestCharm(unittest.TestCase):
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
         )
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
 
         self.harness.charm.on.config_changed.emit()
 
@@ -626,7 +664,11 @@ class TestCharm(unittest.TestCase):
             relation_id=peer_relation_id,
             unit_name=other_unit_name,
         )
-        patch_get_binding.return_value = MockBinding(bind_address="1.2.3.4")
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
 
         self.harness.charm.on.config_changed.emit()
 
@@ -751,7 +793,10 @@ class TestCharm(unittest.TestCase):
     ):
         patch_get_num_raft_peers.return_value = 2
         bind_address = "1.2.3.4"
-        patch_get_binding.return_value = MockBinding(bind_address=bind_address)
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = True
         patch_is_node_in_raft_peers.return_value = True
