@@ -106,7 +106,7 @@ juju integrate <vault provider charm> <vault requirer charm>
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import ops
 
@@ -230,17 +230,22 @@ class VaultKvProvides(ops.Object):
             )
             return
         credentials[nonce] = secret.id
-
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def get_unit_credentials(self, relation: ops.Relation, nonce: str) -> Optional[str]:
-        """Get the unit credentials from the relation.
+    def remove_unit_credentials(self, relation: ops.Relation, nonce: Union[str, List[str]]):
+        """Remove nonce(s) from the relation."""
+        if not self.charm.unit.is_leader():
+            return
 
-        Return None if the unit credentials are not set.
-        Return a juju secret id if the unit credentials are set.
-        """
+        if isinstance(nonce, str):
+            nonce = [nonce]
+
         credentials = self.get_credentials(relation)
-        return credentials.get(nonce)
+
+        for n in nonce:
+            credentials.pop(n, None)
+
+        relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
     def get_credentials(self, relation: ops.Relation) -> dict:
         """Get the unit credentials from the relation."""
@@ -415,11 +420,7 @@ class VaultKvRequires(ops.Object):
 
         A change in egress_subnet can happen when the pod is rescheduled to a different
         node by the underlying substrate without a change from Juju.
-
-        Only update the egress_subnet if it is already set.
         """
-        if not self.charm.unit.is_leader():
-            return
         self._set_unit_egress_subnet(relation, egress_subnet)
         self._set_unit_nonce(relation, self.nonce)
 
