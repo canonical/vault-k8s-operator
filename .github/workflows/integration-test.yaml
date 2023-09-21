@@ -1,0 +1,43 @@
+name: Integration tests
+
+on:
+  workflow_call:
+    inputs:
+      charm-file-name:
+        description: Tested charm file name
+        required: true
+        type: string
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.27-strict/stable
+          juju-channel: 3.1/stable
+      - name: Run integration tests
+        run: tox -e integration
+      - name: Archive Tested Charm
+        uses: actions/upload-artifact@v3
+        if: ${{ github.ref_name == 'main' }}
+        with:
+          name: tested-charm
+          path: .tox/**/${{ inputs.charm-file-name }}
+          retention-days: 5
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: charmcraft-logs
+          path: /home/runner/.local/state/charmcraft/log/*.log
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: juju-crashdump
+          path: juju-crashdump-*.tar.xz
