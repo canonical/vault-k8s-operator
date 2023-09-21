@@ -137,7 +137,6 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Container.push", new=Mock)
-    @patch("vault.Vault.enable_approle_auth")
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.set_token")
     @patch("vault.Vault.initialize")
@@ -150,7 +149,6 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize,
         patch_vault_set_token,
         patch_vault_unseal,
-        patch_vault_enable_approle_auth,
     ):
         root_token = "root token content"
         unseal_keys = ["unseal key 1"]
@@ -169,10 +167,8 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize.assert_called_once()
         patch_vault_set_token.assert_called_once_with(token=root_token)
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
-        patch_vault_enable_approle_auth.assert_called_once()
 
     @patch("ops.model.Container.push", new=Mock)
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
     @patch("vault.Vault.initialize")
@@ -252,7 +248,6 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault to be available"),
         )
 
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
@@ -294,7 +289,6 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(secret_content["privatekey"], private_key)
         self.assertEqual(secret_content["cacertificate"], ca_certificate)
 
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
@@ -334,7 +328,6 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
@@ -434,7 +427,6 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Container.push", new=Mock)
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
@@ -509,7 +501,6 @@ class TestCharm(unittest.TestCase):
             expected_plan,
         )
 
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
@@ -552,7 +543,6 @@ class TestCharm(unittest.TestCase):
 
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
-    @patch("vault.Vault.enable_approle_auth")
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
@@ -564,7 +554,6 @@ class TestCharm(unittest.TestCase):
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_vault_unseal,
-        patch_vault_enable_approle_auth,
         patch_get_binding,
     ):
         patch_is_api_available.return_value = True
@@ -594,7 +583,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
 
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
-        patch_vault_enable_approle_auth.assert_called_once()
 
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
@@ -905,11 +893,13 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.configure_kv_policy")
     @patch("vault.Vault.configure_kv_mount")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_approle_auth")
     def test_given_unit_is_leader_when_secret_kv_is_complete_then_provider_side_is_filled(
         self,
         _,
         __,
         ___,
+        ____,
         configure_approle,
         generate_role_secret_id,
     ):
@@ -987,11 +977,13 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.configure_kv_policy")
     @patch("vault.Vault.configure_kv_mount")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_approle_auth")
     def test_given_unit_is_leader_when_related_unit_egress_is_updated_then_secret_content_is_updated(  # noqa: E501
         self,
-        _,
+        enable_approle_auth,
         __,
         ___,
+        ____,
         configure_approle,
         generate_role_secret_id,
         read_role_secret,
@@ -1044,6 +1036,7 @@ class TestCharm(unittest.TestCase):
         # Update unit egress
         self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
 
+        enable_approle_auth.assert_called()
         read_role_secret.has_calls([call("charm-" + unit_name, old_secret_id)])
 
         for cred_nonce, juju_secret_id in credentials.items():

@@ -174,7 +174,6 @@ class VaultCharm(CharmBase):
         self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
-        vault.enable_approle_auth()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
@@ -234,7 +233,6 @@ class VaultCharm(CharmBase):
             return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
-        vault.enable_approle_auth()
         self._set_peer_relation_node_api_address()
         self.unit.status = ActiveStatus()
 
@@ -313,6 +311,8 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             event.defer()
             return
+
+        vault.enable_approle_auth()
 
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
         vault.configure_kv_mount(mount)
