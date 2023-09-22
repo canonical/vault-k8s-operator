@@ -276,14 +276,14 @@ class VaultCharm(CharmBase):
             return
 
         if not self._is_peer_relation_created():
-            self.unit.status = WaitingStatus("Waiting for peer relation")
+            logger.debug("Peer relation not created, deferring event")
             event.defer()
             return
 
         try:
             root_token, _ = self._get_initialization_secret_from_peer_relation()
         except PeerSecretError:
-            self.unit.status = WaitingStatus("Waiting for vault initialization secret")
+            logger.debug("Vault initialization secret not set in peer relation, deferring event")
             event.defer()
             return
 
@@ -294,21 +294,24 @@ class VaultCharm(CharmBase):
                 ca_certificate,
             ) = self._get_certificates_secret_in_peer_relation()
         except PeerSecretError:
-            self.unit.status = WaitingStatus("Waiting for vault certificate to be available")
+            logger.debug("Vault certificate secret not set in peer relation, deferring event")
             event.defer()
             return
 
         relation = self.model.get_relation(event.relation_name, event.relation_id)
 
         if relation is None or relation.app is None:
-            logger.debug("Relation or remote application is None, skipping")
+            logger.warning(
+                "Relation or remote application is missing,"
+                "this should not happen, skipping event"
+            )
             return
 
         vault = Vault(url=self._api_address)
         vault.set_token(token=root_token)
 
         if not vault.is_api_available():
-            self.unit.status = WaitingStatus("Waiting for vault to be available")
+            logger.debug("Vault is not available, deferring event")
             event.defer()
             return
 

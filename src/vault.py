@@ -12,15 +12,6 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-KV_MOUNT_HCL = """
-path "{mount}/*" {{
-  capabilities = ["create", "read", "update", "delete", "list"]
-}}
-path "sys/internal/ui/mounts/{mount}" {{
-  capabilities = ["read"]
-}}
-"""
-
 
 class VaultError(Exception):
     """Exception raised for Vault errors."""
@@ -109,7 +100,9 @@ class Vault:
 
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""
-        self._client.sys.create_or_update_policy(policy, KV_MOUNT_HCL.format(mount=mount))
+        with open("src/kv_mount.hcl", "r") as fd:
+            mount_policy = fd.read()
+        self._client.sys.create_or_update_policy(policy, mount_policy.format(mount=mount))
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
