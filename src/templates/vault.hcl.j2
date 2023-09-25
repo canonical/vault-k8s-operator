@@ -1,0 +1,21 @@
+ui      = true
+storage "raft" {
+  path= "{{ raft_storage_path }}"
+  node_id = "{{ node_id }}"
+  {% for retry in retry_joins %}
+  retry_join {
+    leader_api_addr = "{{ retry.leader_api_addr }}"
+    leader_ca_cert_file = "{{ retry.leader_ca_cert_file }}"
+  }
+  {% endfor %}
+  }
+listener "tcp" {
+  address       = "{{ tcp_address }}"
+  tls_cert_file = "{{ tls_cert_file }}"
+  tls_key_file  = "{{ tls_key_file }}"
+}
+default_lease_ttl = "{{ default_lease_ttl }}"
+max_lease_ttl     = "{{ max_lease_ttl }}"
+disable_mlock     = true
+cluster_addr      = "{{ cluster_address }}"
+api_addr          = "{{ api_address }}"
