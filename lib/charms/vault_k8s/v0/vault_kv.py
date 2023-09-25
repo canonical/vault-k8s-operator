@@ -114,7 +114,7 @@ logger = logging.getLogger(__name__)
 
 
 # The unique Charmhub library identifier, never change it
-LIBID = "to_fill"
+LIBID = "591d6d2fb6a54853b4bb53ef16ef603a"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
