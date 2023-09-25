@@ -358,12 +358,6 @@ class VaultCharm(CharmBase):
             return False
         return True
 
-    def _config_file_pushed_to_workload(self) -> bool:
-        """Check if the config file is pushed to the workload."""
-        if not self._container.exists(path=VAULT_CONFIG_FILE_PATH):
-            return False
-        return True
-
     def _generate_vault_config_file(self) -> None:
         """Handles creation of the Vault config file."""
         retry_joins = [
@@ -373,8 +367,6 @@ class VaultCharm(CharmBase):
             }
             for node_api_address in self._other_peer_node_api_addresses()
         ]
-        logger.info("Retry joins: %s", retry_joins)
-
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
             max_lease_ttl=self.model.config["max_lease_ttl"],
