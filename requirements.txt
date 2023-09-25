@@ -3,6 +3,8 @@ hvac
 jsonschema
 lightkube
 lightkube-models
+pydantic
+pytest-interface-tester
 requests
 jsonschema
 cryptography
