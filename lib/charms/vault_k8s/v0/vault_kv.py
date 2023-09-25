@@ -109,7 +109,7 @@ import logging
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 import ops
-from interface_tester.schema_base import DataBagSchema
+from interface_tester.schema_base import DataBagSchema  # type: ignore[import]
 from pydantic import BaseModel, Field, Json, ValidationError
 
 logger = logging.getLogger(__name__)

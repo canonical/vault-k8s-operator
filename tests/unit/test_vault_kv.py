@@ -83,6 +83,11 @@ class TestVaultKvProvides(unittest.TestCase):
         relation = self.harness.model.get_relation(rel_name, rel_id)
         assert relation
         self.harness.add_relation_unit(rel_id, remote_unit)
+        self.harness.update_relation_data(
+            rel_id,
+            remote_unit,
+            key_values={"nonce": "abcd", "egress_subnet": "10.0.0.1/32"},
+        )
         return remote_app, remote_unit, relation, rel_id
 
     @patch("test_vault_kv.VaultKvProviderCharm._on_new_vault_kv_client_attached")

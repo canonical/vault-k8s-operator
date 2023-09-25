@@ -938,6 +938,10 @@ class TestCharm(unittest.TestCase):
             assert configure_approle.return_value == secret_content["role-id"]
             assert generate_role_secret_id.return_value == secret_content["role-secret-id"]
 
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_unit_credentials")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_vault_url")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_mount")
     @patch("vault.Vault.generate_role_secret_id")
     @patch("vault.Vault.configure_approle")
     @patch("vault.Vault.configure_kv_policy")
@@ -950,6 +954,10 @@ class TestCharm(unittest.TestCase):
         ___,
         configure_approle,
         generate_role_secret_id,
+        set_mount,
+        set_vault_url,
+        set_ca_certificate,
+        set_unit_credentials,
     ):
         (
             app_name,
@@ -966,10 +974,10 @@ class TestCharm(unittest.TestCase):
         mount_suffix = "dummy"
         self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
 
-        relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        assert "vault_url" not in relation_data
-        assert "mount" not in relation_data
-        assert "credentials" not in relation_data
+        set_mount.assert_not_called()
+        set_vault_url.assert_not_called()
+        set_ca_certificate.assert_not_called()
+        set_unit_credentials.assert_not_called()
 
     @patch("vault.Vault.read_role_secret")
     @patch("vault.Vault.generate_role_secret_id")
@@ -1013,10 +1021,9 @@ class TestCharm(unittest.TestCase):
 
         mount_suffix = "dummy"
         self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
+        enable_approle_auth.assert_called()
         # choose an unit to update
         unit = next(iter(units.keys()))
-        unit_data = self.harness.get_relation_data(rel_id, unit)
-        nonce = unit_data["nonce"]
         unit_name = unit.replace("/", "-")
 
         # Mock read to actually return a comparable cidr_list
@@ -1026,23 +1033,13 @@ class TestCharm(unittest.TestCase):
 
         read_role_secret.side_effect = mock_read_role_secret
         # get current role secret id from unit's secert
-        app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        credentials = json.loads(app_relation_data["credentials"])
-        juju_secret_id = credentials[nonce]
-        old_secret_id = self.harness.model.get_secret(id=juju_secret_id).get_content()[
-            "role-secret-id"
-        ]
         generate_role_secret_id.return_value = "22222222"
-        # Update unit egress
-        self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
+        with patch("ops.Secret.set_content") as set_content:
+            self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
+            assert set_content.call_count == 1
+            set_content.assert_has_calls(
+                [call({"role-id": "12345678", "role-secret-id": "22222222"})]
+            )
 
-        enable_approle_auth.assert_called()
-        read_role_secret.has_calls([call("charm-" + unit_name, old_secret_id)])
-
-        for cred_nonce, juju_secret_id in credentials.items():
-            secret_content = self.harness.model.get_secret(id=juju_secret_id).get_content()
-            # Assert only the updated unit has a new secret id
-            if cred_nonce == nonce:
-                assert secret_content["role-secret-id"] == "22222222"
-            else:
-                assert secret_content["role-secret-id"] == "11111111"
+        assert read_role_secret.call_count == 3
+        read_role_secret.has_calls([call("charm-" + unit_name, "11111111")])
