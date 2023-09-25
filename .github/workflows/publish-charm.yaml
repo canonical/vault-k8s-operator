@@ -30,9 +30,10 @@ jobs:
       - name: Upload charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.4.0
         with:
-          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
+          built-charm-path: ${{ inputs.charm-file-name }}
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
-          channel: "${{ steps.channel.outputs.name }}"
+          channel: latest/edge
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v3
