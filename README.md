@@ -10,7 +10,7 @@ The Vault Operator deploys and initializes Vault on Kubernetes, and runs in high
 
 Deploy the charm:
 ```bash
-juju deploy vault-k8s -n 5 --trust
+juju deploy vault-k8s vault --channel edge --base jammy -n 5 --trust
 ```
 > Note: It is advised to deploy Vault with an odd number of units
 
@@ -19,9 +19,12 @@ We recommend deploying Vault with an odd number of units.
 ### Integrate with Ingress
 
 ```bash
+
 juju deploy traefik-k8s --trust --config external_hostname=<your hostname> 
 juju integrate vault:ingress traefik-k8s:ingress
 ```
+
+You should now be able to access the Vault at `https://<model name>-vault.<your hostname>.`
 
 ### Interact with Vault via CLI
 

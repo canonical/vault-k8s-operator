@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
+import json
 import logging
+import time
 from pathlib import Path
 
+import hvac  # type: ignore[import]
 import pytest
 import yaml
 from pytest_operator.plugin import OpsTest
@@ -15,6 +18,9 @@ APPLICATION_NAME = "vault-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
 EXTERNAL_HOSTNAME = "mydomain.com"
+
+class InvalidHostError(Exception):
+    pass
 
 
 class TestVaultK8s:
@@ -37,6 +43,60 @@ class TestVaultK8s:
             series="jammy",
             num_units=5,
         )
+
+    async def _get_vault_endpoint(self, ops_test: OpsTest) -> str:
+        """Retrieves the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+
+        Args:
+            ops_test: Ops test Framework.
+
+        Returns:
+            vault_endpoint: Vault proxied endpoint by Traefik.
+
+        Raises:
+            TimeoutError: If proxied endpoints are not retrieved.
+        """
+        traefik = ops_test.model.applications[TRAEFIK_APP_NAME]  # type: ignore[union-attr]
+        traefik_unit = traefik.units[0]
+        t0 = time.time()
+        timeout = 120  # seconds
+        while time.time() - t0 < timeout:
+            proxied_endpoint_action = await traefik_unit.run_action(
+                action_name="show-proxied-endpoints"
+            )
+            action_output = await ops_test.model.get_action_output(  # type: ignore[union-attr]
+                action_uuid=proxied_endpoint_action.entity_id, wait=30
+            )
+
+            if "proxied-endpoints" in action_output:
+                proxied_endpoints = json.loads(action_output["proxied-endpoints"])
+                return proxied_endpoints[APPLICATION_NAME]["url"]
+            else:
+                logger.info("Traefik did not return proxied endpoints yet")
+            time.sleep(2)
+
+        raise TimeoutError("Traefik did not return proxied endpoints")
+
+    def _get_url(self, vault_endpoint: str) -> str:
+        """Returns the URL formatted as https://<host>/<path> from the vault endpoint.
+
+        Args:
+            vault_endpoint:  Vault proxied endpoint by Traefik.
+
+        Returns:
+            url: URL formatted as https://<host>/<path>
+
+        Raises:
+            InvalidHostException: If vault host address is empty
+        """
+        host, path = "", ""
+        uri = vault_endpoint.split("//")[1]
+        host = uri.split(":")[0]
+        if not host:
+            raise InvalidHostError("Vault host address is invalid.")
+        if len(uri.split(":")) == 2 and len(uri.split(":")[1].split("/")) == 2:
+            path = uri.split(":")[1].split("/")[1]
+        return f"https://{host}/{path}"
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
@@ -82,7 +142,11 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def deploy_traefik(self, ops_test: OpsTest):
-        """Deploy Traefik."""
+        """Deploy Traefik.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
         await ops_test.model.deploy(  # type: ignore[union-attr]
             "traefik-k8s",
             application_name=TRAEFIK_APPLICATION_NAME,
@@ -162,3 +226,19 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
         )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_related_to_traefik_when_vault_status_checked_then_returns_400(
+        self, ops_test: OpsTest
+    ):
+        """Sending a request without token and returns 400 Bad Request.
+
+        This proves that vault is reachable behind ingress.
+        Juju secrets belongs to model are not gathered using pytest-operator,
+        so vault token is missing in the request causes authorization problems.
+        """
+        vault_endpoint = await self._get_vault_endpoint(ops_test)
+        url = self._get_url(vault_endpoint)
+        self._client = hvac.Client(url=url, verify=False)
+        response = self._client.sys.read_health_status()
+        assert str(response) == "<Response [400]>"
