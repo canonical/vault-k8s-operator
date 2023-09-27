@@ -443,7 +443,7 @@ class VaultCharm(CharmBase):
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
             return content["privatekey"], content["certificate"], content["cacertificate"]
-        except (TypeError, SecretNotFoundError, AttributeError):
+        except (TypeError, SecretNotFoundError, AttributeError, ModelError):
             raise PeerSecretError(secret_name="vault-certificates-secret-id")
 
     def _set_initialization_secret_in_peer_relation(
@@ -479,7 +479,7 @@ class VaultCharm(CharmBase):
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
             return content["roottoken"], json.loads(content["unsealkeys"])
-        except (TypeError, SecretNotFoundError, AttributeError):
+        except (TypeError, SecretNotFoundError, AttributeError, ModelError):
             raise PeerSecretError(secret_name="vault-initialization-secret-id")
 
     def _is_peer_relation_created(self) -> bool:
