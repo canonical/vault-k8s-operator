@@ -51,7 +51,7 @@ class VaultKvRequirerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.interface = vault_kv.VaultKvRequires(self, "vault-kv", "dummy", "abcd")
+        self.interface = vault_kv.VaultKvRequires(self, "vault-kv", "dummy")
         self.framework.observe(self.interface.on.connected, self._on_connected)
         self.framework.observe(self.interface.on.ready, self._on_ready)
         self.framework.observe(self.interface.on.gone_away, self._on_gone_away)
@@ -210,7 +210,7 @@ class TestVaultKvRequires(unittest.TestCase):
         relation = self.harness.model.get_relation(rel_name, rel_id)
         assert relation
         self.harness.add_relation_unit(rel_id, remote_unit)
-        self.harness.charm.interface.request_credentials(relation, "10.20.20.1/32")
+        self.harness.charm.interface.request_credentials(relation, "10.20.20.1/32", "abcd")
         return remote_app, remote_unit, relation, rel_id
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
@@ -223,10 +223,8 @@ class TestVaultKvRequires(unittest.TestCase):
         event = args[0]
 
         app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        unit_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         assert isinstance(event, vault_kv.VaultKvConnectedEvent)
         assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
-        assert unit_relation_data["nonce"] == self.harness.charm.interface.nonce
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
@@ -238,10 +236,8 @@ class TestVaultKvRequires(unittest.TestCase):
         event = args[0]
 
         app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        unit_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         assert isinstance(event, vault_kv.VaultKvConnectedEvent)
         assert "mount_suffix" not in app_relation_data
-        assert unit_relation_data["nonce"] == self.harness.charm.interface.nonce
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_gone_away")
     def test_given_all_units_departed_when_relation_broken_then_gone_away_event_fired(
@@ -254,11 +250,8 @@ class TestVaultKvRequires(unittest.TestCase):
 
         assert isinstance(event, vault_kv.VaultKvGoneAwayEvent)
 
-    @patch("secrets.token_hex")
     @patch("test_vault_kv.VaultKvRequirerCharm._on_ready")
-    def test_given_relation_changed_when_all_data_present_then_ready_event_fired(
-        self, _on_ready, token_hex
-    ):
+    def test_given_relation_changed_when_all_data_present_then_ready_event_fired(self, _on_ready):
         remote_app, _, _, rel_id = self.setup_relation()
         self.harness.update_relation_data(
             rel_id,
@@ -267,7 +260,7 @@ class TestVaultKvRequires(unittest.TestCase):
                 "vault_url": "https://vault.example.com",
                 "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
-                "credentials": json.dumps({self.harness.charm.interface.nonce: "dummy"}),
+                "credentials": json.dumps({"abcd": "dummy"}),
             },
         )
 

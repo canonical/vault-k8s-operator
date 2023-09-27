@@ -18,24 +18,24 @@ charmcraft fetch-lib charms.vault_k8s.v0.vault_kv
 The requirer charm is the charm requiring a secret value store. In this example, the requirer charm
 is requiring a secret value store.
 
+```python
 import secrets
 
 from charms.vault_k8s.v0 import vault_kv
 from ops.charm import CharmBase, InstallEvent
-from ops import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus
 
+NONCE_SECRET_LABEL = "nonce"
+
+
 class ExampleRequirerCharm(CharmBase):
-    _stored = ops.StoredState()
     def __init__(self, *args):
         super().__init__(*args)
-        self._stored.set_default(nonce=secrets.token_hex(16))
         self.interface = vault_kv.VaultKvRequires(
             self,
             "vault-kv",
             "my-suffix",
-            self._stored.nonce,
         )
 
         self.framework.observe(self.on.install, self._on_install)
@@ -45,23 +45,27 @@ class ExampleRequirerCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
 
     def _on_install(self, event: InstallEvent):
-        self.interface.request_credentials()
+        self.unit.add_secret(
+            {"nonce": secrets.token_hex(16)},
+            label=NONCE_SECRET_LABEL,
+            description="Nonce for vault-kv relation",
+        )
         self.unit.status = BlockedStatus("Waiting for vault-kv relation")
 
     def _on_connected(self, event: vault_kv.VaultKvConnectedEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
-        egress_subnet = self.model.get_binding(relation).network.interfaces[0].subnet
-        self.interface.request_credentials(relation, egress_subnet)
+        egress_subnet = str(self.model.get_binding(relation).network.interfaces[0].subnet)  # type: ignore
+        self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
     def _on_ready(self, event: vault_kv.VaultKvReadyEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
         if relation is None:
             return
-        vault_url = self.interface.vault_url(relation)
-        ca_certificate = self.interface.ca_certificate(relation)
-        mount = self.interface.mount(relation)
+        vault_url = self.interface.get_vault_url(relation)
+        ca_certificate = self.interface.get_ca_certificate(relation)
+        mount = self.interface.get_mount(relation)
 
-        unit_credentials = self.interface.unit_credentials(relation)
+        unit_credentials = self.interface.get_unit_credentials(relation)
         # unit_credentials is a juju secret id
         secret = self.model.get_secret(id=unit_credentials)
         secret_content = secret.get_content()
@@ -76,26 +80,32 @@ class ExampleRequirerCharm(CharmBase):
         self.unit.status = BlockedStatus("Waiting for vault-kv relation")
 
     def _configure(
-            self,
-            vault_url: str,
-            ca_certificate: str,
-            mount: str,
-            role_id: str,
-            role_secret_id: str,
-        ):
+        self,
+        vault_url: str,
+        ca_certificate: str,
+        mount: str,
+        role_id: str,
+        role_secret_id: str,
+    ):
         pass
 
     def _on_update_status(self, event):
         # Check somewhere that egress subnet has not changed i.e. pod has not been rescheduled
         # Update status might not be the best place
         binding = self.model.get_binding("vault-kv")
-        if binding is not None
-            egress_subnet = binding.network.interfaces[0].subnet
-            self.interface.request_credentials(event.relation, egress_subnet)
+        if binding is not None:
+            egress_subnet = str(binding.network.interfaces[0].subnet)
+            self.interface.request_credentials(event.relation, egress_subnet, self.get_nonce())
+
+    def get_nonce(self):
+        secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
+        nonce = secret.get_content()["nonce"]
+        return nonce
 
 
 if __name__ == "__main__":
     main(ExampleRequirerCharm)
+```
 
 You can integrate both charms by running:
 
@@ -376,28 +386,16 @@ class VaultKvReadyEvent(ops.EventBase):
         handle: ops.Handle,
         relation_id: int,
         relation_name: str,
-        vault_url: str,
-        ca_certificate: str,
-        mount: str,
-        credentials_secret: str,
     ):
         super().__init__(handle)
         self.relation_id = relation_id
         self.relation_name = relation_name
-        self.vault_url = vault_url
-        self.ca_certificate = ca_certificate
-        self.mount = mount
-        self.credentials_secret = credentials_secret
 
     def snapshot(self) -> dict:
         """Return snapshot data that should be persisted."""
         return {
             "relation_id": self.relation_id,
             "relation_name": self.relation_name,
-            "vault_url": self.vault_url,
-            "ca_certificate": self.ca_certificate,
-            "mount": self.mount,
-            "credentials_secret": self.credentials_secret,
         }
 
     def restore(self, snapshot: Dict[str, Any]):
@@ -405,10 +403,6 @@ class VaultKvReadyEvent(ops.EventBase):
         super().restore(snapshot)
         self.relation_id = snapshot["relation_id"]
         self.relation_name = snapshot["relation_name"]
-        self.vault_url = snapshot["vault_url"]
-        self.ca_certificate = snapshot["ca_certificate"]
-        self.mount = snapshot["mount"]
-        self.credentials_secret = snapshot["credentials_secret"]
 
 
 class VaultKvGoneAwayEvent(ops.EventBase):
@@ -435,13 +429,11 @@ class VaultKvRequires(ops.Object):
         charm: ops.CharmBase,
         relation_name: str,
         mount_suffix: str,
-        nonce: str,
     ) -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation_name = relation_name
         self.mount_suffix = mount_suffix
-        self.nonce = nonce
         self.framework.observe(
             self.charm.on[relation_name].relation_joined,
             self._on_vault_kv_relation_joined,
@@ -471,7 +463,6 @@ class VaultKvRequires(ops.Object):
         """
         if self.charm.unit.is_leader():
             event.relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
-        self._set_unit_nonce(event.relation, self.nonce)
         self.on.connected.emit(
             event.relation.id,
             event.relation.name,
@@ -483,21 +474,20 @@ class VaultKvRequires(ops.Object):
             logger.debug("No remote application yet")
             return
 
-        if is_provider_data_valid(dict(event.relation.data[event.app])):
+        if (
+            is_provider_data_valid(dict(event.relation.data[event.app]))
+            and self.get_unit_credentials(event.relation) is not None
+        ):
             self.on.ready.emit(
                 event.relation.id,
                 event.relation.name,
-                self.get_vault_url(event.relation),
-                self.get_ca_certificate(event.relation),
-                self.get_mount(event.relation),
-                self.get_unit_credentials(event.relation),
             )
 
     def _on_vault_kv_relation_broken(self, event: ops.RelationBrokenEvent):
         """Handle relation broken."""
         self.on.gone_away.emit()
 
-    def request_credentials(self, relation: ops.Relation, egress_subnet: str) -> None:
+    def request_credentials(self, relation: ops.Relation, egress_subnet: str, nonce: str) -> None:
         """Request credentials from the vault-kv relation.
 
         Generated secret ids are tied to the unit egress_subnet, so if the egress_subnet
@@ -507,7 +497,7 @@ class VaultKvRequires(ops.Object):
         node by the underlying substrate without a change from Juju.
         """
         self._set_unit_egress_subnet(relation, egress_subnet)
-        self._set_unit_nonce(relation, self.nonce)
+        self._set_unit_nonce(relation, nonce)
 
     def get_vault_url(self, relation: ops.Relation) -> Optional[str]:
         """Return the vault_url from the relation."""
@@ -532,6 +522,7 @@ class VaultKvRequires(ops.Object):
 
         Unit credentials are stored in the relation data as a Juju secret id.
         """
-        if relation.app is None:
+        nonce = relation.data[self.charm.unit].get("nonce")
+        if nonce is None or relation.app is None:
             return None
-        return json.loads(relation.data[relation.app].get("credentials", "{}")).get(self.nonce)
+        return json.loads(relation.data[relation.app].get("credentials", "{}")).get(nonce)
