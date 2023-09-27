@@ -24,7 +24,7 @@ juju deploy traefik-k8s --trust --config external_hostname=<your hostname>
 juju integrate vault:ingress traefik-k8s:ingress
 ```
 
-You should now be able to access the Vault at `https://<model name>-vault.<your hostname>.`
+You should now be able to access the Vault at `https://<your hostname>/<model name>-vault.`
 
 ### Interact with Vault via CLI
 

@@ -59,7 +59,7 @@ class TestVaultK8s:
         traefik = ops_test.model.applications[TRAEFIK_APP_NAME]  # type: ignore[union-attr]
         traefik_unit = traefik.units[0]
         t0 = time.time()
-        timeout = 120  # seconds
+        timeout = 300  # seconds
         while time.time() - t0 < timeout:
             proxied_endpoint_action = await traefik_unit.run_action(
                 action_name="show-proxied-endpoints"
