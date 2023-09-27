@@ -1,8 +1,10 @@
 ops
 hvac
+jinja2
 jsonschema
 lightkube
 lightkube-models
+pyhcl
 requests
 jsonschema
 cryptography
