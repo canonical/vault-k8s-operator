@@ -13,6 +13,9 @@ description: |
   network encryption-as-a-service, or generate AWS IAM/STS
   credentials, SQL/NoSQL databases, X.509 certificates,
   SSH credentials, and more.
+website: https://charmhub.io/vault-k8s
+source: https://github.com/canonical/vault-k8s-operator
+issues: https://github.com/canonical/vault-k8s-operator/issues
 
 containers:
   vault:
