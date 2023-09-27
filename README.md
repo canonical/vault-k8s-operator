@@ -1,10 +1,8 @@
-# vault
+# Vault Operator (Kubernetes)
 
-This charm deploys [Vault][vault-upstream], a tool for securely managing
-secrets used in modern computing (e.g. passwords, certificates, API keys).
+Vault is a tool for securely managing secrets used in modern computing (e.g. passwords, certificates, API keys).
 
-In addition to deploying and initializing Vault, this charm supports high availability mode using
-the Raft backend.
+The Vault Operator deploys and initializes Vault on Kubernetes, and runs in high availability mode using the Raft backend.
 
 ## Usage
 
@@ -14,10 +12,9 @@ Deploy the charm:
 ```bash
 juju deploy vault-k8s -n 5 --trust
 ```
+> Note: It is advised to deploy Vault with an odd number of units
 
-We recommend deploying Vault with an odd number of units.
-
-### Interact with Vault using the CLI
+### Interact with Vault via CLI
 
 Install the Vault client:
 
@@ -118,8 +115,11 @@ You can now run vault commands against the vault unit.
 ```bash
 vault status
 vault operator raft list-peers
-...
 ```
+
+## OCI Images
+
+- [Vault](ghcr.io/canonical/vault:1.14.3)
 
 <!-- LINKS -->
 
