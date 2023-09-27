@@ -394,9 +394,7 @@ class VaultCharm(CharmBase):
         existing_config_hcl = hcl.load(existing_content)
         new_content_hcl = hcl.loads(content)
 
-        if existing_config_hcl != new_content_hcl:
-            return False
-        return True
+        return existing_config_hcl == new_content_hcl
 
     def _push_config_file_to_workload(self, content: str):
         """Push the config file to the workload."""
