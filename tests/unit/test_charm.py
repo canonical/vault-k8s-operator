@@ -8,10 +8,25 @@ from io import StringIO
 from typing import List
 from unittest.mock import Mock, call, patch
 
+import hcl  # type: ignore[import]
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
 
 from charm import VaultCharm
+
+
+def read_file(path: str) -> str:
+    """Reads a file and returns as a string.
+
+    Args:
+        path (str): path to the file.
+
+    Returns:
+        str: content of the file.
+    """
+    with open(path, "r") as f:
+        content = f.read()
+    return content
 
 
 class MockNetwork:
@@ -168,6 +183,40 @@ class TestCharm(unittest.TestCase):
         patch_vault_set_token.assert_called_once_with(token=root_token)
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
 
+    @patch("ops.model.Container.push")
+    @patch("ops.model.Container.pull")
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.set_token", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    def test_given_config_file_not_pushed_when_install_then_vault_config_file_is_pushed(
+        self,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_vault_initialize,
+        patch_pull,
+        patch_push,
+    ):
+        patch_pull.return_value = ""
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+        patch_is_api_available.return_value = True
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+
+        self.harness.charm.on.install.emit()
+
+        args, kwargs = patch_push.call_args
+        pushed_content_hcl = hcl.loads(kwargs["source"])
+        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl").strip())
+        self.assertEqual(pushed_content_hcl, expected_content_hcl)
+
     @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
@@ -188,35 +237,13 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize.return_value = "root token content", "unseal key content"
         self._set_peer_relation()
 
-        expected_vault_config = {
-            "ui": True,
-            "storage": {
-                "raft": {"path": "/vault/raft", "node_id": f"{self.model_name}-{self.app_name}/0"}
-            },
-            "listener": {
-                "tcp": {
-                    "address": "[::]:8200",
-                    "tls_cert_file": "/vault/certs/cert.pem",
-                    "tls_key_file": "/vault/certs/key.pem",
-                }
-            },
-            "default_lease_ttl": "168h",
-            "max_lease_ttl": "720h",
-            "disable_mlock": True,
-            "cluster_addr": f"https://{bind_address}:8201",
-            "api_addr": f"https://{bind_address}:8200",
-        }
         expected_plan = {
             "services": {
                 "vault": {
                     "override": "replace",
                     "summary": "vault",
-                    "command": "/usr/local/bin/docker-entrypoint.sh server",
+                    "command": "vault server -config=/vault/config/vault.hcl",
                     "startup": "enabled",
-                    "environment": {
-                        "VAULT_LOCAL_CONFIG": json.dumps(expected_vault_config),
-                        "VAULT_API_ADDR": "https://[::]:8200",
-                    },
                 }
             },
         }
@@ -354,9 +381,10 @@ class TestCharm(unittest.TestCase):
             StringIO(certificate),
             StringIO(private_key),
             StringIO(ca_certificate),
+            StringIO(read_file("tests/unit/config.hcl").strip()),
         ]
         patch_generate_certs.return_value = private_key, certificate, ca_certificate
-        bind_address = "1.2.1.2"
+        bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
         patch_get_binding.return_value = MockBinding(
             bind_address=bind_address, ingress_address=ingress_address
@@ -426,6 +454,53 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for other units to provide their addresses"),
         )
 
+    @patch("ops.model.Container.push")
+    @patch("ops.model.Container.pull")
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.is_sealed")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Container.exec", new=Mock)
+    def test_given_config_file_not_pushed_when_config_changed_then_config_file_is_pushed(
+        self,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_vault_is_sealed,
+        patch_get_binding,
+        patch_pull,
+        patch_push,
+    ):
+        patch_pull.return_value = ""
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_vault_is_sealed.return_value = False
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = True
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        args, kwargs = patch_push.call_args
+        pushed_content_hcl = hcl.loads(kwargs["source"])
+        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl").strip())
+        self.assertEqual(pushed_content_hcl, expected_content_hcl)
+
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
@@ -464,35 +539,13 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm.on.config_changed.emit()
 
-        expected_vault_config = {
-            "ui": True,
-            "storage": {
-                "raft": {"path": "/vault/raft", "node_id": f"{self.model_name}-{self.app_name}/0"},
-            },
-            "listener": {
-                "tcp": {
-                    "address": "[::]:8200",
-                    "tls_cert_file": "/vault/certs/cert.pem",
-                    "tls_key_file": "/vault/certs/key.pem",
-                }
-            },
-            "default_lease_ttl": "168h",
-            "max_lease_ttl": "720h",
-            "disable_mlock": True,
-            "cluster_addr": f"https://{bind_address}:8201",
-            "api_addr": f"https://{bind_address}:8200",
-        }
         expected_plan = {
             "services": {
                 "vault": {
                     "override": "replace",
                     "summary": "vault",
-                    "command": "/usr/local/bin/docker-entrypoint.sh server",
+                    "command": "vault server -config=/vault/config/vault.hcl",
                     "startup": "enabled",
-                    "environment": {
-                        "VAULT_LOCAL_CONFIG": json.dumps(expected_vault_config),
-                        "VAULT_API_ADDR": "https://[::]:8200",
-                    },
                 }
             },
         }
@@ -728,6 +781,11 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("ops.model.Model.get_binding")
     @patch("ops.model.Container.exists")
     @patch("ops.model.Container.pull")
     @patch("ops.model.Container.push")
@@ -736,7 +794,14 @@ class TestCharm(unittest.TestCase):
         patch_push,
         patch_pull,
         patch_exists,
+        patch_get_binding,
     ):
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address,
+            ingress_address=ingress_address,
+        )
         patch_exists.return_value = True
         certificate = "certificate content"
         private_key = "private key content"
@@ -745,6 +810,7 @@ class TestCharm(unittest.TestCase):
             StringIO(certificate),
             StringIO(private_key),
             StringIO(ca_certificate),
+            StringIO(read_file("tests/unit/config.hcl").strip()),
         ]
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.set_leader(is_leader=True)

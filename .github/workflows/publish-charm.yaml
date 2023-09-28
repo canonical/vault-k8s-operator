@@ -1,0 +1,42 @@
+name: Publish charm
+
+on:
+  workflow_call:
+    inputs:
+      charm-file-name:
+        description: Charm file name
+        required: true
+        type: string
+    secrets:
+      CHARMCRAFT_AUTH:
+        required: true
+
+jobs:
+  publish-charm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        with:
+          fetch-depth: 0
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Fetch Tested Charm
+        uses: actions/download-artifact@v3
+        with:
+          name: tested-charm
+      - name: Move charm in current directory
+        run: find ./ -name ${{ inputs.charm-file-name }} -exec mv -t ./ {} \;
+      - name: Upload charm to Charmhub
+        uses: canonical/charming-actions/upload-charm@2.4.0
+        with:
+          built-charm-path: ${{ inputs.charm-file-name }}
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          channel: latest/edge
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: charmcraft-logs
+          path: /home/runner/.local/state/charmcraft/log/*.log

@@ -6,11 +6,11 @@
 
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
-
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import hcl  # type: ignore[import]
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -22,6 +22,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_private_key,
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
+from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
@@ -46,12 +47,45 @@ from vault import Vault
 logger = logging.getLogger(__name__)
 
 VAULT_STORAGE_PATH = "/vault/raft"
+CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
+CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
+VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 TLS_CERT_FILE_PATH = "/vault/certs/cert.pem"
 TLS_KEY_FILE_PATH = "/vault/certs/key.pem"
 TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
+
+
+def render_vault_config_file(
+    default_lease_ttl: str,
+    max_lease_ttl: str,
+    cluster_address: str,
+    api_address: str,
+    tls_cert_file: str,
+    tls_key_file: str,
+    tcp_address: str,
+    raft_storage_path: str,
+    node_id: str,
+    retry_joins: List[Dict[str, str]],
+) -> str:
+    """Render the Vault config file."""
+    jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
+    template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
+    content = template.render(
+        default_lease_ttl=default_lease_ttl,
+        max_lease_ttl=max_lease_ttl,
+        cluster_address=cluster_address,
+        api_address=api_address,
+        tls_cert_file=tls_cert_file,
+        tls_key_file=tls_key_file,
+        tcp_address=tcp_address,
+        raft_storage_path=raft_storage_path,
+        node_id=node_id,
+        retry_joins=retry_joins,
+    )
+    return content
 
 
 class PeerSecretError(Exception):
@@ -164,6 +198,7 @@ class VaultCharm(CharmBase):
                 private_key=private_key,
                 ca_certificate=ca_certificate,
             )
+        self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
         if not vault.is_api_available():
@@ -220,6 +255,7 @@ class VaultCharm(CharmBase):
                 ca_certificate=ca_certificate,
             )
         self.unit.status = MaintenanceStatus("Preparing vault")
+        self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
         vault.set_token(token=root_token)
@@ -524,6 +560,49 @@ class VaultCharm(CharmBase):
             return False
         return True
 
+    def _generate_vault_config_file(self) -> None:
+        """Handles creation of the Vault config file."""
+        retry_joins = [
+            {
+                "leader_api_addr": node_api_address,
+                "leader_ca_cert_file": TLS_CA_FILE_PATH,
+            }
+            for node_api_address in self._other_peer_node_api_addresses()
+        ]
+        content = render_vault_config_file(
+            default_lease_ttl=self.model.config["default_lease_ttl"],
+            max_lease_ttl=self.model.config["max_lease_ttl"],
+            cluster_address=f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
+            api_address=self._api_address,
+            tcp_address=f"[::]:{self.VAULT_PORT}",
+            tls_cert_file=TLS_CERT_FILE_PATH,
+            tls_key_file=TLS_KEY_FILE_PATH,
+            raft_storage_path=VAULT_STORAGE_PATH,
+            node_id=self._node_id,
+            retry_joins=retry_joins,
+        )
+        if not self._config_file_content_matches(content=content):
+            self._push_config_file_to_workload(content=content)
+
+    def _config_file_content_matches(self, content: str) -> bool:
+        """Returns whether the vault config file content matches the provided content.
+
+        Returns:
+            bool: Whether the vault config file content matches
+        """
+        if not self._container.exists(path=VAULT_CONFIG_FILE_PATH):
+            return False
+        existing_content = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
+        existing_config_hcl = hcl.load(existing_content)
+        new_content_hcl = hcl.loads(content)
+
+        return existing_config_hcl == new_content_hcl
+
+    def _push_config_file_to_workload(self, content: str):
+        """Push the config file to the workload."""
+        self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
+        logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
+
     def _set_certificates_secret_in_peer_relation(
         self,
         private_key: str,
@@ -656,45 +735,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _vault_layer(self) -> Layer:
-        """Returns pebble layer to start Vault.
-
-        Vault config options:
-            ui: Enables the built-in static web UI.
-            storage: Configures the storage backend, which represents the location for the
-                durable storage of Vault's information.
-            listener: Configures how Vault is listening for API requests.
-            default_lease_ttl: Specifies the default lease duration for Vault's tokens and secrets.
-            max_lease_ttl: Specifies the maximum possible lease duration for Vault's tokens and
-                secrets.
-            disable_mlock: mlock() ensures memory from a process on a Linux system isn't swapped
-                (written) to disk. Enabling mlock would require the operator to add IPC_LOCK
-                capabilities to the vault pod which isn't even necessary since Kubernetes, by
-                default, doesn't enable swap.
-            cluster_addr: Specifies the address to advertise to other Vault servers in the cluster
-                for request forwarding.
-            api_addr: Specifies the address (full URL) to advertise to other Vault servers in the
-                cluster for client redirection
-
-        Returns:
-            Layer: Pebble Layer
-        """
-        vault_config = {
-            "ui": True,
-            "storage": {"raft": self._get_raft_config()},
-            "listener": {
-                "tcp": {
-                    "address": f"[::]:{self.VAULT_PORT}",
-                    "tls_cert_file": TLS_CERT_FILE_PATH,
-                    "tls_key_file": TLS_KEY_FILE_PATH,
-                }
-            },
-            "default_lease_ttl": self.model.config["default_lease_ttl"],
-            "max_lease_ttl": self.model.config["max_lease_ttl"],
-            "disable_mlock": True,
-            "cluster_addr": f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
-            "api_addr": self._api_address,
-        }
-
+        """Returns pebble layer to start Vault."""
         return Layer(
             {
                 "summary": "vault layer",
@@ -703,12 +744,8 @@ class VaultCharm(CharmBase):
                     "vault": {
                         "override": "replace",
                         "summary": "vault",
-                        "command": "/usr/local/bin/docker-entrypoint.sh server",
+                        "command": f"vault server -config={VAULT_CONFIG_FILE_PATH}",
                         "startup": "enabled",
-                        "environment": {
-                            "VAULT_LOCAL_CONFIG": json.dumps(vault_config),
-                            "VAULT_API_ADDR": f"https://[::]:{self.VAULT_PORT}",
-                        },
                     }
                 },
             }
@@ -742,40 +779,6 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_relation_node_api_addresses()
             if node_api_address != self._api_address
         ]
-
-    def _get_raft_config(self) -> Dict[str, Any]:
-        """Returns raft config for vault.
-
-        Example of raft config:
-        {
-            "path": "/vault/raft",
-            "node_id": "vault-k8s-0",
-            "retry_join": [
-                {
-                    "leader_api_addr": "https://1.2.3.4:8200",
-                    "leader_ca_cert_file": "/vault/certs/ca.pem",
-                },
-                {
-                    "leader_api_addr": "https://5.6.7.8:8200",
-                    "leader_ca_cert_file": "/vault/certs/ca.pem",
-                }
-            ]
-        }
-        """
-        retry_join = [
-            {
-                "leader_api_addr": node_api_address,
-                "leader_ca_cert_file": TLS_CA_FILE_PATH,
-            }
-            for node_api_address in self._other_peer_node_api_addresses()
-        ]
-        raft_config: Dict[str, Any] = {
-            "path": VAULT_STORAGE_PATH,
-            "node_id": self._node_id,
-        }
-        if retry_join:
-            raft_config["retry_join"] = retry_join
-        return raft_config
 
     @property
     def _node_id(self) -> str:

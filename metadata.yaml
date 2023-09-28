@@ -13,6 +13,9 @@ description: |
   network encryption-as-a-service, or generate AWS IAM/STS
   credentials, SQL/NoSQL databases, X.509 certificates,
   SSH credentials, and more.
+website: https://charmhub.io/vault-k8s
+source: https://github.com/canonical/vault-k8s-operator
+issues: https://github.com/canonical/vault-k8s-operator/issues
 
 containers:
   vault:
@@ -20,6 +23,8 @@ containers:
     mounts:
       - storage: vault-raft
         location: /vault/raft
+      - storage: config
+        location: /vault/config
       - storage: certs
         location: /vault/certs
 
@@ -27,12 +32,15 @@ resources:
   vault-image:
     type: oci-image
     description: OCI image for Vault
-    upstream-source: vault:1.13.3
+    upstream-source: ghcr.io/canonical/vault:1.14.3
 
 storage:
   vault-raft:
     type: filesystem
     minimum-size: 10G
+  config:
+    type: filesystem
+    minimum-size: 50M
   certs:
     type: filesystem
     minimum-size: 50M

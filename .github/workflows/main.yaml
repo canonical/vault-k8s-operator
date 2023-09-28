@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+
+jobs:
+  lint-report:
+    uses: ./.github/workflows/lint-report.yaml
+
+  static-analysis:
+    name: Static analysis
+    uses: ./.github/workflows/static-analysis.yaml
+
+  unit-tests-with-coverage:
+    uses: ./.github/workflows/unit-test.yaml
+
+  integration-test:
+    uses: ./.github/workflows/integration-test.yaml
+    with:
+      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
+
+  publish-charm:
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+      - integration-test
+    if: ${{ github.ref_name == 'main' }}
+    uses: ./.github/workflows/publish-charm.yaml
+    with:
+      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
+    secrets: inherit
+
