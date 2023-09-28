@@ -35,10 +35,10 @@ jobs:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           channel: latest/edge
       - name: Publish libs
-        env:
-          CHARMCRAFT_AUTH: "${{ secrets.CHARMCRAFT_AUTH }}"
-        run: |
-          charmcraft publish-lib charms.vault_k8s.v0.vault_kv
+        uses: canonical/charming-actions/release-libraries@2.4.0
+        with:
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v3
