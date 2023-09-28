@@ -116,7 +116,8 @@ juju integrate <vault provider charm> <vault requirer charm>
 
 import json
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Union
+from collections.abc import Iterable, Mapping
+from typing import Any, Dict, Optional, Union
 
 import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import]
@@ -331,7 +332,7 @@ class VaultKvProvides(ops.Object):
         credentials[nonce] = secret.id
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def remove_unit_credentials(self, relation: ops.Relation, nonce: Union[str, List[str]]):
+    def remove_unit_credentials(self, relation: ops.Relation, nonce: Union[str, Iterable[str]]):
         """Remove nonce(s) from the relation."""
         if not self.charm.unit.is_leader():
             return

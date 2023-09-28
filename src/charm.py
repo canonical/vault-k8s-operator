@@ -340,7 +340,7 @@ class VaultCharm(CharmBase):
 
         # Remove any stale nonce
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
-        stale_nonces = list(set(credential_nonces) - set(nonces))
+        stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
 
     def _ensure_unit_credentials(
