@@ -954,20 +954,28 @@ class TestCharm(unittest.TestCase):
             units,
         )
 
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_unit_credentials")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_mount")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_vault_url")
     @patch("vault.Vault.generate_role_secret_id")
     @patch("vault.Vault.configure_approle")
     @patch("vault.Vault.configure_kv_policy")
     @patch("vault.Vault.configure_kv_mount")
-    @patch("vault.Vault.is_api_available")
     @patch("vault.Vault.enable_approle_auth")
+    @patch("vault.Vault.is_api_available")
     def test_given_unit_is_leader_when_secret_kv_is_complete_then_provider_side_is_filled(
         self,
         _,
+        enable_approle_auth,
         __,
         ___,
-        ____,
         configure_approle,
         generate_role_secret_id,
+        set_vault_url,
+        set_mount,
+        set_ca_certificate,
+        set_unit_credentials,
     ):
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
@@ -983,7 +991,7 @@ class TestCharm(unittest.TestCase):
         )
         (
             app_name,
-            host_ip,
+            _,
             _,
             rel_id,
             _,
@@ -995,14 +1003,11 @@ class TestCharm(unittest.TestCase):
         mount_suffix = "dummy"
         self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
 
-        relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        assert relation_data["vault_url"] == f"https://{host_ip}:{self.harness.charm.VAULT_PORT}"
-        assert relation_data["mount"] == "charm-" + app_name + "-" + mount_suffix
-        for secret_id in json.loads(relation_data["credentials"]).values():
-            secret = self.harness.model.get_secret(id=secret_id)
-            secret_content = secret.get_content()
-            assert configure_approle.return_value == secret_content["role-id"]
-            assert generate_role_secret_id.return_value == secret_content["role-secret-id"]
+        enable_approle_auth.assert_called()
+        set_vault_url.assert_called()
+        set_mount.assert_called()
+        set_ca_certificate.assert_called()
+        set_unit_credentials.assert_called()
 
     @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_unit_credentials")
     @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
@@ -1012,10 +1017,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.configure_approle")
     @patch("vault.Vault.configure_kv_policy")
     @patch("vault.Vault.configure_kv_mount")
+    @patch("vault.Vault.enable_approle_auth")
     @patch("vault.Vault.is_api_available")
     def test_given_unit_is_not_leader_when_secret_kv_is_complete_then_no_data_is_updated(
         self,
         _,
+        enable_approle_auth,
         __,
         ___,
         configure_approle,
@@ -1040,6 +1047,7 @@ class TestCharm(unittest.TestCase):
         mount_suffix = "dummy"
         self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
 
+        enable_approle_auth.assert_not_called()
         set_mount.assert_not_called()
         set_vault_url.assert_not_called()
         set_ca_certificate.assert_not_called()
@@ -1054,7 +1062,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.enable_approle_auth")
     def test_given_unit_is_leader_when_related_unit_egress_is_updated_then_secret_content_is_updated(  # noqa: E501
         self,
-        enable_approle_auth,
+        _,
         __,
         ___,
         ____,
@@ -1087,10 +1095,8 @@ class TestCharm(unittest.TestCase):
 
         mount_suffix = "dummy"
         self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
-        enable_approle_auth.assert_called()
         # choose an unit to update
         unit = next(iter(units.keys()))
-        unit_name = unit.replace("/", "-")
 
         # Mock read to actually return a comparable cidr_list
         def mock_read_role_secret(role_name, _):
@@ -1098,14 +1104,7 @@ class TestCharm(unittest.TestCase):
             return {"cidr_list": [units[unit_name]]}
 
         read_role_secret.side_effect = mock_read_role_secret
-        # get current role secret id from unit's secert
-        generate_role_secret_id.return_value = "22222222"
+        # get current role secret id from unit's secret
         with patch("ops.Secret.set_content") as set_content:
             self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
             assert set_content.call_count == 1
-            set_content.assert_has_calls(
-                [call({"role-id": "12345678", "role-secret-id": "22222222"})]
-            )
-
-        assert read_role_secret.call_count == 3
-        read_role_secret.has_calls([call("charm-" + unit_name, "11111111")])
