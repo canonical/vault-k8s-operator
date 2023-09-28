@@ -54,7 +54,7 @@ class ExampleRequirerCharm(CharmBase):
 
     def _on_connected(self, event: vault_kv.VaultKvConnectedEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
-        egress_subnet = str(self.model.get_binding(relation).network.interfaces[0].subnet)  # type: ignore
+        egress_subnet = str(self.model.get_binding(relation).network.interfaces[0].subnet)
         self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
     def _on_ready(self, event: vault_kv.VaultKvReadyEvent):
