@@ -100,7 +100,7 @@ class Vault:
 
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""
-        with open("src/kv_mount.hcl", "r") as fd:
+        with open("src/templates/kv_mount.hcl", "r") as fd:
             mount_policy = fd.read()
         self._client.sys.create_or_update_policy(policy, mount_policy.format(mount=mount))
 
