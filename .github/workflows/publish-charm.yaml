@@ -34,6 +34,11 @@ jobs:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           channel: latest/edge
+      - name: Publish libs
+        uses: canonical/charming-actions/release-libraries@2.4.0
+        with:
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v3
