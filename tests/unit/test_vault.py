@@ -102,3 +102,27 @@ class TestVault(unittest.TestCase):
         vault.get_num_raft_peers()
 
         self.assertEqual(3, vault.get_num_raft_peers())
+
+    @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
+    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
+    def test_given_approle_not_in_auth_methods_when_enable_approle_auth_then_approle_is_added_to_auth_methods(  # noqa: E501
+        self, patch_list_auth_methods, patch_enable_auth_method
+    ):
+        patch_list_auth_methods.return_value = {}
+        vault = Vault(url="http://whatever-url")
+
+        vault.enable_approle_auth()
+
+        patch_enable_auth_method.assert_called_with("approle")
+
+    @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
+    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
+    def test_given_approle_in_auth_methods_when_enable_approle_auth_then_approle_is_not_added_to_auth_methods(  # noqa: E501
+        self, patch_list_auth_methods, patch_enable_auth_method
+    ):
+        patch_list_auth_methods.return_value = {"approle/": "whatever"}
+        vault = Vault(url="http://whatever-url")
+
+        vault.enable_approle_auth()
+
+        patch_enable_auth_method.assert_not_called()

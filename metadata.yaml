@@ -49,6 +49,10 @@ peers:
   vault-peers:
     interface: vault-peer
 
+provides:
+  vault-kv:
+    interface: vault-kv
+
 assumes:
   - juju >= 3.1
   - k8s-api

@@ -4,6 +4,8 @@ jinja2
 jsonschema
 lightkube
 lightkube-models
+pydantic
+pytest-interface-tester
 pyhcl
 requests
 jsonschema

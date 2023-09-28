@@ -926,3 +926,185 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.remove.emit()
 
         patch_stop_service.assert_called_with("vault")
+
+    def setup_vault_kv_relation(self, nb_units: int = 1) -> tuple:
+        app_name = "consumer"
+        unit_name = app_name + "/0"
+        relation_name = "vault-kv"
+
+        host_ip = "10.20.20.1"
+        self.harness.add_network(host_ip, endpoint="vault-kv")
+        self.harness.set_leader()
+        rel_id = self.harness.add_relation(relation_name, app_name)
+        units = {}
+        for unit_id in range(nb_units):
+            unit_name = app_name + "/" + str(unit_id)
+            egress_subnet = f"10.20.20.{20 + unit_id}/32"
+            self.harness.add_relation_unit(rel_id, unit_name)
+            self.harness.update_relation_data(
+                rel_id, unit_name, {"egress_subnet": egress_subnet, "nonce": str(unit_id)}
+            )
+            units[unit_name] = egress_subnet
+
+        return (
+            app_name,
+            host_ip,
+            relation_name,
+            rel_id,
+            units,
+        )
+
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_unit_credentials")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_mount")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_vault_url")
+    @patch("vault.Vault.generate_role_secret_id")
+    @patch("vault.Vault.configure_approle")
+    @patch("vault.Vault.configure_kv_policy")
+    @patch("vault.Vault.configure_kv_mount")
+    @patch("vault.Vault.enable_approle_auth")
+    @patch("vault.Vault.is_api_available")
+    def test_given_unit_is_leader_when_secret_kv_is_complete_then_provider_side_is_filled(
+        self,
+        _,
+        enable_approle_auth,
+        __,
+        ___,
+        configure_approle,
+        generate_role_secret_id,
+        set_vault_url,
+        set_mount,
+        set_ca_certificate,
+        set_unit_credentials,
+    ):
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
+        (
+            app_name,
+            _,
+            _,
+            rel_id,
+            _,
+        ) = self.setup_vault_kv_relation(nb_units=3)
+
+        configure_approle.return_value = "12345678"
+        generate_role_secret_id.return_value = "11111111"
+
+        mount_suffix = "dummy"
+        self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
+
+        enable_approle_auth.assert_called()
+        set_vault_url.assert_called()
+        set_mount.assert_called()
+        set_ca_certificate.assert_called()
+        set_unit_credentials.assert_called()
+
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_unit_credentials")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_vault_url")
+    @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_mount")
+    @patch("vault.Vault.generate_role_secret_id")
+    @patch("vault.Vault.configure_approle")
+    @patch("vault.Vault.configure_kv_policy")
+    @patch("vault.Vault.configure_kv_mount")
+    @patch("vault.Vault.enable_approle_auth")
+    @patch("vault.Vault.is_api_available")
+    def test_given_unit_is_not_leader_when_secret_kv_is_complete_then_no_data_is_updated(
+        self,
+        _,
+        enable_approle_auth,
+        __,
+        ___,
+        configure_approle,
+        generate_role_secret_id,
+        set_mount,
+        set_vault_url,
+        set_ca_certificate,
+        set_unit_credentials,
+    ):
+        (
+            app_name,
+            _,
+            _,
+            rel_id,
+            _,
+        ) = self.setup_vault_kv_relation(nb_units=3)
+        self.harness.set_leader(False)
+
+        configure_approle.return_value = "12345678"
+        generate_role_secret_id.return_value = "11111111"
+
+        mount_suffix = "dummy"
+        self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
+
+        enable_approle_auth.assert_not_called()
+        set_mount.assert_not_called()
+        set_vault_url.assert_not_called()
+        set_ca_certificate.assert_not_called()
+        set_unit_credentials.assert_not_called()
+
+    @patch("vault.Vault.read_role_secret")
+    @patch("vault.Vault.generate_role_secret_id")
+    @patch("vault.Vault.configure_approle")
+    @patch("vault.Vault.configure_kv_policy")
+    @patch("vault.Vault.configure_kv_mount")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_approle_auth")
+    def test_given_unit_is_leader_when_related_unit_egress_is_updated_then_secret_content_is_updated(  # noqa: E501
+        self,
+        _,
+        __,
+        ___,
+        ____,
+        configure_approle,
+        generate_role_secret_id,
+        read_role_secret,
+    ):
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self._set_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="certificate content",
+            private_key="private key content",
+            ca_certificate="ca certificate content",
+        )
+        (
+            app_name,
+            _,
+            _,
+            rel_id,
+            units,
+        ) = self.setup_vault_kv_relation(nb_units=3)
+
+        configure_approle.return_value = "12345678"
+        generate_role_secret_id.return_value = "11111111"
+
+        mount_suffix = "dummy"
+        self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
+        # choose an unit to update
+        unit = next(iter(units.keys()))
+
+        # Mock read to actually return a comparable cidr_list
+        def mock_read_role_secret(role_name, _):
+            unit_name = "/".join(role_name.split("-")[-2:])
+            return {"cidr_list": [units[unit_name]]}
+
+        read_role_secret.side_effect = mock_read_role_secret
+        # get current role secret id from unit's secret
+        with patch("ops.Secret.set_content") as set_content:
+            self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
+            assert set_content.call_count == 1
