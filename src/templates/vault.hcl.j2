@@ -10,6 +10,9 @@ storage "raft" {
   {% endfor %}
   }
 listener "tcp" {
+  telemetry {
+    unauthenticated_metrics_access = true
+  }
   address       = "{{ tcp_address }}"
   tls_cert_file = "{{ tls_cert_file }}"
   tls_key_file  = "{{ tls_key_file }}"
@@ -19,3 +22,7 @@ max_lease_ttl     = "{{ max_lease_ttl }}"
 disable_mlock     = true
 cluster_addr      = "{{ cluster_address }}"
 api_addr          = "{{ api_address }}"
+telemetry {
+  disable_hostname = true
+  prometheus_retention_time = "12h"
+}

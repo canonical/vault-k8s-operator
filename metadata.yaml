@@ -52,6 +52,8 @@ peers:
 provides:
   vault-kv:
     interface: vault-kv
+  metrics-endpoint:
+    interface: prometheus_scrape
 
 assumes:
   - juju >= 3.1

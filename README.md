@@ -117,6 +117,14 @@ vault status
 vault operator raft list-peers
 ```
 
+## Integrations
+
+### Prometheus
+
+```bash
+juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
+```
+
 ## OCI Images
 
 - [Vault](ghcr.io/canonical/vault:1.14.3)
