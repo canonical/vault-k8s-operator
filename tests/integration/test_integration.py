@@ -44,22 +44,23 @@ class TestVaultK8s:
             num_units=5,
         )
 
-    async def _get_vault_endpoint(self, ops_test: OpsTest) -> str:
+    async def _get_vault_endpoint(self, ops_test: OpsTest, timeout: int = 60) -> str:
         """Retrieves the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
 
         Args:
             ops_test: Ops test Framework.
+            timeout: Wait time in seconds to get proxied endpoints.
 
         Returns:
             vault_endpoint: Vault proxied endpoint by Traefik.
 
         Raises:
             TimeoutError: If proxied endpoints are not retrieved.
+
         """
         traefik = ops_test.model.applications[TRAEFIK_APP_NAME]  # type: ignore[union-attr]
         traefik_unit = traefik.units[0]
         t0 = time.time()
-        timeout = 300  # seconds
         while time.time() - t0 < timeout:
             proxied_endpoint_action = await traefik_unit.run_action(
                 action_name="show-proxied-endpoints"
@@ -81,13 +82,13 @@ class TestVaultK8s:
         """Returns the URL formatted as https://<host>/<path> from the vault endpoint.
 
         Args:
-            vault_endpoint:  Vault proxied endpoint by Traefik.
+            vault_endpoint: Vault proxied endpoint by Traefik.
 
         Returns:
             url: URL formatted as https://<host>/<path>
 
         Raises:
-            InvalidHostException: If vault host address is empty
+            InvalidHostError: If vault host address is empty
         """
         host, path = "", ""
         uri = vault_endpoint.split("//")[1]
@@ -152,6 +153,7 @@ class TestVaultK8s:
             application_name=TRAEFIK_APPLICATION_NAME,
             config={"external_hostname": EXTERNAL_HOSTNAME, "routing_mode": "subdomain"},
             trust=True,
+            channel="edge",
         )
 
     @pytest.mark.abort_on_fail
@@ -228,17 +230,16 @@ class TestVaultK8s:
         )
 
     @pytest.mark.abort_on_fail
-    async def test_given_related_to_traefik_when_vault_status_checked_then_returns_400(
+    async def test_given_related_to_traefik_when_vault_status_checked_then_vault_returns_500(
         self, ops_test: OpsTest
     ):
-        """Sending a request without token and returns 400 Bad Request.
+        """This proves that vault is reachable behind ingress however TLS handshake error happens.
 
-        This proves that vault is reachable behind ingress.
-        Juju secrets belongs to model are not gathered using pytest-operator,
-        so vault token is missing in the request causes authorization problems.
+        Vault and Traefik uses their own self signed certificates and TLS handshake error happens
+        with the reason of bad certificate and Vault server returns 500.
         """
         vault_endpoint = await self._get_vault_endpoint(ops_test)
         url = self._get_url(vault_endpoint)
         self._client = hvac.Client(url=url, verify=False)
         response = self._client.sys.read_health_status()
-        assert str(response) == "<Response [400]>"
+        assert str(response) == "<Response [500]>"

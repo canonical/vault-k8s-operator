@@ -222,10 +222,11 @@ class VaultCharm(CharmBase):
             ],
         )
         self.ingress = IngressPerAppRequirer(
-            charm=self,
+            self,
             port=self.VAULT_PORT,
-            relation_name=INGRESS_RELATION_NAME,
             strip_prefix=True,
+            scheme=lambda: "https",
+            redirect_https=True,
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)

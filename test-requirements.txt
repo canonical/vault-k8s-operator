@@ -9,6 +9,7 @@ isort
 juju
 mypy
 pep8-naming
+pydantic
 pyproject-flake8
 pytest
 pytest-operator
