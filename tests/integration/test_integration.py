@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 APPLICATION_NAME = "vault-k8s"
+PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 
 
 class TestVaultK8s:
@@ -38,6 +39,20 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
+    async def deploy_prometheus(self, ops_test: OpsTest) -> None:
+        """Deploys Prometheus.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
+        await ops_test.model.deploy(  # type: ignore[union-attr]
+            "prometheus-k8s",
+            application_name=PROMETHEUS_APPLICATION_NAME,
+            trust=True,
+        )
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
     async def build_and_deploy(self, ops_test: OpsTest):
         """Builds and deploys vault-k8s charm.
 
@@ -57,6 +72,20 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
             wait_for_exact_units=5,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
+        self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
+    ):
+        await ops_test.model.add_relation(  # type: ignore[union-attr]
+            relation1=f"{APPLICATION_NAME}:metrics-endpoint",
+            relation2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
+        )
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME, APPLICATION_NAME],
+            status="active",
+            timeout=1000,
         )
 
     @pytest.mark.abort_on_fail

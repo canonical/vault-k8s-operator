@@ -15,6 +15,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_ca,
     generate_certificate,
@@ -139,6 +140,17 @@ class VaultCharm(CharmBase):
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
+        self._metrics_endpoint = MetricsEndpointProvider(
+            self,
+            jobs=[
+                {
+                    "scheme": "https",
+                    "tls_config": {"insecure_skip_verify": True},
+                    "metrics_path": "/v1/sys/metrics",
+                    "static_configs": [{"targets": [f"*:{self.VAULT_PORT}"]}],
+                }
+            ],
+        )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
