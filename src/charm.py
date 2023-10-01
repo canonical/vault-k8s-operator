@@ -850,13 +850,13 @@ class VaultCharm(CharmBase):
         try:
             peer_relation = self.model.get_relation(PEER_RELATION_NAME)
             juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                VAULT_INITIALIZATION_SECRET_ID
+                "vault-initialization-secret-id"
             )
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_ID)
+            raise PeerSecretError(secret_name="vault-initialization-secret-id")
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
