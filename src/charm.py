@@ -65,6 +65,11 @@ CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 INGRESS_RELATION_NAME = "ingress"
+SEND_CA_CERT_REL_NAME = "send-ca-cert"
+VAULT_CERTIFICATE_SECRET_ID = "vault-certificates-secret-id"
+VAULT_CERTIFICATE_SECRET_LABEL = "vault-certificate"
+VAULT_INITIALIZATION_SECRET_ID = "vault-initialization-secret-id"
+VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 
 
 def render_vault_config_file(
@@ -225,8 +230,6 @@ class VaultCharm(CharmBase):
             self,
             port=self.VAULT_PORT,
             strip_prefix=True,
-            scheme=lambda: "https",
-            redirect_https=True,
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
@@ -411,7 +414,31 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         self._set_peer_relation_node_api_address()
+        self._send_ca_cert()
         self.unit.status = ActiveStatus()
+
+    def _on_send_ca_cert_relation_joined(self, event: RelationJoinedEvent):
+        self._send_ca_cert(rel_id=event.relation.id)
+
+    def _send_ca_cert(self, *, rel_id=None):
+        """There is one (and only one) CA cert that we need to forward to multiple apps.
+
+        Args:
+            rel_id: Relation id. If not given, update all relations.
+        """
+        send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_REL_NAME)
+        if self._vault_certificate_is_stored:
+            secret = self.model.get_secret(label=VAULT_CERTIFICATE_SECRET_LABEL)
+            secret_content = secret.get_content()
+            ca = secret_content["cacertificate"]
+            if rel_id:
+                send_ca_cert.set_certificate("", ca, [], relation_id=rel_id)
+            else:
+                for relation in self.model.relations.get(SEND_CA_CERT_REL_NAME, []):
+                    send_ca_cert.set_certificate("", ca, [], relation_id=relation.id)
+        else:
+            for relation in self.model.relations.get(SEND_CA_CERT_REL_NAME, []):
+                send_ca_cert.remove_certificate(relation.id)
 
     def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
         """Handle relation-joined event for the replicas relation."""
@@ -808,9 +835,11 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        juju_secret = self.app.add_secret(juju_secret_content, label="vault-initialization")
+        juju_secret = self.app.add_secret(
+            juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
+        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        peer_relation.data[self.app].update({VAULT_INITIALIZATION_SECRET_ID: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
@@ -821,13 +850,13 @@ class VaultCharm(CharmBase):
         try:
             peer_relation = self.model.get_relation(PEER_RELATION_NAME)
             juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                "vault-initialization-secret-id"
+                VAULT_INITIALIZATION_SECRET_ID
             )
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name="vault-initialization-secret-id")
+            raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_ID)
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
@@ -979,6 +1008,19 @@ class VaultCharm(CharmBase):
     @property
     def _certificate_subject(self) -> str:
         return f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+    @property
+    def _vault_certificate_is_stored(self) -> bool:
+        """Returns whether self-signed certificate is stored Juju secret.
+
+        Returns:
+            bool: Whether certificates are stored..
+        """
+        try:
+            self.model.get_secret(label=VAULT_CERTIFICATE_SECRET_LABEL)
+            return True
+        except SecretNotFoundError:
+            return False
 
 
 if __name__ == "__main__":  # pragma: no cover
