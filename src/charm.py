@@ -89,6 +89,43 @@ def render_vault_config_file(
     return content
 
 
+def config_file_content_matches(existing_content: str, new_content: str) -> bool:
+    """Returns whether two Vault config file contents match.
+
+    We check if the retry_join addresses match, and then we check if the rest of the config
+    file matches.
+
+    Returns:
+        bool: Whether the vault config file content matches
+    """
+    existing_config_hcl = hcl.loads(existing_content)
+    new_content_hcl = hcl.loads(new_content)
+    if not existing_config_hcl:
+        logger.info("Existing config file is empty")
+        return existing_config_hcl == new_content_hcl
+    if not new_content_hcl:
+        logger.info("New config file is empty")
+        return existing_config_hcl == new_content_hcl
+
+    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
+    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
+
+    # If there is only one retry join, it is a dict
+    if isinstance(new_retry_joins, dict):
+        new_retry_joins = [new_retry_joins]
+    if isinstance(existing_retry_joins, dict):
+        existing_retry_joins = [existing_retry_joins]
+
+    new_retry_join_api_addresses = set(address["leader_api_addr"] for address in new_retry_joins)
+    existing_retry_join_api_addresses = set(
+        address["leader_api_addr"] for address in existing_retry_joins
+    )
+    return (
+        new_retry_join_api_addresses == existing_retry_join_api_addresses
+        and new_content_hcl == existing_config_hcl
+    )
+
+
 class PeerSecretError(Exception):
     """Exception raised when a peer secret is not found."""
 
@@ -593,22 +630,13 @@ class VaultCharm(CharmBase):
             node_id=self._node_id,
             retry_joins=retry_joins,
         )
-        if not self._config_file_content_matches(content=content):
+        existing_content = ""
+        if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
+            existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
+            existing_content = existing_content_stringio.read()  # type: ignore[assignment]
+
+        if not config_file_content_matches(existing_content=existing_content, new_content=content):
             self._push_config_file_to_workload(content=content)
-
-    def _config_file_content_matches(self, content: str) -> bool:
-        """Returns whether the vault config file content matches the provided content.
-
-        Returns:
-            bool: Whether the vault config file content matches
-        """
-        if not self._container.exists(path=VAULT_CONFIG_FILE_PATH):
-            return False
-        existing_content = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
-        existing_config_hcl = hcl.load(existing_content)
-        new_content_hcl = hcl.loads(content)
-
-        return existing_config_hcl == new_content_hcl
 
     def _push_config_file_to_workload(self, content: str):
         """Push the config file to the workload."""

@@ -12,7 +12,7 @@ import hcl  # type: ignore[import]
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
 
-from charm import VaultCharm
+from charm import VaultCharm, config_file_content_matches
 
 
 def read_file(path: str) -> str:
@@ -38,6 +38,38 @@ class MockNetwork:
 class MockBinding:
     def __init__(self, bind_address: str, ingress_address: str):
         self.network = MockNetwork(bind_address=bind_address, ingress_address=ingress_address)
+
+
+class TestConfigFileContentMatches(unittest.TestCase):
+    def test_given_identical_vault_config_when_config_file_content_matches_returns_true(self):
+        existing_content = read_file("tests/unit/config.hcl")
+        new_content = read_file("tests/unit/config.hcl")
+
+        matches = config_file_content_matches(
+            existing_content=existing_content, new_content=new_content
+        )
+
+        self.assertTrue(matches)
+
+    def test_given_different_vault_config_when_config_file_content_matches_returns_false(self):
+        existing_content = read_file("tests/unit/config.hcl")
+        new_content = read_file("tests/unit/config_with_raft_peers.hcl")
+
+        matches = config_file_content_matches(
+            existing_content=existing_content, new_content=new_content
+        )
+
+        self.assertFalse(matches)
+
+    def test_given_equivalent_vault_config_when_config_file_content_matches_returns_true(self):
+        existing_content = read_file("tests/unit/config_with_raft_peers.hcl")
+        new_content = read_file("tests/unit/config_with_raft_peers_equivalent.hcl")
+
+        matches = config_file_content_matches(
+            existing_content=existing_content, new_content=new_content
+        )
+
+        self.assertTrue(matches)
 
 
 class TestCharm(unittest.TestCase):
@@ -151,6 +183,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.set_token")
@@ -183,6 +216,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_set_token.assert_called_once_with(token=root_token)
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
 
+    @patch("charm.config_file_content_matches")
     @patch("ops.model.Container.push")
     @patch("ops.model.Container.pull")
     @patch("vault.Vault.unseal", new=Mock)
@@ -197,8 +231,10 @@ class TestCharm(unittest.TestCase):
         patch_vault_initialize,
         patch_pull,
         patch_push,
+        patch_config_file_matches,
     ):
-        patch_pull.return_value = ""
+        patch_pull.return_value = StringIO()
+        patch_config_file_matches.return_value = False
         bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
         patch_get_binding.return_value = MockBinding(
@@ -214,9 +250,10 @@ class TestCharm(unittest.TestCase):
 
         args, kwargs = patch_push.call_args
         pushed_content_hcl = hcl.loads(kwargs["source"])
-        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl").strip())
+        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl"))
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
@@ -252,6 +289,7 @@ class TestCharm(unittest.TestCase):
         updated_plan = self.harness.get_container_pebble_plan("vault").to_dict()
         self.assertEqual(updated_plan, expected_plan)
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
@@ -275,6 +313,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault to be available"),
         )
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
@@ -316,6 +355,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(secret_content["privatekey"], private_key)
         self.assertEqual(secret_content["cacertificate"], ca_certificate)
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
@@ -381,7 +421,7 @@ class TestCharm(unittest.TestCase):
             StringIO(certificate),
             StringIO(private_key),
             StringIO(ca_certificate),
-            StringIO(read_file("tests/unit/config.hcl").strip()),
+            StringIO(read_file("tests/unit/config.hcl")),
         ]
         patch_generate_certs.return_value = private_key, certificate, ca_certificate
         bind_address = "1.2.3.4"
@@ -454,6 +494,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for other units to provide their addresses"),
         )
 
+    @patch("charm.config_file_content_matches")
     @patch("ops.model.Container.push")
     @patch("ops.model.Container.pull")
     @patch("ops.model.Model.get_binding")
@@ -469,8 +510,10 @@ class TestCharm(unittest.TestCase):
         patch_get_binding,
         patch_pull,
         patch_push,
+        patch_config_file_content_matches,
     ):
-        patch_pull.return_value = ""
+        patch_pull.return_value = StringIO()
+        patch_config_file_content_matches.return_value = False
         bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
         patch_vault_is_sealed.return_value = False
@@ -498,9 +541,10 @@ class TestCharm(unittest.TestCase):
 
         args, kwargs = patch_push.call_args
         pushed_content_hcl = hcl.loads(kwargs["source"])
-        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl").strip())
+        expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl"))
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
@@ -554,6 +598,7 @@ class TestCharm(unittest.TestCase):
             expected_plan,
         )
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
@@ -594,6 +639,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal")
@@ -637,6 +683,7 @@ class TestCharm(unittest.TestCase):
 
         patch_vault_unseal.assert_called_once_with(unseal_keys=unseal_keys)
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal", new=Mock)
@@ -683,6 +730,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault to be available"),
         )
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
     @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.unseal", new=Mock)
@@ -749,6 +797,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault certificate to be available"),
         )
 
+    @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Container.push")
     def test_given_vault_certificate_available_when_config_changed_then_pushed_to_workload(
         self, patch_push
@@ -810,7 +859,7 @@ class TestCharm(unittest.TestCase):
             StringIO(certificate),
             StringIO(private_key),
             StringIO(ca_certificate),
-            StringIO(read_file("tests/unit/config.hcl").strip()),
+            StringIO(read_file("tests/unit/config.hcl")),
         ]
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.set_leader(is_leader=True)
