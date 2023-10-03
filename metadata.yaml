@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 name: vault-k8s
+
+display-name: Vault Operator
 summary: A tool for managing secrets
 description: |
   Vault secures, stores, and tightly controls access to
