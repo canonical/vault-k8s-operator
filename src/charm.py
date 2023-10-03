@@ -8,6 +8,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 """
 import json
 import logging
+import socket
 from typing import Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
@@ -25,7 +26,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
@@ -64,10 +65,6 @@ KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
-INGRESS_RELATION_NAME = "ingress"
-SEND_CA_CERT_REL_NAME = "send-ca-cert"
-VAULT_CERTIFICATE_SECRET_ID = "vault-certificates-secret-id"
-VAULT_CERTIFICATE_SECRET_LABEL = "vault-certificate"
 VAULT_INITIALIZATION_SECRET_ID = "vault-initialization-secret-id"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 
@@ -174,13 +171,18 @@ def generate_vault_ca_certificate() -> Tuple[str, str]:
 
 
 def generate_vault_unit_certificate(
-    subject: str, sans_ip: List[str], ca_certificate: bytes, ca_private_key: bytes
+    subject: str,
+    sans_ip: List[str],
+    sans_dns: List[str],
+    ca_certificate: bytes,
+    ca_private_key: bytes,
 ) -> Tuple[str, str]:
     """Generate Vault unit certificates valid for 50 years.
 
     Args:
         subject: Subject of the certificate
         sans_ip: List of IP addresses to add to the SAN
+        sans_dns: List of DNS subject alternative names
         ca_certificate: CA certificate
         ca_private_key: CA private key
 
@@ -189,7 +191,7 @@ def generate_vault_unit_certificate(
     """
     vault_private_key = generate_private_key()
     csr = generate_csr(
-        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=[subject]
+        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=sans_dns
     )
     vault_certificate = generate_certificate(
         ca=ca_certificate,
@@ -227,9 +229,11 @@ class VaultCharm(CharmBase):
             ],
         )
         self.ingress = IngressPerAppRequirer(
-            self,
+            charm=self,
             port=self.VAULT_PORT,
             strip_prefix=True,
+            scheme=lambda: "https",
+            redirect_https=True,
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
@@ -301,6 +305,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
+                sans_dns=[self._ingress_address, socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
@@ -358,6 +363,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
+                sans_dns=[self._ingress_address, socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
@@ -414,31 +420,7 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         self._set_peer_relation_node_api_address()
-        self._send_ca_cert()
         self.unit.status = ActiveStatus()
-
-    def _on_send_ca_cert_relation_joined(self, event: RelationJoinedEvent):
-        self._send_ca_cert(rel_id=event.relation.id)
-
-    def _send_ca_cert(self, *, rel_id=None):
-        """There is one (and only one) CA cert that we need to forward to multiple apps.
-
-        Args:
-            rel_id: Relation id. If not given, update all relations.
-        """
-        send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_REL_NAME)
-        if self._vault_certificate_is_stored:
-            secret = self.model.get_secret(label=VAULT_CERTIFICATE_SECRET_LABEL)
-            secret_content = secret.get_content()
-            ca = secret_content["cacertificate"]
-            if rel_id:
-                send_ca_cert.set_certificate("", ca, [], relation_id=rel_id)
-            else:
-                for relation in self.model.relations.get(SEND_CA_CERT_REL_NAME, []):
-                    send_ca_cert.set_certificate("", ca, [], relation_id=relation.id)
-        else:
-            for relation in self.model.relations.get(SEND_CA_CERT_REL_NAME, []):
-                send_ca_cert.remove_certificate(relation.id)
 
     def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
         """Handle relation-joined event for the replicas relation."""
@@ -1008,19 +990,6 @@ class VaultCharm(CharmBase):
     @property
     def _certificate_subject(self) -> str:
         return f"{self.app.name}.{self.model.name}.svc.cluster.local"
-
-    @property
-    def _vault_certificate_is_stored(self) -> bool:
-        """Returns whether self-signed certificate is stored Juju secret.
-
-        Returns:
-            bool: Whether certificates are stored..
-        """
-        try:
-            self.model.get_secret(label=VAULT_CERTIFICATE_SECRET_LABEL)
-            return True
-        except SecretNotFoundError:
-            return False
 
 
 if __name__ == "__main__":  # pragma: no cover

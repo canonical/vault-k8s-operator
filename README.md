@@ -16,10 +16,25 @@ juju deploy vault-k8s --channel edge -n 5 --trust
 
 We recommend deploying Vault with an odd number of units.
 
-### Integrate with Ingress
+### Reach Vault through Ingress
+
+#### Deploy Traefik
 
 ```bash
-juju deploy traefik-k8s --trust --config external_hostname=<your hostname> 
+juju deploy traefik-k8s --channel edge --trust --config external_hostname=<your hostname> 
+```
+
+#### Integrate with Certificate Transfer Interface
+
+Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send Vault's CA certificate in the relation databag.
+
+```bash
+juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
+```
+
+#### Integrate with Ingress
+
+```bash
 juju integrate vault:ingress traefik-k8s:ingress
 ```
 
@@ -68,7 +83,8 @@ ck0i0krq457c7bgte4l0:
 Set the vault token for use in the client:
 
 ```bash
-export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
+export VAULT_TOKEN=hvs.WjJyFMP0jvNwBgPgelOcO4BM
+
 ```
 
 Read the `vault-ca-certificate` secret content:
@@ -132,14 +148,6 @@ vault operator raft list-peers
 
 ```bash
 juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
-```
-
-### Traefik
-
-Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send Vault's CA certificate in the relation databag.
-
-```bash
-juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
 ```
 
 ## OCI Images

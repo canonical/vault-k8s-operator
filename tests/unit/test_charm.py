@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import socket
 import unittest
 from typing import List
 from unittest.mock import Mock, call, patch
@@ -197,6 +198,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_unit_cert.assert_called_with(
             subject=ingress_address,
             sans_ip=[bind_address, ingress_address],
+            sans_dns=[ingress_address, socket.getfqdn()],
             ca_certificate=ca_certificate.encode(),
             ca_private_key=ca_private_key.encode(),
         )
@@ -239,6 +241,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_unit_cert.assert_called_with(
             subject=ingress_address,
             sans_ip=[bind_address, ingress_address],
+            sans_dns=[ingress_address, socket.getfqdn()],
             ca_certificate=ca_certificate.encode(),
             ca_private_key=ca_private_key.encode(),
         )
@@ -424,6 +427,8 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_vault_initialize,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
         ca_certificate = "certificate content"
         ca_private_key = "private key content"
         patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
@@ -465,6 +470,9 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_vault_initialize,
     ):
+        root = self.harness.get_filesystem_root(self.container_name)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
         ca_private_key = "private key content"
         ca_certificate = "ca certificate content"
         patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
