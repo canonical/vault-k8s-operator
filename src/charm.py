@@ -57,6 +57,8 @@ TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
+CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
+CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 
 
 def render_vault_config_file(
@@ -137,11 +139,11 @@ class PeerSecretError(Exception):
         super().__init__(self.message)
 
 
-def generate_vault_certificates(subject: str, sans_ip: List[str]) -> Tuple[str, str, str]:
-    """Generate Vault certificates valid for 50 years.
+def generate_vault_ca_certificate() -> Tuple[str, str]:
+    """Generate Vault CA certificates valid for 50 years.
 
     Returns:
-        Tuple[str, str, str]: Private key, certificate, CA certificate
+        Tuple[str, str]: CA Private key, CA certificate
     """
     ca_private_key = generate_private_key()
     ca_certificate = generate_ca(
@@ -149,6 +151,23 @@ def generate_vault_certificates(subject: str, sans_ip: List[str]) -> Tuple[str, 
         subject="Vault self signed CA",
         validity=365 * 50,
     )
+    return ca_private_key.decode(), ca_certificate.decode()
+
+
+def generate_vault_unit_certificate(
+    subject: str, sans_ip: List[str], ca_certificate: bytes, ca_private_key: bytes
+) -> Tuple[str, str]:
+    """Generate Vault unit certificates valid for 50 years.
+
+    Args:
+        subject: Subject of the certificate
+        sans_ip: List of IP addresses to add to the SAN
+        ca_certificate: CA certificate
+        ca_private_key: CA private key
+
+    Returns:
+        Tuple[str, str]: Unit private key, Unit certificate
+    """
     vault_private_key = generate_private_key()
     csr = generate_csr(
         private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=[subject]
@@ -159,7 +178,7 @@ def generate_vault_certificates(subject: str, sans_ip: List[str]) -> Tuple[str, 
         csr=csr,
         validity=365 * 50,
     )
-    return vault_private_key.decode(), vault_certificate.decode(), ca_certificate.decode()
+    return vault_private_key.decode(), vault_certificate.decode()
 
 
 class VaultCharm(CharmBase):
@@ -204,12 +223,26 @@ class VaultCharm(CharmBase):
 
         Sets pebble plan, initializes vault, and unseals vault.
         """
+        if self.unit.is_leader():
+            self._on_install_leader(event)
+        else:
+            self._on_install_non_leader(event)
+
+    def _on_install_leader(self, event: InstallEvent):
+        """Install event handler for leader unit.
+
+        This handler is responsible for:
+        - Deleting pre-existing Vault data
+        - Creating CA certificate
+        - Creating leader unit certificate
+        - Initializing vault
+
+        Args:
+            event: InstallEvent
+        """
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
-            return
-        self._delete_vault_data()
-        if not self.unit.is_leader():
             return
         if not self._is_peer_relation_created():
             self.unit.status = WaitingStatus("Waiting for peer relation to be created")
@@ -222,31 +255,30 @@ class VaultCharm(CharmBase):
             event.defer()
             return
         self.unit.status = MaintenanceStatus("Initializing vault")
-        try:
-            (
-                private_key,
-                certificate,
-                ca_certificate,
-            ) = self._get_certificates_secret_in_peer_relation()
-        except PeerSecretError:
-            logger.info("Vault certificate secret not set in peer relation")
-            private_key, certificate, ca_certificate = generate_vault_certificates(
-                subject=self._certificate_subject,
-                sans_ip=[self._bind_address, self._ingress_address],
+        if not self._ca_certificate_pushed_to_workload():
+            ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            self._set_ca_certificate_secret_in_peer_relation(
+                private_key=ca_private_key, certificate=ca_certificate
             )
-            self._set_certificates_secret_in_peer_relation(
-                private_key=private_key, certificate=certificate, ca_certificate=ca_certificate
+            self._push_ca_certificate_to_workload(certificate=ca_certificate)
+        if not self._unit_certificate_pushed_to_workload():
+            try:
+                ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+            except PeerSecretError:
+                self.unit.status = WaitingStatus("Waiting for vault CA certificate secret")
+                event.defer()
+                return
+            sans_ip = [self._bind_address, self._ingress_address]
+            private_key, certificate = generate_vault_unit_certificate(
+                subject=self._ingress_address,
+                sans_ip=sans_ip,
+                ca_certificate=ca_certificate.encode(),
+                ca_private_key=ca_private_key.encode(),
             )
-        if not self._certificate_pushed_to_workload(
-            certificate=certificate,
-            private_key=private_key,
-            ca_certificate=ca_certificate,
-        ):
-            self._push_certificates_to_workload(
-                certificate=certificate,
-                private_key=private_key,
-                ca_certificate=ca_certificate,
+            self._push_unit_certificate_to_workload(
+                certificate=certificate, private_key=private_key
             )
+        self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(url=self._api_address)
@@ -258,6 +290,52 @@ class VaultCharm(CharmBase):
         self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         vault.set_token(token=root_token)
         vault.unseal(unseal_keys=unseal_keys)
+
+    def _on_install_non_leader(self, event: InstallEvent):
+        """Install event handler for non-leader unit.
+
+        This handler is responsible for:
+        - Deleting pre-existing Vault data
+        - Creating unit certificate
+
+        Args:
+            event: InstallEvent
+        """
+        if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
+            event.defer()
+            return
+        if not self._is_peer_relation_created():
+            self.unit.status = WaitingStatus("Waiting for peer relation to be created")
+            event.defer()
+            return
+        if not self._bind_address or not self._ingress_address:
+            self.unit.status = WaitingStatus(
+                "Waiting for bind and ingress addresses to be available"
+            )
+            event.defer()
+            return
+        try:
+            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+        except PeerSecretError:
+            self.unit.status = WaitingStatus("Waiting for vault CA certificate secret")
+            event.defer()
+            return
+        self.unit.status = MaintenanceStatus("Initializing vault certificates")
+        if not self._ca_certificate_pushed_to_workload():
+            self._push_ca_certificate_to_workload(certificate=ca_certificate)
+        if not self._unit_certificate_pushed_to_workload():
+            sans_ip = [self._bind_address, self._ingress_address]
+            private_key, certificate = generate_vault_unit_certificate(
+                subject=self._ingress_address,
+                sans_ip=sans_ip,
+                ca_certificate=ca_certificate.encode(),
+                ca_private_key=ca_private_key.encode(),
+            )
+            self._push_unit_certificate_to_workload(
+                certificate=certificate, private_key=private_key
+            )
+        self._delete_vault_data()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
@@ -283,26 +361,14 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             event.defer()
             return
-        try:
-            (
-                private_key,
-                certificate,
-                ca_certificate,
-            ) = self._get_certificates_secret_in_peer_relation()
-        except PeerSecretError:
-            self.unit.status = WaitingStatus("Waiting for vault certificate to be available")
+        if not self._ca_certificate_pushed_to_workload():
+            self.unit.status = WaitingStatus("Waiting for vault CA certificate to be available")
             event.defer()
             return
-        if not self._certificate_pushed_to_workload(
-            private_key=private_key,
-            certificate=certificate,
-            ca_certificate=ca_certificate,
-        ):
-            self._push_certificates_to_workload(
-                private_key=private_key,
-                certificate=certificate,
-                ca_certificate=ca_certificate,
-            )
+        if not self._unit_certificate_pushed_to_workload():
+            self.unit.status = WaitingStatus("Waiting for vault unit certificate to be available")
+            event.defer()
+            return
         self.unit.status = MaintenanceStatus("Preparing vault")
         self._generate_vault_config_file()
         self._set_pebble_plan()
@@ -373,13 +439,9 @@ class VaultCharm(CharmBase):
             return
 
         try:
-            (
-                _,
-                _,
-                ca_certificate,
-            ) = self._get_certificates_secret_in_peer_relation()
+            _, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
         except PeerSecretError:
-            logger.debug("Vault certificate secret not set in peer relation, deferring event")
+            logger.debug("Vault CA certificate secret not set in peer relation, deferring event")
             event.defer()
             return
 
@@ -576,38 +638,35 @@ class VaultCharm(CharmBase):
         """
         return f"https://{self._bind_address}:{self.VAULT_PORT}"
 
-    def _push_certificates_to_workload(
-        self,
-        private_key: str,
-        certificate: str,
-        ca_certificate: str,
-    ) -> None:
-        """Push the certificates to the workload."""
-        self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
-        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
-        self._container.push(path=TLS_CA_FILE_PATH, source=ca_certificate)
-        logger.info("Pushed certificates to workload")
+    def _push_ca_certificate_to_workload(self, certificate: str) -> None:
+        """Push the CA certificate to the workload.
 
-    def _certificate_pushed_to_workload(
-        self, private_key: str, certificate: str, ca_certificate: str
-    ) -> bool:
-        """Check if the certificates are pushed to the workload."""
-        if not self._container.exists(path=TLS_CERT_FILE_PATH):
-            return False
-        if not self._container.exists(path=TLS_KEY_FILE_PATH):
-            return False
-        if not self._container.exists(path=TLS_CA_FILE_PATH):
-            return False
-        existing_certificate = self._container.pull(path=TLS_CERT_FILE_PATH)
-        if existing_certificate.read() != certificate:
-            return False
-        existing_private_key = self._container.pull(path=TLS_KEY_FILE_PATH)
-        if existing_private_key.read() != private_key:
-            return False
-        existing_ca_certificate = self._container.pull(path=TLS_CA_FILE_PATH)
-        if existing_ca_certificate.read() != ca_certificate:
-            return False
-        return True
+        Args:
+            certificate: CA certificate
+        """
+        self._container.push(path=TLS_CA_FILE_PATH, source=certificate)
+        logger.info("Pushed CA certificate to workload")
+
+    def _push_unit_certificate_to_workload(self, private_key: str, certificate: str) -> None:
+        """Push the unit certificate to the workload.
+
+        Args:
+            private_key: Private key
+            certificate: Certificate
+        """
+        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
+        self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
+        logger.info("Pushed unit certificate to workload")
+
+    def _ca_certificate_pushed_to_workload(self) -> bool:
+        """Returns whether CA certificate is pushed to the workload."""
+        return self._container.exists(path=TLS_CA_FILE_PATH)
+
+    def _unit_certificate_pushed_to_workload(self) -> bool:
+        """Returns whether unit certificate is pushed to the workload."""
+        return self._container.exists(path=TLS_KEY_FILE_PATH) and self._container.exists(
+            path=TLS_CERT_FILE_PATH
+        )
 
     def _generate_vault_config_file(self) -> None:
         """Handles creation of the Vault config file."""
@@ -643,50 +702,46 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_certificates_secret_in_peer_relation(
+    def _set_ca_certificate_secret_in_peer_relation(
         self,
         private_key: str,
         certificate: str,
-        ca_certificate: str,
     ) -> None:
-        """Set the vault certificate secret in the peer relation.
+        """Set the vault CA certificate secret in the peer relation.
 
         Args:
             private_key: Private key
             certificate: certificate
-            ca_certificate: CA certificate
         """
         if not self._is_peer_relation_created():
             raise RuntimeError("Peer relation not created")
         juju_secret_content = {
             "privatekey": private_key,
             "certificate": certificate,
-            "cacertificate": ca_certificate,
         }
-        juju_secret = self.app.add_secret(juju_secret_content, label="vault-certificate")
+        juju_secret = self.app.add_secret(
+            juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL
+        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-certificates-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
-        logger.info("Vault certificate secret set in peer relation")
+        peer_relation.data[self.app].update({CA_CERTIFICATE_JUJU_SECRET_KEY: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        logger.info("Vault CA certificate secret set in peer relation")
 
-    def _get_certificates_secret_in_peer_relation(
-        self,
-    ) -> Tuple[str, str, str]:
-        """Get the vault certificate secret from the peer relation.
+    def _get_ca_certificate_secret_in_peer_relation(self) -> Tuple[str, str]:
+        """Get the vault CA certificate secret from the peer relation.
 
         Returns:
-            Tuple[Optional[str], Optional[str], Optional[str]]: The private key, certificate and
-                CA certificate.
+            Tuple[Optional[str], Optional[str]]: The CA private key and certificate
         """
         try:
             peer_relation = self.model.get_relation(PEER_RELATION_NAME)
             juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                "vault-certificates-secret-id"
+                CA_CERTIFICATE_JUJU_SECRET_KEY
             )
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
-            return content["privatekey"], content["certificate"], content["cacertificate"]
+            return content["privatekey"], content["certificate"]
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name="vault-certificates-secret-id")
+            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]

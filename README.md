@@ -29,7 +29,7 @@ user@ubuntu:~$ juju secrets --format=yaml
 ck0i0h3q457c7bgte4kg:
   revision: 1
   owner: vault-k8s
-  label: vault-certificate
+  label: vault-ca-certificate
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
 ck0i0krq457c7bgte4l0:
@@ -60,18 +60,18 @@ Set the vault token for use in the client:
 export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
-Read the `vault-certificate` secret content:
+Read the `vault-ca-certificate` secret content:
 
 ```bash
 user@ubuntu:~$ juju show-secret ck0i0h3q457c7bgte4kg --reveal
 ck0i0h3q457c7bgte4kg:
   revision: 1
   owner: vault-k8s
-  label: vault-certificate
+  label: vault-ca-certificate
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
   content:
-    cacertificate: |
+    certificate: |
       -----BEGIN CERTIFICATE-----
       MIIDPTCCAiWgAwIBAgIUGLlWWWj9My3coKtn/EAgequ4rlswDQYJKoZIhvcNAQEL
       BQAwLDELMAkGA1UEBhMCVVMxHTAbBgNVBAMMFFZhdWx0IHNlbGYgc2lnbmVkIENB
@@ -92,10 +92,8 @@ ck0i0h3q457c7bgte4kg:
       lzhpYn0LdcL8ci8LxCv1OjcgCNeC6kRgzgUhbrUmVHAQmC2+c4tmUq/HQnXA0LWI
       cgSs46l4xpaiLnDeBytVdWo=
       -----END CERTIFICATE-----
-    certificate: |
-      [...]
     privatekey: |
-      [...]
+    [...]
 ```
 
 Copy the CA certificate content into a file and set the `VAULT_CACERT` environment variable to reference this file:
