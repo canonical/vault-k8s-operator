@@ -498,50 +498,40 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.unseal")
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")
-    @patch("ops.model.Container.exists")
-    @patch("ops.model.Container.pull")
-    @patch("ops.model.Container.push")
-    @patch("ops.model.Model.get_binding")
-    @patch("charm.generate_vault_unit_certificate")
-    @patch("charm.generate_vault_ca_certificate")
     def test_given_certificates_pushed_when_install_then_certificate_not_pushed_to_workload(
         self,
-        patch_generate_ca_certs,
-        patch_generate_unit_certs,
-        patch_get_binding,
-        patch_push,
-        patch_pull,
-        patch_exists,
         patch_is_api_available,
         patch_vault_initialize,
+        patch_vault_unseal,
     ):
-        ca_private_key = "ca private key content"
-        ca_certificate = "ca certificate content"
-        unit_private_key = "unit private key content"
-        unit_certificate = "unit certificate content"
-
-        patch_exists.return_value = True
-        patch_pull.return_value = StringIO()
-        patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
-        patch_generate_unit_certs.return_value = unit_private_key, unit_certificate
-        bind_address = "1.2.3.4"
-        ingress_address = "10.1.0.1"
-        patch_get_binding.return_value = MockBinding(
-            bind_address=bind_address, ingress_address=ingress_address
-        )
         patch_is_api_available.return_value = True
         patch_vault_initialize.return_value = "root token content", "unseal key content"
+
+        # Pre-create dummy CA and key+cert so install doesn't create them
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/config").mkdir(parents=True)
+        (root / "vault/certs").mkdir(parents=True)
+        (root / "vault/certs/ca.pem").write_text("CA")
+        (root / "vault/certs/key.pem").write_text("KEY")
+        (root / "vault/certs/cert.pem").write_text("CERT")
+
+        self.harness.add_network("1.2.3.4")
         self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
 
         self.harness.charm.on.install.emit()
 
-        for call_args in patch_push.call_args_list:
-            self.assertFalse(call_args.kwargs["path"].startswith("/vault/certs"))
+        # Ensure CA and key+cert weren't overwritten
+        self.assertEqual((root / "vault/certs/ca.pem").read_text(), "CA")
+        self.assertEqual((root / "vault/certs/key.pem").read_text(), "KEY")
+        self.assertEqual((root / "vault/certs/cert.pem").read_text(), "CERT")
+
+        # Ensure vault was actually unsealed
+        patch_vault_unseal.assert_called_once()
 
     def test_given_cant_connect_to_workload_when_config_changed_then_status_is_waiting(self):
         self.harness.set_leader(is_leader=True)

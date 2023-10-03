@@ -1,5 +1,5 @@
 cosl
-ops
+ops ~= 2.7.0
 hvac
 jinja2
 jsonschema
