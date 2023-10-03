@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-
 import logging
 from pathlib import Path
 
@@ -15,6 +14,7 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APPLICATION_NAME = "vault-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
+EXTERNAL_HOSTNAME = "mydomain.com"
 
 
 class TestVaultK8s:
@@ -78,6 +78,17 @@ class TestVaultK8s:
         ops_test.destructive_mode = False
         charm = await ops_test.build_charm(".")
         await self.deploy_charm(ops_test, charm)
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def deploy_traefik(self, ops_test: OpsTest):
+        """Deploy Traefik."""
+        await ops_test.model.deploy(  # type: ignore[union-attr]
+            "traefik-k8s",
+            application_name=TRAEFIK_APPLICATION_NAME,
+            config={"external_hostname": EXTERNAL_HOSTNAME, "routing_mode": "subdomain"},
+            trust=True,
+        )
 
     @pytest.mark.abort_on_fail
     async def test_given_default_config_when_deploy_then_status_is_active(

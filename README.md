@@ -14,6 +14,15 @@ juju deploy vault-k8s -n 5 --trust
 ```
 > Note: It is advised to deploy Vault with an odd number of units
 
+We recommend deploying Vault with an odd number of units.
+
+### Integrate with Ingress
+
+```bash
+juju deploy traefik-k8s --trust --config external_hostname=<your hostname> 
+juju integrate vault:ingress traefik-k8s:ingress
+```
+
 ### Interact with Vault via CLI
 
 Install the Vault client:

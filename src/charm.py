@@ -25,6 +25,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
@@ -63,6 +64,7 @@ KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+INGRESS_RELATION_NAME = "ingress"
 
 
 def render_vault_config_file(
@@ -218,6 +220,12 @@ class VaultCharm(CharmBase):
                     "static_configs": [{"targets": [f"*:{self.VAULT_PORT}"]}],
                 }
             ],
+        )
+        self.ingress = IngressPerAppRequirer(
+            charm=self,
+            port=self.VAULT_PORT,
+            relation_name=INGRESS_RELATION_NAME,
+            strip_prefix=True,
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)

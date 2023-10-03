@@ -69,3 +69,8 @@ provides:
 assumes:
   - juju >= 3.1
   - k8s-api
+
+requires:
+  ingress:
+    interface: ingress
+    limit: 1
