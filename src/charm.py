@@ -57,6 +57,8 @@ TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
+CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
+CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 
 
 def render_vault_config_file(
@@ -637,22 +639,31 @@ class VaultCharm(CharmBase):
         return f"https://{self._bind_address}:{self.VAULT_PORT}"
 
     def _push_ca_certificate_to_workload(self, certificate: str) -> None:
-        """Push the CA certificate to the workload."""
+        """Push the CA certificate to the workload.
+
+        Args:
+            certificate: CA certificate
+        """
         self._container.push(path=TLS_CA_FILE_PATH, source=certificate)
         logger.info("Pushed CA certificate to workload")
 
     def _push_unit_certificate_to_workload(self, private_key: str, certificate: str) -> None:
-        """Push the unit certificate to the workload."""
+        """Push the unit certificate to the workload.
+
+        Args:
+            private_key: Private key
+            certificate: Certificate
+        """
         self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
         self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
         logger.info("Pushed unit certificate to workload")
 
     def _ca_certificate_pushed_to_workload(self) -> bool:
-        """Check if the CA certificate is pushed to the workload."""
+        """Returns whether CA certificate is pushed to the workload."""
         return self._container.exists(path=TLS_CA_FILE_PATH)
 
     def _unit_certificate_pushed_to_workload(self) -> bool:
-        """Check if the unit certificate is pushed to the workload."""
+        """Returns whether unit certificate is pushed to the workload."""
         return self._container.exists(path=TLS_KEY_FILE_PATH) and self._container.exists(
             path=TLS_CERT_FILE_PATH
         )
@@ -708,9 +719,11 @@ class VaultCharm(CharmBase):
             "privatekey": private_key,
             "certificate": certificate,
         }
-        juju_secret = self.app.add_secret(juju_secret_content, label="vault-ca-certificate")
+        juju_secret = self.app.add_secret(
+            juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL
+        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-ca-certificates-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        peer_relation.data[self.app].update({CA_CERTIFICATE_JUJU_SECRET_KEY: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
         logger.info("Vault CA certificate secret set in peer relation")
 
     def _get_ca_certificate_secret_in_peer_relation(self) -> Tuple[str, str]:
@@ -722,13 +735,13 @@ class VaultCharm(CharmBase):
         try:
             peer_relation = self.model.get_relation(PEER_RELATION_NAME)
             juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                "vault-ca-certificates-secret-id"
+                CA_CERTIFICATE_JUJU_SECRET_KEY
             )
             juju_secret = self.model.get_secret(id=juju_secret_id)
             content = juju_secret.get_content()
             return content["privatekey"], content["certificate"]
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name="vault-ca-certificates-secret-id")
+            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
