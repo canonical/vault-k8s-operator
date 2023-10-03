@@ -55,6 +55,10 @@ provides:
     interface: vault-kv
   metrics-endpoint:
     interface: prometheus_scrape
+  send-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Send our CA certificate so clients can trust the CA by means of forming a relation.
 
 assumes:
   - juju >= 3.1

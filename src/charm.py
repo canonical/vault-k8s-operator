@@ -11,6 +11,9 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import]
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateTransferProvides,
+)
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -59,6 +62,7 @@ KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
+SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 
 
 def render_vault_config_file(
@@ -225,6 +229,10 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
+        self.framework.observe(
+            self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
+            self._on_send_ca_cert_relation_joined,
+        )
 
     def _on_install(self, event: InstallEvent):
         """Handler triggered when the charm is installed.
@@ -286,6 +294,7 @@ class VaultCharm(CharmBase):
             self._push_unit_certificate_to_workload(
                 certificate=certificate, private_key=private_key
             )
+            self._send_ca_cert()
         self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
@@ -823,6 +832,42 @@ class VaultCharm(CharmBase):
             self._container.add_layer(self._container_name, layer, combine=True)
             self._container.replan()
             logger.info("Pebble layer added")
+
+    def _on_send_ca_cert_relation_joined(self, event: RelationJoinedEvent):
+        self._send_ca_cert(rel_id=event.relation.id)
+
+    def _send_ca_cert(self, *, rel_id=None):
+        """There is one (and only one) CA cert that we need to forward to multiple apps.
+
+        Args:
+            rel_id: Relation id. If not given, update all relations.
+        """
+        send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
+        if self._vault_ca_certificate_is_stored:
+            secret = self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+            secret_content = secret.get_content()
+            ca = secret_content["cacertificate"]
+            if rel_id:
+                send_ca_cert.set_certificate("", ca, [], relation_id=rel_id)
+            else:
+                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                    send_ca_cert.set_certificate("", ca, [], relation_id=relation.id)
+        else:
+            for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                send_ca_cert.remove_certificate(relation.id)
+
+    @property
+    def _vault_ca_certificate_is_stored(self) -> bool:
+        """Returns whether self-signed certificate is stored Juju secret.
+
+        Returns:
+            bool: Whether certificates are stored..
+        """
+        try:
+            self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+            return True
+        except SecretNotFoundError:
+            return False
 
     @property
     def _bind_address(self) -> Optional[str]:
