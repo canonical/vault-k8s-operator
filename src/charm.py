@@ -834,6 +834,11 @@ class VaultCharm(CharmBase):
             logger.info("Pebble layer added")
 
     def _on_send_ca_cert_relation_joined(self, event: RelationJoinedEvent):
+        """Send Vault CA certificate when relation joined.
+
+        Args:
+            event: RelationJoinedEvent
+        """
         self._send_ca_cert(rel_id=event.relation.id)
 
     def _send_ca_cert(self, *, rel_id=None):
@@ -858,7 +863,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _vault_ca_certificate_is_stored(self) -> bool:
-        """Returns whether self-signed certificate is stored Juju secret.
+        """Returns whether CA certificate is stored in Juju secrets.
 
         Returns:
             bool: Whether certificates are stored..
