@@ -281,7 +281,9 @@ class VaultCharm(CharmBase):
         self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address)
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+        )
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             event.defer()
@@ -372,7 +374,9 @@ class VaultCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Preparing vault")
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address)
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+        )
         vault.set_token(token=root_token)
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
@@ -401,7 +405,9 @@ class VaultCharm(CharmBase):
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if self._bind_address:
-                vault = Vault(url=self._api_address)
+                vault = Vault(
+                    url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+                )
                 vault.set_token(token=root_token)
                 if (
                     vault.is_api_available()
@@ -454,7 +460,9 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(url=self._api_address)
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+        )
         vault.set_token(token=root_token)
 
         if not vault.is_api_available():
