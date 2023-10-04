@@ -139,6 +139,14 @@ class PeerSecretError(Exception):
         super().__init__(self.message)
 
 
+class VaultCertsError(Exception):
+    """Exception raised when a vault certificate is not found."""
+
+    def __init__(self, message: str = "Could not retrieve vault certificates from local storage"):
+        self.message = message
+        super().__init__(self.message)
+
+
 def generate_vault_ca_certificate() -> Tuple[str, str]:
     """Generate Vault CA certificates valid for 50 years.
 
@@ -413,6 +421,8 @@ class VaultCharm(CharmBase):
                     vault.remove_raft_node(node_id=self._node_id)
         except PeerSecretError:
             logger.info("Vault initialization secret not set in peer relation")
+        except VaultCertsError:
+            logger.info("Vault CA certificate not found")
         finally:
             if self._vault_service_is_running():
                 try:
@@ -499,8 +509,16 @@ class VaultCharm(CharmBase):
 
         Returns:
             str: Path
+
+        Raises:
+            VaultCertsError: If the CA certificate is not found
         """
-        cert_storage = self.model.storages["certs"][0]
+        storage = self.model.storages
+        if "certs" not in storage:
+            raise VaultCertsError()
+        if len(storage["certs"]) == 0:
+            raise VaultCertsError()
+        cert_storage = storage["certs"][0]
         storage_location = cert_storage.location
         return f"{storage_location}/ca.pem"
 
