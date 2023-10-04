@@ -4,7 +4,6 @@
 
 import json
 import unittest
-from io import StringIO
 from typing import List
 from unittest.mock import Mock, call, patch
 
@@ -499,7 +498,6 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_vault_initialize,
     ):
-
         initial_ca_content = "whatever initial CA"
         initial_key_content = "whatever initial key"
         initial_cert_content = "whatever initial cert"
@@ -510,7 +508,10 @@ class TestCharm(unittest.TestCase):
         (root / "vault/certs/key.pem").write_text(initial_key_content)
         (root / "vault/certs/cert.pem").write_text(initial_cert_content)
         patch_generate_ca_certs.return_value = "ca private key content", "ca certificate content"
-        patch_generate_unit_certs.return_value = "unit private key content", "unit certificate content"
+        patch_generate_unit_certs.return_value = (
+            "unit private key content",
+            "unit certificate content",
+        )
         bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
         patch_get_binding.return_value = MockBinding(
