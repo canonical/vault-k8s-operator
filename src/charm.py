@@ -277,6 +277,7 @@ class VaultCharm(CharmBase):
                 private_key=ca_private_key, certificate=ca_certificate
             )
             self._push_ca_certificate_to_workload(certificate=ca_certificate)
+            self._send_ca_cert()
         if not self._unit_certificate_pushed_to_workload():
             try:
                 ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
@@ -294,7 +295,6 @@ class VaultCharm(CharmBase):
             self._push_unit_certificate_to_workload(
                 certificate=certificate, private_key=private_key
             )
-            self._send_ca_cert()
         self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
@@ -846,7 +846,7 @@ class VaultCharm(CharmBase):
         if self._vault_ca_certificate_is_stored:
             secret = self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             secret_content = secret.get_content()
-            ca = secret_content["cacertificate"]
+            ca = secret_content["certificate"]
             if rel_id:
                 send_ca_cert.set_certificate("", ca, [], relation_id=rel_id)
             else:
