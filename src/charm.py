@@ -281,9 +281,7 @@ class VaultCharm(CharmBase):
         self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(
-            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
-        )
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             event.defer()
@@ -374,9 +372,7 @@ class VaultCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Preparing vault")
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(
-            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
-        )
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
@@ -460,9 +456,7 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(
-            url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
-        )
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
 
         if not vault.is_api_available():
@@ -497,6 +491,18 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _get_ca_cert_location_in_charm(self) -> str:
+        """Returns the CA certificate location in the charm (not in the workload).
+
+        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
+
+        Returns:
+            str: Path
+        """
+        cert_storage = self.model.storages["certs"][0]
+        storage_location = cert_storage.location
+        return f"{storage_location}/ca.pem"
 
     def _ensure_unit_credentials(
         self,

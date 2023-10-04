@@ -203,7 +203,6 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.initialize")
     @patch("ops.model.Container.push")
     @patch("ops.model.Container.pull", new=Mock)
-    @patch("ops.model.Container.exists")
     @patch("ops.model.Model.get_binding")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
@@ -212,10 +211,10 @@ class TestCharm(unittest.TestCase):
         patch_generate_ca_cert,
         patch_generate_unit_cert,
         patch_get_binding,
-        patch_exists,
         patch_push,
         patch_initialize,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         ca_certificate = "ca certificate"
         ca_private_key = "ca private key"
         unit_private_key = "unit private key"
@@ -226,7 +225,6 @@ class TestCharm(unittest.TestCase):
         patch_get_binding.return_value = MockBinding(
             bind_address=bind_address, ingress_address=ingress_address
         )
-        patch_exists.return_value = False
         patch_generate_ca_cert.return_value = ca_private_key, ca_certificate
         patch_generate_unit_cert.return_value = unit_private_key, unit_certificate
         self.harness.set_leader(is_leader=True)
@@ -288,7 +286,6 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.config_file_content_matches", new=Mock)
-    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal")
     @patch("vault.Vault.set_token")
     @patch("vault.Vault.initialize")
@@ -302,6 +299,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_set_token,
         patch_vault_unseal,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         root_token = "root token content"
         unseal_keys = ["unseal key 1"]
         bind_address = "1.2.1.2"
@@ -337,6 +335,7 @@ class TestCharm(unittest.TestCase):
         patch_push,
         patch_config_file_matches,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_pull.return_value = StringIO()
         patch_config_file_matches.return_value = False
         bind_address = "1.2.3.4"
@@ -358,7 +357,6 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
     @patch("charm.config_file_content_matches", new=Mock)
-    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.set_token", new=Mock)
     @patch("vault.Vault.initialize")
@@ -367,6 +365,7 @@ class TestCharm(unittest.TestCase):
     def test_given_binding_addresses_when_install_then_pebble_is_planned(
         self, patch_get_binding, patch_is_api_available, patch_vault_initialize
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         bind_address = "1.2.1.2"
         ingress_address = "10.1.0.1"
         patch_get_binding.return_value = MockBinding(
@@ -394,12 +393,12 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(updated_plan, expected_plan)
 
     @patch("charm.config_file_content_matches", new=Mock)
-    @patch("ops.model.Container.push", new=Mock)
     @patch("vault.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
     def test_given_vault_not_available_when_install_then_status_is_waiting(
         self, patch_get_binding, patch_is_api_available
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
@@ -432,6 +431,7 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_vault_initialize,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         ca_certificate = "certificate content"
         ca_private_key = "private key content"
         patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
@@ -475,6 +475,7 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_vault_initialize,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         ca_private_key = "private key content"
         ca_certificate = "ca certificate content"
         patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
@@ -523,6 +524,7 @@ class TestCharm(unittest.TestCase):
         unit_private_key = "unit private key content"
         unit_certificate = "unit certificate content"
 
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_exists.return_value = True
         patch_pull.return_value = StringIO()
         patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
@@ -617,6 +619,7 @@ class TestCharm(unittest.TestCase):
         patch_push,
         patch_config_file_content_matches,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_pull.return_value = StringIO()
         patch_config_file_content_matches.return_value = False
         bind_address = "1.2.3.4"
@@ -664,6 +667,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_is_sealed,
         patch_get_binding,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
         patch_vault_is_sealed.return_value = False
@@ -719,6 +723,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_is_sealed,
         patch_get_binding,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_vault_is_sealed.return_value = False
         patch_is_api_available.return_value = True
         patch_is_initialized.return_value = True
@@ -763,6 +768,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_unseal,
         patch_get_binding,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_is_api_available.return_value = True
         patch_is_initialized.return_value = True
         unseal_keys = ["unseal key content"]
@@ -803,6 +809,7 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_api_not_available_when_config_changed_then_status_is_waiting(
         self, patch_is_api_available, patch_get_binding
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = False
         self.harness.set_leader(is_leader=False)
@@ -851,6 +858,7 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_is_not_initialized_when_config_changed_then_status_is_waiting(
         self, patch_is_api_available, patch_is_initialized, patch_get_binding
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_is_api_available.return_value = True
         patch_is_initialized.return_value = False
@@ -932,6 +940,7 @@ class TestCharm(unittest.TestCase):
         patch_get_num_raft_peers,
         patch_get_binding,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         patch_get_num_raft_peers.return_value = 2
         bind_address = "1.2.3.4"
         ingress_address = "10.1.0.1"
@@ -1052,6 +1061,7 @@ class TestCharm(unittest.TestCase):
         set_ca_certificate,
         set_unit_credentials,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
@@ -1144,6 +1154,7 @@ class TestCharm(unittest.TestCase):
         generate_role_secret_id,
         read_role_secret,
     ):
+        self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
