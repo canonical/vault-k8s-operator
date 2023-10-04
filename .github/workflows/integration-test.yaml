@@ -7,6 +7,16 @@ on:
         description: Tested charm file name
         required: true
         type: string
+      enable-metallb:
+        description: Enable MetalLB
+        required: false
+        type: boolean
+        default: false
+      metallb-range:
+        description: MetalLB range
+        required: false
+        type: string
+        default: "10.0.0.2-10.0.0.10"
 
 jobs:
   integration-test:
@@ -20,6 +30,9 @@ jobs:
           provider: microk8s
           channel: 1.27-strict/stable
           juju-channel: 3.1/stable
+      - name: Enable MetalLB
+        if: ${{ inputs.enable-metallb == true }}
+        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
       - name: Run integration tests
         run: tox -e integration
       - name: Archive Tested Charm

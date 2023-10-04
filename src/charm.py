@@ -866,7 +866,7 @@ class VaultCharm(CharmBase):
         """Returns whether CA certificate is stored in Juju secrets.
 
         Returns:
-            bool: Whether certificates are stored..
+            bool: Whether CA is stored.
         """
         try:
             self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)

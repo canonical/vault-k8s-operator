@@ -6,7 +6,7 @@ flake8-copyright
 flake8-builtins
 hvac
 isort
-juju>3.1
+juju
 mypy
 pep8-naming
 pyproject-flake8
