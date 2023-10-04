@@ -139,6 +139,14 @@ class PeerSecretError(Exception):
         super().__init__(self.message)
 
 
+class VaultCertsError(Exception):
+    """Exception raised when a vault certificate is not found."""
+
+    def __init__(self, message: str = "Could not retrieve vault certificates from local storage"):
+        self.message = message
+        super().__init__(self.message)
+
+
 def generate_vault_ca_certificate() -> Tuple[str, str]:
     """Generate Vault CA certificates valid for 50 years.
 
@@ -281,7 +289,7 @@ class VaultCharm(CharmBase):
         self._delete_vault_data()
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address)
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             event.defer()
@@ -372,7 +380,7 @@ class VaultCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Preparing vault")
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address)
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
@@ -401,7 +409,9 @@ class VaultCharm(CharmBase):
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if self._bind_address:
-                vault = Vault(url=self._api_address)
+                vault = Vault(
+                    url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+                )
                 vault.set_token(token=root_token)
                 if (
                     vault.is_api_available()
@@ -411,6 +421,8 @@ class VaultCharm(CharmBase):
                     vault.remove_raft_node(node_id=self._node_id)
         except PeerSecretError:
             logger.info("Vault initialization secret not set in peer relation")
+        except VaultCertsError:
+            logger.info("Vault CA certificate not found")
         finally:
             if self._vault_service_is_running():
                 try:
@@ -454,7 +466,7 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(url=self._api_address)
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
 
         if not vault.is_api_available():
@@ -489,6 +501,26 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _get_ca_cert_location_in_charm(self) -> str:
+        """Returns the CA certificate location in the charm (not in the workload).
+
+        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
+
+        Returns:
+            str: Path
+
+        Raises:
+            VaultCertsError: If the CA certificate is not found
+        """
+        storage = self.model.storages
+        if "certs" not in storage:
+            raise VaultCertsError()
+        if len(storage["certs"]) == 0:
+            raise VaultCertsError()
+        cert_storage = storage["certs"][0]
+        storage_location = cert_storage.location
+        return f"{storage_location}/ca.pem"
 
     def _ensure_unit_credentials(
         self,
