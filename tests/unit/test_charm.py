@@ -1188,6 +1188,7 @@ class TestCharm(unittest.TestCase):
         with patch("ops.Secret.set_content") as set_content:
             self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
             assert set_content.call_count == 1
+
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.initialize")
     @patch("vault.Vault.is_api_available")

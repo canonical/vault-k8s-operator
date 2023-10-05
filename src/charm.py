@@ -841,7 +841,7 @@ class VaultCharm(CharmBase):
         """
         self._send_ca_cert(rel_id=event.relation.id)
 
-    def _send_ca_cert(self, *, rel_id=None):
+    def _send_ca_cert(self, *, rel_id=None) -> None:
         """There is one (and only one) CA cert that we need to forward to multiple apps.
 
         Args:
