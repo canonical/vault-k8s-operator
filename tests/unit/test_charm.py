@@ -7,11 +7,16 @@ import unittest
 from typing import List
 from unittest.mock import Mock, call, patch
 
-import hcl  # type: ignore[import]
+import hcl  # type: ignore[import-untyped]
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
 
-from charm import VaultCharm, config_file_content_matches
+from charm import (
+    CA_CERTIFICATE_JUJU_SECRET_KEY,
+    CA_CERTIFICATE_JUJU_SECRET_LABEL,
+    VaultCharm,
+    config_file_content_matches,
+)
 
 
 def read_file(path: str) -> str:
@@ -1183,3 +1188,131 @@ class TestCharm(unittest.TestCase):
         with patch("ops.Secret.set_content") as set_content:
             self.harness.update_relation_data(rel_id, unit, {"egress_subnet": "10.20.20.240/32"})
             assert set_content.call_count == 1
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("charm.generate_vault_ca_certificate")
+    def test_given_ca_cert_exists_when_certificate_transfer_relation_joins_then_ca_cert_is_advertised(
+        self,
+        patch_generate_ca_certs,
+        patch_generate_unit_certs,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        ca_certificate = "certificate content"
+        ca_private_key = "private key content"
+        patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
+        patch_generate_unit_certs.return_value = "unit private key", "unit certificate"
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.charm.on.install.emit()
+        app = "traefik"
+        certificate_transfer_rel_id = self.harness.add_relation(
+            relation_name="send-ca-cert", remote_app=app
+        )
+        self.harness.add_relation_unit(
+            relation_id=certificate_transfer_rel_id, remote_unit_name=f"{app}/0"
+        )
+        secret = self.harness.charm.model.get_secret(
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL
+        ).get_content()
+        ca_from_secret = secret["certificate"]
+        data = self.harness.get_relation_data(certificate_transfer_rel_id, self.harness.charm.unit)
+        ca_from_rel_data = data["ca"]
+        self.assertEqual(ca_from_secret, ca_from_rel_data)
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_unit_certificate", new=Mock)
+    def test_given_ca_cert_is_not_stored_when_certificate_transfer_relation_joins_then_ca_cert_is_not_advertised(
+        self,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=False)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.charm.on.install.emit()
+        app = "traefik"
+        certificate_transfer_rel_id = self.harness.add_relation(
+            relation_name="send-ca-cert", remote_app=app
+        )
+        self.harness.add_relation_unit(
+            relation_id=certificate_transfer_rel_id, remote_unit_name=f"{app}/0"
+        )
+        relation_data = self.harness.get_relation_data(
+            relation_id=certificate_transfer_rel_id, app_or_unit=self.app_name
+        )
+        self.assertNotIn(CA_CERTIFICATE_JUJU_SECRET_KEY, relation_data)
+
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("charm.generate_vault_ca_certificate")
+    def test_given_certificate_transfer_relation_joined_when_ca_cert_is_generated_then_ca_cert_is_advertised(
+        self,
+        patch_generate_ca_certs,
+        patch_generate_unit_certs,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_vault_initialize,
+    ):
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        app = "traefik"
+        certificate_transfer_rel_id = self.harness.add_relation(
+            relation_name="send-ca-cert", remote_app=app
+        )
+        self.harness.add_relation_unit(
+            relation_id=certificate_transfer_rel_id, remote_unit_name=f"{app}/0"
+        )
+        ca_certificate = "certificate content"
+        ca_private_key = "private key content"
+        patch_generate_ca_certs.return_value = ca_private_key, ca_certificate
+        patch_generate_unit_certs.return_value = "unit private key", "unit certificate"
+        bind_address = "1.2.1.2"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+        patch_is_api_available.return_value = True
+        patch_vault_initialize.return_value = "root token content", "unseal key content"
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.charm.on.install.emit()
+
+        secret = self.harness.charm.model.get_secret(
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL
+        ).get_content()
+        ca_from_secret = secret["certificate"]
+        data = self.harness.get_relation_data(certificate_transfer_rel_id, self.harness.charm.unit)
+        ca_from_rel_data = data["ca"]
+        self.assertEqual(ca_from_secret, ca_from_rel_data)

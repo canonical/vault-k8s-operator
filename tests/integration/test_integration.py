@@ -14,6 +14,7 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 APPLICATION_NAME = "vault-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
+TRAEFIK_APPLICATION_NAME = "traefik"
 
 
 class TestVaultK8s:
@@ -49,6 +50,21 @@ class TestVaultK8s:
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
             trust=True,
+        )
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def deploy_traefik(self, ops_test: OpsTest):
+        """Deploy Traefik.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
+        await ops_test.model.deploy(  # type: ignore[union-attr]
+            "traefik-k8s",
+            application_name=TRAEFIK_APPLICATION_NAME,
+            trust=True,
+            channel="edge",
         )
 
     @pytest.mark.abort_on_fail
@@ -118,4 +134,20 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
             wait_for_exact_units=num_units,
+        )
+
+    async def test_given_traefik_is_deployed_and_related_then_status_is_active(
+        self,
+        ops_test: OpsTest,
+        build_and_deploy,
+        deploy_traefik,
+    ):
+        await ops_test.model.add_relation(  # type: ignore[union-attr]
+            relation1=f"{APPLICATION_NAME}:send-ca-cert",
+            relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
+        )
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
         )
