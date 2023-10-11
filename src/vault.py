@@ -7,7 +7,7 @@
 import logging
 from typing import List, Tuple
 
-import hvac  # type: ignore[import]
+import hvac  # type: ignore[import-untyped]
 import requests
 
 logger = logging.getLogger(__name__)

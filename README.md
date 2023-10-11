@@ -125,7 +125,7 @@ juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
 
 ### Traefik
 
-Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send VAult's CA certificate in the relation databag.
+Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send Vault's CA certificate in the relation databag.
 
 ```bash
 juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert

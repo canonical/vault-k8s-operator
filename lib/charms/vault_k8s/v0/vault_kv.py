@@ -120,7 +120,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Dict, Optional, Union
 
 import ops
-from interface_tester.schema_base import DataBagSchema  # type: ignore[import]
+from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, Json, ValidationError
 
 logger = logging.getLogger(__name__)

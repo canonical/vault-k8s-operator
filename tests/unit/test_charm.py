@@ -7,7 +7,7 @@ import unittest
 from typing import List
 from unittest.mock import Mock, call, patch
 
-import hcl  # type: ignore[import]
+import hcl  # type: ignore[import-untyped]
 from ops import testing
 from ops.model import ActiveStatus, ModelError, WaitingStatus
 

@@ -30,9 +30,6 @@ jobs:
           provider: microk8s
           channel: 1.27-strict/stable
           juju-channel: 3.1/stable
-      - name: Enable Microk8s Addons
-        continue-on-error: true
-        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable hostpath-storage; sudo microk8s enable dns"
       - name: Enable Metallb
         if: ${{ inputs.enable-metallb == true }}
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"

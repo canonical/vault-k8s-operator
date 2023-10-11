@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Dict, List, Optional, Tuple
 
-import hcl  # type: ignore[import]
+import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -853,10 +853,12 @@ class VaultCharm(CharmBase):
             secret_content = secret.get_content()
             ca = secret_content["certificate"]
             if rel_id:
-                send_ca_cert.set_certificate("", ca, [], relation_id=rel_id)
+                send_ca_cert.set_certificate(certificate="", ca=ca, chain=[], relation_id=rel_id)
             else:
                 for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
-                    send_ca_cert.set_certificate("", ca, [], relation_id=relation.id)
+                    send_ca_cert.set_certificate(
+                        certificate="", ca=ca, chain=[], relation_id=relation.id
+                    )
         else:
             for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
                 send_ca_cert.remove_certificate(relation.id)
