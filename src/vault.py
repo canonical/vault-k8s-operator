@@ -107,10 +107,16 @@ class Vault:
     def enable_audit_device(self, device_type: str, path: str) -> None:
         """Enable a new audit device at the supplied path."""
         if device_type + "/" not in self._client.sys.list_enabled_audit_devices()["data"].keys():
-            self._client.sys.enable_audit_device(
-                device_type=device_type,
-                options={"file_path": path},
-            )
+            if (
+                self._client.sys.enable_audit_device(
+                    device_type=device_type,
+                    options={"file_path": path},
+                ).status_code
+                != 204
+            ):
+                logger.error(
+                    "Failed to enable audit device of type: %s, using path: %s", device_type, path
+                )
             logger.info("Enabled audit device of type: %s, using path: %s", device_type, path)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
