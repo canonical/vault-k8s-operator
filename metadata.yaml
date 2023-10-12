@@ -28,6 +28,8 @@ containers:
         location: /vault/config
       - storage: certs
         location: /vault/certs
+      - storage: tmp
+        location: /tmp
 
 resources:
   vault-image:
@@ -43,6 +45,9 @@ storage:
     type: filesystem
     minimum-size: 50M
   certs:
+    type: filesystem
+    minimum-size: 50M
+  tmp:
     type: filesystem
     minimum-size: 50M
 
