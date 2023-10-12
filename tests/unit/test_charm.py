@@ -594,10 +594,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_audit_device")
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_config_file_not_pushed_when_config_changed_then_config_file_is_pushed(
         self,
         patch_is_api_available,
+        patch_enable_audit_device,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_get_binding,
@@ -643,10 +645,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_audit_device")
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_initialization_secret_is_stored_when_config_changed_then_pebble_plan_is_applied(
         self,
         patch_is_api_available,
+        patch_enable_audit_device,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_get_binding,
@@ -701,10 +705,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_audit_device")
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_initialization_secret_is_stored_when_config_changed_then_status_is_active(
         self,
         patch_is_api_available,
+        patch_enable_audit_device,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_get_binding,
@@ -747,10 +753,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_audit_device")
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_vault_is_sealed_when_config_changed_then_vault_is_unsealed(
         self,
         patch_is_api_available,
+        patch_enable_audit_device,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_vault_unseal,

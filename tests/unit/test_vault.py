@@ -126,3 +126,33 @@ class TestVault(unittest.TestCase):
         vault.enable_approle_auth()
 
         patch_enable_auth_method.assert_not_called()
+
+    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
+    @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
+    def test_given_audit_device_is_not_yet_enabled_when_enable_audit_device_then_device_is_enabled(
+        self,
+        patch_enable_audit_device,
+        patch_list_enabled_audit_devices,
+    ):
+        patch_list_enabled_audit_devices.return_value = {"data": {}}
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.enable_audit_device(device_type="file", path="stdout")
+        patch_enable_audit_device.assert_called_once_with(
+            device_type="file", options={"file_path": "stdout"}
+        )
+
+    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
+    @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
+    def test_given_audit_device_already_enabled_when_enable_audit_device_then_method_not_called(
+        self,
+        patch_enable_audit_device,
+        patch_list_enabled_audit_devices,
+    ):
+        patch_list_enabled_audit_devices.return_value = {
+            "data": {
+                "file/": {"options": {"file_path": "stdout"}, "path": "file/", "type": "file"}
+            }
+        }
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.enable_audit_device(device_type="file", path="stdout")
+        patch_enable_audit_device.assert_not_called()

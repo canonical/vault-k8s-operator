@@ -104,6 +104,15 @@ class Vault:
             mount_policy = fd.read()
         self._client.sys.create_or_update_policy(policy, mount_policy.format(mount=mount))
 
+    def enable_audit_device(self, device_type: str, path: str) -> None:
+        """Enable a new audit device at the supplied path."""
+        if device_type + "/" not in self._client.sys.list_enabled_audit_devices()["data"].keys():
+            self._client.sys.enable_audit_device(
+                device_type=device_type,
+                options={"file_path": path},
+            )
+            logger.info("Enabled audit device of type: %s, using path: %s", device_type, path)
+
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
         self._client.auth.approle.create_or_update_approle(
