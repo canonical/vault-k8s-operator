@@ -5,6 +5,7 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
+import time
 from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
@@ -46,6 +47,15 @@ class Vault:
     def is_sealed(self) -> bool:
         """Returns whether Vault is sealed."""
         return self._client.sys.is_sealed()
+
+    def wait_for_unseal(self) -> None:
+        """Wait for Vault to be unsealed."""
+        elapsed_time = 0
+        while self.is_sealed() and elapsed_time < 30:
+            logger.info("Vault is sealed, waiting for unseal")
+            time.sleep(5)
+            elapsed_time += 5
+        return
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""

@@ -707,6 +707,53 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_api_available")
     @patch("vault.Vault.enable_audit_device")
     @patch("ops.model.Container.exec", new=Mock)
+    def test_given_initialization_secret_is_stored_when_config_changed_then_audit_device_is_enabled(
+        self,
+        patch_is_api_available,
+        patch_enable_audit_device,
+        patch_is_initialized,
+        patch_vault_is_sealed,
+        patch_get_binding,
+    ):
+        root = self.harness.get_filesystem_root(self.container_name)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        (root / "vault/certs/ca.pem").write_text("CA")
+        (root / "vault/certs/cert.pem").write_text("CERT")
+        (root / "vault/certs/key.pem").write_text("KEY")
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_vault_is_sealed.return_value = False
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = True
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+        self._set_ca_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="ca certificate content",
+            private_key="private key content",
+        )
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        patch_enable_audit_device.assert_called_once()
+
+    @patch("charm.config_file_content_matches", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.is_sealed")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.enable_audit_device")
+    @patch("ops.model.Container.exec", new=Mock)
     def test_given_initialization_secret_is_stored_when_config_changed_then_status_is_active(
         self,
         patch_is_api_available,
