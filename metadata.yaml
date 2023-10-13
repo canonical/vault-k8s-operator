@@ -43,13 +43,13 @@ storage:
     minimum-size: 10G
   config:
     type: filesystem
-    minimum-size: 50M
+    minimum-size: 5M
   certs:
     type: filesystem
-    minimum-size: 50M
+    minimum-size: 5M
   tmp:
     type: filesystem
-    minimum-size: 50M
+    minimum-size: 5G
 
 peers:
   vault-peers:
