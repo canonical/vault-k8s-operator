@@ -888,7 +888,7 @@ class VaultCharm(CharmBase):
             return None
         try:
             binding = self.model.get_binding(peer_relation)
-            if not binding:
+            if not binding or not binding.network.bind_address:
                 return None
             return str(binding.network.bind_address)
         except ModelError:
@@ -906,7 +906,7 @@ class VaultCharm(CharmBase):
             return None
         try:
             binding = self.model.get_binding(peer_relation)
-            if not binding:
+            if not binding or not binding.network.ingress_address:
                 return None
             return str(binding.network.ingress_address)
         except ModelError:
