@@ -49,13 +49,20 @@ class Vault:
         return self._client.sys.is_sealed()
 
     def wait_for_unseal(self) -> None:
-        """Wait for Vault to be unsealed."""
+        """Waits for Vault to be unsealed.
+
+        Expected to be called after attempting to unseal Vault.
+        If it times out, raises a TimeoutError.
+        """
         elapsed_time = 0
-        while self.is_sealed() and elapsed_time < 30:
+        timeout = 30
+        while elapsed_time < 30:
+            if not self.is_sealed():
+                return
             logger.info("Vault is sealed, waiting for unseal")
-            time.sleep(5)
-            elapsed_time += 5
-        return
+            time.sleep(2)
+            elapsed_time += 2
+        raise TimeoutError(f"Vault is still sealed after waiting for {timeout} seconds")
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
