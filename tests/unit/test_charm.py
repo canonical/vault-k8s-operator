@@ -800,12 +800,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.enable_audit_device")
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("vault.Vault.wait_for_unseal", new=Mock)
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_vault_is_sealed_when_config_changed_then_vault_is_unsealed(
         self,
         patch_is_api_available,
-        patch_enable_audit_device,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_vault_unseal,
