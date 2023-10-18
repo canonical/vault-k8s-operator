@@ -749,6 +749,56 @@ class TestCharm(unittest.TestCase):
 
     @patch("charm.config_file_content_matches", new=Mock)
     @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.unseal")
+    @patch("vault.Vault.is_sealed")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("time.sleep", return_value=None)
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("ops.model.Container.exec", new=Mock)
+    def test_given_vault_times_out_before_unsealing_when_config_change_then_error_is_raised(
+        self,
+        patch_sleep,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_vault_is_sealed,
+        patch_vault_unseal,
+        patch_get_binding,
+    ):
+        root = self.harness.get_filesystem_root(self.container_name)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        (root / "vault/certs/ca.pem").write_text("CA")
+        (root / "vault/certs/cert.pem").write_text("CERT")
+        (root / "vault/certs/key.pem").write_text("KEY")
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = True
+        unseal_keys = ["unseal key content"]
+        patch_vault_is_sealed.return_value = True
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=unseal_keys,
+        )
+        self._set_ca_certificate_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            certificate="ca certificate content",
+            private_key="private key content",
+        )
+        bind_address = "1.2.3.4"
+        ingress_address = "10.1.0.1"
+        patch_get_binding.return_value = MockBinding(
+            bind_address=bind_address, ingress_address=ingress_address
+        )
+
+        with self.assertRaises(TimeoutError):
+            self.harness.charm.on.config_changed.emit()
+
+    @patch("charm.config_file_content_matches", new=Mock)
+    @patch("ops.model.Model.get_binding")
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
