@@ -48,21 +48,22 @@ class Vault:
         """Returns whether Vault is sealed."""
         return self._client.sys.is_sealed()
 
-    def wait_for_unseal(self, max_attempts: int = 15) -> None:
+    def wait_for_unseal(self, timeout: int = 30) -> None:
         """Waits for Vault to be unsealed.
 
         Expected to be called after attempting to unseal Vault.
         If it times out, raises a TimeoutError.
 
         Args:
-            max_attempts: The maximum number of attempts to check if Vault is unsealed.
+            timeout: Timeout in seconds.
         """
-        for _ in range(max_attempts):
+        initial_time = time.time()
+        while time.time() - initial_time < timeout:
             if not self.is_sealed():
                 return
             logger.info("Vault is sealed, waiting for unseal")
             time.sleep(2)
-        raise TimeoutError(f"Vault is still sealed after checking {max_attempts} times")
+        raise TimeoutError(f"Vault is still sealed {timeout} seconds")
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""

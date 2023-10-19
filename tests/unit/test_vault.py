@@ -3,11 +3,24 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 import requests
 
 from vault import Vault
+
+
+def infinite_time_values(start=0, step=2):
+    """Generator that returns an infinite sequence of time values.
+
+    Args:
+        start: Initial time value.
+        step: Time step between values.
+    """
+    current_time = start
+    while True:
+        yield current_time
+        current_time += step
 
 
 class TestVault(unittest.TestCase):
@@ -156,3 +169,35 @@ class TestVault(unittest.TestCase):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_audit_device(device_type="file", path="stdout")
         patch_enable_audit_device.assert_not_called()
+
+    @patch("vault.Vault.is_sealed")
+    @patch("time.sleep", new=Mock)
+    @patch("time.time")
+    def test_given_vault_stays_sealed_when_wait_for_unseal_then_timeout_error_is_raised(
+        self,
+        patch_time,
+        patch_is_sealed,
+    ):
+        time_values = infinite_time_values()
+        patch_time.side_effect = lambda: next(time_values)
+
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        patch_is_sealed.return_value = True
+
+        with self.assertRaises(TimeoutError):
+            vault.wait_for_unseal(timeout=30)
+
+    @patch("vault.Vault.is_sealed")
+    @patch("time.sleep", new=Mock)
+    @patch("time.time")
+    def test_given_vault_is_unsealed_when_wait_for_unseal_then_returns(
+        self,
+        patch_time,
+        patch_is_sealed,
+    ):
+        time_values = infinite_time_values()
+        patch_time.side_effect = lambda: next(time_values)
+
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        patch_is_sealed.return_value = False
+        vault.wait_for_unseal(timeout=30)

@@ -19,6 +19,19 @@ from charm import (
 )
 
 
+def infinite_time_values(start=0, step=2):
+    """Generator that returns an infinite sequence of time values.
+
+    Args:
+        start: Initial time value.
+        step: Time step between values.
+    """
+    current_time = start
+    while True:
+        yield current_time
+        current_time += step
+
+
 def read_file(path: str) -> str:
     """Reads a file and returns as a string.
 
@@ -753,18 +766,21 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
-    @patch("time.sleep", return_value=None)
+    @patch("time.time")
+    @patch("time.sleep", new=Mock)
     @patch("vault.Vault.enable_audit_device", new=Mock)
     @patch("ops.model.Container.exec", new=Mock)
     def test_given_vault_times_out_before_unsealing_when_config_change_then_error_is_raised(
         self,
-        patch_sleep,
+        patch_time,
         patch_is_api_available,
         patch_is_initialized,
         patch_vault_is_sealed,
         patch_vault_unseal,
         patch_get_binding,
     ):
+        time_values = infinite_time_values()
+        patch_time.side_effect = lambda: next(time_values)
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
