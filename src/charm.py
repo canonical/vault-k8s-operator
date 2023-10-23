@@ -233,7 +233,6 @@ class VaultCharm(CharmBase):
             port=self.VAULT_PORT,
             strip_prefix=True,
             scheme=lambda: "https",
-            redirect_https=True,
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)

@@ -3,7 +3,9 @@
 # See LICENSE file for licensing details.
 import json
 import logging
+import os
 import time
+from os.path import abspath
 from pathlib import Path
 
 import hvac  # type: ignore[import-untyped]
@@ -17,10 +19,7 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APPLICATION_NAME = "vault-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
-
-
-class InvalidHostError(Exception):
-    pass
+SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 
 
 class TestVaultK8s:
@@ -71,7 +70,6 @@ class TestVaultK8s:
 
             if "proxied-endpoints" in action_output:
                 proxied_endpoints = json.loads(action_output["proxied-endpoints"])
-                print(proxied_endpoints)
                 return proxied_endpoints[APPLICATION_NAME]["url"]
             else:
                 logger.info("Traefik did not return proxied endpoints yet")
@@ -79,26 +77,22 @@ class TestVaultK8s:
 
         raise TimeoutError("Traefik did not return proxied endpoints")
 
-    def _get_url(self, vault_endpoint: str) -> str:
-        """Returns the URL formatted as https://<host>/<path> from the vault endpoint.
+    async def run_get_ca_certificate_action(self, ops_test: OpsTest, timeout: int = 60) -> dict:
+        """Runs `get-certificate` on the `vault-k8s` unit.
 
         Args:
-            vault_endpoint: Vault proxied endpoint by Traefik.
+            ops_test (OpsTest): OpsTest
 
         Returns:
-            url: URL formatted as https://<host>/<path>
-
-        Raises:
-            InvalidHostError: If vault host address is empty
+            dict: Action output
         """
-        host, path = "", ""
-        uri = vault_endpoint.split("//")[1]
-        host = uri.split(":")[0]
-        if not host:
-            raise InvalidHostError("Vault host address is invalid.")
-        if len(uri.split(":")) == 2 and len(uri.split(":")[1].split("/")) == 2:
-            path = uri.split(":")[1].split("/")[1]
-        return f"https://{host}/{path}"
+        self_signed_certificates_unit = ops_test.model.units[  # type: ignore[union-attr]
+            f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
+        ]
+        action = await self_signed_certificates_unit.run_action(
+            action_name="get-ca-certificate",
+        )
+        return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)  # type: ignore[union-attr]
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
@@ -142,6 +136,21 @@ class TestVaultK8s:
         )
 
     @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def deploy_self_signed_certificates_operator(self, ops_test: OpsTest):
+        """Deploy Self Signed Certificates Operator.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
+        await ops_test.model.deploy(  # type: ignore[union-attr]
+            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            trust=True,
+            channel="beta",
+        )
+
+    @pytest.mark.abort_on_fail
     async def test_given_default_config_when_deploy_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy
     ):
@@ -152,11 +161,25 @@ class TestVaultK8s:
             wait_for_exact_units=5,
         )
 
-    async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
+    async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
         self,
         ops_test: OpsTest,
         build_and_deploy,
         deploy_traefik,
+        deploy_self_signed_certificates_operator,
+    ):
+        await ops_test.model.add_relation(  # type: ignore[union-attr]
+            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation2=f"{TRAEFIK_APPLICATION_NAME}",
+        )
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[TRAEFIK_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
+        self, ops_test: OpsTest
     ):
         await ops_test.model.add_relation(  # type: ignore[union-attr]
             relation1=f"{APPLICATION_NAME}:send-ca-cert",
@@ -170,7 +193,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
-        self, ops_test: OpsTest, build_and_deploy, deploy_traefik
+        self, ops_test: OpsTest
     ):
         await ops_test.model.add_relation(  # type: ignore[union-attr]
             relation1=f"{APPLICATION_NAME}:ingress",
@@ -183,17 +206,30 @@ class TestVaultK8s:
         )
 
     @pytest.mark.abort_on_fail
-    async def test_given_related_to_traefik_when_vault_status_checked_then_vault_returns_200(
-        self, ops_test: OpsTest
+    async def test_given_given_traefik_is_related_when_vault_status_checked_then_vault_returns_200_or_429(
+        self,
+        ops_test: OpsTest,
     ):
         """This proves that vault is reachable behind ingress."""
         vault_endpoint = await self._get_vault_endpoint(ops_test)
-        print(vault_endpoint)
-        url = self._get_url(vault_endpoint)
-        print(url)
-        self._client = hvac.Client(url=url, verify=False)
+        action_output = await self.run_get_ca_certificate_action(ops_test)
+        ca_certificate = action_output["ca-certificate"]
+        with open("ca_file.txt", mode="w+") as ca_file:
+            ca_file.write(ca_certificate)
+        self._client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
         response = self._client.sys.read_health_status()
-        assert str(response) == "<Response [200]>"
+        # As we have multiple Vault units, the one who gives the response could be in active or standby.  # noqa: E501, W505
+        # According to the Vault upstream code, expected response codes could be "200"
+        # if the unit is active or "429" if the unit is standby.
+        # https://github.com/hashicorp/vault/blob/3c42b15260de8b94388ed2296fc18e89ea80c4c9/vault/logical_system_paths.go#L152  # noqa: E501, W505
+        # Summary: "Returns the health status of Vault.",
+        # 200: {{Description: "initialized, unsealed, and active"}}
+        # 429: {{Description: "unsealed and standby"}}
+        # 472: {{Description: "data recovery mode replication secondary and active"}}
+        # 501: {{Description: "not initialized"}}
+        # 503: {{Description: "sealed"}}
+        assert str(response) == "<Response [200]>" or "<Response [429]>"
+        os.remove("ca_file.txt")
 
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(

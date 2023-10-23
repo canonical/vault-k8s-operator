@@ -14,31 +14,29 @@ juju deploy vault-k8s --channel edge -n 5 --trust
 ```
 > Note: It is advised to deploy Vault with an odd number of units
 
-We recommend deploying Vault with an odd number of units.
+### Access Vault through Ingress
 
-### Reach Vault through Ingress
-
-#### Deploy Traefik
+Deploy Traefik
 
 ```bash
 juju deploy traefik-k8s --channel edge --trust --config external_hostname=<your hostname> 
 ```
 
-#### Integrate with Certificate Transfer Interface
+#### Integrate Traefik with Self-Signed-Certificates Operator
 
-Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send Vault's CA certificate in the relation databag.
+```bash
+juju deploy self-signed-certificates --channel beta
+juju integrate self-signed-certificates:certificates traefik-k8s
+```
+
+#### Integrate Vault with Traefik
 
 ```bash
 juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
+juju integrate vault-k8s:ingress traefik-k8s:ingress
 ```
 
-#### Integrate with Ingress
-
-```bash
-juju integrate vault:ingress traefik-k8s:ingress
-```
-
-You should now be able to access the Vault at `https://<your hostname>/<model name>-vault.`
+You should now be able to access the Vault at `https://<your hostname>/<model name>-vault-k8s.`
 
 ### Interact with Vault via CLI
 
@@ -54,8 +52,8 @@ Retrieve the Juju secrets list:
 user@ubuntu:~$ juju secrets --format=yaml
 ck0i0h3q457c7bgte4kg:
   revision: 1
-  owner: vault-k8s
-  label: vault-ca-certificate
+  owner: self-signed-certificates
+  label: ca-certificates
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
 ck0i0krq457c7bgte4l0:
@@ -83,22 +81,21 @@ ck0i0krq457c7bgte4l0:
 Set the vault token for use in the client:
 
 ```bash
-export VAULT_TOKEN=hvs.WjJyFMP0jvNwBgPgelOcO4BM
-
+export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
-Read the `vault-ca-certificate` secret content:
+Read the `ca-certificates` secret content:
 
 ```bash
 user@ubuntu:~$ juju show-secret ck0i0h3q457c7bgte4kg --reveal
 ck0i0h3q457c7bgte4kg:
   revision: 1
-  owner: vault-k8s
-  label: vault-ca-certificate
+  owner: self-signed-certificates
+  label: ca-certificates
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
   content:
-    certificate: |
+    ca-certificate: |
       -----BEGIN CERTIFICATE-----
       MIIDPTCCAiWgAwIBAgIUGLlWWWj9My3coKtn/EAgequ4rlswDQYJKoZIhvcNAQEL
       BQAwLDELMAkGA1UEBhMCVVMxHTAbBgNVBAMMFFZhdWx0IHNlbGYgc2lnbmVkIENB

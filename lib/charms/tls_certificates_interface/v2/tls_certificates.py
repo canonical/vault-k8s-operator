@@ -287,7 +287,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.extensions import Extension, ExtensionNotFound
-from jsonschema import exceptions, validate  # type: ignore[import]
+from jsonschema import exceptions, validate  # type: ignore[import-untyped]
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -308,7 +308,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 16
+LIBPATCH = 18
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -1701,7 +1701,10 @@ def csr_matches_certificate(csr: str, cert: str) -> bool:
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ):
             return False
-        if csr_object.subject != cert_object.subject:
+        if (
+            csr_object.public_key().public_numbers().n  # type: ignore[union-attr]
+            != cert_object.public_key().public_numbers().n  # type: ignore[union-attr]
+        ):
             return False
     except ValueError:
         logger.warning("Could not load certificate or CSR.")
