@@ -4,6 +4,7 @@
 
 import json
 import unittest
+from itertools import count
 from typing import List
 from unittest.mock import Mock, call, patch
 
@@ -17,19 +18,6 @@ from charm import (
     VaultCharm,
     config_file_content_matches,
 )
-
-
-def infinite_time_values(start=0, step=2):
-    """Generator that returns an infinite sequence of time values.
-
-    Args:
-        start: Initial time value.
-        step: Time step between values.
-    """
-    current_time = start
-    while True:
-        yield current_time
-        current_time += step
 
 
 def read_file(path: str) -> str:
@@ -779,7 +767,7 @@ class TestCharm(unittest.TestCase):
         patch_vault_unseal,
         patch_get_binding,
     ):
-        time_values = infinite_time_values()
+        time_values = count(0, 2)
         patch_time.side_effect = lambda: next(time_values)
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="certs", attach=True)

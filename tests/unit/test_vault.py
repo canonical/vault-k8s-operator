@@ -3,24 +3,12 @@
 # See LICENSE file for licensing details.
 
 import unittest
+from itertools import count
 from unittest.mock import Mock, call, patch
 
 import requests
 
 from vault import Vault
-
-
-def infinite_time_values(start=0, step=2):
-    """Generator that returns an infinite sequence of time values.
-
-    Args:
-        start: Initial time value.
-        step: Time step between values.
-    """
-    current_time = start
-    while True:
-        yield current_time
-        current_time += step
 
 
 class TestVault(unittest.TestCase):
@@ -178,7 +166,7 @@ class TestVault(unittest.TestCase):
         patch_time,
         patch_is_sealed,
     ):
-        time_values = infinite_time_values()
+        time_values = count(0, 2)
         patch_time.side_effect = lambda: next(time_values)
 
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
@@ -195,7 +183,7 @@ class TestVault(unittest.TestCase):
         patch_time,
         patch_is_sealed,
     ):
-        time_values = infinite_time_values()
+        time_values = count(0, 2)
         patch_time.side_effect = lambda: next(time_values)
 
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")

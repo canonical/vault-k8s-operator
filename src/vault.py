@@ -63,6 +63,11 @@ class Vault:
                 return
             logger.info("Vault is sealed, waiting for unseal")
             time.sleep(2)
+
+        # One more check after the loop to catch any edge cases.
+        if not self.is_sealed():
+            return
+
         raise TimeoutError(f"Vault is still sealed {timeout} seconds")
 
     def unseal(self, unseal_keys: List[str]) -> None:
@@ -136,6 +141,7 @@ class Vault:
                     "Failed to enable audit device of type: %s, using path: %s", device_type, path
                 )
             logger.info("Enabled audit device of type: %s, using path: %s", device_type, path)
+        logger.info("Audit device of type: %s, using path: %s already enabled", device_type, path)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
