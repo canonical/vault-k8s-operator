@@ -141,7 +141,7 @@ class Vault:
                     "Failed to enable audit device of type: %s, using path: %s", device_type, path
                 )
             logger.info("Enabled audit device of type: %s, using path: %s", device_type, path)
-        logger.info("Audit device of type: %s, using path: %s already enabled", device_type, path)
+        logger.debug("Audit device of type: %s, using path: %s already enabled", device_type, path)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
