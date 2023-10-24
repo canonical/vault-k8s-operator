@@ -237,7 +237,7 @@ class VaultCharm(CharmBase):
     def _on_install(self, event: InstallEvent):
         """Handler triggered when the charm is installed.
 
-        Sets pebble plan, initializes vault, and unseals vault.
+        Sets pebble plan, initializes vault, enable audit device, and unseals vault.
         """
         if self.unit.is_leader():
             self._on_install_leader(event)
@@ -401,6 +401,8 @@ class VaultCharm(CharmBase):
             return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
+        vault.wait_for_unseal()
+        vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
         self.unit.status = ActiveStatus()
 
