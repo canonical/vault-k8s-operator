@@ -752,7 +752,7 @@ class VaultCharm(CharmBase):
         existing_content = ""
         if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
             existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
-            existing_content = existing_content_stringio.read()  # type: ignore[assignment]
+            existing_content = existing_content_stringio.read()
 
         if not config_file_content_matches(existing_content=existing_content, new_content=content):
             self._push_config_file_to_workload(content=content)
