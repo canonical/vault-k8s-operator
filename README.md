@@ -22,14 +22,14 @@ Deploy Traefik
 juju deploy traefik-k8s --channel edge --trust --config external_hostname=<your hostname> 
 ```
 
-#### Integrate Traefik with Self-Signed-Certificates Operator
+Integrate Traefik with Self-Signed-Certificates Operator
 
 ```bash
 juju deploy self-signed-certificates --channel beta
-juju integrate self-signed-certificates:certificates traefik-k8s
+juju integrate self-signed-certificates:certificates traefik-k8s:certificates
 ```
 
-#### Integrate Vault with Traefik
+Integrate Vault with Traefik
 
 ```bash
 juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
@@ -52,8 +52,8 @@ Retrieve the Juju secrets list:
 user@ubuntu:~$ juju secrets --format=yaml
 ck0i0h3q457c7bgte4kg:
   revision: 1
-  owner: self-signed-certificates
-  label: ca-certificates
+  owner: vault-k8s
+  label: vault-ca-certificate
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
 ck0i0krq457c7bgte4l0:
@@ -62,6 +62,13 @@ ck0i0krq457c7bgte4l0:
   label: vault-initialization
   created: 2023-09-13T02:37:10Z
   updated: 2023-09-13T02:37:10Z
+cks0s1c24l7c77v23p80:
+  revision: 1
+  expires: 2024-09-13T02:36:10Z
+  owner: self-signed-certificates
+  label: ca-certificates
+  created: 2023-09-13T02:36:57Z
+  updated: 2023-09-13T02:36:57Z
 ```
 
 Read the `vault-initialization` secret content:
@@ -84,10 +91,10 @@ Set the vault token for use in the client:
 export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
-Read the `ca-certificates` secret content:
+Read the Self Signed Certificates operator's `ca-certificates` secret content:
 
 ```bash
-user@ubuntu:~$ juju show-secret ck0i0h3q457c7bgte4kg --reveal
+user@ubuntu:~$ juju show-secret cks0s1c24l7c77v23p80 --reveal
 ck0i0h3q457c7bgte4kg:
   revision: 1
   owner: self-signed-certificates
