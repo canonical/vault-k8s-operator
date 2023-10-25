@@ -304,7 +304,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
-                sans_dns=[self._ingress_address, socket.getfqdn()],
+                sans_dns=[socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
@@ -362,7 +362,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
-                sans_dns=[self._ingress_address, socket.getfqdn()],
+                sans_dns=[socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )

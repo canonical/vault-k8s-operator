@@ -168,7 +168,7 @@ class TestVaultK8s:
         deploy_traefik,
         deploy_self_signed_certificates_operator,
     ):
-        await ops_test.model.add_relation(  # type: ignore[union-attr]
+        await ops_test.model.integrate(  # type: ignore[union-attr]
             relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
             relation2=f"{TRAEFIK_APPLICATION_NAME}",
         )
@@ -181,7 +181,7 @@ class TestVaultK8s:
     async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
         self, ops_test: OpsTest
     ):
-        await ops_test.model.add_relation(  # type: ignore[union-attr]
+        await ops_test.model.integrate(  # type: ignore[union-attr]
             relation1=f"{APPLICATION_NAME}:send-ca-cert",
             relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
         )
@@ -195,7 +195,7 @@ class TestVaultK8s:
     async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
         self, ops_test: OpsTest
     ):
-        await ops_test.model.add_relation(  # type: ignore[union-attr]
+        await ops_test.model.integrate(  # type: ignore[union-attr]
             relation1=f"{APPLICATION_NAME}:ingress",
             relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
         )
@@ -235,7 +235,7 @@ class TestVaultK8s:
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
     ):
-        await ops_test.model.add_relation(  # type: ignore[union-attr]
+        await ops_test.model.integrate(  # type: ignore[union-attr]
             relation1=f"{APPLICATION_NAME}:metrics-endpoint",
             relation2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
         )
