@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import socket
 import unittest
 from itertools import count
 from typing import List
@@ -198,6 +199,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_unit_cert.assert_called_with(
             subject=ingress_address,
             sans_ip=[bind_address, ingress_address],
+            sans_dns=[socket.getfqdn()],
             ca_certificate=ca_certificate.encode(),
             ca_private_key=ca_private_key.encode(),
         )
@@ -240,6 +242,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_unit_cert.assert_called_with(
             subject=ingress_address,
             sans_ip=[bind_address, ingress_address],
+            sans_dns=[socket.getfqdn()],
             ca_certificate=ca_certificate.encode(),
             ca_private_key=ca_private_key.encode(),
         )

@@ -8,6 +8,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 """
 import json
 import logging
+import socket
 from typing import Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
@@ -25,6 +26,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
@@ -63,6 +65,8 @@ KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+VAULT_INITIALIZATION_SECRET_ID = "vault-initialization-secret-id"
+VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 
 
 def render_vault_config_file(
@@ -167,13 +171,18 @@ def generate_vault_ca_certificate() -> Tuple[str, str]:
 
 
 def generate_vault_unit_certificate(
-    subject: str, sans_ip: List[str], ca_certificate: bytes, ca_private_key: bytes
+    subject: str,
+    sans_ip: List[str],
+    sans_dns: List[str],
+    ca_certificate: bytes,
+    ca_private_key: bytes,
 ) -> Tuple[str, str]:
     """Generate Vault unit certificates valid for 50 years.
 
     Args:
         subject: Subject of the certificate
         sans_ip: List of IP addresses to add to the SAN
+        sans_dns: List of DNS subject alternative names
         ca_certificate: CA certificate
         ca_private_key: CA private key
 
@@ -182,7 +191,7 @@ def generate_vault_unit_certificate(
     """
     vault_private_key = generate_private_key()
     csr = generate_csr(
-        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=[subject]
+        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=sans_dns
     )
     vault_certificate = generate_certificate(
         ca=ca_certificate,
@@ -218,6 +227,12 @@ class VaultCharm(CharmBase):
                     "static_configs": [{"targets": [f"*:{self.VAULT_PORT}"]}],
                 }
             ],
+        )
+        self.ingress = IngressPerAppRequirer(
+            charm=self,
+            port=self.VAULT_PORT,
+            strip_prefix=True,
+            scheme=lambda: "https",
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
@@ -289,6 +304,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
+                sans_dns=[socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
@@ -346,6 +362,7 @@ class VaultCharm(CharmBase):
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
+                sans_dns=[socket.getfqdn()],
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
@@ -801,9 +818,11 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        juju_secret = self.app.add_secret(juju_secret_content, label="vault-initialization")
+        juju_secret = self.app.add_secret(
+            juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
+        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        peer_relation.data[self.app].update({VAULT_INITIALIZATION_SECRET_ID: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.

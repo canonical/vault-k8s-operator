@@ -10,9 +10,53 @@ The Vault Operator deploys and initializes Vault on Kubernetes, and runs in high
 
 Deploy the charm:
 ```bash
-juju deploy vault-k8s -n 5 --trust
+juju deploy vault-k8s --channel edge -n 5 --trust
 ```
 > Note: It is advised to deploy Vault with an odd number of units
+
+### Access Vault through Ingress
+
+Deploy Traefik
+
+```bash
+juju deploy traefik-k8s --channel edge --trust --config external_hostname=<your hostname> 
+```
+
+Deploy Self Signed Certificates Operator
+
+```bash
+juju deploy self-signed-certificates --channel beta
+```
+
+Integrate Traefik with Self-Signed-Certificates Operator
+
+```bash
+juju integrate self-signed-certificates:certificates traefik-k8s:certificates
+```
+
+Integrate Vault with Traefik
+
+```bash
+juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
+juju integrate vault-k8s:ingress traefik-k8s:ingress
+```
+
+Get the Vault URL 
+
+Run the `show-proxied-endpoints` action on Traefik.
+
+```bash
+juju run traefik-k8s/0 show-proxied-endpoints
+
+# Sample Action Output
+Running operation 1 with 1 task
+  - task 2 on unit-traefik-k8s-0
+
+Waiting for task 2...
+proxied-endpoints: '{"vault-k8s": {"url": "https://10.0.0.4/vault-vault-k8s"}}'
+```
+
+You should now be able to access the Vault using the URL in the action output.
 
 ### Interact with Vault via CLI
 
@@ -38,6 +82,13 @@ ck0i0krq457c7bgte4l0:
   label: vault-initialization
   created: 2023-09-13T02:37:10Z
   updated: 2023-09-13T02:37:10Z
+cks0s1c24l7c77v23p80:
+  revision: 1
+  expires: 2024-09-13T02:36:10Z
+  owner: self-signed-certificates
+  label: ca-certificates
+  created: 2023-09-13T02:36:57Z
+  updated: 2023-09-13T02:36:57Z
 ```
 
 Read the `vault-initialization` secret content:
@@ -60,18 +111,18 @@ Set the vault token for use in the client:
 export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
-Read the `vault-ca-certificate` secret content:
+Read the Self Signed Certificates operator's `ca-certificates` secret content:
 
 ```bash
-user@ubuntu:~$ juju show-secret ck0i0h3q457c7bgte4kg --reveal
+user@ubuntu:~$ juju show-secret cks0s1c24l7c77v23p80 --reveal
 ck0i0h3q457c7bgte4kg:
   revision: 1
-  owner: vault-k8s
-  label: vault-ca-certificate
+  owner: self-signed-certificates
+  label: ca-certificates
   created: 2023-09-13T02:36:57Z
   updated: 2023-09-13T02:36:57Z
   content:
-    certificate: |
+    ca-certificate: |
       -----BEGIN CERTIFICATE-----
       MIIDPTCCAiWgAwIBAgIUGLlWWWj9My3coKtn/EAgequ4rlswDQYJKoZIhvcNAQEL
       BQAwLDELMAkGA1UEBhMCVVMxHTAbBgNVBAMMFFZhdWx0IHNlbGYgc2lnbmVkIENB
@@ -102,10 +153,10 @@ Copy the CA certificate content into a file and set the `VAULT_CACERT` environme
 export VAULT_CAPATH=/path/to/vault_ca.pem
 ```
 
-Identify the vault unit by setting the `VAULT_ADDR` environment variable based on the IP address of the unit.
+Identify the vault address by setting the `VAULT_ADDR` environment variable using the Vault URL which is retrieved through `show-proxied-endpoints` action.
 
 ```bash
-export VAULT_ADDR="https://10.1.182.39:8200"
+export VAULT_ADDR="https://10.0.0.4/vault-vault-k8s"
 ```
 
 You can now run vault commands against the vault unit.
@@ -121,14 +172,6 @@ vault operator raft list-peers
 
 ```bash
 juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
-```
-
-### Traefik
-
-Traefik requires to know about Vault’s CA certificate and the certificate-transfer is used to send Vault's CA certificate in the relation databag.
-
-```bash
-juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
 ```
 
 ## OCI Images
