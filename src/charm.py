@@ -21,6 +21,8 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v2.tls_certificates import (
+    CertificateAvailableEvent,
+    TLSCertificatesRequiresV2,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -67,6 +69,8 @@ CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_ID = "vault-initialization-secret-id"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+PKI_MOUNT = "pki_charm"
+PKI_ROLE = "charm"
 
 
 def render_vault_config_file(
@@ -234,6 +238,9 @@ class VaultCharm(CharmBase):
             strip_prefix=True,
             scheme=lambda: "https",
         )
+        self._pki_requires = TLSCertificatesRequiresV2(
+            self, relationship_name="certificates-pki-request"
+        )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -247,6 +254,14 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
             self._on_send_ca_cert_relation_joined,
+        )
+        self.framework.observe(
+            self.on.certificates_pki_request_relation_joined,
+            self._on_certificates_pki_request_relation_joined,
+        )
+        self.framework.observe(
+            self._pki_requires.on.certificate_available,
+            self._on_certificate_pki_request_certificate_available,
         )
 
     def _on_install(self, event: InstallEvent):
@@ -529,6 +544,60 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _on_certificates_pki_request_relation_joined(self, event: RelationJoinedEvent):
+        """Initializes the PKI backend."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit should configure the vault PKI, skipping")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set correctly in the charm configuration")
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.debug("Vault initialization secret not set in peer relation, deferring event")
+            event.defer()
+            return
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault.set_token(token=root_token)
+        vault.configure_pki_mount(name=PKI_MOUNT)
+
+        csr = vault.configure_pki_intermediate_ca(
+            mount=PKI_MOUNT,
+            common_name=common_name,
+        )
+        logger.info("CSR: %s", csr)
+        self._pki_requires.request_certificate_creation(certificate_signing_request=csr.encode())
+
+    def _on_certificate_pki_request_certificate_available(self, event: CertificateAvailableEvent):
+        """Handles the certificate available event for the PKI backend."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit should configure the vault PKI, skipping")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set correctly in the charm configuration")
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.debug("Vault initialization secret not set in peer relation, deferring event")
+            event.defer()
+            return
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault.set_token(token=root_token)
+        vault.set_pki_intermediate_ca_certificate(certificate=event.certificate, mount=PKI_MOUNT)
+        vault.set_pki_charm_role(
+            allowed_domains=common_name,
+            mount=PKI_MOUNT,
+            role=PKI_ROLE,
+        )
+
+    def _get_config_common_name(self) -> Optional[str]:
+        """Return the common name to use for the PKI backend."""
+        return self.config.get("common_name", None)
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).

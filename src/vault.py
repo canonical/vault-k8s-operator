@@ -121,6 +121,45 @@ class Vault:
                 path=name,
             )
 
+    def configure_pki_mount(self, name: str):
+        """Ensure a PKI mount is enabled."""
+        if name + "/" not in self._client.sys.list_mounted_secrets_engines():
+            self._client.sys.enable_secrets_engine(
+                backend_type="pki",
+                description="Charm created PKI backend",
+                path=name,
+            )
+
+    def configure_pki_intermediate_ca(self, mount: str, common_name: str) -> str:
+        """Create an intermediate CA for the PKI backend.
+
+        Generate a CSR for the intermediate CA.
+
+        Returns:
+            The CSR.
+        """
+        response = self._client.secrets.pki.generate_intermediate(
+            mount_point=mount,
+            common_name=common_name,
+            type="exported",
+        )
+        return response["data"]["csr"]
+
+    def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
+        """Set the intermediate CA certificate for the PKI backend."""
+        self._client.secrets.pki.set_signed_intermediate(
+            certificate=certificate, mount_point=mount
+        )
+
+    def set_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+        """Create a role for the PKI backend."""
+        self._client.secrets.pki.create_or_update_role(
+            name=role,
+            allowed_domains=allowed_domains,
+            allow_subdomains=True,
+            mount_point=mount,
+        )
+
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""
         with open("src/templates/kv_mount.hcl", "r") as fd:
