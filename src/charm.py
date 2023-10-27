@@ -35,6 +35,7 @@ from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    RelationBrokenEvent,
     RelationJoinedEvent,
     RemoveEvent,
 )
@@ -262,6 +263,10 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self._pki_requires.on.certificate_available,
             self._on_certificate_pki_request_certificate_available,
+        )
+        self.framework.observe(
+            self.on.certificates_pki_request_relation_broken,
+            self._on_certificates_pki_request_relation_broken,
         )
 
     def _on_install(self, event: InstallEvent):
@@ -550,6 +555,10 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit should configure the vault PKI, skipping")
             return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created, deferring event")
+            event.defer()
+            return
         common_name = self._get_config_common_name()
         if not common_name:
             logger.error("Common name is not set correctly in the charm configuration")
@@ -562,14 +571,18 @@ class VaultCharm(CharmBase):
             return
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
-        vault.configure_pki_mount(name=PKI_MOUNT)
-
-        csr = vault.configure_pki_intermediate_ca(
-            mount=PKI_MOUNT,
-            common_name=common_name,
+        if not vault.is_api_available():
+            logger.debug("Vault is not available, deferring event")
+            event.defer()
+            return
+        if vault.is_secret_engine_enabled(path=PKI_MOUNT):
+            logger.debug("PKI backend already enabled, skipping")
+            return
+        vault.enable_pki_engine(path=PKI_MOUNT)
+        csr = vault.configure_pki_intermediate_ca(mount=PKI_MOUNT, common_name=common_name)
+        self._pki_requires.request_certificate_creation(
+            certificate_signing_request=csr.encode(), is_ca=True
         )
-        logger.info("CSR: %s", csr)
-        self._pki_requires.request_certificate_creation(certificate_signing_request=csr.encode())
 
     def _on_certificate_pki_request_certificate_available(self, event: CertificateAvailableEvent):
         """Handles the certificate available event for the PKI backend."""
@@ -588,12 +601,35 @@ class VaultCharm(CharmBase):
             return
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
+        if not vault.is_api_available():
+            logger.debug("Vault is not available, deferring event")
+            return
+        if vault.is_pki_ca_certificate_set(mount=PKI_MOUNT, certificate=event.certificate):
+            logger.debug("PKI backend already configured, skipping")
+            return
         vault.set_pki_intermediate_ca_certificate(certificate=event.certificate, mount=PKI_MOUNT)
         vault.set_pki_charm_role(
             allowed_domains=common_name,
             mount=PKI_MOUNT,
             role=PKI_ROLE,
         )
+
+    def _on_certificates_pki_request_relation_broken(self, event: RelationBrokenEvent):
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit should configure the vault PKI, skipping")
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.debug("Vault initialization secret not set in peer relation, ignoring event")
+            return
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault.set_token(token=root_token)
+        if not vault.is_api_available():
+            logger.debug("Vault is not available, ignoring event")
+            return
+        if vault.is_secret_engine_enabled(path=PKI_MOUNT):
+            vault.disable_pki_engine(path=PKI_MOUNT)
 
     def _get_config_common_name(self) -> Optional[str]:
         """Return the common name to use for the PKI backend."""

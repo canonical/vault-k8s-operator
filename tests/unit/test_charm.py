@@ -20,6 +20,8 @@ from charm import (
     config_file_content_matches,
 )
 
+TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v2.tls_certificates"
+
 
 def read_file(path: str) -> str:
     """Reads a file and returns as a string.
@@ -1428,3 +1430,193 @@ class TestCharm(unittest.TestCase):
         data = self.harness.get_relation_data(certificate_transfer_rel_id, self.harness.charm.unit)
         ca_from_rel_data = data["ca"]
         self.assertEqual(ca_from_secret, ca_from_rel_data)
+
+    @patch("vault.Vault.configure_pki_intermediate_ca")
+    @patch("vault.Vault.is_secret_engine_enabled")
+    @patch("vault.Vault.enable_pki_engine", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV2.request_certificate_creation")
+    def test_given_pki_not_enabled_when_pki_requires_relation_joined_then_certificate_is_requested(  # noqa: E501
+        self,
+        patch_request_certificate,
+        patch_secret_engine_enabled,
+        patch_configure_pki_intermediate_ca,
+    ):
+        self.harness.update_config(key_values={"common_name": "pizza.com"})
+        csr = "whatever csr content"
+        patch_configure_pki_intermediate_ca.return_value = csr
+        patch_secret_engine_enabled.return_value = False
+        self.harness.set_leader(is_leader=True)
+        peer_relation_id = self._set_peer_relation()
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        relation_id = self.harness.add_relation(
+            relation_name="certificates-pki-request", remote_app="cert-provider"
+        )
+        self.harness.add_relation_unit(relation_id=relation_id, remote_unit_name="cert-provider/0")
+
+        patch_request_certificate.assert_called_with(
+            certificate_signing_request=csr.encode(), is_ca=True
+        )
+
+    @patch("vault.Vault.configure_pki_intermediate_ca")
+    @patch("vault.Vault.is_secret_engine_enabled")
+    @patch("vault.Vault.enable_pki_engine", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV2.request_certificate_creation")
+    def test_given_pki_enabled_when_pki_requires_relation_joined_then_certificate_not_requested(
+        self,
+        patch_request_certificate,
+        patch_secret_engine_enabled,
+        patch_configure_pki_intermediate_ca,
+    ):
+        self.harness.update_config(key_values={"common_name": "pizza.com"})
+        csr = "whatever csr content"
+        patch_configure_pki_intermediate_ca.return_value = csr
+        patch_secret_engine_enabled.return_value = True
+        self.harness.set_leader(is_leader=True)
+        peer_relation_id = self._set_peer_relation()
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        relation_id = self.harness.add_relation(
+            relation_name="certificates-pki-request", remote_app="cert-provider"
+        )
+        self.harness.add_relation_unit(relation_id=relation_id, remote_unit_name="cert-provider/0")
+
+        patch_request_certificate.assert_not_called()
+
+    @patch("vault.Vault.set_pki_charm_role")
+    @patch("vault.Vault.set_pki_intermediate_ca_certificate")
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_pki_ca_certificate_set")
+    def test_given_ca_certificate_not_set_when_pki_requires_certificate_available_then_ca_certificate_set(  # noqa: E501
+        self,
+        patch_is_pki_ca_certificate_set,
+        patch_set_pki_intermediate_ca_certificate,
+        patch_set_pki_charm_role,
+    ):
+        common_name = "pizza.com"
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        self.harness.update_config(key_values={"common_name": common_name})
+        certificate = "whatever"
+        event = Mock()
+        event.certificate = certificate
+        self.harness.set_leader(is_leader=True)
+        patch_is_pki_ca_certificate_set.return_value = False
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        self.harness.charm._on_certificate_pki_request_certificate_available(event=event)
+
+        patch_set_pki_intermediate_ca_certificate.assert_called_with(
+            certificate=certificate, mount="pki_charm"
+        )
+        patch_set_pki_charm_role.assert_called_with(
+            allowed_domains=common_name,
+            mount="pki_charm",
+            role="charm",
+        )
+
+    @patch("vault.Vault.set_pki_charm_role")
+    @patch("vault.Vault.set_pki_intermediate_ca_certificate")
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_pki_ca_certificate_set")
+    def test_given_ca_certificate_set_when_pki_requires_certificate_available_then_ca_certificate_not_set(  # noqa: E501
+        self,
+        patch_is_pki_ca_certificate_set,
+        patch_set_pki_intermediate_ca_certificate,
+        patch_set_pki_charm_role,
+    ):
+        common_name = "pizza.com"
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        self.harness.update_config(key_values={"common_name": common_name})
+        certificate = "whatever"
+        event = Mock()
+        event.certificate = certificate
+        self.harness.set_leader(is_leader=True)
+        patch_is_pki_ca_certificate_set.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        self.harness.charm._on_certificate_pki_request_certificate_available(event=event)
+
+        patch_set_pki_intermediate_ca_certificate.assert_not_called()
+        patch_set_pki_charm_role.assert_not_called()
+
+    @patch("vault.Vault.is_secret_engine_enabled")
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.disable_pki_engine")
+    def test_given_secret_engine_enabled_when_pki_requires_relation_broken_then_pki_engine_is_disabled(  # noqa: E501
+        self, patch_disable_pki_engine, patch_is_secret_engine_enabled
+    ):
+        self.harness.set_leader(is_leader=True)
+        patch_is_secret_engine_enabled.return_value = True
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        relation_id = self.harness.add_relation(
+            relation_name="certificates-pki-request", remote_app="cert-provider"
+        )
+        self.harness.add_relation_unit(relation_id=relation_id, remote_unit_name="cert-provider/0")
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        self.harness.remove_relation(relation_id=relation_id)
+
+        patch_disable_pki_engine.assert_called_with(path="pki_charm")
+
+    @patch("vault.Vault.is_secret_engine_enabled")
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.disable_pki_engine")
+    def test_given_secret_engine_not_enabled_when_pki_requires_relation_broken_then_pki_engine_is_not_disabled(  # noqa: E501
+        self, patch_disable_pki_engine, patch_is_secret_engine_enabled
+    ):
+        self.harness.set_leader(is_leader=True)
+        patch_is_secret_engine_enabled.return_value = False
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("whatever ca content")
+        relation_id = self.harness.add_relation(
+            relation_name="certificates-pki-request", remote_app="cert-provider"
+        )
+        self.harness.add_relation_unit(relation_id=relation_id, remote_unit_name="cert-provider/0")
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal key content"],
+        )
+
+        self.harness.remove_relation(relation_id=relation_id)
+
+        patch_disable_pki_engine.assert_not_called()

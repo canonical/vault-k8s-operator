@@ -76,3 +76,4 @@ requires:
     limit: 1
   certificates-pki-request:
     interface: tls-certificates
+    limit: 1
