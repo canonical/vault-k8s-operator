@@ -122,7 +122,7 @@ class Vault:
                 path=name,
             )
 
-    def enable_pki_engine(self, path: str):
+    def enable_pki_engine(self, *, path: str):
         """Ensure a PKI mount is enabled."""
         if not self.is_secret_engine_enabled(path):
             self._client.sys.enable_secrets_engine(
