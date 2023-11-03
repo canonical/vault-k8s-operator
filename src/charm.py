@@ -42,6 +42,7 @@ from ops.charm import (
 from ops.main import main
 from ops.model import (
     ActiveStatus,
+    BlockedStatus,
     MaintenanceStatus,
     ModelError,
     Relation,
@@ -245,8 +246,12 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.update_status, self._on_config_changed)
         self.framework.observe(
-            self.on[PEER_RELATION_NAME].relation_created, self._on_peer_relation_created
+            self.on[PEER_RELATION_NAME].relation_created, self._on_config_changed
+        )
+        self.framework.observe(
+            self.on[PEER_RELATION_NAME].relation_changed, self._on_config_changed
         )
         self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(
@@ -339,10 +344,13 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             event.defer()
             return
-        root_token, unseal_keys = vault.initialize()
-        self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
-        vault.set_token(token=root_token)
-        vault.unseal(unseal_keys=unseal_keys)
+        if not vault.is_initialized():
+            root_token, unseal_keys = vault.initialize()
+            self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
+            vault.set_token(token=root_token)
+        if vault.is_sealed():
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            vault.unseal(unseal_keys=unseal_keys)
 
     def _on_install_non_leader(self, event: InstallEvent):
         """Install event handler for non-leader unit.
@@ -399,21 +407,17 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
-            event.defer()
             return
         if not self._is_peer_relation_created():
             self.unit.status = WaitingStatus("Waiting for peer relation")
-            event.defer()
             return
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         except PeerSecretError:
             self.unit.status = WaitingStatus("Waiting for vault initialization secret")
-            event.defer()
             return
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
-            event.defer()
             return
         if not self._ca_certificate_pushed_to_workload():
             self.unit.status = WaitingStatus("Waiting for vault CA certificate to be available")
@@ -441,11 +445,61 @@ class VaultCharm(CharmBase):
         vault.wait_for_unseal()
         vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
+        if self._pki_requires_relation_created() and not self._common_name_config_is_valid():
+            self.unit.status = BlockedStatus(
+                "Common name is not set correctly in the charm config"
+            )
+            return
+        self._configure_pki_secrets_engine()
         self.unit.status = ActiveStatus()
 
-    def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
-        """Handle relation-joined event for the replicas relation."""
-        self._set_peer_relation_node_api_address()
+    def _common_name_config_is_valid(self):
+        """Check if the common name is set correctly in the charm config."""
+        common_name = self._get_config_common_name()
+        return common_name is not None
+
+    def _configure_pki_secrets_engine(self) -> None:
+        """Configure the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit should configure the vault PKI, skipping")
+            return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created, skipping")
+            return
+        if not self._pki_requires_relation_created():
+            logger.debug("PKI relation not created, skipping")
+            return
+        if not self._common_name_config_is_valid():
+            logger.debug("Common name is not set correctly in the charm config, skipping")
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.error("Vault initialization secret not set in peer relation, skipping")
+            return
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault.set_token(token=root_token)
+        if not vault.is_api_available():
+            logger.error("Vault is not available, skipping")
+            return
+        if not vault.is_secret_engine_enabled(path=PKI_MOUNT):
+            vault.enable_pki_engine(path=PKI_MOUNT)
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config, skipping")
+            return
+        if not vault.is_intermediate_ca_set_with_common_name(
+            mount=PKI_MOUNT, common_name=common_name
+        ):
+            csr = vault.configure_pki_intermediate_ca(mount=PKI_MOUNT, common_name=common_name)
+            self._pki_requires.request_certificate_creation(
+                certificate_signing_request=csr.encode(),
+                is_ca=True,
+            )
+
+    def _pki_requires_relation_created(self) -> bool:
+        """Check if the PKI relation is created."""
+        return self.model.get_relation("certificates-pki-request") is not None
 
     def _on_remove(self, event: RemoveEvent):
         """Handler triggered when the charm is removed.
@@ -552,37 +606,7 @@ class VaultCharm(CharmBase):
 
     def _on_certificates_pki_request_relation_joined(self, event: RelationJoinedEvent):
         """Initializes the PKI backend."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit should configure the vault PKI, skipping")
-            return
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created, deferring event")
-            event.defer()
-            return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set correctly in the charm configuration")
-            return
-        try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault initialization secret not set in peer relation, deferring event")
-            event.defer()
-            return
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        vault.set_token(token=root_token)
-        if not vault.is_api_available():
-            logger.debug("Vault is not available, deferring event")
-            event.defer()
-            return
-        if vault.is_secret_engine_enabled(path=PKI_MOUNT):
-            logger.debug("PKI backend already enabled, skipping")
-            return
-        vault.enable_pki_engine(path=PKI_MOUNT)
-        csr = vault.configure_pki_intermediate_ca(mount=PKI_MOUNT, common_name=common_name)
-        self._pki_requires.request_certificate_creation(
-            certificate_signing_request=csr.encode(), is_ca=True
-        )
+        self._configure_pki_secrets_engine()
 
     def _on_certificate_pki_request_certificate_available(self, event: CertificateAvailableEvent):
         """Handles the certificate available event for the PKI backend."""
@@ -596,23 +620,26 @@ class VaultCharm(CharmBase):
         try:
             root_token, _ = self._get_initialization_secret_from_peer_relation()
         except PeerSecretError:
-            logger.debug("Vault initialization secret not set in peer relation, deferring event")
-            event.defer()
+            logger.debug("Vault initialization secret not set in peer relation, skipping")
             return
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
         if not vault.is_api_available():
-            logger.debug("Vault is not available, deferring event")
+            logger.debug("Vault is not available, skipping")
             return
         if vault.is_pki_ca_certificate_set(mount=PKI_MOUNT, certificate=event.certificate):
             logger.debug("PKI backend already configured, skipping")
             return
-        vault.set_pki_intermediate_ca_certificate(certificate=event.certificate, mount=PKI_MOUNT)
-        vault.set_pki_charm_role(
-            allowed_domains=common_name,
-            mount=PKI_MOUNT,
-            role=PKI_ROLE,
-        )
+        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=event.certificate):
+            vault.set_pki_intermediate_ca_certificate(
+                certificate=event.certificate, mount=PKI_MOUNT
+            )
+        if not vault.is_pki_role_set(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.set_pki_charm_role(
+                allowed_domains=common_name,
+                mount=PKI_MOUNT,
+                role=PKI_ROLE,
+            )
 
     def _on_certificates_pki_request_relation_broken(self, event: RelationBrokenEvent):
         if not self.unit.is_leader():

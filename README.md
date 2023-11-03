@@ -174,6 +174,14 @@ vault operator raft list-peers
 juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
 ```
 
+### PKI
+
+Vault can be used as an intermediate CA for issuing certificates. Integrate it with a parent CA charm, such as [self-signed-certificates](https://charmhub.io/self-signed-certificates).
+
+```bash
+juju integrate vault-k8s:certificates self-signed-certificates:certificates
+```
+
 ## OCI Images
 
 - Vault: ghcr.io/canonical/vault:1.15.0

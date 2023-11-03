@@ -10,6 +10,7 @@ from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
+from cryptography import x509
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,22 @@ class Vault:
         logger.info("Generated a intermediate CA CSR for the PKI backend")
         return response["data"]["csr"]
 
+    def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
+        """Check if the intermediate CA is set for the PKI backend."""
+        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+        return intermediate_ca == certificate
+
+    def is_intermediate_ca_set_with_common_name(self, mount: str, common_name: str) -> bool:
+        """Check if the intermediate CA is set for the PKI backend."""
+        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+        if not intermediate_ca:
+            return False
+        loaded_certificate = x509.load_pem_x509_certificate(intermediate_ca.encode("utf-8"))
+        existing_common_name = loaded_certificate.subject.get_attributes_for_oid(
+            x509.oid.NameOID.COMMON_NAME
+        )[0].value
+        return existing_common_name == common_name
+
     def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
         """Set the intermediate CA certificate for the PKI backend."""
         self._client.secrets.pki.set_signed_intermediate(
@@ -179,6 +196,14 @@ class Vault:
             },
         )
         logger.info("Created a role for the PKI backend")
+
+    def is_pki_role_set(self, role: str, mount: str) -> bool:
+        """Check if the role is set for the PKI backend."""
+        try:
+            existing_roles = self._client.secrets.pki.list_roles(mount_point=mount)
+            return role in existing_roles["data"]["keys"]
+        except hvac.exceptions.InvalidPath:
+            return False
 
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""
