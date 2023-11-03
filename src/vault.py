@@ -124,7 +124,7 @@ class Vault:
 
     def enable_pki_engine(self, *, path: str):
         """Ensure a PKI mount is enabled."""
-        if not self.is_secret_engine_enabled(path):
+        if not self.is_secret_engine_enabled(path=path):
             self._client.sys.enable_secrets_engine(
                 backend_type="pki",
                 description="Charm created PKI backend",
@@ -132,16 +132,16 @@ class Vault:
             )
             logger.info("Enabled PKI backend")
 
-    def is_secret_engine_enabled(self, path: str) -> bool:
+    def is_secret_engine_enabled(self, *, path: str) -> bool:
         """Check if a PKI mount is enabled."""
         return path + "/" in self._client.sys.list_mounted_secrets_engines()
 
-    def disable_pki_engine(self, path: str):
+    def disable_pki_engine(self, *, path: str):
         """Disable the PKI engine."""
         self._client.sys.disable_secrets_engine(path=path)
         logger.info("Disabled PKI backend")
 
-    def configure_pki_intermediate_ca(self, mount: str, common_name: str) -> str:
+    def configure_pki_intermediate_ca(self, *, mount: str, common_name: str) -> str:
         """Create an intermediate CA for the PKI backend.
 
         Generate a CSR for the intermediate CA.
@@ -157,12 +157,12 @@ class Vault:
         logger.info("Generated a intermediate CA CSR for the PKI backend")
         return response["data"]["csr"]
 
-    def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
+    def is_intermediate_ca_set(self, *, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
         intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         return intermediate_ca == certificate
 
-    def is_intermediate_ca_set_with_common_name(self, mount: str, common_name: str) -> bool:
+    def is_intermediate_ca_set_with_common_name(self, *, mount: str, common_name: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
         intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         if not intermediate_ca:
@@ -173,19 +173,19 @@ class Vault:
         )[0].value
         return existing_common_name == common_name
 
-    def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
+    def set_pki_intermediate_ca_certificate(self, *, certificate: str, mount: str) -> None:
         """Set the intermediate CA certificate for the PKI backend."""
         self._client.secrets.pki.set_signed_intermediate(
             certificate=certificate, mount_point=mount
         )
         logger.info("Set the intermediate CA certificate for the PKI backend")
 
-    def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
+    def is_pki_ca_certificate_set(self, *, mount: str, certificate: str) -> bool:
         """Check if the CA certificate is set for the PKI backend."""
         existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         return existing_certificate == certificate
 
-    def set_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+    def set_pki_charm_role(self, *, role: str, allowed_domains: str, mount: str) -> None:
         """Create a role for the PKI backend."""
         self._client.secrets.pki.create_or_update_role(
             name=role,
@@ -197,7 +197,7 @@ class Vault:
         )
         logger.info("Created a role for the PKI backend")
 
-    def is_pki_role_set(self, role: str, mount: str) -> bool:
+    def is_pki_role_set(self, *, role: str, mount: str) -> bool:
         """Check if the role is set for the PKI backend."""
         try:
             existing_roles = self._client.secrets.pki.list_roles(mount_point=mount)
