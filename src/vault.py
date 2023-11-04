@@ -80,7 +80,8 @@ class Vault:
     def is_api_available(self) -> bool:
         """Returns whether Vault is available."""
         try:
-            self._client.sys.read_health_status()
+            health_status = self._client.sys.read_health_status()
+            logger.info("Health status: %s", health_status)
         except requests.exceptions.ConnectionError:
             return False
         return True
@@ -135,6 +136,19 @@ class Vault:
     def is_secret_engine_enabled(self, *, path: str) -> bool:
         """Check if a PKI mount is enabled."""
         return path + "/" in self._client.sys.list_mounted_secrets_engines()
+
+    def is_active(self) -> bool:
+        """Check if Vault is active."""
+        try:
+            health_status = self._client.sys.read_health_status(standby_ok=False)
+            logger.info("Health status: %s", health_status)
+            if health_status['initialized'] and not health_status['sealed'] and not health_status['standby']:
+                return True
+        except hvac.exceptions.VaultDown:
+            return False
+        except hvac.exceptions.VaultStandby:
+            return False
+        return False
 
     def disable_pki_engine(self, *, path: str):
         """Disable the PKI engine."""

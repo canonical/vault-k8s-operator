@@ -434,11 +434,9 @@ class VaultCharm(CharmBase):
         vault.set_token(token=root_token)
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
-            event.defer()
             return
         if not vault.is_initialized():
             self.unit.status = WaitingStatus("Waiting for vault to be initialized")
-            event.defer()
             return
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
@@ -481,6 +479,9 @@ class VaultCharm(CharmBase):
         vault.set_token(token=root_token)
         if not vault.is_api_available():
             logger.error("Vault is not available, skipping")
+            return
+        if not vault.is_active():
+            logger.error("Vault is not active, skipping")
             return
         if not vault.is_secret_engine_enabled(path=PKI_MOUNT):
             vault.enable_pki_engine(path=PKI_MOUNT)
