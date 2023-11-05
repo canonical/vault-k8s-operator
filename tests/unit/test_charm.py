@@ -9,7 +9,7 @@ from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
 from ops import testing
-from ops.model import WaitingStatus
+from ops.model import ActiveStatus, WaitingStatus
 
 from charm import (
     CA_CERTIFICATE_JUJU_SECRET_LABEL,
@@ -214,6 +214,63 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(
             self.harness.charm.unit.status,
             WaitingStatus("Waiting for other units to provide their addresses"),
+        )
+
+    @patch("ops.model.Model.get_binding")
+    def test_given_not_leader_and_ca_not_set_when_configure_then_status_is_waiting(
+        self, patch_get_binding
+    ):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=False)
+        peer_relation_id = self._set_peer_relation()
+        other_unit_name = f"{self.app_name}/1"
+        self.harness.add_relation_unit(
+            relation_id=peer_relation_id, remote_unit_name=other_unit_name
+        )
+        self._set_other_node_api_address_in_peer_relation(
+            relation_id=peer_relation_id, unit_name=other_unit_name
+        )
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for CA certificate to be set in peer relation"),
+        )
+
+    @patch("ops.model.Model.get_binding")
+    def test_given_not_leader_and_init_secret_not_set_when_configure_then_status_is_waiting(
+        self, patch_get_binding
+    ):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=False)
+        peer_relation_id = self._set_peer_relation()
+        other_unit_name = f"{self.app_name}/1"
+        self.harness.add_relation_unit(
+            relation_id=peer_relation_id, remote_unit_name=other_unit_name
+        )
+        self._set_other_node_api_address_in_peer_relation(
+            relation_id=peer_relation_id, unit_name=other_unit_name
+        )
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for initialization secret to be set in peer relation"),
         )
 
     @patch("vault.Vault.enable_audit_device", new=Mock)
@@ -520,6 +577,90 @@ class TestCharm(unittest.TestCase):
             init_secret,
             {"roottoken": "root token", "unsealkeys": '["unseal key 1"]'},
         )
+
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("vault.Vault.is_active", new=Mock)
+    @patch("vault.Vault.audit_device_enabled", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("charm.generate_vault_ca_certificate")
+    @patch("ops.model.Model.get_binding")
+    def test_given_api_available_when_configure_then_status_is_active(
+        self,
+        patch_get_binding,
+        patch_generate_ca_certificate,
+        patch_generate_unit_certificate,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_initialize,
+    ):
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = False
+        patch_initialize.return_value = "root token", ["unseal key 1"]
+        patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
+        patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
+        self._set_peer_relation()
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            ActiveStatus(),
+        )
+
+    @patch("vault.Vault.enable_audit_device")
+    @patch("vault.Vault.is_active")
+    @patch("vault.Vault.audit_device_enabled")
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("charm.generate_vault_ca_certificate")
+    @patch("ops.model.Model.get_binding")
+    def test_given_audit_device_not_enabled_when_configure_then_audit_device_is_enabled(
+        self,
+        patch_get_binding,
+        patch_generate_ca_certificate,
+        patch_generate_unit_certificate,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_initialize,
+        patch_audit_device_enabled,
+        patch_is_active,
+        patch_enable_audit_device,
+    ):
+        patch_audit_device_enabled.return_value = False
+        patch_is_active.return_value = True
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = False
+        patch_initialize.return_value = "root token", ["unseal key 1"]
+        patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
+        patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
+        self._set_peer_relation()
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+
+        self.harness.charm.on.config_changed.emit()
+
+        patch_enable_audit_device.assert_called_with(device_type="file", path="stdout")
 
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
         root = self.harness.get_filesystem_root(self.container_name)
