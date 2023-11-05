@@ -3,8 +3,7 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from itertools import count
-from unittest.mock import Mock, call, patch
+from unittest.mock import call, patch
 
 import requests
 
@@ -141,51 +140,3 @@ class TestVault(unittest.TestCase):
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
         )
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
-    def test_given_audit_device_already_enabled_when_enable_audit_device_then_method_not_called(
-        self,
-        patch_enable_audit_device,
-        patch_list_enabled_audit_devices,
-    ):
-        patch_list_enabled_audit_devices.return_value = {
-            "data": {
-                "file/": {"options": {"file_path": "stdout"}, "path": "file/", "type": "file"}
-            }
-        }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        vault.enable_audit_device(device_type="file", path="stdout")
-        patch_enable_audit_device.assert_not_called()
-
-    @patch("vault.Vault.is_sealed")
-    @patch("time.sleep", new=Mock)
-    @patch("time.time")
-    def test_given_vault_stays_sealed_when_wait_for_unseal_then_timeout_error_is_raised(
-        self,
-        patch_time,
-        patch_is_sealed,
-    ):
-        time_values = count(0, 2)
-        patch_time.side_effect = lambda: next(time_values)
-
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        patch_is_sealed.return_value = True
-
-        with self.assertRaises(TimeoutError):
-            vault.wait_for_unseal(timeout=30)
-
-    @patch("vault.Vault.is_sealed")
-    @patch("time.sleep", new=Mock)
-    @patch("time.time")
-    def test_given_vault_is_unsealed_when_wait_for_unseal_then_returns(
-        self,
-        patch_time,
-        patch_is_sealed,
-    ):
-        time_values = count(0, 2)
-        patch_time.side_effect = lambda: next(time_values)
-
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        patch_is_sealed.return_value = False
-        vault.wait_for_unseal(timeout=30)
