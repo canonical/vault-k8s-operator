@@ -118,6 +118,7 @@ class TestVaultK8s:
         """
         ops_test.destructive_mode = False
         charm = await ops_test.build_charm(".")
+        assert charm is not None
         await self.deploy_charm(ops_test, charm)
 
     @pytest.mark.abort_on_fail

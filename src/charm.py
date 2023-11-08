@@ -39,7 +39,6 @@ from ops.charm import (
 from ops.main import main
 from ops.model import (
     ActiveStatus,
-    MaintenanceStatus,
     ModelError,
     Relation,
     Secret,
@@ -65,7 +64,6 @@ KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
-VAULT_INITIALIZATION_SECRET_ID = "vault-initialization-secret-id"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 
 
@@ -235,11 +233,11 @@ class VaultCharm(CharmBase):
             scheme=lambda: "https",
         )
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.vault_pebble_ready, self._on_config_changed)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(
-            self.on[PEER_RELATION_NAME].relation_created, self._on_peer_relation_created
-        )
+        self.framework.observe(self.on.update_status, self._configure)
+        self.framework.observe(self.on.vault_pebble_ready, self._configure)
+        self.framework.observe(self.on.config_changed, self._configure)
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
@@ -254,124 +252,13 @@ class VaultCharm(CharmBase):
 
         Sets pebble plan, initializes vault, enable audit device, and unseals vault.
         """
-        if self.unit.is_leader():
-            self._on_install_leader(event)
-        else:
-            self._on_install_non_leader(event)
-
-    def _on_install_leader(self, event: InstallEvent):
-        """Install event handler for leader unit.
-
-        This handler is responsible for:
-        - Deleting pre-existing Vault data
-        - Creating CA certificate
-        - Creating leader unit certificate
-        - Initializing vault
-
-        Args:
-            event: InstallEvent
-        """
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
             return
-        if not self._is_peer_relation_created():
-            self.unit.status = WaitingStatus("Waiting for peer relation to be created")
-            event.defer()
-            return
-        if not self._bind_address or not self._ingress_address:
-            self.unit.status = WaitingStatus(
-                "Waiting for bind and ingress addresses to be available"
-            )
-            event.defer()
-            return
-        self.unit.status = MaintenanceStatus("Initializing vault")
-        if not self._ca_certificate_pushed_to_workload():
-            ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self._set_ca_certificate_secret_in_peer_relation(
-                private_key=ca_private_key, certificate=ca_certificate
-            )
-            self._push_ca_certificate_to_workload(certificate=ca_certificate)
-            self._send_ca_cert()
-        if not self._unit_certificate_pushed_to_workload():
-            try:
-                ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-            except PeerSecretError:
-                self.unit.status = WaitingStatus("Waiting for vault CA certificate secret")
-                event.defer()
-                return
-            sans_ip = [self._bind_address, self._ingress_address]
-            private_key, certificate = generate_vault_unit_certificate(
-                subject=self._ingress_address,
-                sans_ip=sans_ip,
-                sans_dns=[socket.getfqdn()],
-                ca_certificate=ca_certificate.encode(),
-                ca_private_key=ca_private_key.encode(),
-            )
-            self._push_unit_certificate_to_workload(
-                certificate=certificate, private_key=private_key
-            )
-        self._delete_vault_data()
-        self._generate_vault_config_file()
-        self._set_pebble_plan()
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        if not vault.is_api_available():
-            self.unit.status = WaitingStatus("Waiting for vault to be available")
-            event.defer()
-            return
-        root_token, unseal_keys = vault.initialize()
-        self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
-        vault.set_token(token=root_token)
-        vault.unseal(unseal_keys=unseal_keys)
-
-    def _on_install_non_leader(self, event: InstallEvent):
-        """Install event handler for non-leader unit.
-
-        This handler is responsible for:
-        - Deleting pre-existing Vault data
-        - Creating unit certificate
-
-        Args:
-            event: InstallEvent
-        """
-        if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
-            event.defer()
-            return
-        if not self._is_peer_relation_created():
-            self.unit.status = WaitingStatus("Waiting for peer relation to be created")
-            event.defer()
-            return
-        if not self._bind_address or not self._ingress_address:
-            self.unit.status = WaitingStatus(
-                "Waiting for bind and ingress addresses to be available"
-            )
-            event.defer()
-            return
-        try:
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-        except PeerSecretError:
-            self.unit.status = WaitingStatus("Waiting for vault CA certificate secret")
-            event.defer()
-            return
-        self.unit.status = MaintenanceStatus("Initializing vault certificates")
-        if not self._ca_certificate_pushed_to_workload():
-            self._push_ca_certificate_to_workload(certificate=ca_certificate)
-        if not self._unit_certificate_pushed_to_workload():
-            sans_ip = [self._bind_address, self._ingress_address]
-            private_key, certificate = generate_vault_unit_certificate(
-                subject=self._ingress_address,
-                sans_ip=sans_ip,
-                sans_dns=[socket.getfqdn()],
-                ca_certificate=ca_certificate.encode(),
-                ca_private_key=ca_private_key.encode(),
-            )
-            self._push_unit_certificate_to_workload(
-                certificate=certificate, private_key=private_key
-            )
         self._delete_vault_data()
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+    def _configure(self, event: ConfigChangedEvent) -> None:
         """Handler triggered whenever there is a config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
@@ -379,53 +266,67 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
-            event.defer()
             return
         if not self._is_peer_relation_created():
             self.unit.status = WaitingStatus("Waiting for peer relation")
-            event.defer()
             return
-        try:
-            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            self.unit.status = WaitingStatus("Waiting for vault initialization secret")
-            event.defer()
+        if not self._bind_address or not self._ingress_address:
+            self.unit.status = WaitingStatus(
+                "Waiting for bind and ingress addresses to be available"
+            )
             return
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
-            event.defer()
             return
+        if not self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
+            self.unit.status = WaitingStatus(
+                "Waiting for CA certificate to be set in peer relation"
+            )
+            return
+        if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
+            self.unit.status = WaitingStatus(
+                "Waiting for initialization secret to be set in peer relation"
+            )
+            return
+        if self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
+            ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            self._set_ca_certificate_secret_in_peer_relation(
+                private_key=ca_private_key, certificate=ca_certificate
+            )
         if not self._ca_certificate_pushed_to_workload():
-            self.unit.status = WaitingStatus("Waiting for vault CA certificate to be available")
-            event.defer()
-            return
+            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+            self._push_ca_certificate_to_workload(certificate=ca_certificate)
         if not self._unit_certificate_pushed_to_workload():
-            self.unit.status = WaitingStatus("Waiting for vault unit certificate to be available")
-            event.defer()
-            return
-        self.unit.status = MaintenanceStatus("Preparing vault")
+            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+            sans_ip = [self._bind_address, self._ingress_address]
+            private_key, certificate = generate_vault_unit_certificate(
+                subject=self._ingress_address,
+                sans_ip=sans_ip,
+                sans_dns=[socket.getfqdn()],
+                ca_certificate=ca_certificate.encode(),
+                ca_private_key=ca_private_key.encode(),
+            )
+            self._push_unit_certificate_to_workload(
+                certificate=certificate, private_key=private_key
+            )
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        vault.set_token(token=root_token)
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
-            event.defer()
             return
-        if not vault.is_initialized():
-            self.unit.status = WaitingStatus("Waiting for vault to be initialized")
-            event.defer()
-            return
+        if self.unit.is_leader() and not vault.is_initialized():
+            root_token, unseal_keys = vault.initialize()
+            self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        vault.set_token(token=root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
-        vault.wait_for_unseal()
-        vault.enable_audit_device(device_type="file", path="stdout")
+        if vault.is_active() and not vault.audit_device_enabled(device_type="file", path="stdout"):
+            vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
+        self._send_ca_cert()
         self.unit.status = ActiveStatus()
-
-    def _on_peer_relation_created(self, event: RelationJoinedEvent) -> None:
-        """Handle relation-joined event for the replicas relation."""
-        self._set_peer_relation_node_api_address()
 
     def _on_remove(self, event: RemoveEvent):
         """Handler triggered when the charm is removed.
@@ -822,7 +723,7 @@ class VaultCharm(CharmBase):
             juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
         )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({VAULT_INITIALIZATION_SECRET_ID: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
 
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
@@ -831,15 +732,11 @@ class VaultCharm(CharmBase):
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
         try:
-            peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-            juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                "vault-initialization-secret-id"
-            )
-            juju_secret = self.model.get_secret(id=juju_secret_id)
+            juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
             content = juju_secret.get_content()
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name="vault-initialization-secret-id")
+            raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
@@ -869,7 +766,7 @@ class VaultCharm(CharmBase):
             rel_id: Relation id. If not given, update all relations.
         """
         send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
-        if self._vault_ca_certificate_is_stored:
+        if self._ca_certificate_set_in_peer_relation():
             secret = self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             secret_content = secret.get_content()
             ca = secret_content["certificate"]
@@ -884,18 +781,25 @@ class VaultCharm(CharmBase):
             for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
                 send_ca_cert.remove_certificate(relation.id)
 
-    @property
-    def _vault_ca_certificate_is_stored(self) -> bool:
-        """Returns whether CA certificate is stored in Juju secrets.
-
-        Returns:
-            bool: Whether CA is stored.
-        """
+    def _ca_certificate_set_in_peer_relation(self) -> bool:
+        """Returns whether CA certificate is stored in peer relation data."""
         try:
-            self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            return True
-        except SecretNotFoundError:
+            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+            if ca_private_key and ca_certificate:
+                return True
+        except PeerSecretError:
             return False
+        return False
+
+    def _initialization_secret_set_in_peer_relation(self) -> bool:
+        """Returns whether initialization secret is stored in peer relation data."""
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            if root_token and unseal_keys:
+                return True
+        except PeerSecretError:
+            return False
+        return False
 
     @property
     def _bind_address(self) -> Optional[str]:

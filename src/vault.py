@@ -5,7 +5,6 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-import time
 from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
@@ -48,27 +47,10 @@ class Vault:
         """Returns whether Vault is sealed."""
         return self._client.sys.is_sealed()
 
-    def wait_for_unseal(self, timeout: int = 30) -> None:
-        """Waits for Vault to be unsealed.
-
-        Expected to be called after attempting to unseal Vault.
-        If it times out, raises a TimeoutError.
-
-        Args:
-            timeout: Timeout in seconds.
-        """
-        initial_time = time.time()
-        while time.time() - initial_time < timeout:
-            if not self.is_sealed():
-                return
-            logger.info("Vault is sealed, waiting for unseal")
-            time.sleep(2)
-
-        # One more check after the loop to catch any edge cases.
-        if not self.is_sealed():
-            return
-
-        raise TimeoutError(f"Vault is still sealed {timeout} seconds")
+    def is_active(self) -> bool:
+        """Returns whether Vault is active."""
+        health_status = self._client.sys.read_health_status()
+        return health_status.status_code == 200
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
@@ -127,21 +109,22 @@ class Vault:
             mount_policy = fd.read()
         self._client.sys.create_or_update_policy(policy, mount_policy.format(mount=mount))
 
+    def audit_device_enabled(self, device_type: str, path: str) -> bool:
+        """Check if audit device is enabled."""
+        audit_devices = self._client.sys.list_enabled_audit_devices()
+        if f"{device_type}/" not in audit_devices["data"].keys():
+            return False
+        if audit_devices["data"][f"{device_type}/"]["options"]["file_path"] != path:
+            return False
+        return True
+
     def enable_audit_device(self, device_type: str, path: str) -> None:
         """Enable a new audit device at the supplied path."""
-        if device_type + "/" not in self._client.sys.list_enabled_audit_devices()["data"].keys():
-            if (
-                self._client.sys.enable_audit_device(
-                    device_type=device_type,
-                    options={"file_path": path},
-                ).status_code
-                != 204
-            ):
-                logger.error(
-                    "Failed to enable audit device of type: %s, using path: %s", device_type, path
-                )
-            logger.info("Enabled audit device of type: %s, using path: %s", device_type, path)
-        logger.debug("Audit device of type: %s, using path: %s already enabled", device_type, path)
+        self._client.sys.enable_audit_device(
+            device_type=device_type,
+            options={"file_path": path},
+        )
+        logger.info("Enabled audit device %s", device_type)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
