@@ -782,7 +782,7 @@ class VaultCharm(CharmBase):
                 send_ca_cert.remove_certificate(relation.id)
 
     def _ca_certificate_set_in_peer_relation(self) -> bool:
-        """Returns whether CA certificate is stored in Juju secrets."""
+        """Returns whether CA certificate is stored in peer relation data."""
         try:
             ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
             if ca_private_key and ca_certificate:
