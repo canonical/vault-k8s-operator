@@ -792,7 +792,7 @@ class VaultCharm(CharmBase):
         return False
 
     def _initialization_secret_set_in_peer_relation(self) -> bool:
-        """Returns whether initialization secret is stored in Juju secrets."""
+        """Returns whether initialization secret is stored in peer relation data."""
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if root_token and unseal_keys:
