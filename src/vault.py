@@ -90,18 +90,25 @@ class Vault:
 
     def enable_approle_auth(self) -> None:
         """Enable the AppRole authentication method in Vault, if not already enabled."""
-        if "approle/" not in self._client.sys.list_auth_methods():
-            self._client.sys.enable_auth_method("approle")
-            logger.info("Enabled approle auth method")
+        self._client.sys.enable_auth_method("approle")
+        logger.info("Enabled approle auth method")
+
+    def approle_auth_enabled(self) -> bool:
+        """Check if AppRole auth method is enabled."""
+        return "approle/" in self._client.sys.list_auth_methods()
 
     def configure_kv_mount(self, name: str):
         """Ensure a KV mount is enabled."""
-        if name + "/" not in self._client.sys.list_mounted_secrets_engines():
-            self._client.sys.enable_secrets_engine(
-                backend_type="kv-v2",
-                description="Charm created KV backend",
-                path=name,
-            )
+        self._client.sys.enable_secrets_engine(
+            backend_type="kv-v2",
+            description="Charm created KV backend",
+            path=name,
+        )
+        logger.info("Enabled KV mount %s", name)
+
+    def kv_mount_configured(self, name: str) -> bool:
+        """Check if KV mount is configured."""
+        return name + "/" in self._client.sys.list_mounted_secrets_engines()
 
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""
@@ -126,7 +133,7 @@ class Vault:
         )
         logger.info("Enabled audit device %s", device_type)
 
-    def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
+    def configure_approle(self, *, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
         self._client.auth.approle.create_or_update_approle(
             name,

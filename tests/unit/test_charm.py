@@ -662,6 +662,77 @@ class TestCharm(unittest.TestCase):
 
         patch_enable_audit_device.assert_called_with(device_type="file", path="stdout")
 
+    @patch("vault.Vault.generate_role_secret_id")
+    @patch("vault.Vault.configure_approle")
+    @patch("vault.Vault.configure_kv_policy")
+    @patch("vault.Vault.configure_kv_mount")
+    @patch("vault.Vault.kv_mount_configured")
+    @patch("vault.Vault.enable_approle_auth")
+    @patch("vault.Vault.approle_auth_enabled")
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("vault.Vault.is_active")
+    @patch("vault.Vault.audit_device_enabled")
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.initialize")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("charm.generate_vault_ca_certificate")
+    @patch("ops.model.Model.get_binding")
+    def test_given_kv_relations_when_configure_then_kv_mount_is_created(
+        self,
+        patch_get_binding,
+        patch_generate_ca_certificate,
+        patch_generate_unit_certificate,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_initialize,
+        patch_audit_device_enabled,
+        patch_is_active,
+        patch_approle_auth_enabled,
+        patch_enable_approle_auth,
+        patch_kv_mount_configured,
+        patch_configure_kv_mount,
+        patch_configure_kv_policy,
+        patch_configure_approle,
+        patch_generate_role_secret_id,
+    ):
+        patch_approle_auth_enabled.return_value = False
+        patch_audit_device_enabled.return_value = False
+        patch_kv_mount_configured.return_value = False
+        patch_is_active.return_value = True
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = False
+        patch_configure_approle.return_value = "approle role id"
+        patch_generate_role_secret_id.return_value = "role secret id"
+        patch_initialize.return_value = "root token", ["unseal key 1"]
+        patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
+        patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
+        mount_suffix = "dummy"
+        self._set_peer_relation()
+        (
+            app_name,
+            _,
+            _,
+            rel_id,
+            _,
+        ) = self.setup_vault_kv_relation(nb_units=1)
+        self.harness.update_relation_data(rel_id, app_name, {"mount_suffix": mount_suffix})
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+
+        self.harness.charm.on.config_changed.emit()
+
+        patch_enable_approle_auth.assert_called()
+        patch_configure_approle.assert_called()
+        patch_configure_kv_mount.assert_called_with(f"charm-consumer-{mount_suffix}")
+        patch_configure_kv_policy.assert_called_with(
+            f"charm-consumer-{mount_suffix}-consumer-0", f"charm-consumer-{mount_suffix}"
+        )
+
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="vault-raft", attach=True)
@@ -760,7 +831,6 @@ class TestCharm(unittest.TestCase):
 
     def setup_vault_kv_relation(self, nb_units: int = 1) -> tuple:
         app_name = "consumer"
-        unit_name = app_name + "/0"
         relation_name = "vault-kv"
 
         host_ip = "10.20.20.1"
@@ -789,6 +859,8 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_ca_certificate")
     @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_mount")
     @patch("charms.vault_k8s.v0.vault_kv.VaultKvProvides.set_vault_url")
+    @patch("vault.Vault.kv_mount_configured")
+    @patch("vault.Vault.approle_auth_enabled")
     @patch("vault.Vault.generate_role_secret_id")
     @patch("vault.Vault.configure_approle")
     @patch("vault.Vault.configure_kv_policy")
@@ -803,11 +875,15 @@ class TestCharm(unittest.TestCase):
         ___,
         configure_approle,
         generate_role_secret_id,
+        approle_auth_enabled,
+        kv_mount_configured,
         set_vault_url,
         set_mount,
         set_ca_certificate,
         set_unit_credentials,
     ):
+        approle_auth_enabled.return_value = False
+        kv_mount_configured.return_value = False
         self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(
@@ -884,6 +960,8 @@ class TestCharm(unittest.TestCase):
         set_ca_certificate.assert_not_called()
         set_unit_credentials.assert_not_called()
 
+    @patch("vault.Vault.kv_mount_configured")
+    @patch("vault.Vault.approle_auth_enabled")
     @patch("vault.Vault.read_role_secret")
     @patch("vault.Vault.generate_role_secret_id")
     @patch("vault.Vault.configure_approle")
@@ -900,7 +978,11 @@ class TestCharm(unittest.TestCase):
         configure_approle,
         generate_role_secret_id,
         read_role_secret,
+        approle_auth_enabled,
+        kv_mount_configured,
     ):
+        approle_auth_enabled.return_value = False
+        kv_mount_configured.return_value = False
         self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
         self._set_initialization_secret_in_peer_relation(

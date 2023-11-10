@@ -312,13 +312,20 @@ class VaultCharm(CharmBase):
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        logger.info("CA Certificate path: %s", self._get_ca_cert_location_in_charm())
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             return
         if self.unit.is_leader() and not vault.is_initialized():
             root_token, unseal_keys = vault.initialize()
             self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
-        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            self.unit.status = WaitingStatus(
+                "Waiting for initialization secret to be set in peer relation"
+            )
+            return
         vault.set_token(token=root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
@@ -326,6 +333,7 @@ class VaultCharm(CharmBase):
             vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
         self._send_ca_cert()
+        self._configure_kv_mount_for_all_relations()
         self.unit.status = ActiveStatus()
 
     def _on_remove(self, event: RemoveEvent):
@@ -363,56 +371,58 @@ class VaultCharm(CharmBase):
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handler triggered when a new vault-kv client is attached."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can configure a vault-kv client, skipping")
-            return
-
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created, deferring event")
-            event.defer()
-            return
-
-        try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault initialization secret not set in peer relation, deferring event")
-            event.defer()
-            return
-
-        try:
-            _, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault CA certificate secret not set in peer relation, deferring event")
-            event.defer()
-            return
-
         relation = self.model.get_relation(event.relation_name, event.relation_id)
-
         if relation is None or relation.app is None:
             logger.warning(
                 "Relation or remote application is missing,"
                 "this should not happen, skipping event"
             )
             return
+        self._configure_kv_mount(relation=relation, mount_suffix=event.mount_suffix)
 
+    def _configure_kv_mount_for_all_relations(self):
+        """Configure kv mount for all relations."""
+        for relation in self.model.relations.get(KV_RELATION_NAME, []):
+            mount_suffix = self.vault_kv.get_mount_suffix(relation)
+            if not mount_suffix:
+                return
+            self._configure_kv_mount(relation=relation, mount_suffix=mount_suffix)
+
+    def _configure_kv_mount(self, relation: Relation, mount_suffix: str):
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can configure a vault-kv client, skipping")
+            return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created, skipping")
+            return
+        if not relation.app:
+            logger.debug("Remote application is missing, skipping")
+            return
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.debug("Vault initialization secret not set in peer relation, skipping")
+            return
+        try:
+            _, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+        except PeerSecretError:
+            logger.debug("Vault CA certificate secret not set in peer relation, skipping")
+            return
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
-
         if not vault.is_api_available():
-            logger.debug("Vault is not available, deferring event")
-            event.defer()
+            logger.debug("Vault is not available, skipping")
             return
-
-        vault.enable_approle_auth()
-
-        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
-        vault.configure_kv_mount(mount)
-        self.vault_kv.set_mount(relation, mount)
+        if not vault.approle_auth_enabled():
+            vault.enable_approle_auth()
+        mount = f"charm-{relation.app.name}-{mount_suffix}"
+        if not vault.kv_mount_configured(mount):
+            vault.configure_kv_mount(mount)
+            self.vault_kv.set_mount(relation, mount)
         vault_url = self._get_relation_api_address(relation)
-        if vault_url is not None:
+        if vault_url:
             self.vault_kv.set_vault_url(relation, vault_url)
         self.vault_kv.set_ca_certificate(relation, ca_certificate)
-
         nonces = []
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")
@@ -463,7 +473,9 @@ class VaultCharm(CharmBase):
         """Ensures a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
         vault.configure_kv_policy(policy_name, mount)
-        role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+        role_id = vault.configure_approle(
+            name=role_name, cidrs=[egress_subnet], policies=[policy_name]
+        )
         secret = self._create_or_update_kv_secret(
             vault,
             relation,

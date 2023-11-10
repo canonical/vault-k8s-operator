@@ -351,6 +351,12 @@ class VaultKvProvides(ops.Object):
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
+    def get_mount_suffix(self, relation: ops.Relation) -> Optional[str]:
+        """Get the mount_suffix from the relation."""
+        if not relation.app:
+            return None
+        return relation.data[relation.app].get("mount_suffix")
+
 
 class VaultKvConnectedEvent(ops.EventBase):
     """VaultKvConnectedEvent Event."""

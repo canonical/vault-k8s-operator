@@ -115,18 +115,6 @@ class TestVault(unittest.TestCase):
 
         patch_enable_auth_method.assert_called_with("approle")
 
-    @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
-    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
-    def test_given_approle_in_auth_methods_when_enable_approle_auth_then_approle_is_not_added_to_auth_methods(  # noqa: E501
-        self, patch_list_auth_methods, patch_enable_auth_method
-    ):
-        patch_list_auth_methods.return_value = {"approle/": "whatever"}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        vault.enable_approle_auth()
-
-        patch_enable_auth_method.assert_not_called()
-
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
     @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
     def test_given_audit_device_is_not_yet_enabled_when_enable_audit_device_then_device_is_enabled(
@@ -194,3 +182,32 @@ class TestVault(unittest.TestCase):
         }
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
+
+    @patch("hvac.api.auth_methods.approle.AppRole.read_role_id")
+    @patch("hvac.api.auth_methods.approle.AppRole.create_or_update_approle")
+    def test_given_when_configure_approle_then_(
+        self, patch_create_or_update_approle, patch_read_role_id
+    ):
+        name = "whatever name"
+        cidrs = ["whatever cidr 0", "whatever cidr 1"]
+        policies = ["whatever policy 0", "whatever policy 1"]
+        returned_role_id = "whatever role id"
+        patch_read_role_id.return_value = {"data": {"role_id": returned_role_id}}
+
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+
+        returned_role_id = vault.configure_approle(
+            name=name,
+            cidrs=cidrs,
+            policies=policies,
+        )
+
+        patch_create_or_update_approle.assert_called_with(
+            name,
+            token_ttl="60s",
+            token_max_ttl="60s",
+            token_policies=policies,
+            bind_secret_id="true",
+            token_bound_cidrs=cidrs,
+        )
+        self.assertEqual(returned_role_id, "whatever role id")
