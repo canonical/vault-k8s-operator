@@ -1,0 +1,21 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+create-secret:
+  description: Creates a secret in Vault
+  params:
+    key:
+      description: The key to create
+      type: string
+    value:
+      description: The value to create
+      type: string
+  required: [key, value]
+
+get-secret:
+  description: Gets a secret from Vault
+  params:
+    key:
+      description: The key to get
+      type: string
+  required: [key]

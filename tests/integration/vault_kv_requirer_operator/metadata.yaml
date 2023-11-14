@@ -1,0 +1,22 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: vault-kv-requirer
+
+display-name: Vault KV Requirer
+summary: Vault KV Requirer
+description: Vault KV Requirer
+
+assumes:
+  - juju >= 3.1
+  - k8s-api
+
+requires:
+  vault-kv:
+    interface: vault-kv
+    limit: 1
+
+storage:
+  certs:
+    type: filesystem
+    minimum-size: 5M

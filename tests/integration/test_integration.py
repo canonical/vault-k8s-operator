@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import shutil
 import time
 from os.path import abspath
 from pathlib import Path
@@ -20,6 +21,14 @@ APPLICATION_NAME = "vault-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
+VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
+
+VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
+VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
+
+
+def copy_lib_content() -> None:
+    shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
 
 
 class TestVaultK8s:
@@ -231,6 +240,55 @@ class TestVaultK8s:
         # 503: {{Description: "sealed"}}
         assert str(response) == "<Response [200]>" or "<Response [429]>"
         os.remove("ca_file.txt")
+
+    async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
+        self, ops_test: OpsTest
+    ):
+        copy_lib_content()
+        vault_kv_requirer_path = await ops_test.build_charm(f"{VAULT_KV_REQUIRER_CHARM_DIR}/")
+        assert ops_test.model
+        await ops_test.model.deploy(
+            vault_kv_requirer_path,
+            application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
+            num_units=1,
+        )
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:vault-kv",
+            relation2=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}:vault-kv",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_KV_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is_created(
+        self, ops_test
+    ):
+        secret_key = "test-key"
+        secret_value = "test-value"
+        vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_APPLICATION_NAME]
+        vault_kv_unit = vault_kv_application.units[0]
+        vault_kv_create_secret_action = await vault_kv_unit.run_action(
+            action_name="create-secret",
+            key=secret_key,
+            value=secret_value,
+        )
+
+        await ops_test.model.get_action_output(
+            action_uuid=vault_kv_create_secret_action.entity_id, wait=30
+        )
+
+        vault_kv_get_secret_action = await vault_kv_unit.run_action(
+            action_name="get-secret",
+            key=secret_key,
+        )
+
+        action_output = await ops_test.model.get_action_output(
+            action_uuid=vault_kv_get_secret_action.entity_id, wait=30
+        )
+
+        assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
