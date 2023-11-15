@@ -176,7 +176,7 @@ juju integrate vault-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
 
 ## OCI Images
 
-- Vault: ghcr.io/canonical/vault:1.15.0
+- Vault: ghcr.io/canonical/vault:1.15.2
 
 <!-- LINKS -->
 
