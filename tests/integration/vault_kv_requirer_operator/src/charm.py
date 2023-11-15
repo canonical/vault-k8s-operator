@@ -59,19 +59,15 @@ class VaultKVRequirerCharm(CharmBase):
 
     def _on_kv_ready(self, event: VaultKvReadyEvent):
         """Store the Vault KV credentials in a secret."""
-        relation = self.model.get_relation(event.relation_name, event.relation_id)
-        if relation is None:
+        if (relation := self.model.get_relation(event.relation_name, event.relation_id)) is None:
             return
-        ca_certificate = self.vault_kv.get_ca_certificate(relation)
-        if not ca_certificate:
+        if not (ca_certificate := self.vault_kv.get_ca_certificate(relation)):
             logger.error("CA certificate not found")
             return
-        vault_url = self.vault_kv.get_vault_url(relation)
-        if not vault_url:
+        if not (vault_url := self.vault_kv.get_vault_url(relation)):
             logger.error("Vault URL not found")
             return
-        mount = self.vault_kv.get_mount(relation)
-        if not mount:
+        if not (mount := self.vault_kv.get_mount(relation)):
             logger.error("Mount not found")
             return
         unit_credentials = self.vault_kv.get_unit_credentials(relation)
