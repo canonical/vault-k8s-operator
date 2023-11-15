@@ -2,5 +2,3 @@ ops~=2.8.0
 hvac
 pydantic
 pytest-interface-tester
-requests
-jsonschema

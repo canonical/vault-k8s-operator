@@ -13,9 +13,5 @@ bases:
 
 parts:
   charm:
-    build-packages:
-      - cargo
-      - libffi-dev
-      - libssl-dev
-      - pkg-config
-      - rustc
+    charm-binary-python-packages:
+      - pydantic
