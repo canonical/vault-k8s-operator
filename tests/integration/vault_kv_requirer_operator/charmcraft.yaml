@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: "charm"
+bases:
+  - build-on:
+    - name: "ubuntu"
+      channel: "22.04"
+    run-on:
+    - name: "ubuntu"
+      channel: "22.04"
+
+parts:
+  charm:
+    charm-binary-python-packages:
+      - pydantic
