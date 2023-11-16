@@ -141,6 +141,25 @@ class TestVault(unittest.TestCase):
             device_type="file", options={"file_path": "stdout"}
         )
 
+    @patch("hvac.api.system_backend.Raft.take_raft_snapshot")
+    def test_given_raft_backend_when_create_snapshot_then_take_raft_snapshot_is_called(
+        self,
+        patch_take_raft_snapshot,
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.create_snapshot()
+        patch_take_raft_snapshot.assert_called_once()
+
+    @patch("hvac.api.system.backend.Raft.restore_raft_snapshot")
+    def test_given_snapshot_when_restore_snapshot_then_restore_raft_snapshot_is_called(
+        self,
+        patch_restore_raft_snapshot,
+    ):
+        snapshot = b"whatever snapshot"
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.restore_snapshot(snapshot=snapshot)
+        patch_restore_raft_snapshot.assert_called_once_with(snapshot=snapshot)
+
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_health_status_returns_200_when_is_active_then_return_true(
         self, patch_health_status
