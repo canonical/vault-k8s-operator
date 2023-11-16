@@ -15,6 +15,7 @@ import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -65,6 +66,7 @@ CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+S3_RELATION_NAME = "s3-parameters"
 
 
 def render_vault_config_file(
@@ -232,6 +234,7 @@ class VaultCharm(CharmBase):
             strip_prefix=True,
             scheme=lambda: "https",
         )
+        self.s3 = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.vault_pebble_ready, self._configure)
@@ -741,6 +744,10 @@ class VaultCharm(CharmBase):
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _is_relation_created(self, relation_name: str) -> bool:
+        """Check if the relation is created."""
+        return bool(self.model.get_relation(relation_name))
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
