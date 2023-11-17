@@ -1,4 +1,5 @@
 # Vault Operator (Kubernetes)
+[![CharmHub Badge](https://charmhub.io/vault-k8s/badge.svg)](https://charmhub.io/vault-k8s)
 
 Vault is a tool for securely managing secrets used in modern computing (e.g. passwords, certificates, API keys).
 
