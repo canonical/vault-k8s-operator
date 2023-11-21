@@ -54,7 +54,7 @@ Running operation 1 with 1 task
   - task 2 on unit-traefik-k8s-0
 
 Waiting for task 2...
-proxied-endpoints: '{"vault-k8s": {"url": "https://10.0.0.4/vault-vault-k8s"}}'
+proxied-endpoints: '{"vault-k8s": {"url": "https://<external-hostname>/vault-vault-k8s"}}'
 ```
 
 You should now be able to access the Vault using the URL in the action output.
@@ -148,7 +148,7 @@ ck0i0h3q457c7bgte4kg:
     [...]
 ```
 
-Copy the CA certificate content into a file and set the `VAULT_CACERT` environment variable to reference this file:
+Copy the CA certificate content into a file and set the `VAULT_CAPATH` environment variable to reference this file:
 
 ```bash
 export VAULT_CAPATH=/path/to/vault_ca.pem
@@ -157,7 +157,7 @@ export VAULT_CAPATH=/path/to/vault_ca.pem
 Identify the vault address by setting the `VAULT_ADDR` environment variable using the Vault URL which is retrieved through `show-proxied-endpoints` action.
 
 ```bash
-export VAULT_ADDR="https://10.0.0.4/vault-vault-k8s"
+export VAULT_ADDR="https://<external-hostname>/vault-vault-k8s"
 ```
 
 You can now run vault commands against the vault unit.
