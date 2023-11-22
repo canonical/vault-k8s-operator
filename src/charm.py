@@ -58,7 +58,6 @@ from vault import Vault
 logger = logging.getLogger(__name__)
 
 VAULT_STORAGE_PATH = "/vault/raft"
-VAULT_CONTAINER_NAME = "vault"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
@@ -465,7 +464,7 @@ class VaultCharm(CharmBase):
         new_layer = self._loki_log_target_layer(self._logging.loki_endpoints[0])
         logger.info("Created log forwarding layer:\n %s", new_layer)
         self._container.add_layer(LOKI_LOG_FORWARDING_LAYER_NAME, new_layer, combine=True)
-        self._container.restart(VAULT_CONTAINER_NAME)
+        self._container.restart(self._service_name)
         logger.info("Loki logging layer added for endpoint %s", self._logging.loki_endpoints[0])
         logger.info("Final plan is:\n%s", self._container.get_plan())
 
