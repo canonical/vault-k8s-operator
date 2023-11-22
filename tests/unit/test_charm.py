@@ -998,3 +998,137 @@ class TestCharm(unittest.TestCase):
         )
 
         self.assertNotIn("ca", relation_data)
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.create_snapshot", new=Mock)
+    @patch("vault.Vault.unseal")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_is_initialized_when_create_raft_snapshot_then_vault_is_unsealed(
+        self,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_unseal,
+    ):
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = True
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self.harness.charm._create_raft_snapshot()
+        patch_unseal.assert_called_once()
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.create_snapshot")
+    def test_given_vault_is_initialized_when_create_raft_snapshot_then_snapshot_is_created(
+        self,
+        patch_create_snapshot,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_api_available.return_value = True
+        patch_is_initialized.return_value = True
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self.harness.charm._create_raft_snapshot()
+        patch_create_snapshot.assert_called_once()
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.create_snapshot")
+    def test_given_vault_is_not_initialized_when_create_raft_snapshot_then_snapshot_is_not_created(
+        self,
+        patch_create_snapshot,
+        patch_get_binding,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = False
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.charm._create_raft_snapshot()
+        patch_create_snapshot.assert_not_called()
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.create_snapshot")
+    def test_given_vault_api_not_available_when_create_raft_snapshot_then_snapshot_is_not_created(
+        self,
+        patch_create_snapshot,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = False
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.charm._create_raft_snapshot()
+        patch_create_snapshot.assert_not_called()
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("ops.model.Model.get_binding")
+    @patch("vault.Vault.create_snapshot")
+    def test_given_vault_initialization_secret_not_available_when_create_raft_snapshot_then_snapshot_is_not_created(
+        self,
+        patch_create_snapshot,
+        patch_get_binding,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self.harness.charm._create_raft_snapshot()
+        patch_create_snapshot.assert_not_called()
+
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
