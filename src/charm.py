@@ -9,11 +9,17 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
+import yaml
 from typing import Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
+)
+from charms.loki_k8s.v0.loki_push_api import (
+    LokiPushApiConsumer,
+    LokiPushApiEndpointJoined,
+    LokiPushApiEndpointDeparted,
 )
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
@@ -52,6 +58,7 @@ from vault import Vault
 logger = logging.getLogger(__name__)
 
 VAULT_STORAGE_PATH = "/vault/raft"
+VAULT_CONTAINER_NAME = "vault"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
@@ -65,6 +72,7 @@ CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+LOKI_LOG_FORWARDING_LAYER_NAME = "loki-log-forwarding"
 
 
 def render_vault_config_file(
@@ -226,6 +234,7 @@ class VaultCharm(CharmBase):
                 }
             ],
         )
+        self._logging = LokiPushApiConsumer(charm=self)
         self.ingress = IngressPerAppRequirer(
             charm=self,
             port=self.VAULT_PORT,
@@ -245,6 +254,13 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
             self._on_send_ca_cert_relation_joined,
+        )
+        self.framework.observe(
+            self._logging.on.loki_push_api_endpoint_joined, self._on_loki_push_api_endpoint_joined
+        )
+        self.framework.observe(
+            self._logging.on.loki_push_api_endpoint_departed,
+            self._on_loki_push_api_endpoint_departed,
         )
 
     def _on_install(self, event: InstallEvent):
@@ -430,6 +446,35 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _on_loki_push_api_endpoint_joined(
+        self, event: LokiPushApiEndpointJoined
+    ):  # TODO: change to relation changed instead of joined somehow
+        """Adds a layer to forward logs to loki and restarts the vault service"""
+        if len(self._logging.loki_endpoints) < 1:
+            logger.warning("Loki endpoints aren't ready yet. Deferring event.")
+            event.defer()
+            return
+
+        if len(self._logging.loki_endpoints) > 1:
+            logger.warning(
+                "Multiple targets not supported. Logs will be forwarded to the first available endpoint."
+            )
+
+        logger.warning("Creating new layer for loki")
+        new_layer = self._loki_log_target_layer(self._logging.loki_endpoints[0])
+        logger.info("Created log forwarding layer:\n %s", new_layer)
+        self._container.add_layer(LOKI_LOG_FORWARDING_LAYER_NAME, new_layer, combine=True)
+        self._container.restart(VAULT_CONTAINER_NAME)
+        logger.info("Loki logging layer added for endpoint %s", self._logging.loki_endpoints[0])
+        logger.info("Final plan is:\n%s", self._container.get_plan())
+
+    def _on_loki_push_api_endpoint_departed(self, event: LokiPushApiEndpointDeparted):
+        """Removes the log forwarding layer and restarts the vault service"""
+        self._container.add_layer(LOKI_LOG_FORWARDING_LAYER_NAME, Layer(), combine=True)
+        self._container.replan()
+        logger.info("Loki log forwarding removed from plan")
+        logger.info("Final plan is %s", self._container.get_plan())
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -854,6 +899,23 @@ class VaultCharm(CharmBase):
                 },
             }
         )
+
+    def _loki_log_target_layer(self, endpoint) -> str:
+        """Returns a layer with an added loki log forwarding service"""
+        # RFC: The Layer object doesn't accept adding a log target here
+        log_targets = {
+            "log-targets": {
+                "loki": {
+                    "override": "replace",
+                    "type": "loki",
+                    "location": endpoint,
+                    "services": "all",
+                    # RFC: Labels?
+                }
+            }
+        }
+
+        return Layer(log_targets)
 
     def _set_peer_relation_node_api_address(self) -> None:
         """Set the unit address in the peer relation."""
