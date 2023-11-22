@@ -1,0 +1,7 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+create-backup:
+  description: >-
+    Creates a snapshot of the Raft backend and saves it to the S3 storage.
+    Returns backup ID.

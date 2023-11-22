@@ -6,12 +6,15 @@
 
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
+import datetime
 import json
 import logging
 import socket
 from typing import Dict, List, Optional, Tuple
 
+import boto3  # type: ignore[import-untyped]
 import hcl  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -31,6 +34,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
+    ActionEvent,
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
@@ -242,6 +246,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -430,6 +435,98 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _on_create_backup_action(self, event: ActionEvent) -> None:
+        """Handles create-backup action.
+
+        Creates backup and stores it in S3 bucket.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self._is_relation_created(S3_RELATION_NAME):
+            event.fail(message="S3 relation not created. Failed to perform backup operation.")
+            return
+
+        if not self.unit.is_leader():
+            event.fail(message="Only leader unit can perform backup operations.")
+            return
+
+        s3_parameters, missing_parameters = self._retrieve_s3_parameters()
+        if missing_parameters:
+            event.fail(message="S3 parameters not set.")
+            return
+
+        if not (session := self._create_s3_session(s3_parameters)):
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            self._create_s3_bucket(
+                session=session,
+                region=s3_parameters["region"],
+                bucket_name=s3_parameters["bucket"],
+                endpoint=s3_parameters["endpoint"],
+            )
+        except (ValueError, KeyError, ClientError) as e:
+            logger.error("Failed to create S3 bucket: %s", e)
+            event.fail(message="Failed to create S3 bucket.")
+            return
+        if not (snapshot := self._create_raft_snapshot()):
+            event.fail(message="Failed to create snapshot.")
+            return
+        if not (
+            backup_key := self._upload_byte_content_to_s3(
+                session=session,
+                content=snapshot,
+                bucket_name=s3_parameters["bucket"],
+                endpoint=s3_parameters["endpoint"],
+            )
+        ):
+            event.fail(message="Failed to upload backup to S3 bucket.")
+            return
+
+        event.set_results({"backup-id": backup_key})
+
+    def _upload_byte_content_to_s3(
+        self,
+        session: boto3.session.Session,
+        content: bytes,
+        bucket_name: str,
+        endpoint: str,
+    ) -> Optional[str]:
+        """Uploads the provided contents to the provided S3 bucket.
+
+        Args:
+            content: The content to upload to S3
+            s3_path: The path to which to upload the content
+            s3_parameters: A dictionary containing the S3 parameters
+                The following are expected keys in the dictionary: bucket, region,
+                endpoint, access-key and secret-key
+
+        Returns:
+            str: The S3 key of the uploaded content.
+        """
+        key = self._get_backup_key()
+        try:
+            s3 = session.resource("s3", endpoint_url=endpoint)
+            bucket = s3.Bucket(bucket_name)
+            bucket.put_object(Key=key, Body=content)
+            logger.info("Uploading content to bucket %s", bucket_name)
+        except Exception as e:
+            logger.warning("Error uploading content to bucket %s: %s", bucket_name, e)
+            return None
+
+        return key
+
+    def _get_backup_key(self) -> str:
+        """Returns the backup key.
+
+        Returns:
+            str: The backup key
+        """
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        return f"vault-backup-{self.model.name}-{timestamp}"
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -745,6 +842,120 @@ class VaultCharm(CharmBase):
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
+
+    def _create_s3_session(self, s3_parameters: dict) -> Optional[boto3.session.Session]:
+        """Creates S3 session.
+
+        Args:
+            s3_parameters: Dictionary of the S3 parameters.
+
+        Returns:
+            boto3.session.Session: S3 session.
+        """
+        try:
+            session = boto3.session.Session(
+                aws_access_key_id=s3_parameters["access-key"],
+                aws_secret_access_key=s3_parameters["secret-key"],
+                region_name=s3_parameters["region"],
+            )
+            session.resource("s3", endpoint_url=s3_parameters["endpoint"])
+            return session
+        except Exception as e:
+            logger.warning("Error creating S3 session: %s", e)
+            return None
+
+    def _retrieve_s3_parameters(self) -> Tuple[Dict, List[str]]:
+        """Retrieve S3 parameters from the S3 integrator relation."""
+        s3_parameters = self.s3.get_s3_connection_info()
+        required_parameters = [
+            "bucket",
+            "access-key",
+            "secret-key",
+            "endpoint",
+        ]
+        missing_required_parameters = [
+            param for param in required_parameters if param not in s3_parameters
+        ]
+        if missing_required_parameters:
+            logger.warning(
+                "Missing required S3 parameters in relation with S3 integrator: %s",
+                missing_required_parameters,
+            )
+            return {}, missing_required_parameters
+
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+
+        return s3_parameters, []
+
+    def _is_s3_bucket_created(
+        self,
+        session: boto3.session.Session,
+        region: str,
+        bucket_name: str,
+        endpoint: str,
+    ) -> bool:
+        """Check if the S3 bucket is created.
+
+        Args:
+            session: S3 session.
+            region: S3 region.
+            bucket_name: S3 bucket name.
+            endpoint: S3 endpoint.
+
+        Returns:
+            bool: Whether the S3 bucket is created.
+        """
+        try:
+            s3 = session.resource("s3", endpoint_url=endpoint)
+        except (ValueError, KeyError) as e:
+            logger.exception("Failed to create connect to session '%s' in region=%s.", region)
+            raise e
+        try:
+            bucket = s3.Bucket(bucket_name)
+            bucket.meta.client.head_bucket(Bucket=bucket_name)
+            logger.info("Bucket %s exists.", bucket_name)
+            return True
+        except ClientError:
+            logger.warning("Bucket %s doesn't exist or you don't have access to it.", bucket_name)
+            return False
+
+    def _create_s3_bucket(
+        self,
+        session: boto3.session.Session,
+        region: str,
+        bucket_name: str,
+        endpoint: str,
+    ) -> None:
+        """Create S3 bucket.
+
+        If the bucket already exists, it will be skipped.
+
+        Args:
+            session: S3 session.
+            region: S3 region.
+            bucket_name: S3 bucket name.
+            endpoint: S3 endpoint.
+        """
+        try:
+            s3 = session.resource("s3", endpoint_url=endpoint)
+        except (ValueError, KeyError) as e:
+            logger.exception("Failed to create connect to session '%s' in region=%s.", region)
+            raise e
+        try:
+            if not self._is_s3_bucket_created(
+                session=session, region=region, bucket_name=bucket_name, endpoint=endpoint
+            ):
+                bucket = s3.Bucket(bucket_name)
+                bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
+                bucket.wait_until_exists()
+                logger.info("Created bucket '%s' in region=%s", bucket_name, region)
+        except ClientError as error:
+            logger.exception(
+                "Couldn't create bucket named '%s' in region=%s.", bucket_name, region
+            )
+            raise error
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
