@@ -9,7 +9,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -25,6 +25,11 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_certificate,
     generate_csr,
     generate_private_key,
+    TLSCertificatesRequiresV2,
+    CertificateAvailableEvent,
+    CertificateExpiringEvent,
+    CertificateInvalidatedEvent,
+    AllCertificatesInvalidatedEvent,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
@@ -63,6 +68,7 @@ KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
 CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
+TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 
@@ -226,6 +232,9 @@ class VaultCharm(CharmBase):
                 }
             ],
         )
+        self.tls_certificate_access = TLSCertificatesRequiresV2(
+            charm=self, relationship_name=TLS_CERTIFICATE_ACCESS_RELATION_NAME
+        )
         self.ingress = IngressPerAppRequirer(
             charm=self,
             port=self.VAULT_PORT,
@@ -241,6 +250,22 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
+        )
+        self.framework.observe(
+            self.tls_certificate_access.on.certificate_available,
+            self._on_new_access_root_certificate_available,
+        )
+        self.framework.observe(
+            self.tls_certificate_access.on.certificate_expiring,
+            self._on_access_root_certificate_expiring,
+        )
+        self.framework.observe(
+            self.tls_certificate_access.on.all_certificates_invalidated,
+            self._on_access_root_certificate_invalidated,
+        )
+        self.framework.observe(
+            self.tls_certificate_access.on.certificate_invalidated,
+            self._on_access_root_certificate_invalidated,
         )
         self.framework.observe(
             self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
@@ -290,6 +315,14 @@ class VaultCharm(CharmBase):
             return
         if self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            if self._is_tls_certificates_access_relation_created():
+                # TODO Remove comment. Create a certificate request but don't use it yet
+                new_ca_csr = generate_csr(
+                    private_key=ca_private_key, subject=self._ingress_address
+                )
+                self.tls_certificate_access.request_certificate_creation(
+                    csr=new_ca_csr, is_ca=True
+                )
             self._set_ca_certificate_secret_in_peer_relation(
                 private_key=ca_private_key, certificate=ca_certificate
             )
@@ -430,6 +463,20 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _on_new_access_root_certificate_available(self, event: CertificateAvailableEvent):
+        # TODO invalidate existing root ca and replace everything with this one
+        pass
+
+    def _on_access_root_certificate_expiring(self, event: CertificateExpiringEvent):
+        # TODO get a new root certificate and reconfigure
+        pass
+
+    def _on_access_root_certificate_invalidated(
+        self, event: Union[AllCertificatesInvalidatedEvent, CertificateInvalidatedEvent]
+    ):
+        # TODO invalidate existing certificate and reconfigure a self signed CA cert
+        pass
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -741,6 +788,10 @@ class VaultCharm(CharmBase):
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _is_tls_certificates_access_relation_created(self) -> bool:
+        """Check if the tls-certificates-access relation is created"""
+        return bool(self.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME))
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
