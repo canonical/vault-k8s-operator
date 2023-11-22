@@ -251,10 +251,7 @@ class VaultCharm(CharmBase):
         )
 
     def _on_install(self, event: InstallEvent):
-        """Handler triggered when the charm is installed.
-
-        Sets pebble plan, initializes vault, enable audit device, and unseals vault.
-        """
+        """Handler triggered when the charm is installed."""
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
@@ -807,6 +804,32 @@ class VaultCharm(CharmBase):
         except PeerSecretError:
             return False
         return False
+
+    def _create_raft_snapshot(self) -> Optional[bytes]:
+        """Creates a snapshot of Vault.
+
+        Returns:
+            bytes: The snapshot content
+        """
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        if not vault.is_initialized():
+            logger.warning("Vault is not initialized, cannot create snapshot")
+            return None
+        if not vault.is_api_available():
+            logger.warning("Vault API is not available, cannot create snapshot")
+            return None
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.warning(
+                "Vault initialization secret not set in peer relation, cannot create snapshot"
+            )
+            return None
+        vault.set_token(token=root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=unseal_keys)
+        response = vault.create_snapshot()
+        return response.raw.read()
 
     @property
     def _bind_address(self) -> Optional[str]:

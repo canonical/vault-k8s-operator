@@ -150,7 +150,7 @@ class TestVault(unittest.TestCase):
         vault.create_snapshot()
         patch_take_raft_snapshot.assert_called_once()
 
-    @patch("hvac.api.system.backend.Raft.restore_raft_snapshot")
+    @patch("hvac.api.system_backend.Raft.restore_raft_snapshot")
     def test_given_snapshot_when_restore_snapshot_then_restore_raft_snapshot_is_called(
         self,
         patch_restore_raft_snapshot,
@@ -158,7 +158,7 @@ class TestVault(unittest.TestCase):
         snapshot = b"whatever snapshot"
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.restore_snapshot(snapshot=snapshot)
-        patch_restore_raft_snapshot.assert_called_once_with(snapshot=snapshot)
+        patch_restore_raft_snapshot.assert_called_once_with(snapshot)
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_health_status_returns_200_when_is_active_then_return_true(
