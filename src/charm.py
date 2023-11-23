@@ -595,7 +595,8 @@ class VaultCharm(CharmBase):
     def _api_address(self) -> str:
         """Returns the FQDN with the https schema and vault port.
 
-        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"""
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
+        """
         return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
 
     def _push_ca_certificate_to_workload(self, certificate: str) -> None:
