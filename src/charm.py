@@ -21,15 +21,15 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v2.tls_certificates import (
+    AllCertificatesInvalidatedEvent,
+    CertificateAvailableEvent,
+    CertificateExpiringEvent,
+    CertificateInvalidatedEvent,
+    TLSCertificatesRequiresV2,
     generate_ca,
     generate_certificate,
     generate_csr,
     generate_private_key,
-    TLSCertificatesRequiresV2,
-    CertificateAvailableEvent,
-    CertificateExpiringEvent,
-    CertificateInvalidatedEvent,
-    AllCertificatesInvalidatedEvent,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
@@ -63,6 +63,7 @@ VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 TLS_CERT_FILE_PATH = "/vault/certs/cert.pem"
 TLS_KEY_FILE_PATH = "/vault/certs/key.pem"
 TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
+TLS_CSR_FILE_PATH = "/vault/certs/csr.pem"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
@@ -252,6 +253,10 @@ class VaultCharm(CharmBase):
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
         self.framework.observe(
+            self.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_joined,
+            self._on_new_access_certificate_joined,
+        )
+        self.framework.observe(
             self.tls_certificate_access.on.certificate_available,
             self._on_new_access_root_certificate_available,
         )
@@ -315,14 +320,6 @@ class VaultCharm(CharmBase):
             return
         if self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            if self._is_tls_certificates_access_relation_created():
-                # TODO Remove comment. Create a certificate request but don't use it yet
-                new_ca_csr = generate_csr(
-                    private_key=ca_private_key, subject=self._ingress_address
-                )
-                self.tls_certificate_access.request_certificate_creation(
-                    csr=new_ca_csr, is_ca=True
-                )
             self._set_ca_certificate_secret_in_peer_relation(
                 private_key=ca_private_key, certificate=ca_certificate
             )
@@ -464,19 +461,47 @@ class VaultCharm(CharmBase):
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
 
+    def _on_new_access_certificate_joined(self, event: RelationJoinedEvent):
+        if not self.unit.is_leader():
+            return
+        ca_private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
+        new_ca_csr = generate_csr(
+            private_key=ca_private_key.encode(), subject=self._ingress_address
+        )
+        self._push_ca_csr_to_workload(new_ca_csr.decode())
+        self.tls_certificate_access.request_certificate_creation(
+            certificate_signing_request=new_ca_csr, is_ca=True
+        )
+        logger.info("New intermediary root certificate requested from %s", event.relation.app.name)
+
     def _on_new_access_root_certificate_available(self, event: CertificateAvailableEvent):
-        # TODO invalidate existing root ca and replace everything with this one
-        pass
+        private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
+        self._purge_certs_from_workload()
+        if self.unit.is_leader():
+            self._set_ca_certificate_secret_in_peer_relation(
+                private_key=private_key, certificate=event.certificate
+            )
+        logger.info("Self signed CA was replaced with new intermediary root CA.")
+        self._configure(event=None)  # type: ignore
 
     def _on_access_root_certificate_expiring(self, event: CertificateExpiringEvent):
-        # TODO get a new root certificate and reconfigure
-        pass
+        private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
+        old_ca_csr = self._get_ca_csr_from_workload()
+        if not self._ingress_address:
+            raise RuntimeError("Peer relation somehow unavailable. Something is very wrong")
+        new_ca_csr = generate_csr(private_key=private_key.encode(), subject=self._ingress_address)
+        self.tls_certificate_access.request_certificate_renewal(
+            old_certificate_signing_request=old_ca_csr.encode(),
+            new_certificate_signing_request=new_ca_csr,
+        )
+        logger.info("Sent a intermediary root certificate renewal request.")
 
     def _on_access_root_certificate_invalidated(
         self, event: Union[AllCertificatesInvalidatedEvent, CertificateInvalidatedEvent]
     ):
-        # TODO invalidate existing certificate and reconfigure a self signed CA cert
-        pass
+        self._purge_certs_from_workload()
+        self._remove_ca_certificate_secret_in_peer_relation()
+        self._configure(event=None)  # type: ignore
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -598,6 +623,15 @@ class VaultCharm(CharmBase):
         """Return the vault kv secret id associated to input label from peer relation."""
         return self._get_vault_kv_secrets_in_peer_relation().get(label)
 
+    def _purge_certs_from_workload(self) -> None:
+        try:
+            self._container.remove_path(TLS_CA_FILE_PATH)
+            self._container.remove_path(TLS_KEY_FILE_PATH)
+            self._container.remove_path(TLS_CERT_FILE_PATH)
+            self._container.remove_path(TLS_CSR_FILE_PATH)
+        except PathError:
+            pass
+
     def _set_vault_kv_secret_in_peer_relation(self, label: str, secret_id: str):
         """Set the vault kv secret in the peer relation."""
         if not self._is_peer_relation_created():
@@ -665,6 +699,15 @@ class VaultCharm(CharmBase):
         self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
         self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
         logger.info("Pushed unit certificate to workload")
+
+    def _push_ca_csr_to_workload(self, csr: str) -> None:
+        """Push the CA CSR to the workload.
+
+        Args:
+            csr: CSR generated for the CA certificate
+        """
+        self._container.push(path=TLS_CSR_FILE_PATH, source=csr)
+        logger.info("Pushed CA CSR to workload")
 
     def _ca_certificate_pushed_to_workload(self) -> bool:
         """Returns whether CA certificate is pushed to the workload."""
@@ -734,6 +777,15 @@ class VaultCharm(CharmBase):
         peer_relation.data[self.app].update({CA_CERTIFICATE_JUJU_SECRET_KEY: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
         logger.info("Vault CA certificate secret set in peer relation")
 
+    def _remove_ca_certificate_secret_in_peer_relation(self) -> None:
+        """Removes the vault CA certificate secret in the peer relation."""
+        if not self._is_peer_relation_created():
+            raise RuntimeError("Peer relation not created")
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if peer_relation:
+            peer_relation.data[self.app].pop(CA_CERTIFICATE_JUJU_SECRET_KEY)
+        logger.info("Vault CA certificate secret removed from peer relation")
+
     def _get_ca_certificate_secret_in_peer_relation(self) -> Tuple[str, str]:
         """Get the vault CA certificate secret from the peer relation.
 
@@ -750,6 +802,14 @@ class VaultCharm(CharmBase):
             return content["privatekey"], content["certificate"]
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
+
+    def _get_ca_csr_from_workload(self) -> str:
+        """Get the CSR generated for the requested CSR from the workload.
+
+        Returns:
+            str: The CSR string
+        """
+        return self._container.pull(TLS_CSR_FILE_PATH).read()
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
@@ -790,7 +850,7 @@ class VaultCharm(CharmBase):
         return bool(self.model.get_relation(PEER_RELATION_NAME))
 
     def _is_tls_certificates_access_relation_created(self) -> bool:
-        """Check if the tls-certificates-access relation is created"""
+        """Check if the tls-certificates-access relation is created."""
         return bool(self.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME))
 
     def _set_pebble_plan(self) -> None:

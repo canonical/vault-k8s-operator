@@ -76,5 +76,6 @@ requires:
     limit: 1
   tls-certificates-access:
     interface: tls-certificates
+    limit: 1
     description: |
       Receive a cert for Vault to use.
