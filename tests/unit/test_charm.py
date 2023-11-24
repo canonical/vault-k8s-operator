@@ -407,7 +407,7 @@ class TestCharm(unittest.TestCase):
 
         patch_generate_unit_certificate.assert_called_with(
             subject=ingress_address,
-            sans_ip=[bind_address, ingress_address],
+            sans_ip=[ingress_address],
             sans_dns=[fqdn],
             ca_certificate=ca_certificate.encode(),
             ca_private_key=ca_private_key.encode(),
@@ -421,6 +421,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.is_initialized", new=Mock)
     @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("socket.getfqdn")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -429,9 +430,11 @@ class TestCharm(unittest.TestCase):
         patch_get_binding,
         patch_generate_ca_certificate,
         patch_generate_unit_certificate,
+        patch_socket_getfqdn,
     ):
         patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
         patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
+        patch_socket_getfqdn.return_value = "myhostname"
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
