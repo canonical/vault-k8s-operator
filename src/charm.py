@@ -454,7 +454,7 @@ class VaultCharm(CharmBase):
 
         s3_parameters, missing_parameters = self._retrieve_s3_parameters()
         if missing_parameters:
-            event.fail(message="S3 parameters not set.")
+            event.fail(message=f"S3 parameters missing. {missing_parameters}")
             return
 
         if not (session := self._create_s3_session(s3_parameters)):
@@ -468,7 +468,11 @@ class VaultCharm(CharmBase):
                 bucket_name=s3_parameters["bucket"],
                 endpoint=s3_parameters["endpoint"],
             )
-        except (ValueError, KeyError, ClientError) as e:
+        except KeyError as e:
+            logger.error("Missing required S3 parameter: %s", e)
+            event.fail(message="Failed to create S3 bucket.")
+            return
+        except Exception as e:
             logger.error("Failed to create S3 bucket: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
@@ -498,11 +502,10 @@ class VaultCharm(CharmBase):
         """Uploads the provided contents to the provided S3 bucket.
 
         Args:
-            content: The content to upload to S3
-            s3_path: The path to which to upload the content
-            s3_parameters: A dictionary containing the S3 parameters
-                The following are expected keys in the dictionary: bucket, region,
-                endpoint, access-key and secret-key
+            session: S3 session.
+            content: Byte contents to upload.
+            bucket_name: S3 bucket name.
+            endpoint: S3 endpoint.
 
         Returns:
             str: The S3 key of the uploaded content.
@@ -860,6 +863,9 @@ class VaultCharm(CharmBase):
             )
             session.resource("s3", endpoint_url=s3_parameters["endpoint"])
             return session
+        except KeyError as e:
+            logger.warning("Missing required S3 parameter: %s", e)
+            return None
         except Exception as e:
             logger.warning("Error creating S3 session: %s", e)
             return None
@@ -882,51 +888,20 @@ class VaultCharm(CharmBase):
                 missing_required_parameters,
             )
             return {}, missing_required_parameters
-
+        if "region" not in s3_parameters:
+            s3_parameters["region"] = "us-east-1"
         for key, value in s3_parameters.items():
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
 
         return s3_parameters, []
 
-    def _is_s3_bucket_created(
-        self,
-        session: boto3.session.Session,
-        region: str,
-        bucket_name: str,
-        endpoint: str,
-    ) -> bool:
-        """Check if the S3 bucket is created.
-
-        Args:
-            session: S3 session.
-            region: S3 region.
-            bucket_name: S3 bucket name.
-            endpoint: S3 endpoint.
-
-        Returns:
-            bool: Whether the S3 bucket is created.
-        """
-        try:
-            s3 = session.resource("s3", endpoint_url=endpoint)
-        except (ValueError, KeyError) as e:
-            logger.exception("Failed to create connect to session '%s' in region=%s.", region)
-            raise e
-        try:
-            bucket = s3.Bucket(bucket_name)
-            bucket.meta.client.head_bucket(Bucket=bucket_name)
-            logger.info("Bucket %s exists.", bucket_name)
-            return True
-        except ClientError:
-            logger.warning("Bucket %s doesn't exist or you don't have access to it.", bucket_name)
-            return False
-
     def _create_s3_bucket(
         self,
         session: boto3.session.Session,
-        region: str,
         bucket_name: str,
         endpoint: str,
+        region: str,
     ) -> None:
         """Create S3 bucket.
 
@@ -940,18 +915,29 @@ class VaultCharm(CharmBase):
         """
         try:
             s3 = session.resource("s3", endpoint_url=endpoint)
-        except (ValueError, KeyError) as e:
-            logger.exception("Failed to create connect to session '%s' in region=%s.", region)
+        except Exception as e:
+            logger.exception("Failed to connect to session '%s'.", session)
             raise e
         try:
-            if not self._is_s3_bucket_created(
-                session=session, region=region, bucket_name=bucket_name, endpoint=endpoint
-            ):
-                bucket = s3.Bucket(bucket_name)
+            # Checking if bucket already exists
+            bucket = s3.Bucket(bucket_name)
+            bucket.meta.client.head_bucket(Bucket=bucket_name)
+            logger.info("Bucket %s exists.", bucket_name)
+            return
+        except ClientError:
+            logger.debug("Bucket %s doesn't exist, creating it.", bucket_name)
+            pass
+        except Exception as e:
+            logger.debug("Failed to check wether bucket exists.", e)
+            raise e
+        try:
+            if region == "us-east-1":
+                bucket.create()
+            else:
                 bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
-                bucket.wait_until_exists()
-                logger.info("Created bucket '%s' in region=%s", bucket_name, region)
-        except ClientError as error:
+            bucket.wait_until_exists()
+            logger.info("Created bucket '%s' in region=%s", bucket_name, region)
+        except Exception as error:
             logger.exception(
                 "Couldn't create bucket named '%s' in region=%s.", bucket_name, region
             )
