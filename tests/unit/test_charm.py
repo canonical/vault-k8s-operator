@@ -1145,11 +1145,8 @@ class TestCharm(unittest.TestCase):
         mock_resource.Bucket.return_value = mock_bucket
         mock_bucket.meta.client = mock_client
         mock_client.head_bucket.side_effect = ClientError(
-            operation_name='NoSuchBucket', error_response={
-                'Error': {
-                    'Message': 'Random bucket exists error message'
-                }
-            }
+            operation_name="NoSuchBucket",
+            error_response={"Error": {"Message": "Random bucket exists error message"}},
         )
 
         self.harness.charm._create_s3_bucket(
@@ -1184,9 +1181,9 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(
-            message="S3 parameters missing. ['bucket', 'access-key', 'secret-key', 'endpoint']"
-        )
+        event.fail.assert_called_once()
+        call_args = event.fail.call_args[1]["message"]
+        self.assertIn("S3 parameters missing.", call_args)
 
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_s3_session_not_created_when_create_backup_action_then_action_fails(

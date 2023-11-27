@@ -937,9 +937,7 @@ class VaultCharm(CharmBase):
             bucket.wait_until_exists()
             logger.info("Created bucket '%s' in region=%s", bucket_name, region)
         except (BotoCoreError, ClientError) as error:
-            logger.warning(
-                "Couldn't create bucket named '%s' in region=%s.", bucket_name, region
-            )
+            logger.warning("Couldn't create bucket named '%s' in region=%s.", bucket_name, region)
             raise error
 
     def _is_peer_relation_created(self) -> bool:
