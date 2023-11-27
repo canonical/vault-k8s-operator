@@ -14,7 +14,10 @@ from typing import Dict, List, Optional, Tuple
 
 import boto3  # type: ignore[import-untyped]
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import (  # type: ignore[import-untyped]
+    BotoCoreError,
+    ClientError,
+)
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -469,11 +472,11 @@ class VaultCharm(CharmBase):
                 endpoint=s3_parameters["endpoint"],
             )
         except KeyError as e:
-            logger.error("Missing required S3 parameter: %s", e)
+            logger.warning("Missing required S3 parameter: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
-        except Exception as e:
-            logger.error("Failed to create S3 bucket: %s", e)
+        except (BotoCoreError, ClientError) as e:
+            logger.warning("Failed to create S3 bucket: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
         if not (snapshot := self._create_raft_snapshot()):
@@ -516,7 +519,7 @@ class VaultCharm(CharmBase):
             bucket = s3.Bucket(bucket_name)
             bucket.put_object(Key=key, Body=content)
             logger.info("Uploading content to bucket %s", bucket_name)
-        except Exception as e:
+        except (BotoCoreError, ClientError) as e:
             logger.warning("Error uploading content to bucket %s: %s", bucket_name, e)
             return None
 
@@ -866,8 +869,8 @@ class VaultCharm(CharmBase):
         except KeyError as e:
             logger.warning("Missing required S3 parameter: %s", e)
             return None
-        except Exception as e:
-            logger.warning("Error creating S3 session: %s", e)
+        except ValueError as e:
+            logger.warning("Error creating resource: %s", e)
             return None
 
     def _retrieve_s3_parameters(self) -> Tuple[Dict, List[str]]:
@@ -913,11 +916,7 @@ class VaultCharm(CharmBase):
             bucket_name: S3 bucket name.
             endpoint: S3 endpoint.
         """
-        try:
-            s3 = session.resource("s3", endpoint_url=endpoint)
-        except Exception as e:
-            logger.exception("Failed to connect to session '%s'.", session)
-            raise e
+        s3 = session.resource("s3", endpoint_url=endpoint)
         try:
             # Checking if bucket already exists
             bucket = s3.Bucket(bucket_name)
@@ -925,10 +924,10 @@ class VaultCharm(CharmBase):
             logger.info("Bucket %s exists.", bucket_name)
             return
         except ClientError:
-            logger.debug("Bucket %s doesn't exist, creating it.", bucket_name)
+            logger.warning("Bucket %s doesn't exist, creating it.", bucket_name)
             pass
-        except Exception as e:
-            logger.debug("Failed to check wether bucket exists.", e)
+        except BotoCoreError as e:
+            logger.warning("Failed to check wether bucket exists. %s", e)
             raise e
         try:
             if region == "us-east-1":
@@ -937,8 +936,8 @@ class VaultCharm(CharmBase):
                 bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
             bucket.wait_until_exists()
             logger.info("Created bucket '%s' in region=%s", bucket_name, region)
-        except Exception as error:
-            logger.exception(
+        except (BotoCoreError, ClientError) as error:
+            logger.warning(
                 "Couldn't create bucket named '%s' in region=%s.", bucket_name, region
             )
             raise error

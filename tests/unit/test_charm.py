@@ -8,7 +8,10 @@ from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import (  # type: ignore[import-untyped]
+    BotoCoreError,
+    ClientError,
+)
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
@@ -35,6 +38,11 @@ def read_file(path: str) -> str:
     with open(path, "r") as f:
         content = f.read()
     return content
+
+
+class CustomBotoCoreError(BotoCoreError):
+    def __init__(self):
+        self.fmt = "whatever exception"
 
 
 class MockNetwork:
@@ -1213,8 +1221,8 @@ class TestCharm(unittest.TestCase):
         mock_session.resource.return_value = mock_resource
         mock_resource.Bucket.return_value = mock_bucket
         mock_bucket.meta.client = mock_client
-        mock_bucket.create.side_effect = Exception("whatever exception")
-        mock_client.head_bucket.side_effect = Exception("Bucket not found")
+        mock_bucket.create.side_effect = CustomBotoCoreError()
+        mock_client.head_bucket.side_effect = CustomBotoCoreError()
         patch_get_s3_connection_info.return_value = {
             "bucket": "whatever bucket",
             "access-key": "whatever access key",
@@ -1297,7 +1305,7 @@ class TestCharm(unittest.TestCase):
         patch_session.return_value = mock_session
         mock_session.resource.return_value = mock_resource
         mock_resource.Bucket.return_value = mock_bucket
-        mock_bucket.put_object.side_effect = Exception("whatever exception")
+        mock_bucket.put_object.side_effect = CustomBotoCoreError()
         patch_get_s3_connection_info.return_value = {
             "bucket": "whatever bucket",
             "access-key": "whatever access key",
