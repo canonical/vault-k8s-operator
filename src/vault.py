@@ -128,12 +128,10 @@ class Vault:
 
     def create_snapshot(self) -> requests.Response:
         """Create a snapshot of the Vault data."""
-        logger.info("Created snapshot of the raft backend")
         return self._client.sys.take_raft_snapshot()
 
     def restore_snapshot(self, snapshot: bytes) -> None:
         """Restore a snapshot of the Vault data."""
-        logger.info("Restored snapshot of the raft backend")
         self._client.sys.restore_raft_snapshot(snapshot)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:

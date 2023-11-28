@@ -471,6 +471,7 @@ class VaultCharm(CharmBase):
                 bucket_name=s3_parameters["bucket"],
                 endpoint=s3_parameters["endpoint"],
             )
+            logger.info("Created S3 bucket %s", s3_parameters["bucket"])
         except KeyError as e:
             logger.warning("Missing required S3 parameter: %s", e)
             event.fail(message="Failed to create S3 bucket.")
@@ -492,7 +493,7 @@ class VaultCharm(CharmBase):
         ):
             event.fail(message="Failed to upload backup to S3 bucket.")
             return
-
+        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
 
     def _upload_byte_content_to_s3(
@@ -518,7 +519,6 @@ class VaultCharm(CharmBase):
             s3 = session.resource("s3", endpoint_url=endpoint)
             bucket = s3.Bucket(bucket_name)
             bucket.put_object(Key=key, Body=content)
-            logger.info("Uploading content to bucket %s", bucket_name)
         except (BotoCoreError, ClientError) as e:
             logger.warning("Error uploading content to bucket %s: %s", bucket_name, e)
             return None
@@ -924,7 +924,7 @@ class VaultCharm(CharmBase):
             logger.info("Bucket %s exists.", bucket_name)
             return
         except ClientError:
-            logger.warning("Bucket %s doesn't exist, creating it.", bucket_name)
+            logger.info("Bucket %s doesn't exist, creating it.", bucket_name)
             pass
         except BotoCoreError as e:
             logger.warning("Failed to check wether bucket exists. %s", e)
@@ -935,7 +935,6 @@ class VaultCharm(CharmBase):
             else:
                 bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
             bucket.wait_until_exists()
-            logger.info("Created bucket '%s' in region=%s", bucket_name, region)
         except (BotoCoreError, ClientError) as error:
             logger.warning("Couldn't create bucket named '%s' in region=%s.", bucket_name, region)
             raise error
