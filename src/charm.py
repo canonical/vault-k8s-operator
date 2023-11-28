@@ -75,6 +75,7 @@ SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
 DEFAULT_REGION = "us-east-1"  # It is used as default in boto3
+REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 
 
 def render_vault_config_file(
@@ -456,10 +457,12 @@ class VaultCharm(CharmBase):
             event.fail(message="Only leader unit can perform backup operations.")
             return
 
-        s3_parameters, missing_parameters = self._retrieve_s3_parameters()
+        missing_parameters = self._get_missing_s3_parameters()
         if missing_parameters:
             event.fail(message=f"S3 parameters missing. {missing_parameters}")
             return
+
+        s3_parameters = self._retrieve_s3_parameters()
 
         if not (session := self._create_s3_session(s3_parameters)):
             event.fail(message="Failed to create S3 session.")
@@ -874,31 +877,32 @@ class VaultCharm(CharmBase):
             logger.warning("Error creating resource: %s", e)
             return None
 
-    def _retrieve_s3_parameters(self) -> Tuple[Dict, List[str]]:
-        """Retrieve S3 parameters from the S3 integrator relation."""
+    def _get_missing_s3_parameters(self) -> List[str]:
+        """Returns list of missing S3 parameters.
+
+        Returns:
+            List[str]: List of missing required S3 parameters.
+        """
         s3_parameters = self.s3.get_s3_connection_info()
-        required_parameters = [
-            "bucket",
-            "access-key",
-            "secret-key",
-            "endpoint",
-        ]
-        missing_required_parameters = [
-            param for param in required_parameters if param not in s3_parameters
-        ]
-        if missing_required_parameters:
-            logger.warning(
-                "Missing required S3 parameters in relation with S3 integrator: %s",
-                missing_required_parameters,
-            )
-            return {}, missing_required_parameters
+        return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
+
+    def _retrieve_s3_parameters(self) -> Dict[str, str]:
+        """Retrieve S3 parameters from the S3 integrator relation.
+
+        Removes leading and trailing whitespaces from the parameters.
+        Adds default region if not provided.
+
+        Returns:
+            Dict[str, str]: Dictionary of the S3 parameters.
+        """
+        s3_parameters = self.s3.get_s3_connection_info()
         if "region" not in s3_parameters:
             s3_parameters["region"] = DEFAULT_REGION
         for key, value in s3_parameters.items():
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
 
-        return s3_parameters, []
+        return s3_parameters
 
     def _create_s3_bucket(
         self,
