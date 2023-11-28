@@ -1264,7 +1264,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create snapshot.")
+        event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)

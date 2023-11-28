@@ -484,17 +484,17 @@ class VaultCharm(CharmBase):
             logger.warning("Failed to create S3 bucket: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
-        if not (snapshot := self._create_raft_snapshot()):
-            event.fail(message="Failed to create snapshot.")
+        snapshot = self._create_raft_snapshot()
+        if not snapshot:
+            event.fail(message="Failed to create raft snapshot.")
             return
-        if not (
-            backup_key := self._upload_byte_content_to_s3(
-                session=session,
-                content=snapshot,
-                bucket_name=s3_parameters["bucket"],
-                endpoint=s3_parameters["endpoint"],
-            )
-        ):
+        backup_key = self._upload_byte_content_to_s3(
+            session=session,
+            content=snapshot,
+            bucket_name=s3_parameters["bucket"],
+            endpoint=s3_parameters["endpoint"],
+        )
+        if not backup_key:
             event.fail(message="Failed to upload backup to S3 bucket.")
             return
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
