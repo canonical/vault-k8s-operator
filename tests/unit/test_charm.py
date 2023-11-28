@@ -8,10 +8,7 @@ from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import (  # type: ignore[import-untyped]
-    BotoCoreError,
-    ClientError,
-)
+from botocore.exceptions import BotoCoreError, ClientError
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
@@ -1112,7 +1109,7 @@ class TestCharm(unittest.TestCase):
     def test_given_cannot_connect_to_session_when_create_s3_bucket_then_exception_is_raised(self):
         with self.assertRaises(Exception):
             self.harness.charm._create_s3_bucket(
-                session=None,
+                session=None,  # type: ignore[arg-type]
                 bucket_name="whatever bucket",
                 region="whatever region",
                 endpoint="whatever endpoint",

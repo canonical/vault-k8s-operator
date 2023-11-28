@@ -17,3 +17,5 @@ types-PyYAML
 types-setuptools
 types-toml
 types-requests
+types-boto3
+types-boto3

@@ -12,13 +12,10 @@ import logging
 import socket
 from typing import Dict, List, Optional, Tuple
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 import hcl  # type: ignore[import-untyped]
 import requests
-from botocore.exceptions import (  # type: ignore[import-untyped]
-    BotoCoreError,
-    ClientError,
-)
+from botocore.exceptions import BotoCoreError, ClientError
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -489,7 +486,7 @@ class VaultCharm(CharmBase):
         if not snapshot:
             event.fail(message="Failed to create raft snapshot.")
             return
-        backup_key = self._upload_byte_content_to_s3(
+        backup_key = self._upload_content_to_s3(
             session=session,
             content=snapshot,
             bucket_name=s3_parameters["bucket"],
@@ -501,10 +498,10 @@ class VaultCharm(CharmBase):
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
 
-    def _upload_byte_content_to_s3(
+    def _upload_content_to_s3(
         self,
         session: boto3.session.Session,
-        content: bytes,
+        content: requests.Response,
         bucket_name: str,
         endpoint: str,
     ) -> Optional[str]:
@@ -923,9 +920,9 @@ class VaultCharm(CharmBase):
             endpoint: S3 endpoint.
         """
         s3 = session.resource("s3", endpoint_url=endpoint)
+        bucket = s3.Bucket(bucket_name)
         try:
             # Checking if bucket already exists
-            bucket = s3.Bucket(bucket_name)
             bucket.meta.client.head_bucket(Bucket=bucket_name)
             logger.info("Bucket %s exists.", bucket_name)
             return
