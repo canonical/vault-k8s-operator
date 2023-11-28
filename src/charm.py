@@ -478,11 +478,11 @@ class VaultCharm(CharmBase):
             )
             logger.info("Created S3 bucket %s", s3_parameters["bucket"])
         except KeyError as e:
-            logger.warning("Missing required S3 parameter: %s", e)
+            logger.error("Missing required S3 parameter: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
         except (BotoCoreError, ClientError) as e:
-            logger.warning("Failed to create S3 bucket: %s", e)
+            logger.error("Failed to create S3 bucket: %s", e)
             event.fail(message="Failed to create S3 bucket.")
             return
         snapshot = self._create_raft_snapshot()
@@ -872,10 +872,10 @@ class VaultCharm(CharmBase):
             session.resource("s3", endpoint_url=s3_parameters["endpoint"])
             return session
         except KeyError as e:
-            logger.warning("Missing required S3 parameter: %s", e)
+            logger.error("Missing required S3 parameter: %s", e)
             return None
         except ValueError as e:
-            logger.warning("Error creating resource: %s", e)
+            logger.error("Error creating resource: %s", e)
             return None
 
     def _get_missing_s3_parameters(self) -> List[str]:
@@ -933,7 +933,7 @@ class VaultCharm(CharmBase):
             logger.info("Bucket %s doesn't exist, creating it.", bucket_name)
             pass
         except BotoCoreError as e:
-            logger.warning("Failed to check wether bucket exists. %s", e)
+            logger.error("Failed to check wether bucket exists. %s", e)
             raise e
         try:
             # AWS client does't allow LocationConstraint to be set to us-east-1
@@ -945,7 +945,7 @@ class VaultCharm(CharmBase):
                 bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
             bucket.wait_until_exists()
         except (BotoCoreError, ClientError) as error:
-            logger.warning("Couldn't create bucket named '%s' in region=%s.", bucket_name, region)
+            logger.error("Couldn't create bucket named '%s' in region=%s.", bucket_name, region)
             raise error
 
     def _is_peer_relation_created(self) -> bool:
@@ -1023,15 +1023,15 @@ class VaultCharm(CharmBase):
         """
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         if not vault.is_initialized():
-            logger.warning("Vault is not initialized, cannot create snapshot")
+            logger.error("Vault is not initialized, cannot create snapshot")
             return None
         if not vault.is_api_available():
-            logger.warning("Vault API is not available, cannot create snapshot")
+            logger.error("Vault API is not available, cannot create snapshot")
             return None
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         except PeerSecretError:
-            logger.warning(
+            logger.error(
                 "Vault initialization secret not set in peer relation, cannot create snapshot"
             )
             return None
