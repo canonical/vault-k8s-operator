@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 
 import boto3  # type: ignore[import-untyped]
 import hcl  # type: ignore[import-untyped]
+import requests
 from botocore.exceptions import (  # type: ignore[import-untyped]
     BotoCoreError,
     ClientError,
@@ -935,6 +936,9 @@ class VaultCharm(CharmBase):
             logger.warning("Failed to check wether bucket exists. %s", e)
             raise e
         try:
+            # AWS client does't allow LocationConstraint to be set to us-east-1
+            # If that's the regions used, we don't set LocationConstraint
+            # us-east-1 is the default region for AWS
             if region == DEFAULT_REGION:
                 bucket = bucket.create()
             else:
@@ -1011,7 +1015,7 @@ class VaultCharm(CharmBase):
             return False
         return False
 
-    def _create_raft_snapshot(self) -> Optional[bytes]:
+    def _create_raft_snapshot(self) -> Optional[requests.Response]:
         """Creates a snapshot of Vault.
 
         Returns:
@@ -1035,7 +1039,7 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         response = vault.create_snapshot()
-        return response.raw.read()
+        return response.raw
 
     @property
     def _bind_address(self) -> Optional[str]:
