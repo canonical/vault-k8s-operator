@@ -74,6 +74,7 @@ CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
+DEFAULT_REGION = "us-east-1"  # It is used as default in boto3
 
 
 def render_vault_config_file(
@@ -892,7 +893,7 @@ class VaultCharm(CharmBase):
             )
             return {}, missing_required_parameters
         if "region" not in s3_parameters:
-            s3_parameters["region"] = "us-east-1"
+            s3_parameters["region"] = DEFAULT_REGION
         for key, value in s3_parameters.items():
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
@@ -930,8 +931,8 @@ class VaultCharm(CharmBase):
             logger.warning("Failed to check wether bucket exists. %s", e)
             raise e
         try:
-            if region == "us-east-1":
-                bucket.create()
+            if region == DEFAULT_REGION:
+                bucket = bucket.create()
             else:
                 bucket.create(CreateBucketConfiguration={"LocationConstraint": region})
             bucket.wait_until_exists()
