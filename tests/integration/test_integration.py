@@ -12,6 +12,8 @@ from pathlib import Path
 import hvac  # type: ignore[import-untyped]
 import pytest
 import yaml
+from juju.application import Application
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -40,10 +42,11 @@ class TestVaultK8s:
             ops_test: Ops test Framework.
             charm: Charm path.
         """
+        assert ops_test.model
         resources = {
             "vault-image": METADATA["resources"]["vault-image"]["upstream-source"],
         }
-        await ops_test.model.deploy(  # type: ignore[union-attr]
+        await ops_test.model.deploy(
             charm,
             resources=resources,
             application_name=APPLICATION_NAME,
@@ -66,14 +69,16 @@ class TestVaultK8s:
             TimeoutError: If proxied endpoints are not retrieved.
 
         """
-        traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]  # type: ignore[union-attr]
+        assert ops_test.model
+        traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
+        assert isinstance(traefik, Application)
         traefik_unit = traefik.units[0]
         t0 = time.time()
         while time.time() - t0 < timeout:
             proxied_endpoint_action = await traefik_unit.run_action(
                 action_name="show-proxied-endpoints"
             )
-            action_output = await ops_test.model.get_action_output(  # type: ignore[union-attr]
+            action_output = await ops_test.model.get_action_output(
                 action_uuid=proxied_endpoint_action.entity_id, wait=30
             )
 
@@ -95,13 +100,15 @@ class TestVaultK8s:
         Returns:
             dict: Action output
         """
-        self_signed_certificates_unit = ops_test.model.units[  # type: ignore[union-attr]
+        assert ops_test.model
+        self_signed_certificates_unit = ops_test.model.units[
             f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
         ]
+        assert isinstance(self_signed_certificates_unit, Unit)
         action = await self_signed_certificates_unit.run_action(
             action_name="get-ca-certificate",
         )
-        return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)  # type: ignore[union-attr]
+        return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
@@ -111,7 +118,8 @@ class TestVaultK8s:
         Args:
             ops_test: Ops test Framework.
         """
-        await ops_test.model.deploy(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.deploy(
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
             trust=True,
@@ -138,7 +146,8 @@ class TestVaultK8s:
         Args:
             ops_test: Ops test Framework.
         """
-        await ops_test.model.deploy(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.deploy(
             "traefik-k8s",
             application_name=TRAEFIK_APPLICATION_NAME,
             trust=True,
@@ -153,7 +162,8 @@ class TestVaultK8s:
         Args:
             ops_test: Ops test Framework.
         """
-        await ops_test.model.deploy(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             trust=True,
@@ -164,7 +174,8 @@ class TestVaultK8s:
     async def test_given_default_config_when_deploy_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy
     ):
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -178,11 +189,12 @@ class TestVaultK8s:
         deploy_traefik,
         deploy_self_signed_certificates_operator,
     ):
-        await ops_test.model.integrate(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.integrate(
             relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
             relation2=f"{TRAEFIK_APPLICATION_NAME}",
         )
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(
             apps=[TRAEFIK_APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -191,11 +203,12 @@ class TestVaultK8s:
     async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
         self, ops_test: OpsTest
     ):
-        await ops_test.model.integrate(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:send-ca-cert",
             relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
         )
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -205,11 +218,12 @@ class TestVaultK8s:
     async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
         self, ops_test: OpsTest
     ):
-        await ops_test.model.integrate(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:ingress",
             relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
         )
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -294,11 +308,12 @@ class TestVaultK8s:
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
     ):
-        await ops_test.model.integrate(  # type: ignore[union-attr]
+        assert ops_test.model
+        await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:metrics-endpoint",
             relation2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
         )
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -310,10 +325,13 @@ class TestVaultK8s:
         ops_test: OpsTest,
         build_and_deploy,
     ):
+        assert ops_test.model
         num_units = 7
-        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]  # noqa: E501
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
+        await app.scale(num_units)
 
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
@@ -326,10 +344,14 @@ class TestVaultK8s:
         ops_test: OpsTest,
         build_and_deploy,
     ):
+        assert ops_test.model
         num_units = 3
-        await ops_test.model.applications[APPLICATION_NAME].scale(num_units)  # type: ignore[union-attr]  # noqa: E501
 
-        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
+        await app.scale(num_units)
+
+        await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
