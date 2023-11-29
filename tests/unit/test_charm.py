@@ -8,7 +8,7 @@ from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
@@ -1106,55 +1106,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._create_raft_snapshot()
         patch_create_snapshot.assert_not_called()
 
-    def test_given_cannot_connect_to_session_when_create_s3_bucket_then_exception_is_raised(self):
-        with self.assertRaises(Exception):
-            self.harness.charm._create_s3_bucket(
-                session=None,  # type: ignore[arg-type]
-                bucket_name="whatever bucket",
-                region="whatever region",
-                endpoint="whatever endpoint",
-            )
-
-    def test_given_bucket_already_exists_when_create_s3_bucket_then_bucket_not_created(
-        self,
-    ):
-        patch_session = Mock()
-        patch_session.resource.Bucket.meta.client.head_bucket.return_value = Mock()
-
-        self.harness.charm._create_s3_bucket(
-            session=patch_session,
-            bucket_name="whatever bucket",
-            region="whatever region",
-            endpoint="whatever endpoint",
-        )
-
-        patch_session.resource.Bucket.create.assert_not_called()
-
-    def test_given_bucket_not_created_when_create_s3_bucket_then_bucket_created(
-        self,
-    ):
-        mock_session = Mock()
-        mock_resource = Mock()
-        mock_bucket = Mock()
-        mock_client = Mock()
-
-        mock_session.resource.return_value = mock_resource
-        mock_resource.Bucket.return_value = mock_bucket
-        mock_bucket.meta.client = mock_client
-        mock_client.head_bucket.side_effect = ClientError(
-            operation_name="NoSuchBucket",
-            error_response={"Error": {"Message": "Random bucket exists error message"}},
-        )
-
-        self.harness.charm._create_s3_bucket(
-            session=mock_session,
-            bucket_name="whatever bucket",
-            region="whatever region",
-            endpoint="whatever endpoint",
-        )
-
-        mock_bucket.create.assert_called_once()
-
     def test_given_s3_relation_not_created_when_create_backup_action_then_action_fails(self):
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
@@ -1270,7 +1221,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("boto3.session.Session")
-    def test_given_upload_content_to_s3_fails_when_create_backup_action_then_action_fails(
+    def test_given_s3_content_upload_fails_when_create_backup_action_then_action_fails(
         self,
         patch_session,
         patch_get_s3_connection_info,
