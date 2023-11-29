@@ -240,8 +240,8 @@ class TestVaultK8s:
         ca_certificate = action_output["ca-certificate"]
         with open("ca_file.txt", mode="w+") as ca_file:
             ca_file.write(ca_certificate)
-        self._client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
-        response = self._client.sys.read_health_status()
+        client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
+        response = client.sys.read_health_status()
         # As we have multiple Vault units, the one who gives the response could be in active or standby.  # noqa: E501, W505
         # According to the Vault upstream code, expected response codes could be "200"
         # if the unit is active or "429" if the unit is standby.
