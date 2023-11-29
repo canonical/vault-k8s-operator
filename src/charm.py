@@ -336,8 +336,8 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             return
         try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
-            if self._api_address:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            if self._bind_address:
                 vault = Vault(
                     url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
                 )
