@@ -104,9 +104,13 @@ class TestCharm(unittest.TestCase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
-        secret = self.harness.model.get_secret(id=secret_id)
-        secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+            secret = self.harness.model.get_secret(id=secret_id)
+            secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
+            self.harness.set_leader(original_leader_state)
         key_values = {"vault-initialization-secret-id": secret_id}
         self.harness.update_relation_data(
             app_or_unit=self.app_name,
@@ -122,9 +126,13 @@ class TestCharm(unittest.TestCase):
             "certificate": certificate,
             "privatekey": private_key,
         }
-        secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
-        secret = self.harness.model.get_secret(id=secret_id)
-        secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+            secret = self.harness.model.get_secret(id=secret_id)
+            secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+            self.harness.set_leader(original_leader_state)
         key_values = {"vault-ca-certificates-secret-id": secret_id}
         self.harness.update_relation_data(
             app_or_unit=self.app_name,
@@ -328,6 +336,7 @@ class TestCharm(unittest.TestCase):
     def test_given_ca_certificate_not_pushed_to_workload_when_configure_then_ca_certificate_pushed(
         self, patch_get_binding, patch_generate_unit_certificate, patch_exists
     ):
+        self.harness.set_leader(is_leader=True)
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
@@ -349,7 +358,6 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
 
         self.harness.charm.on.config_changed.emit()
 
@@ -373,6 +381,7 @@ class TestCharm(unittest.TestCase):
         patch_exists,
         patch_socket_getfqdn,
     ):
+        self.harness.set_leader(is_leader=True)
         fqdn = "banana"
         patch_socket_getfqdn.return_value = fqdn
         root = self.harness.get_filesystem_root(self.container_name)
@@ -398,7 +407,6 @@ class TestCharm(unittest.TestCase):
             unseal_keys=["whatever unseal key"],
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
         patch_get_binding.return_value = MockBinding(
             bind_address=bind_address, ingress_address=ingress_address
         )
@@ -432,6 +440,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_unit_certificate,
         patch_socket_getfqdn,
     ):
+        self.harness.set_leader(is_leader=True)
         patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
         patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
         patch_socket_getfqdn.return_value = "myhostname"
@@ -448,7 +457,6 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.3.4", ingress_address="1.1.1.1"
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
 
         self.harness.charm.on.config_changed.emit()
 
@@ -472,6 +480,7 @@ class TestCharm(unittest.TestCase):
         patch_generate_ca_certificate,
         patch_generate_unit_certificate,
     ):
+        self.harness.set_leader(is_leader=True)
         patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
         patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -483,7 +492,6 @@ class TestCharm(unittest.TestCase):
             unseal_keys=["whatever unseal key"],
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.3.4", ingress_address="1.1.1.1"
         )
@@ -946,6 +954,7 @@ class TestCharm(unittest.TestCase):
     def test_given_ca_cert_exists_when_certificate_transfer_relation_joins_then_ca_cert_is_advertised(
         self,
     ):
+        self.harness.set_leader(is_leader=True)
         ca_certificate = "certificate content"
         ca_private_key = "private key content"
         relation_id = self._set_peer_relation()
@@ -954,7 +963,6 @@ class TestCharm(unittest.TestCase):
             private_key=ca_private_key,
             relation_id=relation_id,
         )
-        self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         app = "traefik"
         certificate_transfer_rel_id = self.harness.add_relation(
