@@ -99,6 +99,16 @@ class TestCharm(unittest.TestCase):
         self.container_name = "vault"
         self.app_name = "vault-k8s"
 
+    def get_valid_s3_params(self):
+        """Returns valid S3 parameters for mocking."""
+        return {
+            "bucket": "BUCKET",
+            "access-key": "whatever access key",
+            "secret-key": "whatever secret key",
+            "endpoint": "http://ENDPOINT",
+            "region": "REGION",
+        }
+
     def _set_peer_relation(self) -> int:
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
@@ -1151,48 +1161,34 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to create S3 session.")
 
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("boto3.session.Session")
+    @patch("s3_session.S3Session.create_s3_bucket")
     def test_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
         self,
-        patch_session,
+        patch_create_bucket,
         patch_get_s3_connection_info,
     ):
-        mock_session = Mock()
-        mock_resource = Mock()
-        mock_bucket = Mock()
-        mock_client = Mock()
-
-        patch_session.return_value = mock_session
-        mock_session.resource.return_value = mock_resource
-        mock_resource.Bucket.return_value = mock_bucket
-        mock_bucket.meta.client = mock_client
-        mock_bucket.create.side_effect = CustomBotoCoreError()
-        mock_client.head_bucket.side_effect = CustomBotoCoreError()
-        patch_get_s3_connection_info.return_value = {
-            "bucket": "whatever bucket",
-            "access-key": "whatever access key",
-            "secret-key": "whatever secret key",
-            "endpoint": "whatever endpoint",
-            "region": "whatever region",
-        }
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_create_bucket.return_value = False
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create S3 bucket.")
 
-    @patch("boto3.session.Session", new=Mock)
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3Session.create_s3_bucket")
     def test_given_snapshot_creation_fails_when_create_backup_action_then_action_fails(
         self,
+        patch_create_bucket,
         patch_get_s3_connection_info,
         patch_is_api_available,
         patch_is_initialized,
     ):
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
+        patch_create_bucket.return_value = True
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
@@ -1201,13 +1197,7 @@ class TestCharm(unittest.TestCase):
             private_key="whatever private key",
             relation_id=peer_relation_id,
         )
-        patch_get_s3_connection_info.return_value = {
-            "bucket": "whatever bucket",
-            "access-key": "whatever access key",
-            "secret-key": "whatever secret key",
-            "endpoint": "whatever endpoint",
-            "region": "whatever region",
-        }
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
@@ -1220,10 +1210,12 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("boto3.session.Session")
+    @patch("s3_session.S3Session.create_s3_bucket")
+    @patch("s3_session.S3Session.upload_content_to_s3")
     def test_given_s3_content_upload_fails_when_create_backup_action_then_action_fails(
         self,
-        patch_session,
+        patch_upload_content_to_s3,
+        patch_create_bucket,
         patch_get_s3_connection_info,
         patch_is_api_available,
         patch_is_initialized,
@@ -1232,6 +1224,8 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available.return_value = True
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
+        patch_create_bucket.return_value = True
+        patch_upload_content_to_s3.return_value = False
         peer_relation_id = self._set_peer_relation()
         self._set_ca_certificate_secret_in_peer_relation(
             certificate="whatever certificate",
@@ -1243,21 +1237,7 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
-        mock_session = Mock()
-        mock_resource = Mock()
-        mock_bucket = Mock()
-
-        patch_session.return_value = mock_session
-        mock_session.resource.return_value = mock_resource
-        mock_resource.Bucket.return_value = mock_bucket
-        mock_bucket.put_object.side_effect = CustomBotoCoreError()
-        patch_get_s3_connection_info.return_value = {
-            "bucket": "whatever bucket",
-            "access-key": "whatever access key",
-            "secret-key": "whatever secret key",
-            "endpoint": "whatever endpoint",
-            "region": "whatever region",
-        }
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
@@ -1267,7 +1247,8 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.create_snapshot", new=Mock)
-    @patch("boto3.session.Session", new=Mock)
+    @patch("s3_session.S3Session.create_s3_bucket")
+    @patch("s3_session.S3Session.upload_content_to_s3")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
@@ -1276,7 +1257,11 @@ class TestCharm(unittest.TestCase):
         patch_get_s3_connection_info,
         patch_is_api_available,
         patch_is_initialized,
+        patch_upload_content_to_s3,
+        patch_create_bucket,
     ):
+        patch_upload_content_to_s3.return_value = True
+        patch_create_bucket.return_value = True
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
         self.harness.set_can_connect(container=self.container_name, val=True)
@@ -1292,13 +1277,7 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
-        patch_get_s3_connection_info.return_value = {
-            "bucket": "whatever bucket",
-            "access-key": "whatever access key",
-            "secret-key": "whatever secret key",
-            "endpoint": "whatever endpoint",
-            "region": "whatever region",
-        }
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")

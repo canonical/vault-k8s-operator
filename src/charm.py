@@ -51,7 +51,7 @@ from ops.model import (
 )
 from ops.pebble import ChangeError, Layer, PathError
 
-from s3_helpers import create_s3_bucket, create_s3_session, upload_content_to_s3
+from s3_session import S3Session
 from vault import Vault
 
 logger = logging.getLogger(__name__)
@@ -461,32 +461,30 @@ class VaultCharm(CharmBase):
 
         s3_parameters = self._retrieve_s3_parameters()
 
-        if not (session := create_s3_session(s3_parameters)):
+        try:
+            s3_session = S3Session(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
             event.fail(message="Failed to create S3 session.")
             return
-
-        try:
-            create_s3_bucket(
-                session=session,
-                region=s3_parameters["region"],
-                bucket_name=s3_parameters["bucket"],
-                endpoint=s3_parameters["endpoint"],
-            )
-            logger.info("Created S3 bucket %s", s3_parameters["bucket"])
-        except (BotoCoreError, ClientError) as e:
-            logger.error("Failed to create S3 bucket: %s", e)
+        if not (s3_session.create_s3_bucket(bucket_name=s3_parameters["bucket"])):
+            logger.error("Failed to create S3 bucket")
             event.fail(message="Failed to create S3 bucket.")
             return
+
         snapshot = self._create_raft_snapshot()
         if not snapshot:
             event.fail(message="Failed to create raft snapshot.")
             return
         backup_key = self._get_backup_key()
-        content_uploaded = upload_content_to_s3(
-            session=session,
+        content_uploaded = s3_session.upload_content_to_s3(
             content=snapshot,
             bucket_name=s3_parameters["bucket"],
-            endpoint=s3_parameters["endpoint"],
             key=backup_key,
         )
         if not content_uploaded:
@@ -832,14 +830,11 @@ class VaultCharm(CharmBase):
         """Retrieve S3 parameters from the S3 integrator relation.
 
         Removes leading and trailing whitespaces from the parameters.
-        Adds default region if not provided.
 
         Returns:
             Dict[str, str]: Dictionary of the S3 parameters.
         """
         s3_parameters = self.s3.get_s3_connection_info()
-        if "region" not in s3_parameters:
-            s3_parameters["region"] = DEFAULT_REGION
         for key, value in s3_parameters.items():
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
