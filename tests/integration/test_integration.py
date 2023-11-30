@@ -25,12 +25,14 @@ TRAEFIK_APPLICATION_NAME = "traefik"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 
-VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
+VAULT_KV_LIB_FILE = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
 
 
 def copy_lib_content() -> None:
-    shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
+    shutil.copyfile(
+        src=VAULT_KV_LIB_FILE, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_FILE}"
+    )
 
 
 class TestVaultK8s:
@@ -105,29 +107,15 @@ class TestVaultK8s:
             f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
         ]
         assert isinstance(self_signed_certificates_unit, Unit)
+        self_signed_certificates_unit.destroy
         action = await self_signed_certificates_unit.run_action(
             action_name="get-ca-certificate",
         )
         return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
 
     @pytest.mark.abort_on_fail
-    @pytest.fixture(scope="module")
-    async def deploy_prometheus(self, ops_test: OpsTest) -> None:
-        """Deploys Prometheus.
-
-        Args:
-            ops_test: Ops test Framework.
-        """
-        assert ops_test.model
-        await ops_test.model.deploy(
-            "prometheus-k8s",
-            application_name=PROMETHEUS_APPLICATION_NAME,
-            trust=True,
-        )
-
-    @pytest.mark.abort_on_fail
-    @pytest.fixture(scope="module")
-    async def build_and_deploy(self, ops_test: OpsTest):
+    @pytest.mark.skip_if_deployed
+    async def test_build_and_deploy(self, ops_test: OpsTest):
         """Builds and deploys vault-k8s charm.
 
         Args:
@@ -139,8 +127,19 @@ class TestVaultK8s:
         await self.deploy_charm(ops_test, charm)
 
     @pytest.mark.abort_on_fail
-    @pytest.fixture(scope="module")
-    async def deploy_traefik(self, ops_test: OpsTest):
+    @pytest.mark.skip_if_deployed
+    async def test_given_default_config_when_deploy_then_status_is_active(self, ops_test: OpsTest):
+        assert ops_test.model
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=5,
+        )
+
+    @pytest.mark.abort_on_fail
+    @pytest.mark.skip_if_deployed
+    async def test_deploy_traefik(self, ops_test: OpsTest):
         """Deploy Traefik.
 
         Args:
@@ -155,8 +154,8 @@ class TestVaultK8s:
         )
 
     @pytest.mark.abort_on_fail
-    @pytest.fixture(scope="module")
-    async def deploy_self_signed_certificates_operator(self, ops_test: OpsTest):
+    @pytest.mark.skip_if_deployed
+    async def test_deploy_self_signed_certificates_operator(self, ops_test: OpsTest):
         """Deploy Self Signed Certificates Operator.
 
         Args:
@@ -170,24 +169,9 @@ class TestVaultK8s:
             channel="beta",
         )
 
-    @pytest.mark.abort_on_fail
-    async def test_given_default_config_when_deploy_then_status_is_active(
-        self, ops_test: OpsTest, build_and_deploy
-    ):
-        assert ops_test.model
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=5,
-        )
-
     async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_and_deploy,
-        deploy_traefik,
-        deploy_self_signed_certificates_operator,
     ):
         assert ops_test.model
         await ops_test.model.integrate(
@@ -277,8 +261,9 @@ class TestVaultK8s:
         )
 
     async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is_created(
-        self, ops_test
+        self, ops_test: OpsTest
     ):
+        assert ops_test.model
         secret_key = "test-key"
         secret_value = "test-value"
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_APPLICATION_NAME]
@@ -305,8 +290,23 @@ class TestVaultK8s:
         assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
+    @pytest.mark.skip_if_deployed
+    async def test_deploy_prometheus(self, ops_test: OpsTest) -> None:
+        """Deploys Prometheus.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
+        assert ops_test.model
+        await ops_test.model.deploy(
+            "prometheus-k8s",
+            application_name=PROMETHEUS_APPLICATION_NAME,
+            trust=True,
+        )
+
+    @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
-        self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
+        self, ops_test: OpsTest
     ):
         assert ops_test.model
         await ops_test.model.integrate(
@@ -323,7 +323,6 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_and_deploy,
     ):
         assert ops_test.model
         num_units = 7
@@ -342,7 +341,6 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_and_deploy,
     ):
         assert ops_test.model
         num_units = 3
