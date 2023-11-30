@@ -599,6 +599,14 @@ class VaultCharm(CharmBase):
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
 
+    @property
+    def _cluster_address(self) -> str:
+        """Returns the FQDN with the https schema and vault cluster port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
+
     def _push_ca_certificate_to_workload(self, certificate: str) -> None:
         """Push the CA certificate to the workload.
 
@@ -641,7 +649,7 @@ class VaultCharm(CharmBase):
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
             max_lease_ttl=self.model.config["max_lease_ttl"],
-            cluster_address=f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
+            cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
             tls_cert_file=TLS_CERT_FILE_PATH,
