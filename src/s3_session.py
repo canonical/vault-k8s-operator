@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 AWS_DEFAULT_REGION = "us-east-1"
 
 
-class S3Session:
+class S3:
     """A class representing an S3 session allowing S3 operations."""
 
     def __init__(
@@ -40,16 +40,13 @@ class S3Session:
             logger.error("Error creating AWS session: %s", e)
             raise e
 
-    def create_s3_bucket(self, bucket_name: str) -> bool:
+    def create_bucket(self, bucket_name: str) -> bool:
         """Create S3 bucket.
 
         If the bucket already exists, it will be skipped.
 
         Args:
-            session: S3 session.
-            region: S3 region.
-            bucket_name: S3 bucket name.
-            endpoint: S3 endpoint.
+            bucket_name: S3 bucket name to be created.
 
         Returns:
             bool: True if the bucket was created, False otherwise.
@@ -89,7 +86,7 @@ class S3Session:
             )
             return False
 
-    def upload_content_to_s3(
+    def upload_content(
         self,
         content: IO[bytes],
         bucket_name: str,
@@ -98,10 +95,8 @@ class S3Session:
         """Uploads the provided contents to the provided S3 bucket.
 
         Args:
-            session: S3 session.
-            content: Byte contents to upload.
+            content: File like object containing the content to upload.
             bucket_name: S3 bucket name.
-            endpoint: S3 endpoint.
             key: S3 object key.
 
         Returns:

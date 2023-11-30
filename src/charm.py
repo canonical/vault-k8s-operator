@@ -51,7 +51,7 @@ from ops.model import (
 )
 from ops.pebble import ChangeError, Layer, PathError
 
-from s3_session import S3Session
+from s3_session import S3
 from vault import Vault
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,6 @@ CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
-DEFAULT_REGION = "us-east-1"  # It is used as default in boto3
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 
 
@@ -240,7 +239,7 @@ class VaultCharm(CharmBase):
             strip_prefix=True,
             scheme=lambda: "https",
         )
-        self.s3 = S3Requirer(self, S3_RELATION_NAME)
+        self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.vault_pebble_ready, self._configure)
@@ -462,7 +461,7 @@ class VaultCharm(CharmBase):
         s3_parameters = self._retrieve_s3_parameters()
 
         try:
-            s3_session = S3Session(
+            s3 = S3(
                 access_key=s3_parameters["access-key"],
                 secret_key=s3_parameters["secret-key"],
                 endpoint=s3_parameters["endpoint"],
@@ -472,7 +471,7 @@ class VaultCharm(CharmBase):
             logger.error("Failed to create S3 session: %s", e)
             event.fail(message="Failed to create S3 session.")
             return
-        if not (s3_session.create_s3_bucket(bucket_name=s3_parameters["bucket"])):
+        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
             logger.error("Failed to create S3 bucket")
             event.fail(message="Failed to create S3 bucket.")
             return
@@ -482,7 +481,7 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to create raft snapshot.")
             return
         backup_key = self._get_backup_key()
-        content_uploaded = s3_session.upload_content_to_s3(
+        content_uploaded = s3.upload_content(
             content=snapshot,
             bucket_name=s3_parameters["bucket"],
             key=backup_key,
@@ -823,7 +822,7 @@ class VaultCharm(CharmBase):
         Returns:
             List[str]: List of missing required S3 parameters.
         """
-        s3_parameters = self.s3.get_s3_connection_info()
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
         return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
 
     def _retrieve_s3_parameters(self) -> Dict[str, str]:
@@ -834,7 +833,7 @@ class VaultCharm(CharmBase):
         Returns:
             Dict[str, str]: Dictionary of the S3 parameters.
         """
-        s3_parameters = self.s3.get_s3_connection_info()
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
         for key, value in s3_parameters.items():
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()

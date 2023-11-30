@@ -9,10 +9,10 @@ from unittest.mock import Mock, patch
 import boto3
 from botocore.exceptions import ClientError
 
-from s3_session import S3Session
+from s3_session import S3
 
 
-class TestS3Session(unittest.TestCase):
+class TestS3(unittest.TestCase):
     def test_given_valid_s3_parameters_when_create_s3_session_then_session_is_created(self):
         valid_s3_parameters = {
             "access-key": "ACCESS-KEY",
@@ -20,13 +20,13 @@ class TestS3Session(unittest.TestCase):
             "region": "REGION",
             "endpoint": "http://ENDPOINT",
         }
-        s3_session = S3Session(
+        s3 = S3(
             access_key=valid_s3_parameters["access-key"],
             secret_key=valid_s3_parameters["secret-key"],
             region=valid_s3_parameters["region"],
             endpoint=valid_s3_parameters["endpoint"],
         )
-        self.assertIsInstance(s3_session.session, boto3.session.Session)
+        self.assertIsInstance(s3.session, boto3.session.Session)
 
     def test_given_invalid_endpoint_when_create_s3_session_then_session_not_created(self):
         invalid_s3_parameters = {
@@ -36,7 +36,7 @@ class TestS3Session(unittest.TestCase):
             "endpoint": "invalid endpoint",
         }
         with self.assertRaises(ValueError):
-            S3Session(
+            S3(
                 access_key=invalid_s3_parameters["access-key"],
                 secret_key=invalid_s3_parameters["secret-key"],
                 region=invalid_s3_parameters["region"],
@@ -44,7 +44,7 @@ class TestS3Session(unittest.TestCase):
             )
 
     @patch("boto3.session.Session")
-    def test_given_bucket_already_exists_when_create_s3_bucket_then_bucket_not_created(
+    def test_given_bucket_already_exists_when_create_bucket_then_bucket_not_created(
         self,
         patch_session,
     ):
@@ -60,19 +60,19 @@ class TestS3Session(unittest.TestCase):
             "region": "REGION",
             "endpoint": "http://ENDPOINT",
         }
-        s3_session = S3Session(
+        s3 = S3(
             access_key=valid_s3_parameters["access-key"],
             secret_key=valid_s3_parameters["secret-key"],
             region=valid_s3_parameters["region"],
             endpoint=valid_s3_parameters["endpoint"],
         )
 
-        s3_session.create_s3_bucket(bucket_name="whatever-bucket")
+        s3.create_bucket(bucket_name="whatever-bucket")
 
         patch_session.resource.Bucket.create.assert_not_called()
 
     @patch("boto3.session.Session")
-    def test_given_bucket_not_created_when_create_s3_bucket_then_bucket_created(
+    def test_given_bucket_not_created_when_create_bucket_then_bucket_created(
         self,
         patch_session,
     ):
@@ -96,19 +96,19 @@ class TestS3Session(unittest.TestCase):
             error_response={"Error": {"Message": "Random bucket exists error message"}},
         )
 
-        s3_session = S3Session(
+        s3 = S3(
             access_key=valid_s3_parameters["access-key"],
             secret_key=valid_s3_parameters["secret-key"],
             region=valid_s3_parameters["region"],
             endpoint=valid_s3_parameters["endpoint"],
         )
 
-        s3_session.create_s3_bucket(bucket_name="whatever-bucket")
+        s3.create_bucket(bucket_name="whatever-bucket")
 
         mock_bucket.create.assert_called_once()
 
     @patch("boto3.session.Session")
-    def test_bucket_does_not_exist_when_upload_content_to_s3_then_content_not_uploaded(
+    def test_bucket_does_not_exist_when_upload_content_then_content_not_uploaded(
         self,
         patch_session,
     ):
@@ -126,7 +126,7 @@ class TestS3Session(unittest.TestCase):
             "region": "REGION",
             "endpoint": "http://ENDPOINT",
         }
-        s3_session = S3Session(
+        s3 = S3(
             access_key=valid_s3_parameters["access-key"],
             secret_key=valid_s3_parameters["secret-key"],
             region=valid_s3_parameters["region"],
@@ -138,7 +138,7 @@ class TestS3Session(unittest.TestCase):
             error_response={"Error": {"Message": "Random bucket exists error message"}},
         )
         self.assertFalse(
-            s3_session.upload_content_to_s3(
+            s3.upload_content(
                 bucket_name="whatever-bucket",
                 content=io.BytesIO(b"whatever content"),
                 key="whatever key",
@@ -146,14 +146,14 @@ class TestS3Session(unittest.TestCase):
         )
 
     @patch("boto3.session.Session", new=Mock)
-    def test_given_bucket_exists_when_upload_content_to_s3_then_content_uploaded(self):
+    def test_given_bucket_exists_when_upload_content_then_content_uploaded(self):
         valid_s3_parameters = {
             "access-key": "ACCESS-KEY",
             "secret-key": "SECRET-KEY",
             "region": "REGION",
             "endpoint": "http://ENDPOINT",
         }
-        s3_session = S3Session(
+        s3 = S3(
             access_key=valid_s3_parameters["access-key"],
             secret_key=valid_s3_parameters["secret-key"],
             region=valid_s3_parameters["region"],
@@ -161,7 +161,7 @@ class TestS3Session(unittest.TestCase):
         )
 
         self.assertTrue(
-            s3_session.upload_content_to_s3(
+            s3.upload_content(
                 bucket_name="whatever-bucket",
                 content=io.BytesIO(b"whatever content"),
                 key="whatever key",

@@ -1161,7 +1161,7 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to create S3 session.")
 
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3Session.create_s3_bucket")
+    @patch("s3_session.S3.create_bucket")
     def test_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
@@ -1178,7 +1178,7 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3Session.create_s3_bucket")
+    @patch("s3_session.S3.create_bucket")
     def test_given_snapshot_creation_fails_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
@@ -1210,11 +1210,11 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3Session.create_s3_bucket")
-    @patch("s3_session.S3Session.upload_content_to_s3")
+    @patch("s3_session.S3.create_bucket")
+    @patch("s3_session.S3.upload_content")
     def test_given_s3_content_upload_fails_when_create_backup_action_then_action_fails(
         self,
-        patch_upload_content_to_s3,
+        patch_upload_content,
         patch_create_bucket,
         patch_get_s3_connection_info,
         patch_is_api_available,
@@ -1225,7 +1225,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         patch_create_bucket.return_value = True
-        patch_upload_content_to_s3.return_value = False
+        patch_upload_content.return_value = False
         peer_relation_id = self._set_peer_relation()
         self._set_ca_certificate_secret_in_peer_relation(
             certificate="whatever certificate",
@@ -1247,8 +1247,8 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.create_snapshot", new=Mock)
-    @patch("s3_session.S3Session.create_s3_bucket")
-    @patch("s3_session.S3Session.upload_content_to_s3")
+    @patch("s3_session.S3.create_bucket")
+    @patch("s3_session.S3.upload_content")
     @patch("vault.Vault.is_initialized")
     @patch("vault.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
@@ -1257,10 +1257,10 @@ class TestCharm(unittest.TestCase):
         patch_get_s3_connection_info,
         patch_is_api_available,
         patch_is_initialized,
-        patch_upload_content_to_s3,
+        patch_upload_content,
         patch_create_bucket,
     ):
-        patch_upload_content_to_s3.return_value = True
+        patch_upload_content.return_value = True
         patch_create_bucket.return_value = True
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
