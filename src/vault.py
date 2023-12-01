@@ -132,7 +132,7 @@ class Vault:
 
     def restore_snapshot(self, snapshot: bytes) -> None:
         """Restore a snapshot of the Vault data."""
-        self._client.sys.restore_raft_snapshot(snapshot)
+        self._client.sys.force_restore_raft_snapshot(snapshot)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
