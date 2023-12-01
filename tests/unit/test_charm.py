@@ -8,7 +8,6 @@ from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import BotoCoreError
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
@@ -35,11 +34,6 @@ def read_file(path: str) -> str:
     with open(path, "r") as f:
         content = f.read()
     return content
-
-
-class CustomBotoCoreError(BotoCoreError):
-    def __init__(self):
-        self.fmt = "whatever exception"
 
 
 class MockNetwork:

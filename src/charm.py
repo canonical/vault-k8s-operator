@@ -846,7 +846,11 @@ class VaultCharm(CharmBase):
         return bool(self.model.get_relation(PEER_RELATION_NAME))
 
     def _is_relation_created(self, relation_name: str) -> bool:
-        """Check if the relation is created."""
+        """Check if the relation is created.
+
+        Args:
+            relation_name: Checked relation name
+        """
         return bool(self.model.get_relation(relation_name))
 
     def _set_pebble_plan(self) -> None:
