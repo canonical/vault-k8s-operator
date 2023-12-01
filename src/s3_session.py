@@ -35,7 +35,7 @@ class S3:
                 aws_secret_access_key=self.secret_key,
                 region_name=self.region,
             )
-            self.session.resource("s3", endpoint_url=self.endpoint)
+            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint)
         except (ClientError, BotoCoreError, ValueError) as e:
             logger.error("Error creating AWS session: %s", e)
             raise e
@@ -51,8 +51,7 @@ class S3:
         Returns:
             bool: True if the bucket was created, False otherwise.
         """
-        s3 = self.session.resource("s3", endpoint_url=self.endpoint)
-        bucket = s3.Bucket(bucket_name)
+        bucket = self.s3.Bucket(bucket_name)
         try:
             # Checking if bucket already exists
             bucket.meta.client.head_bucket(Bucket=bucket_name)
@@ -63,9 +62,6 @@ class S3:
             pass
         except BotoCoreError as e:
             logger.error("Failed to check wether bucket exists. %s", e)
-            return False
-        except ValueError as e:
-            logger.error("Error creating resource with provided endpoint: %s", e)
             return False
         try:
             # AWS client does't allow LocationConstraint to be set to us-east-1
@@ -103,8 +99,7 @@ class S3:
             bool: True if the upload was successful, False otherwise.
         """
         try:
-            s3 = self.session.resource("s3", endpoint_url=self.endpoint)
-            bucket = s3.Bucket(bucket_name)
+            bucket = self.s3.Bucket(bucket_name)
             bucket.put_object(Key=key, Body=content)
             return True
         except (BotoCoreError, ClientError) as e:

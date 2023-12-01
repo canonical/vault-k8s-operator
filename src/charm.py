@@ -440,7 +440,8 @@ class VaultCharm(CharmBase):
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handles create-backup action.
 
-        Creates backup and stores it in S3 bucket.
+        Creates a snapshot and stores it on S3 storage.
+        Outputs the ID of the backup to the user.
 
         Args:
             event: ActionEvent
