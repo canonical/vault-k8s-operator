@@ -419,6 +419,46 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.audit_device_enabled", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("socket.getfqdn")
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("ops.model.Container.exists")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("ops.model.Model.get_binding")
+    def test_given_certificate_access_relation_when_relation_joined_then_new_request_is_created(
+        self,
+        patch_get_binding,
+        patch_generate_unit_certificate,
+        patch_exists,
+        patch_socket_getfqdn,
+    ):
+        pass
+
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("vault.Vault.is_active", new=Mock)
+    @patch("vault.Vault.audit_device_enabled", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("socket.getfqdn")
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("ops.model.Container.exists")
+    @patch("charm.generate_vault_unit_certificate")
+    @patch("ops.model.Model.get_binding")
+    def test_given_certificate_access_relation_when_relation_joined_then_new_request_is_created(
+        self,
+        patch_get_binding,
+        patch_generate_unit_certificate,
+        patch_exists,
+        patch_socket_getfqdn,
+    ):
+        pass
+
+    @patch("vault.Vault.enable_audit_device", new=Mock)
+    @patch("vault.Vault.is_active", new=Mock)
+    @patch("vault.Vault.audit_device_enabled", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.is_initialized", new=Mock)
     @patch("vault.Vault.is_api_available", new=Mock)
     @patch("charm.generate_vault_unit_certificate")

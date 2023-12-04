@@ -38,6 +38,7 @@ from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    RelationDepartedEvent,
     RelationJoinedEvent,
     RemoveEvent,
 )
@@ -257,20 +258,24 @@ class VaultCharm(CharmBase):
             self._on_new_access_certificate_joined,
         )
         self.framework.observe(
+            self.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_departed,
+            self._on_access_certificate_relation_departed,
+        )
+        self.framework.observe(
             self.tls_certificate_access.on.certificate_available,
-            self._on_new_access_root_certificate_available,
+            self._on_new_access_certificate_available,
         )
         self.framework.observe(
             self.tls_certificate_access.on.certificate_expiring,
-            self._on_access_root_certificate_expiring,
+            self._on_access_certificate_expiring,
         )
         self.framework.observe(
             self.tls_certificate_access.on.all_certificates_invalidated,
-            self._on_access_root_certificate_invalidated,
+            self._on_access_certificate_invalidated,
         )
         self.framework.observe(
             self.tls_certificate_access.on.certificate_invalidated,
-            self._on_access_root_certificate_invalidated,
+            self._on_access_certificate_invalidated,
         )
         self.framework.observe(
             self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
@@ -336,12 +341,14 @@ class VaultCharm(CharmBase):
                 ca_certificate=ca_certificate.encode(),
                 ca_private_key=ca_private_key.encode(),
             )
-            self._push_unit_certificate_to_workload(
+            self._push_unit_certificate_and_pk_to_workload(
                 certificate=certificate, private_key=private_key
             )
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault = Vault(
+            url=self._api_address, auth_details=self._get_authentication_details_for_vault()
+        )
         if not vault.is_api_available():
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             return
@@ -369,7 +376,8 @@ class VaultCharm(CharmBase):
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if self._bind_address:
                 vault = Vault(
-                    url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+                    url=self._api_address,
+                    auth_details=self._get_authentication_details_for_vault(),
                 )
                 vault.set_token(token=root_token)
                 if (
@@ -425,7 +433,9 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault = Vault(
+            url=self._api_address, auth_details=self._get_authentication_details_for_vault()
+        )
         vault.set_token(token=root_token)
 
         if not vault.is_api_available():
@@ -462,46 +472,61 @@ class VaultCharm(CharmBase):
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
 
     def _on_new_access_certificate_joined(self, event: RelationJoinedEvent):
-        if not self.unit.is_leader():
-            return
-        ca_private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
-        new_ca_csr = generate_csr(
-            private_key=ca_private_key.encode(), subject=self._ingress_address
-        )
-        self._push_ca_csr_to_workload(new_ca_csr.decode())
+        if not self._ingress_address:
+            raise RuntimeError("Tried to process relation join before peer relation.")
+        private_key = self._get_private_key_from_workload().encode()
+        private_key = generate_private_key() if not private_key else private_key
+        new_csr = generate_csr(private_key=private_key, subject=self._ingress_address)
+        self._push_csr_to_workload(new_csr.decode())
+        self._push_unit_pk_to_workload(private_key=private_key.decode())
         self.tls_certificate_access.request_certificate_creation(
-            certificate_signing_request=new_ca_csr, is_ca=True
+            certificate_signing_request=new_csr
         )
-        logger.info("New intermediary root certificate requested from %s", event.relation.app.name)
+        logger.info(
+            "New certificate requested from %s for unit %s",
+            event.relation.name,
+            self.unit.name,
+        )
 
-    def _on_new_access_root_certificate_available(self, event: CertificateAvailableEvent):
-        private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
-        self._purge_certs_from_workload()
-        if self.unit.is_leader():
-            self._set_ca_certificate_secret_in_peer_relation(
-                private_key=private_key, certificate=event.certificate
-            )
-        logger.info("Self signed CA was replaced with new intermediary root CA.")
-        self._configure(event=None)  # type: ignore
+    def _on_new_access_certificate_available(self, event: CertificateAvailableEvent):
+        private_key = self._get_private_key_from_workload()
+        csr = self._get_csr_from_workload()
+        if not private_key or csr != event.certificate_signing_request:
+            return
+        self._push_unit_certificate_to_workload(certificate=event.certificate)
+        logger.warn("CERT:!!!%s!!!\n PK:!!!%s!!!", event.certificate, private_key)
+        self._container.restart(self._service_name)
+        logger.info("Existing cert was replaced with cert issued by relation.")
 
-    def _on_access_root_certificate_expiring(self, event: CertificateExpiringEvent):
-        private_key, _ = self._get_ca_certificate_secret_in_peer_relation()
-        old_ca_csr = self._get_ca_csr_from_workload()
+    def _on_access_certificate_expiring(self, event: CertificateExpiringEvent):
+        private_key = self._get_private_key_from_workload()
+        old_ca_csr = self._get_csr_from_workload()
         if not self._ingress_address:
             raise RuntimeError("Peer relation somehow unavailable. Something is very wrong")
         new_ca_csr = generate_csr(private_key=private_key.encode(), subject=self._ingress_address)
+        self._push_csr_to_workload(new_ca_csr.decode())
         self.tls_certificate_access.request_certificate_renewal(
             old_certificate_signing_request=old_ca_csr.encode(),
             new_certificate_signing_request=new_ca_csr,
         )
-        logger.info("Sent a intermediary root certificate renewal request.")
+        logger.info("Sent a certificate renewal request for %s.", self.unit.name)
 
-    def _on_access_root_certificate_invalidated(
+    def _on_access_certificate_invalidated(
         self, event: Union[AllCertificatesInvalidatedEvent, CertificateInvalidatedEvent]
     ):
         self._purge_certs_from_workload()
+        self._configure(event=None)  # type: ignore
+
+    def _on_access_certificate_relation_departed(self, event: RelationDepartedEvent):
+        self._purge_certs_from_workload()
         self._remove_ca_certificate_secret_in_peer_relation()
         self._configure(event=None)  # type: ignore
+
+    def _get_authentication_details_for_vault(self) -> Dict[str, str]:
+        if not self._is_tls_certificates_access_relation_exists():
+            return {"ca-cert-location": self._get_ca_cert_location_in_charm()}
+        cert, pk = self._get_cert_and_pk_location_in_charm()
+        return {"cert": cert, "key": pk}
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -522,6 +547,28 @@ class VaultCharm(CharmBase):
         cert_storage = storage["certs"][0]
         storage_location = cert_storage.location
         return f"{storage_location}/ca.pem"
+
+    def _get_cert_and_pk_location_in_charm(self) -> Tuple[str]:
+        """Returns the certificate and pk location in the charm (not in the workload).
+
+        This path would typically be:
+            /var/lib/juju/storage/certs/0/cert.pem
+            /var/lib/juju/storage/certs/0/key.pem
+
+        Returns:
+            Tuple[str]: Paths of the cert and private key files
+
+        Raises:
+            VaultCertsError: If the CA certificate is not found
+        """
+        storage = self.model.storages
+        if "certs" not in storage:
+            raise VaultCertsError()
+        if len(storage["certs"]) == 0:
+            raise VaultCertsError()
+        cert_storage = storage["certs"][0]
+        storage_location = cert_storage.location
+        return (f"{storage_location}/cert.pem", f"{storage_location}/key.pem")
 
     def _ensure_unit_credentials(
         self,
@@ -625,7 +672,6 @@ class VaultCharm(CharmBase):
 
     def _purge_certs_from_workload(self) -> None:
         try:
-            self._container.remove_path(TLS_CA_FILE_PATH)
             self._container.remove_path(TLS_KEY_FILE_PATH)
             self._container.remove_path(TLS_CERT_FILE_PATH)
             self._container.remove_path(TLS_CSR_FILE_PATH)
@@ -689,25 +735,44 @@ class VaultCharm(CharmBase):
         self._container.push(path=TLS_CA_FILE_PATH, source=certificate)
         logger.info("Pushed CA certificate to workload")
 
-    def _push_unit_certificate_to_workload(self, private_key: str, certificate: str) -> None:
+    def _push_unit_certificate_and_pk_to_workload(
+        self, private_key: str, certificate: str
+    ) -> None:
         """Push the unit certificate to the workload.
 
         Args:
             private_key: Private key
             certificate: Certificate
         """
-        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
+        self._push_unit_certificate_to_workload(certificate=certificate)
+        self._push_unit_pk_to_workload(private_key=private_key)
+
+    def _push_unit_certificate_to_workload(self, certificate: str) -> None:
+        """Push the unit certificate to the workload.
+
+        Args:
+            certificate: Certificate
+        """
         self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
         logger.info("Pushed unit certificate to workload")
 
-    def _push_ca_csr_to_workload(self, csr: str) -> None:
-        """Push the CA CSR to the workload.
+    def _push_unit_pk_to_workload(self, private_key: str) -> None:
+        """Push the unit private key to the workload.
 
         Args:
-            csr: CSR generated for the CA certificate
+            private_key: Private key
+        """
+        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
+        logger.info("Pushed unit private key to workload")
+
+    def _push_csr_to_workload(self, csr: str) -> None:
+        """Push the CSR to the workload.
+
+        Args:
+            csr: CSR generated for the certificate from the access relation
         """
         self._container.push(path=TLS_CSR_FILE_PATH, source=csr)
-        logger.info("Pushed CA CSR to workload")
+        logger.info("Pushed CSR to workload")
 
     def _ca_certificate_pushed_to_workload(self) -> bool:
         """Returns whether CA certificate is pushed to the workload."""
@@ -778,7 +843,10 @@ class VaultCharm(CharmBase):
         logger.info("Vault CA certificate secret set in peer relation")
 
     def _remove_ca_certificate_secret_in_peer_relation(self) -> None:
-        """Removes the vault CA certificate secret in the peer relation."""
+        """Removes the vault CA certificate secret in the peer relation.
+
+        Only the key from the relation is removed. The actual juju secret is unmodified.
+        """
         if not self._is_peer_relation_created():
             raise RuntimeError("Peer relation not created")
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
@@ -803,13 +871,29 @@ class VaultCharm(CharmBase):
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
 
-    def _get_ca_csr_from_workload(self) -> str:
+    def _get_csr_from_workload(self) -> str:
         """Get the CSR generated for the requested CSR from the workload.
 
         Returns:
             str: The CSR string
         """
-        return self._container.pull(TLS_CSR_FILE_PATH).read()
+        return self._container.pull(TLS_CSR_FILE_PATH).read().strip()
+
+    def _get_private_key_from_workload(self) -> str:
+        """Get the private key generated for the unit from the workload.
+
+        Returns:
+            str: The private key
+        """
+        return self._container.pull(TLS_KEY_FILE_PATH).read().strip()
+
+    def _get_cert_from_workload(self) -> str:
+        """Get the certificate assigned to the unit from the workload.
+
+        Returns:
+            str: The certificated
+        """
+        return self._container.pull(TLS_CERT_FILE_PATH).read().strip()
 
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
@@ -849,8 +933,9 @@ class VaultCharm(CharmBase):
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
 
-    def _is_tls_certificates_access_relation_created(self) -> bool:
-        """Check if the tls-certificates-access relation is created."""
+    def _is_tls_certificates_access_relation_exists(self) -> bool:
+        """Check if the tls-certificates-access relation exists."""
+        logger.warning(self.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME))
         return bool(self.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME))
 
     def _set_pebble_plan(self) -> None:
@@ -877,6 +962,7 @@ class VaultCharm(CharmBase):
             rel_id: Relation id. If not given, update all relations.
         """
         send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
+        logger.debug("Send CA certificate to other relations")
         if self._ca_certificate_set_in_peer_relation():
             secret = self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             secret_content = secret.get_content()

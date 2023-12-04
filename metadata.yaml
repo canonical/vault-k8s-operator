@@ -78,4 +78,5 @@ requires:
     interface: tls-certificates
     limit: 1
     description: |
-      Receive a cert for Vault to use.
+      Communication between the vault units and from a client to Vault should 
+      be done using the certificates provided by this integration.

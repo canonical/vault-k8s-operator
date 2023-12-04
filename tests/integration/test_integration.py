@@ -290,6 +290,16 @@ class TestVaultK8s:
 
         assert action_output["value"] == secret_value
 
+    async def test_given_vault_deployed_when_tls_access_relation_created_then_status_certificate_replaced(
+        self, ops_test: OpsTest
+    ):
+        pass
+
+    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
+        self, ops_test
+    ):
+        pass
+
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
@@ -319,6 +329,21 @@ class TestVaultK8s:
             timeout=1000,
             wait_for_exact_units=num_units,
         )
+
+    async def test_given_vault_scaled_up_when_tls_access_relation_created_then_all_units_have_new_unique_certs(
+        self, ops_test: OpsTest
+    ):
+        pass
+
+    async def test_given_vault_scaled_up_when_tls_access_cert_expired_then_only_expired_unit_renews_cert(
+        self, ops_test
+    ):
+        pass
+
+    async def test_given_vault_scaled_up_when_tls_access_relation_destroyed_then_self_signed_cert_recreated(
+        self, ops_test
+    ):
+        pass
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(

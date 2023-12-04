@@ -5,7 +5,7 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Union, Dict
 
 import hvac  # type: ignore[import-untyped]
 import requests
@@ -22,8 +22,15 @@ class VaultError(Exception):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, ca_cert_path: str):
-        self._client = hvac.Client(url=url, verify=ca_cert_path)
+    def __init__(self, url: str, auth_details: Dict[str, str]):
+        if ca_cert := auth_details.get("ca-cert-location"):
+            self._client = hvac.Client(url=url, verify=ca_cert)
+        elif (cert := auth_details.get("cert")) and (pk := auth_details.get("key")):
+            self._client = hvac.Client(url=url, cert=(cert, pk), verify=True)
+        else:
+            raise VaultError(
+                "The authentication provided to the vault client was incomplete or wrong."
+            )
 
     def initialize(
         self, secret_shares: int = 1, secret_threshold: int = 1
