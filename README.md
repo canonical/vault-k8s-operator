@@ -148,10 +148,10 @@ ck0i0h3q457c7bgte4kg:
     [...]
 ```
 
-Copy the CA certificate content into a file and set the `VAULT_CAPATH` environment variable to reference this file:
+Copy the CA certificate content into a file and set the `VAULT_CACERT` environment variable to reference this file:
 
 ```bash
-export VAULT_CAPATH=/path/to/vault_ca.pem
+export VAULT_CACERT=/path/to/vault_ca.pem
 ```
 
 Identify the vault address by setting the `VAULT_ADDR` environment variable using the Vault URL which is retrieved through `show-proxied-endpoints` action.
