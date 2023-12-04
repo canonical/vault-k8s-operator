@@ -1,0 +1,12 @@
+cosl
+ops
+hvac
+Jinja2
+jsonschema
+lightkube
+lightkube-models
+pydantic
+pytest-interface-tester
+pyhcl
+requests
+cryptography
