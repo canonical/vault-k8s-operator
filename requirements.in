@@ -1,7 +1,7 @@
 cosl
 ops
 hvac
-Jinja2
+jinja2
 jsonschema
 lightkube
 lightkube-models
@@ -9,4 +9,5 @@ pydantic
 pytest-interface-tester
 pyhcl
 requests
+jsonschema
 cryptography

@@ -1,5 +1,5 @@
 black
-coverage
+coverage[toml]
 flake8
 flake8-docstrings
 flake8-copyright
