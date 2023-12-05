@@ -100,7 +100,7 @@ class S3:
         """
         try:
             bucket = self.s3.Bucket(bucket_name)
-            bucket.put_object(Key=key, Body=content)
+            bucket.upload_fileobj(Key=key, Fileobj=content)
             return True
         except (BotoCoreError, ClientError) as e:
             logger.error("Error uploading content to bucket %s: %s", bucket_name, e)

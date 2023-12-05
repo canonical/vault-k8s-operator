@@ -133,7 +133,7 @@ class TestS3(unittest.TestCase):
             endpoint=valid_s3_parameters["endpoint"],
         )
 
-        mock_bucket.put_object.side_effect = ClientError(
+        mock_bucket.upload_fileobj.side_effect = ClientError(
             operation_name="NoSuchBucket",
             error_response={"Error": {"Message": "Random bucket exists error message"}},
         )

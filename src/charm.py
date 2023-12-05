@@ -447,15 +447,18 @@ class VaultCharm(CharmBase):
             event: ActionEvent
         """
         if not self._is_relation_created(S3_RELATION_NAME):
+            logger.error("S3 relation not created. Failed to perform backup operation.")
             event.fail(message="S3 relation not created. Failed to perform backup operation.")
             return
 
         if not self.unit.is_leader():
+            logger.error("Only leader unit can perform backup operations.")
             event.fail(message="Only leader unit can perform backup operations.")
             return
 
         missing_parameters = self._get_missing_s3_parameters()
         if missing_parameters:
+            logger.error("S3 parameters missing. %s", missing_parameters)
             event.fail(message=f"S3 parameters missing. {missing_parameters}")
             return
 
@@ -479,6 +482,7 @@ class VaultCharm(CharmBase):
 
         snapshot = self._create_raft_snapshot()
         if not snapshot:
+            logger.error("Failed to create raft snapshot")
             event.fail(message="Failed to create raft snapshot.")
             return
         backup_key = self._get_backup_key()
@@ -488,6 +492,7 @@ class VaultCharm(CharmBase):
             key=backup_key,
         )
         if not content_uploaded:
+            logger.error("Failed to upload backup to S3 bucket")
             event.fail(message="Failed to upload backup to S3 bucket.")
             return
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
