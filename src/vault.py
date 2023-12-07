@@ -23,10 +23,11 @@ class Vault:
     """Class to interact with Vault through its API."""
 
     def __init__(self, url: str, auth_details: Dict[str, str]):
-        if ca_cert := auth_details.get("ca-cert-location"):
-            self._client = hvac.Client(url=url, verify=ca_cert)
-        elif (cert := auth_details.get("cert")) and (pk := auth_details.get("key")):
-            self._client = hvac.Client(url=url, cert=(cert, pk), verify=True)
+        if ca_cert := auth_details.get("ca-cert"):
+            if (cert := auth_details.get("cert")) and (pk := auth_details.get("key")):
+                self._client = hvac.Client(url=url, cert=(cert, pk), verify=ca_cert)
+            else:
+                self._client = hvac.Client(url=url, verify=ca_cert)
         else:
             raise VaultError(
                 "The authentication provided to the vault client was incomplete or wrong."

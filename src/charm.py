@@ -10,6 +10,7 @@ import json
 import logging
 import socket
 from typing import Dict, List, Optional, Tuple, Union
+from signal import SIGHUP
 
 import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -38,7 +39,7 @@ from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
-    RelationDepartedEvent,
+    RelationBrokenEvent,
     RelationJoinedEvent,
     RemoveEvent,
 )
@@ -258,10 +259,6 @@ class VaultCharm(CharmBase):
             self._on_new_access_certificate_joined,
         )
         self.framework.observe(
-            self.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_departed,
-            self._on_access_certificate_relation_departed,
-        )
-        self.framework.observe(
             self.tls_certificate_access.on.certificate_available,
             self._on_new_access_certificate_available,
         )
@@ -293,7 +290,7 @@ class VaultCharm(CharmBase):
             return
         self._delete_vault_data()
 
-    def _configure(self, event: ConfigChangedEvent) -> None:
+    def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:
         """Handler triggered whenever there is a config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
@@ -494,9 +491,8 @@ class VaultCharm(CharmBase):
         if not private_key or csr != event.certificate_signing_request:
             return
         self._push_unit_certificate_to_workload(certificate=event.certificate)
-        logger.warn("CERT:!!!%s!!!\n PK:!!!%s!!!", event.certificate, private_key)
-        self._container.restart(self._service_name)
-        logger.info("Existing cert was replaced with cert issued by relation.")
+        self._push_ca_certificate_to_workload(certificate=event.ca)
+        self._container.send_signal(SIGHUP, self._container_name)
 
     def _on_access_certificate_expiring(self, event: CertificateExpiringEvent):
         private_key = self._get_private_key_from_workload()
@@ -514,19 +510,15 @@ class VaultCharm(CharmBase):
     def _on_access_certificate_invalidated(
         self, event: Union[AllCertificatesInvalidatedEvent, CertificateInvalidatedEvent]
     ):
-        self._purge_certs_from_workload()
-        self._configure(event=None)  # type: ignore
-
-    def _on_access_certificate_relation_departed(self, event: RelationDepartedEvent):
-        self._purge_certs_from_workload()
-        self._remove_ca_certificate_secret_in_peer_relation()
-        self._configure(event=None)  # type: ignore
+        self._remove_all_certs_from_workload()
+        self._configure()
+        self._container.send_signal(SIGHUP, self._container_name)
+        self._configure()
 
     def _get_authentication_details_for_vault(self) -> Dict[str, str]:
-        if not self._is_tls_certificates_access_relation_exists():
-            return {"ca-cert-location": self._get_ca_cert_location_in_charm()}
+        ca_cert = self._get_ca_cert_location_in_charm()
         cert, pk = self._get_cert_and_pk_location_in_charm()
-        return {"cert": cert, "key": pk}
+        return {"ca-cert": ca_cert, "cert": cert, "key": pk}
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -670,11 +662,12 @@ class VaultCharm(CharmBase):
         """Return the vault kv secret id associated to input label from peer relation."""
         return self._get_vault_kv_secrets_in_peer_relation().get(label)
 
-    def _purge_certs_from_workload(self) -> None:
+    def _remove_all_certs_from_workload(self) -> None:
         try:
-            self._container.remove_path(TLS_KEY_FILE_PATH)
+            self._container.remove_path(TLS_CA_FILE_PATH)
             self._container.remove_path(TLS_CERT_FILE_PATH)
             self._container.remove_path(TLS_CSR_FILE_PATH)
+            self._container.remove_path(TLS_KEY_FILE_PATH)
         except PathError:
             pass
 
