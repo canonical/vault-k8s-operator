@@ -15,8 +15,8 @@ listener "tcp" {
 default_lease_ttl = "168h"
 max_lease_ttl     = "720h"
 disable_mlock     = true
-cluster_addr      = "https://1.2.3.4:8201"
-api_addr          = "https://1.2.3.4:8200"
+cluster_addr      = "https://myhostname:8201"
+api_addr          = "https://myhostname:8200"
 telemetry {
   disable_hostname = true
   prometheus_retention_time = "12h"

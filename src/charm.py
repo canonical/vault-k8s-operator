@@ -330,7 +330,7 @@ class VaultCharm(CharmBase):
             self._push_ca_certificate_to_workload(certificate=ca_certificate)
         if not self._unit_certificate_pushed_to_workload():
             ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-            sans_ip = [self._bind_address, self._ingress_address]
+            sans_ip = [self._ingress_address]
             private_key, certificate = generate_vault_unit_certificate(
                 subject=self._ingress_address,
                 sans_ip=sans_ip,
@@ -713,11 +713,19 @@ class VaultCharm(CharmBase):
 
     @property
     def _api_address(self) -> str:
-        """Returns the API address.
+        """Returns the FQDN with the https schema and vault port.
 
-        Example: "https://1.2.3.4:8200"
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
         """
-        return f"https://{self._bind_address}:{self.VAULT_PORT}"
+        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
+
+    @property
+    def _cluster_address(self) -> str:
+        """Returns the FQDN with the https schema and vault cluster port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
     def _push_ca_certificate_to_workload(self, certificate: str) -> None:
         """Push the CA certificate to the workload.
@@ -789,7 +797,7 @@ class VaultCharm(CharmBase):
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
             max_lease_ttl=self.model.config["max_lease_ttl"],
-            cluster_address=f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
+            cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
             tls_cert_file=TLS_CERT_FILE_PATH,
