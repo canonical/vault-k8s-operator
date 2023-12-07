@@ -20,7 +20,7 @@ juju deploy vault-k8s --channel edge -n 5 --trust
 Deploy Traefik
 
 ```bash
-juju deploy traefik-k8s --channel edge --trust --config external_hostname=<your hostname> 
+juju deploy traefik-k8s --channel edge --trust
 ```
 
 Deploy Self Signed Certificates Operator
@@ -54,7 +54,7 @@ Running operation 1 with 1 task
   - task 2 on unit-traefik-k8s-0
 
 Waiting for task 2...
-proxied-endpoints: '{"vault-k8s": {"url": "https://<external-hostname>/vault-vault-k8s"}}'
+proxied-endpoints: '{"vault-k8s": {"url": "https://10.0.0.5/vault-vault-k8s"}}'
 ```
 
 You should now be able to access the Vault using the URL in the action output.
@@ -154,10 +154,10 @@ Copy the CA certificate content into a file and set the `VAULT_CAPATH` environme
 export VAULT_CAPATH=/path/to/vault_ca.pem
 ```
 
-Identify the vault address by setting the `VAULT_ADDR` environment variable using the Vault URL which is retrieved through `show-proxied-endpoints` action.
+Identify the vault address by setting the `VAULT_ADDR` environment variable using the Vault URL which is retrieved through `show-proxied-endpoints` action. In our example, the vault address is "https://10.0.0.5/vault-vault-k8s":
 
 ```bash
-export VAULT_ADDR="https://<external-hostname>/vault-vault-k8s"
+export VAULT_ADDR="https://10.0.0.5/vault-vault-k8s"
 ```
 
 You can now run vault commands against the vault unit.
