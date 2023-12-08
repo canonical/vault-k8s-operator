@@ -17,4 +17,6 @@ types-PyYAML
 types-setuptools
 types-toml
 types-requests
+types-boto3
+types-botocore
 macaroonbakery==1.3.2

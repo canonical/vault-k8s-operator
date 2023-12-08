@@ -11,3 +11,4 @@ pyhcl
 requests
 jsonschema
 cryptography
+boto3

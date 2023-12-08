@@ -6,15 +6,18 @@
 
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
+import datetime
 import json
 import logging
 import socket
-from typing import Dict, List, Optional, Tuple
+from typing import IO, Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
+from botocore.exceptions import BotoCoreError, ClientError
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -30,6 +33,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
+    ActionEvent,
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
@@ -47,6 +51,7 @@ from ops.model import (
 )
 from ops.pebble import ChangeError, Layer, PathError
 
+from s3_session import S3
 from vault import Vault
 
 logger = logging.getLogger(__name__)
@@ -65,6 +70,8 @@ CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+S3_RELATION_NAME = "s3-parameters"
+REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 
 
 def render_vault_config_file(
@@ -232,6 +239,7 @@ class VaultCharm(CharmBase):
             strip_prefix=True,
             scheme=lambda: "https",
         )
+        self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.vault_pebble_ready, self._configure)
@@ -239,6 +247,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -248,10 +257,7 @@ class VaultCharm(CharmBase):
         )
 
     def _on_install(self, event: InstallEvent):
-        """Handler triggered when the charm is installed.
-
-        Sets pebble plan, initializes vault, enable audit device, and unseals vault.
-        """
+        """Handler triggered when the charm is installed."""
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
@@ -430,6 +436,76 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         stale_nonces = set(credential_nonces) - set(nonces)
         self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+
+    def _on_create_backup_action(self, event: ActionEvent) -> None:
+        """Handles create-backup action.
+
+        Creates a snapshot and stores it on S3 storage.
+        Outputs the ID of the backup to the user.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self._is_relation_created(S3_RELATION_NAME):
+            logger.error("S3 relation not created. Failed to perform backup operation.")
+            event.fail(message="S3 relation not created. Failed to perform backup operation.")
+            return
+
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can perform backup operations.")
+            event.fail(message="Only leader unit can perform backup operations.")
+            return
+
+        missing_parameters = self._get_missing_s3_parameters()
+        if missing_parameters:
+            logger.error("S3 parameters missing. %s", missing_parameters)
+            event.fail(message=f"S3 parameters missing. {missing_parameters}")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+            logger.error("Failed to create S3 bucket")
+            event.fail(message="Failed to create S3 bucket.")
+            return
+
+        snapshot = self._create_raft_snapshot()
+        if not snapshot:
+            logger.error("Failed to create raft snapshot")
+            event.fail(message="Failed to create raft snapshot.")
+            return
+        backup_key = self._get_backup_key()
+        content_uploaded = s3.upload_content(
+            content=snapshot,
+            bucket_name=s3_parameters["bucket"],
+            key=backup_key,
+        )
+        if not content_uploaded:
+            logger.error("Failed to upload backup to S3 bucket")
+            event.fail(message="Failed to upload backup to S3 bucket.")
+            return
+        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
+        event.set_results({"backup-id": backup_key})
+
+    def _get_backup_key(self) -> str:
+        """Returns the backup key.
+
+        Returns:
+            str: The backup key
+        """
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        return f"vault-backup-{self.model.name}-{timestamp}"
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -746,9 +822,41 @@ class VaultCharm(CharmBase):
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
 
+    def _get_missing_s3_parameters(self) -> List[str]:
+        """Returns list of missing S3 parameters.
+
+        Returns:
+            List[str]: List of missing required S3 parameters.
+        """
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
+        return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
+
+    def _retrieve_s3_parameters(self) -> Dict[str, str]:
+        """Retrieve S3 parameters from the S3 integrator relation.
+
+        Removes leading and trailing whitespaces from the parameters.
+
+        Returns:
+            Dict[str, str]: Dictionary of the S3 parameters.
+        """
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+
+        return s3_parameters
+
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _is_relation_created(self, relation_name: str) -> bool:
+        """Check if the relation is created.
+
+        Args:
+            relation_name: Checked relation name
+        """
+        return bool(self.model.get_relation(relation_name))
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
@@ -808,6 +916,32 @@ class VaultCharm(CharmBase):
         except PeerSecretError:
             return False
         return False
+
+    def _create_raft_snapshot(self) -> Optional[IO[bytes]]:
+        """Creates a snapshot of Vault.
+
+        Returns:
+            IO[bytes]: The snapshot content as a file like object.
+        """
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        if not vault.is_initialized():
+            logger.error("Vault is not initialized, cannot create snapshot")
+            return None
+        if not vault.is_api_available():
+            logger.error("Vault API is not available, cannot create snapshot")
+            return None
+        try:
+            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.error(
+                "Vault initialization secret not set in peer relation, cannot create snapshot"
+            )
+            return None
+        vault.set_token(token=root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=unseal_keys)
+        response = vault.create_snapshot()
+        return response.raw
 
     @property
     def _bind_address(self) -> Optional[str]:

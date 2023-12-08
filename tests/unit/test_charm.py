@@ -18,7 +18,8 @@ from charm import (
     config_file_content_matches,
 )
 
-TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v2.tls_certificates"
+S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
+S3_RELATION_NAME = "s3-parameters"
 
 
 def read_file(path: str) -> str:
@@ -91,6 +92,16 @@ class TestCharm(unittest.TestCase):
         self.harness.begin()
         self.container_name = "vault"
         self.app_name = "vault-k8s"
+
+    def get_valid_s3_params(self):
+        """Returns valid S3 parameters for mocking."""
+        return {
+            "bucket": "BUCKET",
+            "access-key": "whatever access key",
+            "secret-key": "whatever secret key",
+            "endpoint": "http://ENDPOINT",
+            "region": "REGION",
+        }
 
     def _set_peer_relation(self) -> int:
         """Set the peer relation and return the relation id."""
@@ -998,3 +1009,258 @@ class TestCharm(unittest.TestCase):
         )
 
         self.assertNotIn("ca", relation_data)
+
+    def test_given_s3_relation_not_created_when_create_backup_action_then_action_fails(self):
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(
+            message="S3 relation not created. Failed to perform backup operation."
+        )
+
+    def test_given_unit_not_leader_when_create_backup_action_then_action_fails(self):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Only leader unit can perform backup operations.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_missing_s3_parameters_when_create_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {}
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_once()
+        call_args = event.fail.call_args[1]["message"]
+        self.assertIn("S3 parameters missing.", call_args)
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_s3_session_not_created_when_create_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {
+            "bucket": "whatever bucket",
+            "access-key": "whatever access key",
+            "secret-key": "whatever secret key",
+            "endpoint": "whatever endpoint",
+        }
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create S3 session.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    def test_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
+        self,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_create_bucket.return_value = False
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create S3 bucket.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    @patch("vault.Vault.is_initialized")
+    def test_given_vault_is_not_initialized_when_create_backup_action_then_action_fails(
+        self,
+        patch_is_initialized,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+    ):
+        patch_is_initialized.return_value = False
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_api_available.return_value = True
+        patch_create_bucket.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    @patch("vault.Vault.is_initialized")
+    def test_given_vault_api_not_available_when_create_backup_action_then_action_fails(
+        self,
+        patch_is_initialized,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = False
+        patch_create_bucket.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    @patch("vault.Vault.is_initialized")
+    def test_given_vault_initialization_secret_not_available_create_backup_action_then_action_fails(
+        self,
+        patch_is_initialized,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        patch_create_bucket.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    def test_given_snapshot_creation_fails_when_create_backup_action_then_action_fails(
+        self,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        patch_create_bucket.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.create_snapshot", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    @patch("s3_session.S3.upload_content")
+    def test_given_s3_content_upload_fails_when_create_backup_action_then_action_fails(
+        self,
+        patch_upload_content,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_create_bucket.return_value = True
+        patch_upload_content.return_value = False
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Failed to upload backup to S3 bucket.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.create_snapshot", new=Mock)
+    @patch("s3_session.S3.create_bucket")
+    @patch("s3_session.S3.upload_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_content_uploaded_to_s3_when_create_backup_action_then_action_succeeds(
+        self,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_upload_content,
+        patch_create_bucket,
+    ):
+        patch_upload_content.return_value = True
+        patch_create_bucket.return_value = True
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.set_results.assert_called()
