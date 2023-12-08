@@ -108,7 +108,7 @@ class TestS3(unittest.TestCase):
         mock_bucket.create.assert_called_once()
 
     @patch("boto3.session.Session")
-    def test_bucket_does_not_exist_when_upload_content_then_content_not_uploaded(
+    def test_given_bucket_does_not_exist_when_upload_content_then_content_not_uploaded(
         self,
         patch_session,
     ):
