@@ -28,7 +28,7 @@ class TestS3(unittest.TestCase):
         )
         self.assertIsInstance(s3.session, boto3.session.Session)
 
-    def test_given_invalid_endpoint_when_create_s3_session_then_session_not_created(self):
+    def test_given_invalid_endpoint_when_create_s3_session_then_valueerror_is_raised(self):
         invalid_s3_parameters = {
             "access-key": "ACCESS-KEY",
             "secret-key": "SECRET-KEY",
