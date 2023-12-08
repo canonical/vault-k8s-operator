@@ -9,8 +9,8 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-from typing import Dict, List, Optional, Tuple, Union
 from signal import SIGHUP
+from typing import Dict, List, Optional, Tuple, Union
 
 import hcl  # type: ignore[import-untyped]
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -39,7 +39,6 @@ from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
-    RelationBrokenEvent,
     RelationJoinedEvent,
     RemoveEvent,
 )
@@ -516,11 +515,11 @@ class VaultCharm(CharmBase):
         self._configure()
 
     def _get_authentication_details_for_vault(self) -> Dict[str, str]:
-        ca_cert = self._get_ca_cert_location_in_charm()
-        cert, pk = self._get_cert_and_pk_location_in_charm()
-        return {"ca-cert": ca_cert, "cert": cert, "key": pk}
+        ca_cert = self._get_ca_cert_path_in_charm()
+        cert, pk = self._get_cert_and_pk_path_in_charm()
+        return {"ca-cert-path": ca_cert, "cert-path": cert, "key-path": pk}
 
-    def _get_ca_cert_location_in_charm(self) -> str:
+    def _get_ca_cert_path_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
 
         This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
@@ -540,7 +539,7 @@ class VaultCharm(CharmBase):
         storage_location = cert_storage.location
         return f"{storage_location}/ca.pem"
 
-    def _get_cert_and_pk_location_in_charm(self) -> Tuple[str]:
+    def _get_cert_and_pk_path_in_charm(self) -> Tuple[str, str]:
         """Returns the certificate and pk location in the charm (not in the workload).
 
         This path would typically be:

@@ -307,7 +307,9 @@ class TestVaultK8s:
     async def test_given_vault_deployed_when_tls_access_relation_created_then_status_certificate_replaced(
         self, ops_test: OpsTest
     ):
-        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/leader"]
+        assert ops_test.model
+
+        vault_leader_unit = await ops_test.model.units[f"{APPLICATION_NAME}/leader"]
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         initial_ca_cert = action.results
 
@@ -320,8 +322,8 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
         )
-        # We have to wait for the certificate to actually be produced, which takes about 3 seconds realistically.
-        # Due to the low performance of the github runners this number could be tweaked.
+        # We have to wait for the certificate to actually be produced, which takes about 3 seconds
+        # locally. Due to the low performance of the github runners this number could be tweaked.
         time.sleep(15)
 
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
@@ -331,6 +333,8 @@ class TestVaultK8s:
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
         self, ops_test
     ):
+        assert ops_test.model
+
         vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/leader"]
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         initial_ca_cert = action.results

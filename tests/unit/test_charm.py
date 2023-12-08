@@ -149,6 +149,12 @@ class TestCharm(unittest.TestCase):
             key_values=key_values,
         )
 
+    def _set_tls_access_certificate_relation(self):
+        """Set the peer relation and return the relation id."""
+        return self.harness.add_relation(
+            relation_name="tls-certificates-access", remote_app="some-tls-provider"
+        )
+
     @patch("ops.model.Container.remove_path")
     def test_given_can_connect_when_install_then_existing_data_is_removed(self, patch_remove_path):
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -422,45 +428,46 @@ class TestCharm(unittest.TestCase):
         )
         self.assertEqual((root / "vault/certs/cert.pem").read_text(), unit_certificate)
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("socket.getfqdn")
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("ops.model.Container.exists")
-    @patch("charm.generate_vault_unit_certificate")
-    @patch("ops.model.Model.get_binding")
+    @patch("charm.VaultCharm._get_private_key_from_workload", new=Mock(return_value=b"password"))
     def test_given_certificate_access_relation_when_relation_joined_then_new_request_is_created(
-        self,
-        patch_get_binding,
-        patch_generate_unit_certificate,
-        patch_exists,
-        patch_socket_getfqdn,
+        self, patch_generate_csr
     ):
-        pass
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        # root = self.harness.get_filesystem_root(self.container_name)
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("socket.getfqdn")
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("ops.model.Container.exists")
-    @patch("charm.generate_vault_unit_certificate")
-    @patch("ops.model.Model.get_binding")
-    def test_given_certificate_access_relation_when_relation_joined_then_new_request_is_created(
+        patch_generate_csr.return_value = b"new csr"
+        self._set_tls_access_certificate_relation()
+
+        # assert new csr in container
+        # assert request cert called with this csr
+
+        assert 1 == 1
+
+    def test_given_certificate_access_relation_when_cert_available_then_new_cert_saved(
         self,
-        patch_get_binding,
-        patch_generate_unit_certificate,
-        patch_exists,
-        patch_socket_getfqdn,
     ):
-        pass
+        # Assert old ca cert
+        # run function
+        # Assert new ca cert, new cert in container
+        # Somehow assert sighup on container
+        assert 1 == 1
+
+    def test_given_certificate_access_relation_when_cert_expiring_then_new_cert_is_request_created(
+        self,
+    ):
+        # Assert old csr
+        # run function
+        # Assert new csr
+        assert 1 == 1
+
+    def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
+        self,
+    ):
+        # Assert old ca
+        # run function
+        # Assert storage has nothign
+        assert 1 == 1
 
     @patch("vault.Vault.enable_audit_device", new=Mock)
     @patch("vault.Vault.is_active", new=Mock)

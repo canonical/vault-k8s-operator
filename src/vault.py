@@ -5,7 +5,7 @@
 """Contains all the specificities to communicate with Vault through its API."""
 
 import logging
-from typing import List, Tuple, Union, Dict
+from typing import Dict, List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
@@ -23,7 +23,7 @@ class Vault:
     """Class to interact with Vault through its API."""
 
     def __init__(self, url: str, auth_details: Dict[str, str]):
-        if ca_cert := auth_details.get("ca-cert"):
+        if ca_cert := auth_details.get("ca-cert-path"):
             if (cert := auth_details.get("cert")) and (pk := auth_details.get("key")):
                 self._client = hvac.Client(url=url, cert=(cert, pk), verify=ca_cert)
             else:
