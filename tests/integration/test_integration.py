@@ -14,6 +14,8 @@ import pytest
 import yaml
 from juju.application import Application
 from juju.unit import Unit
+from lightkube import Client as KubernetesClient
+from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -28,9 +30,18 @@ VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
 
+NUM_VAULT_UNITS = 5
+
+k8s = KubernetesClient()
+
 
 def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
+
+
+def crash_pod(name: str, namespace: str) -> None:
+    """Simulates a pod crash by deleting the pod."""
+    k8s.delete(Pod, name=name, namespace=namespace)
 
 
 class TestVaultK8s:
@@ -52,7 +63,7 @@ class TestVaultK8s:
             application_name=APPLICATION_NAME,
             trust=True,
             series="jammy",
-            num_units=5,
+            num_units=NUM_VAULT_UNITS,
         )
 
     async def _get_vault_endpoint(self, ops_test: OpsTest, timeout: int = 60) -> str:
@@ -179,7 +190,25 @@ class TestVaultK8s:
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
-            wait_for_exact_units=5,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
+        self,
+        ops_test: OpsTest,
+        build_and_deploy,
+    ):
+        assert ops_test.model
+        unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
+        assert isinstance(unit, Unit)
+        k8s_namespace = ops_test.model.name
+        crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
     async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
