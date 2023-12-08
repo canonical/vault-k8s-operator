@@ -307,12 +307,47 @@ class TestVaultK8s:
     async def test_given_vault_deployed_when_tls_access_relation_created_then_status_certificate_replaced(
         self, ops_test: OpsTest
     ):
-        pass
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/leader"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        initial_ca_cert = action.results
+
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:tls-certificates-access",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        # We have to wait for the certificate to actually be produced, which takes about 3 seconds realistically.
+        # Due to the low performance of the github runners this number could be tweaked.
+        time.sleep(15)
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        final_ca_cert = action.results
+        assert initial_ca_cert != final_ca_cert
 
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
         self, ops_test
     ):
-        pass
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/leader"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        initial_ca_cert = action.results
+
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:tls-certificates-access",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
+            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
+        )
+        # Same situation as above but this should be a bit faster
+        time.sleep(10)
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        final_ca_cert = action.results
+        assert initial_ca_cert != final_ca_cert
 
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
@@ -347,21 +382,6 @@ class TestVaultK8s:
             timeout=1000,
             wait_for_exact_units=num_units,
         )
-
-    async def test_given_vault_scaled_up_when_tls_access_relation_created_then_all_units_have_new_unique_certs(
-        self, ops_test: OpsTest
-    ):
-        pass
-
-    async def test_given_vault_scaled_up_when_tls_access_cert_expired_then_only_expired_unit_renews_cert(
-        self, ops_test
-    ):
-        pass
-
-    async def test_given_vault_scaled_up_when_tls_access_relation_destroyed_then_self_signed_cert_recreated(
-        self, ops_test
-    ):
-        pass
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
