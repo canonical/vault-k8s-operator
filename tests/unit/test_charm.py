@@ -8,6 +8,7 @@ from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
@@ -1056,7 +1057,7 @@ class TestCharm(unittest.TestCase):
 
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
-    def test_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
+    def test_given_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
         patch_get_s3_connection_info,
@@ -1264,3 +1265,80 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
         event.set_results.assert_called()
+
+    def test_given_s3_relation_not_created_when_list_backups_action_then_action_fails(self):
+        event = Mock()
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_with(message="S3 relation not created. Failed to list backups.")
+
+    def test_given_unit_not_leader_when_list_backups_action_then_action_fails(self):
+        event = Mock()
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_with(message="Only leader unit can list backups.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_missing_s3_parameters_when_list_backups_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {}
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_once()
+        call_args = event.fail.call_args[1]["message"]
+        self.assertIn("S3 parameters missing.", call_args)
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_s3_session_not_created_when_list_backups_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {
+            "bucket": "whatever bucket",
+            "access-key": "whatever access key",
+            "secret-key": "whatever secret key",
+            "endpoint": "whatever endpoint",
+        }
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_with(message="Failed to create S3 session.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_object_key_list")
+    def test_given_get_object_list_raises_an_exception_when_list_backups_action_then_action_fails(
+        self,
+        patch_get_object_key_list,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_object_key_list.side_effect = ClientError(
+            operation_name="NoSuchBucket",
+            error_response={"Error": {"Message": "Random bucket exists error message"}},
+        )
+
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_with(message="Failed to list backups.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_object_key_list")
+    def test_given_backups_in_s3_when_list_backups_action_then_action_succeeds_with_backup_list(
+        self,
+        patch_get_object_key_list,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_object_key_list.return_value = ["backup1", "backup2"]
+        expected_backup_list = ["backup1", "backup2"]
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.set_results.assert_called_with({"backup-ids": expected_backup_list})
