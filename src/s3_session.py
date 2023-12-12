@@ -108,7 +108,7 @@ class S3:
             return False
 
     def get_object_key_list(self, bucket_name: str, prefix: str) -> List[str]:
-        """Get list of objects in an S3 bucket.
+        """Get list of object key in an S3 bucket.
 
         Args:
             bucket_name: S3 bucket name.
@@ -116,13 +116,17 @@ class S3:
 
         Returns:
             List[str]: List of object keys.
+
+        Raises:
+            ClientError
+            BotoCoreError
         """
-        ids = []
+        keys = []
         try:
             bucket = self.s3.Bucket(bucket_name)
             for obj in bucket.objects.filter(Prefix=prefix):
-                ids.append(obj.key)
-            return ids
+                keys.append(obj.key)
+            return keys
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchBucket":
                 logger.error("Bucket %s does not exist.", bucket_name)
@@ -135,7 +139,7 @@ class S3:
             raise e
 
     def get_content(self, bucket_name: str, object_key: str) -> Optional[StreamingBody]:
-        """Get object content from S3 bucket.
+        """Get object content from S3 bucket by key.
 
         Args:
             bucket_name: S3 bucket name.
@@ -143,6 +147,10 @@ class S3:
 
         Returns:
             Optional[StreamingBody]: File like object with the content of the S3 object.
+
+        Raises:
+            ClientError
+            BotoCoreError
         """
         bucket = self.s3.Bucket(bucket_name)
         try:
@@ -150,6 +158,9 @@ class S3:
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchKey":
                 logger.error("Object %s does not exist.", object_key)
+                return None
+            elif e.response["Error"]["Code"] == "NoSuchBucket":
+                logger.error("Bucket %s does not exist.", bucket_name)
                 return None
             else:
                 logger.error(

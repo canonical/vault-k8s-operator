@@ -2,25 +2,28 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import io
 import json
 import unittest
 from typing import List
 from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError
+import requests
+from botocore.exceptions import BotoCoreError, ClientError
+from botocore.response import StreamingBody
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
 
 from charm import (
     CA_CERTIFICATE_JUJU_SECRET_LABEL,
+    S3_RELATION_NAME,
     VAULT_INITIALIZATION_SECRET_LABEL,
     VaultCharm,
     config_file_content_matches,
 )
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
-S3_RELATION_NAME = "s3-parameters"
 
 
 def read_file(path: str) -> str:
@@ -1267,11 +1270,17 @@ class TestCharm(unittest.TestCase):
         event.set_results.assert_called()
 
     def test_given_s3_relation_not_created_when_list_backups_action_then_action_fails(self):
+        self.harness.set_leader(is_leader=True)
         event = Mock()
         self.harness.charm._on_list_backups_action(event)
         event.fail.assert_called_with(message="S3 relation not created. Failed to list backups.")
 
-    def test_given_unit_not_leader_when_list_backups_action_then_action_fails(self):
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_unit_not_leader_when_list_backups_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_list_backups_action(event)
@@ -1316,8 +1325,8 @@ class TestCharm(unittest.TestCase):
         patch_get_s3_connection_info,
     ):
         patch_get_object_key_list.side_effect = ClientError(
-            operation_name="NoSuchBucket",
-            error_response={"Error": {"Message": "Random bucket exists error message"}},
+            operation_name="Error",
+            error_response={"Error": {"Message": "Random bucket related error message"}},
         )
 
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
@@ -1342,3 +1351,445 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_list_backups_action(event)
         event.set_results.assert_called_with({"backup-ids": expected_backup_list})
+
+    def test_given_s3_relation_not_created_when_restore_backup_action_then_action_fails(self):
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="S3 relation not created. Failed to restore backup.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_unit_not_leader_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Only leader unit can restore backups.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_missing_s3_parameters_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {}
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_once()
+        call_args = event.fail.call_args[1]["message"]
+        self.assertIn("S3 parameters missing.", call_args)
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_s3_session_not_created_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = {
+            "bucket": "whatever bucket",
+            "access-key": "whatever access key",
+            "secret-key": "whatever secret key",
+            "endpoint": "whatever endpoint",
+        }
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to create S3 session.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_content")
+    def test_given_get_content_raises_clienterror_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_content,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_content.side_effect = ClientError(
+            operation_name="Error",
+            error_response={"Error": {"Message": "Random bucket related error message"}},
+        )
+
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to retrieve snapshot from S3 storage.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_content")
+    def test_given_get_content_raises_botocoreerror_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_content,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_content.side_effect = BotoCoreError()
+
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to retrieve snapshot from S3 storage.")
+
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_not_initialized_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = False
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "whatever root token",
+            "unseal-keys": ["whatever unseal keys"],
+        }
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to restore vault.")
+
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_api_not_available_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = False
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "whatever root token",
+            "unseal-keys": ["whatever unseal keys"],
+        }
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to restore vault.")
+
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_initialization_secret_not_available_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "whatever root token",
+            "unseal-keys": ["whatever unseal keys"],
+        }
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to restore vault.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.restore_snapshot")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_restoring_snapshot_fails_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_s3_connection_info,
+        patch_restore_snapshot,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 500
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "whatever root token",
+            "unseal-keys": ["whatever unseal keys"],
+        }
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Failed to restore vault.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.restore_snapshot")
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_action_succeeds(
+        self,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+        patch_restore_snapshot,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 200
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "whatever root token",
+            "unseal-keys": ["whatever unseal keys"],
+        }
+
+        self.harness.charm._on_restore_backup_action(event)
+        event.set_results.assert_called_with({"restored": "whatever backup id"})
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.restore_snapshot")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_restore_snapshot_fails_when_restore_backup_action_then_initialization_secret_is_unchanged(
+        self,
+        patch_get_s3_connection_info,
+        patch_restore_snapshot,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="original token content",
+            unseal_keys=["original_unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 500
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "backup root token",
+            "unseal-keys": ["backup_unseal_keys"],
+        }
+        self.harness.charm._on_restore_backup_action(event)
+        init_secret = self.harness.model.get_secret(
+            label=VAULT_INITIALIZATION_SECRET_LABEL
+        ).get_content(refresh=True)
+        self.assertEqual(
+            init_secret,
+            {"roottoken": "original token content", "unsealkeys": '["original_unseal_keys"]'},
+        )
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.restore_snapshot")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_initialization_secret_is_updated(
+        self,
+        patch_get_s3_connection_info,
+        patch_restore_snapshot,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="original token content",
+            unseal_keys=["original_unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 200
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "backup root token",
+            "unseal-keys": ["backup_unseal_keys"],
+        }
+
+        self.harness.charm._on_restore_backup_action(event)
+
+        init_secret = self.harness.model.get_secret(
+            label=VAULT_INITIALIZATION_SECRET_LABEL
+        ).get_content(refresh=True)
+        self.assertEqual(
+            init_secret,
+            {"roottoken": "backup root token", "unsealkeys": '["backup_unseal_keys"]'},
+        )
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal")
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.restore_snapshot")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_vault_is_unsealed_with_new_keys(
+        self,
+        patch_get_s3_connection_info,
+        patch_restore_snapshot,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+        patch_unseal,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="original token content",
+            unseal_keys=["original_unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 200
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "backup root token",
+            "unseal-keys": ["backup_unseal_keys"],
+        }
+
+        self.harness.charm._on_restore_backup_action(event)
+
+        patch_unseal.assert_called_with(unseal_keys=["backup_unseal_keys"])
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal")
+    @patch("vault.Vault.set_token")
+    @patch("s3_session.S3.get_content")
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch("vault.Vault.restore_snapshot")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_new_vault_root_token_is_set(
+        self,
+        patch_get_s3_connection_info,
+        patch_restore_snapshot,
+        patch_is_api_available,
+        patch_is_initialized,
+        patch_get_content,
+        patch_set_token,
+        patch_unseal,
+    ):
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.set_leader(is_leader=True)
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_get_content.return_value = StreamingBody(
+            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
+        )
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="original token content",
+            unseal_keys=["original_unseal_keys"],
+        )
+        patch_restore_snapshot.return_value = Mock(spec=requests.Response)
+        patch_restore_snapshot.return_value.status_code = 200
+        event = Mock()
+        event.params = {
+            "backup-id": "whatever backup id",
+            "root-token": "backup root token",
+            "unseal-keys": ["backup_unseal_keys"],
+        }
+
+        self.harness.charm._on_restore_backup_action(event)
+
+        patch_set_token.assert_called_with(token="backup root token")
