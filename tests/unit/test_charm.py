@@ -1016,10 +1016,9 @@ class TestCharm(unittest.TestCase):
 
     def test_given_s3_relation_not_created_when_create_backup_action_then_action_fails(self):
         event = Mock()
+        self.harness.set_leader(is_leader=True)
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(
-            message="S3 relation not created. Failed to perform backup operation."
-        )
+        event.fail.assert_called_with(message="S3 relation not created. Failed to perform backup.")
 
     def test_given_unit_not_leader_when_create_backup_action_then_action_fails(self):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
