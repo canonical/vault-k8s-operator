@@ -14,6 +14,7 @@ from typing import IO, Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
 from botocore.exceptions import BotoCoreError, ClientError
+from botocore.response import StreamingBody
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -72,6 +73,7 @@ SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
+BACKUP_KEY_PREFIX = "vault-backup"
 
 
 def render_vault_config_file(
@@ -248,6 +250,8 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
+        self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
+        self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -446,20 +450,15 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        if not self._is_relation_created(S3_RELATION_NAME):
-            logger.error("S3 relation not created. Failed to perform backup operation.")
-            event.fail(message="S3 relation not created. Failed to perform backup operation.")
-            return
-
         if not self.unit.is_leader():
             logger.error("Only leader unit can perform backup operations.")
             event.fail(message="Only leader unit can perform backup operations.")
             return
 
-        missing_parameters = self._get_missing_s3_parameters()
-        if missing_parameters:
-            logger.error("S3 parameters missing. %s", missing_parameters)
-            event.fail(message=f"S3 parameters missing. {missing_parameters}")
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to perform backup.")
             return
 
         s3_parameters = self._retrieve_s3_parameters()
@@ -498,6 +497,133 @@ class VaultCharm(CharmBase):
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
 
+    def _on_list_backups_action(self, event: ActionEvent) -> None:
+        """Handles list-backups action.
+
+        Lists all backups stored in S3 bucket.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can list backups.")
+            event.fail(message="Only leader unit can list backups.")
+            return
+
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to list backups.")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            backup_ids = s3.get_object_key_list(
+                bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
+            )
+        except (BotoCoreError, ClientError) as e:
+            logger.error("Failed to list backups: %s", e)
+            event.fail(message="Failed to list backups.")
+            return
+        event.set_results({"backup-ids": backup_ids})
+
+    def _on_restore_backup_action(self, event: ActionEvent) -> None:
+        """Handles restore-backup action.
+
+        Restores the snapshot with the provided ID.
+        Unseals Vault using the provided unseal key.
+        Sets the root token to the provided root token.
+        Updates the initialization secret in the peer relation
+            with the provided unseal key and root token.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can restore backups.")
+            event.fail(message="Only leader unit can restore backups.")
+            return
+
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to restore backup.")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            snapshot = s3.get_content(
+                bucket_name=s3_parameters["bucket"], object_key=event.params.get("backup-id")  # type: ignore[arg-type]
+            )
+        except (BotoCoreError, ClientError) as e:
+            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
+            event.fail(message="Failed to retrieve snapshot from S3 storage.")
+            return
+        if not snapshot:
+            logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
+            event.fail(message="Backup not found in S3 bucket.")
+            return
+        try:
+            if not (
+                self._restore_vault(
+                    snapshot=snapshot,
+                    restore_unseal_keys=event.params.get("unseal-keys"),  # type: ignore[arg-type]
+                    restore_root_token=event.params.get("root-token"),  # type: ignore[arg-type]
+                )
+            ):
+                logger.error("Failed to restore vault.")
+                event.fail(message="Failed to restore vault.")
+                return
+        except RuntimeError as e:
+            logger.error("Failed to restore vault: %s", e)
+            event.fail(message="Failed to restore vault.")
+            return
+        event.set_results({"restored": event.params.get("backup-id")})
+
+    def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
+        """Validates the requirements for creating S3.
+
+        It will check if the S3 relation is created
+            and if the required S3 parameters are set.
+
+        Returns:
+            bool: True if the requirements are met, False otherwise.
+        """
+        if not self._is_relation_created(S3_RELATION_NAME):
+            return False, "S3 relation not created."
+
+        missing_parameters = self._get_missing_s3_parameters()
+        if missing_parameters:
+            return False, f"S3 parameters missing. {missing_parameters}"
+
+        return True, None
+
     def _get_backup_key(self) -> str:
         """Returns the backup key.
 
@@ -505,7 +631,7 @@ class VaultCharm(CharmBase):
             str: The backup key
         """
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        return f"vault-backup-{self.model.name}-{timestamp}"
+        return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
     def _get_ca_cert_location_in_charm(self) -> str:
         """Returns the CA certificate location in the charm (not in the workload).
@@ -803,11 +929,16 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        juju_secret = self.app.add_secret(
-            juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
-        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        if not self._initialization_secret_set_in_peer_relation():
+            juju_secret = self.app.add_secret(
+                juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
+            )
+            peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+            return
+        secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
+        secret.set_content(content=juju_secret_content)
+        peer_relation.data[self.app].update({"vault-initialization-secret-id": secret.id})  # type: ignore[union-attr]
 
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
@@ -923,25 +1054,95 @@ class VaultCharm(CharmBase):
         Returns:
             IO[bytes]: The snapshot content as a file like object.
         """
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        if not vault.is_initialized():
-            logger.error("Vault is not initialized, cannot create snapshot")
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
-        if not vault.is_api_available():
-            logger.error("Vault API is not available, cannot create snapshot")
-            return None
-        try:
-            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            logger.error(
-                "Vault initialization secret not set in peer relation, cannot create snapshot"
-            )
-            return None
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         vault.set_token(token=root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
         response = vault.create_snapshot()
         return response.raw
+
+    def _restore_vault(
+        self, snapshot: StreamingBody, restore_unseal_keys: List[str], restore_root_token: str
+    ) -> bool:
+        """Restore vault using a raft snapshot.
+
+        Updates the initialization secret in the peer relation.
+        Upon successful secret update, it will restore the raft snapshot.
+        Upon successful restore, it will unseal Vault and set root token.
+
+        Args:
+            snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
+            restore_unseal_keys: List of unseal keys used at the time of the backup.
+            restore_root_token: Root token used at the time of the backup.
+
+        Returns:
+            bool: True if the restore was successful, False otherwise.
+        """
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Failed to get Vault client, cannot restore snapshot.")
+            return False
+        (
+            current_root_token,
+            current_unseal_keys,
+        ) = self._get_initialization_secret_from_peer_relation()
+        vault.set_token(token=current_root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=current_unseal_keys)
+
+        self._set_initialization_secret_in_peer_relation(
+            root_token=restore_root_token, unseal_keys=restore_unseal_keys
+        )
+        try:
+            # hvac vault client expects bytes or a file-like object to restore the snapshot
+            # StreamingBody implements the read() method
+            # so it can be used as a file-like object in this context
+            response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
+        except Exception as e:
+            # If restore fails for any reason, we reset the initialization secret
+            logger.error("Failed to restore snapshot: %s", e)
+            self._set_initialization_secret_in_peer_relation(
+                root_token=current_root_token, unseal_keys=current_unseal_keys
+            )
+            return False
+        if not 200 <= response.status_code < 300:
+            logger.error("Failed to restore snapshot: %s", response.json())
+            self._set_initialization_secret_in_peer_relation(
+                root_token=current_root_token, unseal_keys=current_unseal_keys
+            )
+            return False
+        vault.set_token(token=restore_root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=restore_unseal_keys)
+        return True
+
+    def _get_initialized_vault_client(self) -> Optional[Vault]:
+        """Returns an initialized vault client.
+
+        Creates a Vault client and returns it if:
+            - Vault is initialized
+            - Vault API is available
+            - Vault is unsealed
+        Otherwise, returns None.
+
+        Returns:
+            Vault: Vault client
+        """
+        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        if not vault.is_initialized():
+            logger.error("Vault is not initialized.")
+            return None
+        if not vault.is_api_available():
+            logger.error("Vault API is not available.")
+            return None
+        try:
+            self._get_initialization_secret_from_peer_relation()
+        except PeerSecretError:
+            logger.error("Vault initialization secret not set in peer relation.")
+            return None
+        return vault
 
     @property
     def _bind_address(self) -> Optional[str]:

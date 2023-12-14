@@ -5,3 +5,26 @@ create-backup:
   description: >-
     Creates a snapshot of the Raft backend and saves it to the S3 storage.
     Returns backup ID.
+
+list-backups:
+  description: >-
+    Lists all available backups.
+
+restore-backup:
+  description: >-
+    Restores a backup from the S3 storage to the Raft backend.
+    Returns backup ID.
+  params:
+    backup-id:
+      type: string
+      description: >-
+        Backup ID to restore.
+    unseal-keys:
+      type: array
+      description: >-
+        Unseal keys to use for unsealing the Vault after the restore.
+    root-token:
+      type: string
+      description: >-
+        Root token to use for unsealing the Vault after the restore.
+  required: [backup-id, unseal-keys, root-token]

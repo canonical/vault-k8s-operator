@@ -130,13 +130,13 @@ class Vault:
         """Create a snapshot of the Vault data."""
         return self._client.sys.take_raft_snapshot()
 
-    def restore_snapshot(self, snapshot: bytes) -> None:
+    def restore_snapshot(self, snapshot: bytes) -> requests.Response:
         """Restore a snapshot of the Vault data.
 
         Uses force_restore_raft_snapshot to restore the snapshot
         even if the unseal key used at backup time is different from the current one.
         """
-        self._client.sys.force_restore_raft_snapshot(snapshot)
+        return self._client.sys.force_restore_raft_snapshot(snapshot)
 
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
