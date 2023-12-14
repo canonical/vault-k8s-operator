@@ -554,7 +554,7 @@ class VaultCharm(CharmBase):
             logger.error("Failed to list backups: %s", e)
             event.fail(message="Failed to list backups.")
             return
-        event.set_results({"backup-ids": backup_ids})
+        event.set_results({"backup-ids": json.dumps(backup_ids)})
 
     def _on_restore_backup_action(self, event: ActionEvent) -> None:
         """Handles restore-backup action.
@@ -968,7 +968,7 @@ class VaultCharm(CharmBase):
         """
         try:
             juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-            content = juju_secret.get_content()
+            content = juju_secret.get_content(refresh=True)
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)

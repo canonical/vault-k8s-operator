@@ -33,6 +33,17 @@ jobs:
       - name: Enable Metallb
         if: ${{ inputs.enable-metallb == true }}
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
+      - name: Enable minio
+        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable minio"
+      - name: Set S3 environment variables
+        run: |
+          S3_ACCESS_KEY=$(sudo microk8s.kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' | base64 -d)
+          echo "S3_ACCESS_KEY=$S3_ACCESS_KEY" >> $GITHUB_ENV
+          S3_SECRET_KEY=$(sudo microk8s.kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_SECRET_KEY}' | base64 -d)
+          echo "S3_SECRET_KEY=$S3_SECRET_KEY" >> $GITHUB_ENV
+          endpoint_ip=$(sudo microk8s.kubectl get services -n minio-operator | grep minio | awk '{ print $3 }')
+          endpoint="http://$endpoint_ip:80"
+          echo "S3_ENDPOINT=$endpoint" >> $GITHUB_ENV
       - name: Run integration tests
         run: tox -e integration
       - name: Archive Tested Charm
