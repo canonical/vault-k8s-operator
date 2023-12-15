@@ -22,7 +22,7 @@ jobs:
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
       - name: Fetch Tested Charm
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: tested-charm
       - name: Move charm in current directory
