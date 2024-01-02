@@ -10,7 +10,7 @@ from unittest.mock import Mock, call, patch
 
 import hcl  # type: ignore[import-untyped]
 import requests
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
@@ -1072,6 +1072,21 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create S3 bucket.")
 
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    def test_given_bucket_creation_raises_connect_timeout_error_when_create_backup_action_then_action_fails(
+        self,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        patch_create_bucket.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
+
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.is_api_available")
@@ -1231,6 +1246,46 @@ class TestCharm(unittest.TestCase):
     @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.create_snapshot", new=Mock)
+    @patch("vault.Vault.is_initialized")
+    @patch("vault.Vault.is_api_available")
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.create_bucket")
+    @patch("s3_session.S3.upload_content")
+    def test_given_s3_content_upload_raises_connect_timeout_error_when_create_backup_action_then_action_fails(
+        self,
+        patch_upload_content,
+        patch_create_bucket,
+        patch_get_s3_connection_info,
+        patch_is_api_available,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        patch_create_bucket.return_value = True
+        patch_upload_content.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
+        peer_relation_id = self._set_peer_relation()
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        event = Mock()
+        self.harness.charm._on_create_backup_action(event)
+        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
+
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    @patch("vault.Vault.create_snapshot", new=Mock)
     @patch("s3_session.S3.create_bucket")
     @patch("s3_session.S3.upload_content")
     @patch("vault.Vault.is_initialized")
@@ -1337,6 +1392,24 @@ class TestCharm(unittest.TestCase):
 
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.get_object_key_list")
+    def test_given_get_object_list_raises_connect_timeout_error_when_list_backups_action_then_action_fails(
+        self,
+        patch_get_object_key_list,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_object_key_list.side_effect = ConnectTimeoutError(
+            endpoint_url="http://example.com"
+        )
+
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_list_backups_action(event)
+        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_object_key_list")
     def test_given_backups_in_s3_when_list_backups_action_then_action_succeeds_with_backup_list(
         self,
         patch_get_object_key_list,
@@ -1433,6 +1506,21 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to retrieve snapshot from S3 storage.")
+
+    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch("s3_session.S3.get_content")
+    def test_given_get_content_raises_connect_timeout_error_when_restore_backup_action_then_action_fails(
+        self,
+        patch_get_content,
+        patch_get_s3_connection_info,
+    ):
+        patch_get_content.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
+        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
+        event = Mock()
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
+        self.harness.charm._on_restore_backup_action(event)
+        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
 
     @patch("s3_session.S3.get_content")
     @patch("vault.Vault.is_initialized")
