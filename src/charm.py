@@ -968,7 +968,7 @@ class VaultCharm(CharmBase):
         """
         try:
             juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-            content = juju_secret.get_content(refresh=True)
+            content = juju_secret.get_content()
             return content["roottoken"], json.loads(content["unsealkeys"])
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
