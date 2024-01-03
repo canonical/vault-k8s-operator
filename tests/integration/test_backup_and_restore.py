@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
 from pathlib import Path
@@ -8,10 +8,10 @@ from typing import List
 import pytest
 import yaml
 from juju.application import Application
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+from tests.integration.helpers import get_leader_unit
+
 APPLICATION_NAME = "vault-k8s"
 MINIO_APPLICATION_NAME = "minio"
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
@@ -23,15 +23,9 @@ MINIO_CONFIG = {
     "secret-key": MINIO_S3_SECRET_KEY,
 }
 
+METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+
 NUM_VAULT_UNITS = 5
-
-
-async def get_leader_unit(model, application_name: str) -> Unit:
-    """Returns the leader unit for the given application."""
-    for unit in model.units.values():
-        if unit.application == application_name and await unit.is_leader_from_status():
-            return unit
-    raise RuntimeError(f"Leader unit for `{application_name}` not found.")
 
 
 class TestBackupAndRestore:

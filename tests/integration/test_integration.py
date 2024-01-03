@@ -15,8 +15,9 @@ import yaml
 from juju.application import Application
 from juju.unit import Unit
 from lightkube import Client as KubernetesClient
-from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
+
+from tests.integration.helpers import crash_pod
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -37,19 +38,6 @@ k8s = KubernetesClient()
 
 def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
-
-
-def crash_pod(name: str, namespace: str) -> None:
-    """Simulates a pod crash by deleting the pod."""
-    k8s.delete(Pod, name=name, namespace=namespace)
-
-
-async def get_leader_unit(model, application_name: str) -> Unit:
-    """Returns the leader unit for the given application."""
-    for unit in model.units.values():
-        if unit.application == application_name and await unit.is_leader_from_status():
-            return unit
-    raise RuntimeError(f"Leader unit for `{application_name}` not found.")
 
 
 class TestVaultK8s:
@@ -201,6 +189,24 @@ class TestVaultK8s:
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
+        self,
+        ops_test: OpsTest,
+        build_and_deploy,
+    ):
+        assert ops_test.model
+        unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
+        assert isinstance(unit, Unit)
+        k8s_namespace = ops_test.model.name
+        crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
     async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
         self,
         ops_test: OpsTest,
@@ -253,6 +259,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
     ):
+        """This proves that vault is reachable behind ingress."""
         vault_endpoint = await self._get_vault_endpoint(ops_test)
         action_output = await self.run_get_ca_certificate_action(ops_test)
         ca_certificate = action_output["ca-certificate"]
@@ -363,7 +370,6 @@ class TestVaultK8s:
         build_and_deploy,
     ):
         assert ops_test.model
-
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
         await app.scale(NUM_VAULT_UNITS)
