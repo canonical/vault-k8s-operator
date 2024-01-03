@@ -8,7 +8,8 @@ import logging
 from typing import IO, List, Optional
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 
 logger = logging.getLogger(__name__)
@@ -36,9 +37,14 @@ class S3:
                 aws_secret_access_key=self.secret_key,
                 region_name=self.region,
             )
-            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint)
+            custom_config = Config(
+                retries={
+                    "max_attempts": 1,
+                },
+            )
+            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint, config=custom_config)
         except (ClientError, BotoCoreError, ValueError) as e:
-            logger.error("Error creating AWS session: %s", e)
+            logger.error("Error creating session: %s", e)
             raise e
 
     def create_bucket(self, bucket_name: str) -> bool:
@@ -51,6 +57,9 @@ class S3:
 
         Returns:
             bool: True if the bucket was created, False otherwise.
+
+        Raises:
+            ConnectTimeoutError
         """
         bucket = self.s3.Bucket(bucket_name)
         try:
@@ -64,6 +73,10 @@ class S3:
         except BotoCoreError as e:
             logger.error("Failed to check wether bucket exists. %s", e)
             return False
+        except ConnectTimeoutError as e:
+            logger.error("Failed to check wether bucket exists. %s", e)
+            raise e
+
         try:
             # AWS client does't allow LocationConstraint to be set to us-east-1
             # If that's the regions used, we don't set LocationConstraint
@@ -98,6 +111,9 @@ class S3:
 
         Returns:
             bool: True if the upload was successful, False otherwise.
+
+        Raises:
+            ConnectTimeoutError
         """
         try:
             bucket = self.s3.Bucket(bucket_name)
@@ -106,6 +122,9 @@ class S3:
         except (BotoCoreError, ClientError) as e:
             logger.error("Error uploading content to bucket %s: %s", bucket_name, e)
             return False
+        except ConnectTimeoutError as e:
+            logger.error("Error uploading content to bucket %s: %s", bucket_name, e)
+            raise e
 
     def get_object_key_list(self, bucket_name: str, prefix: str) -> List[str]:
         """Get list of object key in an S3 bucket.
@@ -120,6 +139,7 @@ class S3:
         Raises:
             ClientError
             BotoCoreError
+            ConnectTimeoutError
         """
         keys = []
         try:
@@ -137,6 +157,9 @@ class S3:
         except BotoCoreError as e:
             logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
             raise e
+        except ConnectTimeoutError as e:
+            logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
+            raise e
 
     def get_content(self, bucket_name: str, object_key: str) -> Optional[StreamingBody]:
         """Get object content from S3 bucket by key.
@@ -151,6 +174,7 @@ class S3:
         Raises:
             ClientError
             BotoCoreError
+            ConnectTimeoutError
         """
         bucket = self.s3.Bucket(bucket_name)
         try:
@@ -168,6 +192,9 @@ class S3:
                 )
                 raise e
         except BotoCoreError as e:
+            logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
+            raise e
+        except ConnectTimeoutError as e:
             logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
             raise e
 

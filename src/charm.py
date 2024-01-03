@@ -13,7 +13,7 @@ import socket
 from typing import IO, Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
@@ -474,9 +474,15 @@ class VaultCharm(CharmBase):
             logger.error("Failed to create S3 session: %s", e)
             event.fail(message="Failed to create S3 session.")
             return
-        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-            logger.error("Failed to create S3 bucket")
-            event.fail(message="Failed to create S3 bucket.")
+
+        try:
+            if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+                logger.error("Failed to create S3 bucket")
+                event.fail(message="Failed to create S3 bucket.")
+                return
+        except ConnectTimeoutError as e:
+            logger.error("Failed to create S3 bucket: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
             return
 
         snapshot = self._create_raft_snapshot()
@@ -485,11 +491,17 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to create raft snapshot.")
             return
         backup_key = self._get_backup_key()
-        content_uploaded = s3.upload_content(
-            content=snapshot,
-            bucket_name=s3_parameters["bucket"],
-            key=backup_key,
-        )
+        try:
+            content_uploaded = s3.upload_content(
+                content=snapshot,
+                bucket_name=s3_parameters["bucket"],
+                key=backup_key,
+            )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to upload backup to S3 bucket: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
+
         if not content_uploaded:
             logger.error("Failed to upload backup to S3 bucket")
             event.fail(message="Failed to upload backup to S3 bucket.")
@@ -534,6 +546,10 @@ class VaultCharm(CharmBase):
             backup_ids = s3.get_object_key_list(
                 bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
             )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to list backups: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
         except (BotoCoreError, ClientError) as e:
             logger.error("Failed to list backups: %s", e)
             event.fail(message="Failed to list backups.")
@@ -581,6 +597,10 @@ class VaultCharm(CharmBase):
             snapshot = s3.get_content(
                 bucket_name=s3_parameters["bucket"], object_key=event.params.get("backup-id")  # type: ignore[arg-type]
             )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
         except (BotoCoreError, ClientError) as e:
             logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
             event.fail(message="Failed to retrieve snapshot from S3 storage.")
