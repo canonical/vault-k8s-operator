@@ -28,3 +28,25 @@ restore-backup:
       description: >-
         Root token to use for unsealing the Vault after the restore.
   required: [backup-id, unseal-keys, root-token]
+
+set-unseal-keys:
+  description: >-
+    Sets unseal keys for Vault.
+    Used to recover Vault if Vault's unseal key and the one used by the charm mismatch for some reason.
+  params:
+    unseal-keys:
+      type: array
+      description: >-
+        Unseal keys to set.
+  required: [unseal-keys]
+
+set-root-token:
+  description: >-
+    Sets root token for Vault.
+    Used to recover Vault if Vault's root token and the one used by the charm mismatch for some reason.
+  params:
+    root-token:
+      type: string
+      description: >-
+        Root token to set.
+  required: [root-token]

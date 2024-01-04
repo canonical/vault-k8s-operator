@@ -252,6 +252,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
+        self.framework.observe(self.on.set_unseal_keys_action, self._on_set_unseal_keys_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -563,7 +564,7 @@ class VaultCharm(CharmBase):
         Unseals Vault using the provided unseal key.
         Sets the root token to the provided root token.
         Updates the initialization secret in the peer relation
-            with the provided unseal key and root token.
+            with the provided unseal keys.
 
         Args:
             event: ActionEvent
@@ -625,6 +626,65 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         event.set_results({"restored": event.params.get("backup-id")})
+
+    def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
+        """Handles set-unseal-keys action.
+
+        Updates the initialization secret in the peer relation
+            with the provided root token.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can set unseal keys.")
+            event.fail(message="Only leader unit can set unseal keys.")
+            return
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Cannot set unseal keys, vault is not initialized yet.")
+            event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
+            return
+        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
+        new_keys = event.params.get("unseal-keys")
+        if set(new_keys) == set(current_keys):  # type: ignore[arg-type]
+            logger.info("Unseal keys are already set to %s", new_keys)
+            event.fail(message="Provided unseal keys are already set.")
+            return
+        self._set_initialization_secret_in_peer_relation(
+            root_token=root_token, unseal_keys=new_keys  # type: ignore[arg-type]
+        )
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
+        event.set_results({"unseal-keys": new_keys})
+
+    def _on_set_root_token_action(self, event: ActionEvent) -> None:
+        """Handles set-root-token action.
+
+        Updates the initialization secret in the peer relation
+            with the provided root token.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can set the root token.")
+            event.fail(message="Only leader unit can set the root token.")
+            return
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Cannot set root token, vault is not initialized yet.")
+            event.fail(message="Cannot set root token, vault is not initialized yet.")
+            return
+        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
+        new_root_token = event.params.get("root-token")
+        if new_root_token == root_token:
+            logger.info("Root token is already set to %s", new_root_token)
+            event.fail(message="Provided root token is already set.")
+            return
+        self._set_initialization_secret_in_peer_relation(
+            root_token=new_root_token, unseal_keys=current_keys  # type: ignore[arg-type]
+        )
+        vault.set_token(token=new_root_token)  # type: ignore[arg-type]
+        event.set_results({"root-token": new_root_token})
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
         """Validates the requirements for creating S3.

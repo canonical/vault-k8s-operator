@@ -1880,3 +1880,249 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
 
         patch_set_token.assert_called_with(token="backup root token")
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    def test_given_unit_not_leader_when_set_unseal_keys_action_then_action_fails(self):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        event = Mock()
+        self.harness.charm._on_set_unseal_keys_action(event)
+        event.fail.assert_called_with(message="Only leader unit can set unseal keys.")
+
+    @patch("vault.Vault.is_initialized")
+    def test_given_vault_not_initialized_when_set_unseal_keys_action_then_action_fails(
+        self,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = False
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        self.harness.charm._on_set_unseal_keys_action(event)
+        event.fail.assert_called_with(
+            message="Cannot set unseal keys, vault is not initialized yet."
+        )
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    def test_given_provided_unseal_keys_match_current_when_set_unseal_keys_action_then_action_fails(
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"unseal-keys": ["unseal_key2", "unseal_key1"]}
+        self.harness.charm._on_set_unseal_keys_action(event)
+        event.fail.assert_called_with(message="Provided unseal keys are already set.")
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_unseal_keys_are_set_in_secret(  # noqa: E501
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
+        self.harness.charm._on_set_unseal_keys_action(event)
+        init_secret = self.harness.model.get_secret(
+            label=VAULT_INITIALIZATION_SECRET_LABEL
+        ).get_content(refresh=True)
+        self.assertEqual(
+            init_secret,
+            {
+                "roottoken": "root token content",
+                "unsealkeys": '["new unseal key1", "new unseal key2"]',
+            },
+        )
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal")
+    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_vault_is_unsealed(  # noqa: E501
+        self,
+        patch_unseal,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
+        self.harness.charm._on_set_unseal_keys_action(event)
+        patch_unseal.assert_called_with(unseal_keys=["new unseal key1", "new unseal key2"])
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.unseal", new=Mock)
+    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_action_succeeds(  # noqa: E501
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
+        self.harness.charm._on_set_unseal_keys_action(event)
+        event.set_results.assert_called_with(
+            {"unseal-keys": ["new unseal key1", "new unseal key2"]}
+        )
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    def test_given_unit_not_leader_when_set_root_token_action_then_action_fails(self):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        event = Mock()
+        self.harness.charm._on_set_root_token_action(event)
+        event.fail.assert_called_with(message="Only leader unit can set the root token.")
+
+    @patch("vault.Vault.is_initialized")
+    def test_given_vault_not_initialized_when_set_root_token_action_then_action_fails(
+        self,
+        patch_is_initialized,
+    ):
+        patch_is_initialized.return_value = False
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        self.harness.charm._on_set_root_token_action(event)
+        event.fail.assert_called_with(
+            message="Cannot set root token, vault is not initialized yet."
+        )
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    def test_given_provided_root_token_matches_current_when_set_root_token_action_then_action_fails(
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"root-token": "root token content"}
+        self.harness.charm._on_set_root_token_action(event)
+        event.fail.assert_called_with(message="Provided root token is already set.")
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.set_token", new=Mock)
+    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_root_token_is_set_in_secret(  # noqa: E501
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"root-token": "new root token content"}
+        self.harness.charm._on_set_root_token_action(event)
+        init_secret = self.harness.model.get_secret(
+            label=VAULT_INITIALIZATION_SECRET_LABEL
+        ).get_content(refresh=True)
+        self.assertEqual(
+            init_secret,
+            {
+                "roottoken": "new root token content",
+                "unsealkeys": '["unseal_key1", "unseal_key2"]',
+            },
+        )
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.set_token")
+    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_vault_root_token_is_set(  # noqa: E501
+        self,
+        patch_set_token,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"root-token": "new root token content"}
+        self.harness.charm._on_set_root_token_action(event)
+        patch_set_token.assert_called_with(token="new root token content")
+
+    @patch("vault.Vault.is_initialized", new=Mock)
+    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("vault.Vault.set_token", new=Mock)
+    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_action_succeeds(  # noqa: E501
+        self,
+    ):
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_key1", "unseal_key2"],
+        )
+        self.harness.set_leader(is_leader=True)
+        event = Mock()
+        event.params = {"root-token": "new root token content"}
+        self.harness.charm._on_set_root_token_action(event)
+        event.set_results.assert_called_with({"root-token": "new root token content"})
