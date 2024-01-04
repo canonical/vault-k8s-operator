@@ -1422,7 +1422,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_list_backups_action(event)
-        event.set_results.assert_called_with({"backup-ids": expected_backup_list})
+        event.set_results.assert_called_with({"backup-ids": json.dumps(expected_backup_list)})
 
     def test_given_s3_relation_not_created_when_restore_backup_action_then_action_fails(self):
         self.harness.set_leader(is_leader=True)

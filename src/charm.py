@@ -554,7 +554,7 @@ class VaultCharm(CharmBase):
             logger.error("Failed to list backups: %s", e)
             event.fail(message="Failed to list backups.")
             return
-        event.set_results({"backup-ids": backup_ids})
+        event.set_results({"backup-ids": json.dumps(backup_ids)})
 
     def _on_restore_backup_action(self, event: ActionEvent) -> None:
         """Handles restore-backup action.
