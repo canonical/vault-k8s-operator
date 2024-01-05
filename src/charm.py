@@ -253,6 +253,7 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
         self.framework.observe(self.on.set_unseal_keys_action, self._on_set_unseal_keys_action)
+        self.framework.observe(self.on.set_root_token_action, self._on_set_root_token_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -631,7 +632,7 @@ class VaultCharm(CharmBase):
         """Handles set-unseal-keys action.
 
         Updates the initialization secret in the peer relation
-            with the provided root token.
+            with the provided unseal keys.
 
         Args:
             event: ActionEvent
