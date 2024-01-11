@@ -11,6 +11,7 @@ import hvac  # type: ignore[import-untyped]
 import requests
 
 logger = logging.getLogger(__name__)
+RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
 
 
 class VaultError(Exception):
@@ -49,7 +50,7 @@ class Vault:
 
     def is_active(self) -> bool:
         """Returns whether Vault is active."""
-        health_status = self._client.sys.read_health_status()
+        health_status = self._client.sys.read_health_status(standby_ok=True)
         return health_status.status_code == 200
 
     def unseal(self, unseal_keys: List[str]) -> None:
@@ -160,3 +161,12 @@ class Vault:
         """Get definition of a secret tied to an AppRole."""
         response = self._client.auth.approle.read_secret_id(name, id)
         return response["data"]
+
+    def get_raft_cluster_state(self) -> dict:
+        """Get raft cluster state."""
+        response = self._client.adapter.get(RAFT_STATE_ENDPOINT)
+        return response["data"]
+
+    def is_raft_cluster_healthy(self) -> bool:
+        """Check if raft cluster is healthy."""
+        return self.get_raft_cluster_state()["healthy"]
