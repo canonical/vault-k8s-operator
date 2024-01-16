@@ -22,7 +22,7 @@ class TestVault(unittest.TestCase):
 
         returned_root_token, returned_unseal_keys = vault.initialize(
             secret_shares=5, secret_threshold=2
-        )
+        )  # type: ignore[misc]
 
         self.assertEqual(returned_root_token, root_token)
         self.assertEqual(returned_unseal_keys, unseal_keys)
@@ -194,3 +194,4 @@ class TestVault(unittest.TestCase):
         }
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
+

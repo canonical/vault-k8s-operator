@@ -53,7 +53,7 @@ from ops.model import (
 from ops.pebble import ChangeError, Layer, PathError
 
 from s3_session import S3
-from vault import Vault
+from vault import Vault, VaultClientError
 
 logger = logging.getLogger(__name__)
 
@@ -328,22 +328,39 @@ class VaultCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for vault to be available")
             return
         if self.unit.is_leader() and not vault.is_initialized():
-            root_token, unseal_keys = vault.initialize()
+            init_information = vault.initialize()
+            if not init_information:
+                self.unit.status = WaitingStatus("Waiting for vault to be initialized")
+                return
+            root_token, unseal_keys = init_information
             self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
         root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         vault.set_token(token=root_token)
         if vault.is_sealed():
-            vault.unseal(unseal_keys=unseal_keys)
-        if vault.is_active() and not vault.audit_device_enabled(device_type="file", path="stdout"):
-            vault.enable_audit_device(device_type="file", path="stdout")
+            try:
+                vault.unseal(unseal_keys=unseal_keys)
+            except VaultClientError:
+                logger.error("Failed to unseal vault")
+                return
+        try:
+            if vault.is_active() and not vault.audit_device_enabled(
+                device_type="file", path="stdout"
+            ):
+                vault.enable_audit_device(device_type="file", path="stdout")
+        except VaultClientError:
+            logger.error("Failed to enable audit device")
         self._set_peer_relation_node_api_address()
         self._send_ca_cert()
-        if vault.is_active() and not vault.is_raft_cluster_healthy():
-            # Log if a raft node starts reporting unhealthy
-            logger.error(
-                "Raft cluster is not healthy. %s",
-                vault.get_raft_cluster_state(),
-            )
+        try:
+            if vault.is_active() and not vault.is_raft_cluster_healthy():
+                # Log if a raft node starts reporting unhealthy
+                logger.error(
+                    "Raft cluster is not healthy. %s",
+                    vault.get_raft_cluster_state(),
+                )
+        except VaultClientError:
+            logger.error("Failed to check raft cluster health")
+
         self.unit.status = ActiveStatus()
 
     def _on_remove(self, event: RemoveEvent):
@@ -370,6 +387,8 @@ class VaultCharm(CharmBase):
             logger.info("Vault initialization secret not set in peer relation")
         except VaultCertsError:
             logger.info("Vault CA certificate not found")
+        except VaultClientError:
+            logger.info("Failed to remove node from raft cluster")
         finally:
             if self._vault_service_is_running():
                 try:
@@ -416,15 +435,26 @@ class VaultCharm(CharmBase):
         vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
         vault.set_token(token=root_token)
 
-        if not vault.is_api_available():
+        try:
+            if not vault.is_api_available():
+                logger.debug("Vault is not available, deferring event")
+                event.defer()
+                return
+        except VaultClientError:
             logger.debug("Vault is not available, deferring event")
             event.defer()
             return
 
-        vault.enable_approle_auth()
+        try:
+            vault.enable_approle_auth()
 
-        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
-        vault.configure_kv_mount(mount)
+            mount = "charm-" + relation.app.name + "-" + event.mount_suffix
+            vault.configure_kv_mount(mount)
+        except VaultClientError:
+            logger.error("Failed to configure vault-kv mount")
+            event.defer()
+            return
+
         self.vault_kv.set_mount(relation, mount)
         vault_url = self._get_relation_api_address(relation)
         if vault_url is not None:
@@ -442,7 +472,14 @@ class VaultCharm(CharmBase):
                 )
                 continue
             nonces.append(nonce)
-            self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
+            try:
+                self._ensure_unit_credentials(
+                    vault, relation, unit.name, mount, nonce, egress_subnet
+                )
+            except VaultClientError:
+                logger.error("Failed to ensure unit credentials")
+                event.defer()
+                return
 
         # Remove any stale nonce
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
@@ -661,7 +698,12 @@ class VaultCharm(CharmBase):
             root_token=root_token, unseal_keys=new_keys  # type: ignore[arg-type]
         )
         if vault.is_sealed():
-            vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
+            try:
+                vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
+            except VaultClientError:
+                logger.error("Failed to unseal vault")
+                event.fail(message="New unseal keys are set, but failed to unseal vault.")
+                return
         event.set_results({"unseal-keys": new_keys})
 
     def _on_set_root_token_action(self, event: ActionEvent) -> None:
@@ -752,7 +794,10 @@ class VaultCharm(CharmBase):
         """Ensures a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
         vault.configure_kv_policy(policy_name, mount)
-        role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+        try:
+            role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+        except VaultClientError as e:
+            raise e
         secret = self._create_or_update_kv_secret(
             vault,
             relation,
@@ -820,11 +865,19 @@ class VaultCharm(CharmBase):
         secret = self.model.get_secret(id=secret_id, label=label)
         secret.grant(relation)
         credentials = secret.get_content()
-        role_secret_id_data = vault.read_role_secret(role_name, credentials["role-secret-id"])
+        try:
+            role_secret_id_data = vault.read_role_secret(role_name, credentials["role-secret-id"])
+        except VaultClientError as e:
+            raise e
         # if unit subnet is already in cidr_list, skip
         if egress_subnet in role_secret_id_data["cidr_list"]:
             return secret
-        credentials["role-secret-id"] = vault.generate_role_secret_id(role_name, [egress_subnet])
+        try:
+            credentials["role-secret-id"] = vault.generate_role_secret_id(
+                role_name, [egress_subnet]
+            )
+        except VaultClientError as e:
+            raise e
         secret.set_content(credentials)
         return secret
 
@@ -1147,8 +1200,17 @@ class VaultCharm(CharmBase):
         root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
         vault.set_token(token=root_token)
         if vault.is_sealed():
-            vault.unseal(unseal_keys=unseal_keys)
-        response = vault.create_snapshot()
+            try:
+                vault.unseal(unseal_keys=unseal_keys)
+            except VaultClientError:
+                logger.error("Failed to unseal vault. Cannot create snapshot.")
+                return None
+        try:
+            response = vault.create_snapshot()
+        except VaultClientError:
+            logger.error("Failed to create snapshot")
+            return None
+
         return response.raw
 
     def _restore_vault(
@@ -1177,7 +1239,11 @@ class VaultCharm(CharmBase):
         ) = self._get_initialization_secret_from_peer_relation()
         vault.set_token(token=current_root_token)
         if vault.is_sealed():
-            vault.unseal(unseal_keys=current_unseal_keys)
+            try:
+                vault.unseal(unseal_keys=current_unseal_keys)
+            except VaultClientError:
+                logger.error("Failed to unseal vault. Cannot restore snapshot.")
+                return False
 
         self._set_initialization_secret_in_peer_relation(
             root_token=restore_root_token, unseal_keys=restore_unseal_keys
@@ -1202,7 +1268,10 @@ class VaultCharm(CharmBase):
             return False
         vault.set_token(token=restore_root_token)
         if vault.is_sealed():
-            vault.unseal(unseal_keys=restore_unseal_keys)
+            try:
+                vault.unseal(unseal_keys=restore_unseal_keys)
+            except VaultClientError:
+                logger.error("Snapshot restored but failed to unseal vault.")
         return True
 
     def _get_initialized_vault_client(self) -> Optional[Vault]:
