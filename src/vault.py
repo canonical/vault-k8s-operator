@@ -17,7 +17,7 @@ RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
 
 
 class VaultClientError(Exception):
-    """Custom error."""
+    """Custom exception to pass errors with Vault client calls."""
 
     def __init__(self, message: str = "An error occurred while interacting with Vault client."):
         self.message = message
@@ -45,7 +45,7 @@ class Vault:
             )
             logger.info("Vault is initialized")
             return initialize_response["root_token"], initialize_response["keys"]
-        except VaultError as e:
+        except (RequestException, VaultError) as e:
             logger.error("Error initializing Vault: %s", e)
             return None
 
@@ -81,7 +81,7 @@ class Vault:
         try:
             self._client.sys.read_health_status()
             return True
-        except RequestException as e:
+        except (RequestException, VaultError) as e:
             logger.error("Vault API is not available: %s", e)
             return False
 

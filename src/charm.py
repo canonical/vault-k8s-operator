@@ -341,6 +341,7 @@ class VaultCharm(CharmBase):
                 vault.unseal(unseal_keys=unseal_keys)
             except VaultClientError:
                 logger.error("Failed to unseal vault")
+                self.unit.status = WaitingStatus("Waiting for vault to be unsealed")
                 return
         try:
             if vault.is_active() and not vault.audit_device_enabled(
@@ -437,7 +438,7 @@ class VaultCharm(CharmBase):
 
         try:
             if not vault.is_api_available():
-                logger.debug("Vault is not available, deferring event")
+                logger.error("Vault is not available, deferring event")
                 event.defer()
                 return
         except VaultClientError:
@@ -702,7 +703,7 @@ class VaultCharm(CharmBase):
                 vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
             except VaultClientError:
                 logger.error("Failed to unseal vault")
-                event.fail(message="New unseal keys are set, but failed to unseal vault.")
+                event.fail(message="New unseal keys are stored, but failed to unseal vault.")
                 return
         event.set_results({"unseal-keys": new_keys})
 
@@ -796,15 +797,15 @@ class VaultCharm(CharmBase):
         vault.configure_kv_policy(policy_name, mount)
         try:
             role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+            secret = self._create_or_update_kv_secret(
+                vault,
+                relation,
+                role_id,
+                role_name,
+                egress_subnet,
+            )
         except VaultClientError as e:
             raise e
-        secret = self._create_or_update_kv_secret(
-            vault,
-            relation,
-            role_id,
-            role_name,
-            egress_subnet,
-        )
         self.vault_kv.set_unit_credentials(relation, nonce, secret)
 
     def _create_or_update_kv_secret(
@@ -827,9 +828,12 @@ class VaultCharm(CharmBase):
                 vault, relation, role_id, role_name, egress_subnet, label
             )
         else:
-            return self._update_kv_secret(
-                vault, relation, role_name, egress_subnet, label, secret_id
-            )
+            try:
+                return self._update_kv_secret(
+                    vault, relation, role_name, egress_subnet, label, secret_id
+                )
+            except VaultClientError as e:
+                raise e
 
     def _create_kv_secret(
         self,
