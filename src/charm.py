@@ -338,6 +338,12 @@ class VaultCharm(CharmBase):
             vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
         self._send_ca_cert()
+        if vault.is_active() and not vault.is_raft_cluster_healthy():
+            # Log if a raft node starts reporting unhealthy
+            logger.error(
+                "Raft cluster is not healthy. %s",
+                vault.get_raft_cluster_state(),
+            )
         self.unit.status = ActiveStatus()
 
     def _on_remove(self, event: RemoveEvent):
