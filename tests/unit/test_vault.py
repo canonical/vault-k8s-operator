@@ -402,3 +402,16 @@ class TestVault(unittest.TestCase):
                 patch_read_secret_id.side_effect = exception
                 with self.assertRaises(VaultClientError):
                     vault.read_role_secret(name="whatever name", id="id")
+
+    @patch("hvac.adapters.Adapter.get")
+    def test_given_error_when_get_raft_cluster_state_then_vault_client_error_is_raised(
+        self,
+        patch_get,
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+
+        for exception in EXCEPTIONS_TO_TEST:
+            with self.subTest(exception=exception):
+                patch_get.side_effect = exception
+                with self.assertRaises(VaultClientError):
+                    vault.get_raft_cluster_state()
