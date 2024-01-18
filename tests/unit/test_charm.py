@@ -2134,3 +2134,31 @@ class TestCharm(unittest.TestCase):
         event.params = {"root-token": "new root token content"}
         self.harness.charm._on_set_root_token_action(event)
         event.set_results.assert_called_with({"root-token": "new root token content"})
+
+    def test_given_peer_relation_not_created_when_new_vault_kv_client_attached_then_event_is_deferred(self):
+        event = Mock()
+        
+        self.harness.charm._on_new_vault_kv_client_attached(event)
+        event.defer.assert_called_with()
+
+    def test_given_initialization_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(self):
+        event = Mock()
+        peer_relation_id = self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
+        self._set_ca_certificate_secret_in_peer_relation(
+            certificate="whatever certificate",
+            private_key="whatever private key",
+            relation_id=peer_relation_id,
+        )
+        self.harness.charm._on_new_vault_kv_client_attached(event)
+        event.defer.assert_called_with()
+
+    def test_given_ca_certificate_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(self):
+        event = Mock()
+        peer_relation_id = self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self.harness.charm._on_new_vault_kv_client_attached(event)
+        event.defer.assert_called_with()
