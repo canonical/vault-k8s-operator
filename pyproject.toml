@@ -48,10 +48,59 @@ module = ["charms.*", "ops.*", "kubernetes.*", "flatten_json.*", "git.*"]
 ignore_missing_imports = true
 follow_imports = "silent"
 
-[[tool.mypy.overrides]]
-module = ["charms.*"]
-follow_imports = "silent"
-
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
+
+[tool.poetry]
+name = "vault-k8s-operator"
+version = "0.1.0"
+description = ""
+authors = ["yazan"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+ops = "2.9.0"
+cosl = "*"
+hvac = "*"
+jinja2 = "*"
+lightkube = "*"
+lightkube-models = "*"
+pydantic = "*"
+pytest-interface-tester = "*"
+pyhcl = "*"
+requests = "*"
+jsonschema = "*"
+cryptography = "*"
+boto3 = "*"
+pyproject-flake8 = "^6.1.0"
+
+[tool.poetry.group.test.dependencies]
+macaroonbakery = "1.3.4"
+types-botocore = "*"
+types-boto3 = "*"
+types-requests = "*"
+types-toml = "*"
+types-setuptools = "*"
+types-pyyaml = "*"
+pytest-operator = "*"
+pytest = "*"
+pyproject-flake8 = "*"
+pydantic = "*"
+pep8-naming = "*"
+mypy = "*"
+juju = "*"
+isort = "*"
+hvac = "*"
+flake8-builtins = "*"
+flake8-copyright = "*"
+flake8-docstrings = "*"
+flake8 = "*"
+coverage = {extras = ["toml"], version = "*"}
+black = "^23.12.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
