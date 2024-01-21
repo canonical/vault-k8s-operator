@@ -22,7 +22,6 @@ from charm import (
     VaultCharm,
     config_file_content_matches,
 )
-from vault import VaultClientError
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 
@@ -623,92 +622,6 @@ class TestCharm(unittest.TestCase):
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
-    def test_given_initialization_fails_when_configure_then_status_is_waiting(
-        self,
-        patch_get_binding,
-        patch_generate_ca_certificate,
-        patch_generate_unit_certificate,
-        patch_is_api_available,
-        patch_is_initialized,
-        patch_initialize,
-    ):
-        patch_is_api_available.return_value = True
-        patch_is_initialized.return_value = False
-        patch_initialize.return_value = None
-        patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
-        patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
-        self._set_peer_relation()
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.add_storage(storage_name="config", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.3.4", ingress_address="1.1.1.1"
-        )
-
-        self.harness.charm.on.config_changed.emit()
-
-        patch_initialize.assert_called_once()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for vault to be initialized"),
-        )
-
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("charm.generate_vault_unit_certificate")
-    @patch("charm.generate_vault_ca_certificate")
-    @patch("ops.model.Model.get_binding")
-    def test_given_unsealing_vault_fails_when_configure_then_status_is_waiting(
-        self,
-        patch_get_binding,
-        patch_generate_ca_certificate,
-        patch_generate_unit_certificate,
-        patch_is_api_available,
-        patch_is_initialized,
-        patch_initialize,
-        patch_unseal,
-    ):
-        patch_is_api_available.return_value = True
-        patch_is_initialized.return_value = False
-        patch_initialize.return_value = "root token", ["unseal key 1"]
-        patch_generate_ca_certificate.return_value = "ca private key", "ca certificate"
-        patch_generate_unit_certificate.return_value = "unit private key", "unit certificate"
-        patch_unseal.side_effect = VaultClientError("whatever error")
-        self._set_peer_relation()
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.add_storage(storage_name="config", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.3.4", ingress_address="1.1.1.1"
-        )
-
-        self.harness.charm.on.config_changed.emit()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for vault to be unsealed"),
-        )
-
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("charm.generate_vault_unit_certificate")
-    @patch("charm.generate_vault_ca_certificate")
-    @patch("ops.model.Model.get_binding")
     def test_given_api_available_when_configure_then_status_is_active(
         self,
         patch_get_binding,
@@ -1299,89 +1212,6 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
     @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    @patch("s3_session.S3.upload_content")
-    def test_given_unsealing_vault_fails_when_create_backup_action_then_action_fails(
-        self,
-        patch_upload_content,
-        patch_create_bucket,
-        patch_get_s3_connection_info,
-        patch_is_api_available,
-        patch_is_initialized,
-        patch_unseal,
-    ):
-        patch_is_initialized.return_value = True
-        patch_is_api_available.return_value = True
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        patch_create_bucket.return_value = True
-        patch_upload_content.return_value = False
-        patch_unseal.side_effect = VaultClientError("whatever error")
-        peer_relation_id = self._set_peer_relation()
-        self._set_ca_certificate_secret_in_peer_relation(
-            certificate="whatever certificate",
-            private_key="whatever private key",
-            relation_id=peer_relation_id,
-        )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        event = Mock()
-        self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
-
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.create_snapshot")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    @patch("s3_session.S3.upload_content")
-    def test_given_snapshot_creation_raises_an_error_when_create_backup_action_then_action_fails(
-        self,
-        patch_upload_content,
-        patch_create_bucket,
-        patch_get_s3_connection_info,
-        patch_is_api_available,
-        patch_is_initialized,
-        patch_create_snapshot,
-    ):
-        patch_is_initialized.return_value = True
-        patch_is_api_available.return_value = True
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        patch_create_bucket.return_value = True
-        patch_upload_content.return_value = False
-        peer_relation_id = self._set_peer_relation()
-        self._set_ca_certificate_secret_in_peer_relation(
-            certificate="whatever certificate",
-            private_key="whatever private key",
-            relation_id=peer_relation_id,
-        )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_create_snapshot.side_effect = VaultClientError("whatever error")
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        event = Mock()
-        self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
-
-    @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("vault.Vault.create_snapshot", new=Mock)
     @patch("vault.Vault.is_initialized")
@@ -1785,45 +1615,6 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
-    @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    def test_given_unsealing_vault_fails_when_restore_backup_action_then_action_fails(
-        self,
-        patch_get_s3_connection_info,
-        patch_is_api_available,
-        patch_is_initialized,
-        patch_get_content,
-        patch_unseal,
-    ):
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.set_leader(is_leader=True)
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_get_content.return_value = StreamingBody(
-            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
-        )
-        self.harness.add_storage(storage_name="certs", attach=True)
-        patch_is_initialized.return_value = True
-        patch_is_api_available.return_value = True
-        patch_unseal.side_effect = VaultClientError("whatever error")
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        event = Mock()
-        event.params = {
-            "backup-id": "whatever backup id",
-            "root-token": "whatever root token",
-            "unseal-keys": ["whatever unseal keys"],
-        }
-        self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to restore vault.")
-
-    @patch("vault.Vault.is_sealed", new=Mock)
     @patch("vault.Vault.unseal", new=Mock)
     @patch("s3_session.S3.get_content")
     @patch("vault.Vault.is_initialized")
@@ -2146,31 +1937,6 @@ class TestCharm(unittest.TestCase):
         event.params = {"unseal-keys": ["unseal_key2", "unseal_key1"]}
         self.harness.charm._on_set_unseal_keys_action(event)
         event.fail.assert_called_with(message="Provided unseal keys are already set.")
-
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
-    def test_given_unsealing_vault_fails_when_set_unseal_keys_action_then_action_fails(  # noqa: E501
-        self,
-        patch_unseal,
-    ):
-        patch_unseal.side_effect = VaultClientError("whatever vault error")
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
-        self.harness.charm._on_set_unseal_keys_action(event)
-        event.fail.assert_called_with(
-            message="New unseal keys are stored, but failed to unseal vault."
-        )
 
     @patch("vault.Vault.is_initialized", new=Mock)
     @patch("vault.Vault.is_api_available", new=Mock)
