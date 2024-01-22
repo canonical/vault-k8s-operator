@@ -152,12 +152,18 @@ class TestVault(unittest.TestCase):
         self.assertTrue(vault.is_active())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
-    def test_given_health_status_returns_4xx_when_is_active_then_return_false(
+    def test_given_health_status_returns_5xx_when_is_active_then_return_false(
         self, patch_health_status
     ):
         response = requests.Response()
-        response.status_code = 429
+        response.status_code = 501
         patch_health_status.return_value = response
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        self.assertFalse(vault.is_active())
+
+    @patch("hvac.api.system_backend.health.Health.read_health_status")
+    def test_given_connection_error_when_is_active_then_return_false(self, patch_health_status):
+        patch_health_status.side_effect = requests.exceptions.ConnectionError()
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active())
 

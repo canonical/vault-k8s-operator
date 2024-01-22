@@ -9,15 +9,11 @@ from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
+from hvac.exceptions import VaultError  # type: ignore[import-untyped]
+from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
-
-
-class VaultError(Exception):
-    """Exception raised for Vault errors."""
-
-    pass
 
 
 class Vault:
@@ -49,23 +45,33 @@ class Vault:
         return self._client.sys.is_sealed()
 
     def is_active(self) -> bool:
-        """Returns whether Vault is active."""
-        health_status = self._client.sys.read_health_status(standby_ok=True)
-        return health_status.status_code == 200
+        """Returns the health status of Vault.
+
+        Returns:
+            True if initialized, unsealed and active, False otherwise.
+                Will return True if Vault is in standby mode too (standby_ok=True).
+        """
+        try:
+            health_status = self._client.sys.read_health_status(standby_ok=True)
+            return health_status.status_code == 200
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
+
+    def is_api_available(self) -> bool:
+        """Returns whether Vault is available."""
+        try:
+            self._client.sys.read_health_status(standby_ok=True)
+            return True
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
         for unseal_key in unseal_keys:
             self._client.sys.submit_unseal_key(unseal_key)
         logger.info("Vault is unsealed")
-
-    def is_api_available(self) -> bool:
-        """Returns whether Vault is available."""
-        try:
-            self._client.sys.read_health_status()
-        except requests.exceptions.ConnectionError:
-            return False
-        return True
 
     def set_token(self, token: str) -> None:
         """Sets the Vault token for authentication."""
