@@ -390,10 +390,9 @@ class VaultCharm(CharmBase):
             event.defer()
             return
 
-        try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault initialization secret not set in peer relation, deferring event")
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault, deferring event")
             event.defer()
             return
 
@@ -413,25 +412,10 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        vault.set_token(token=root_token)
-
-        if not vault.is_api_available():
-            logger.debug("Vault is not available, deferring event")
-            event.defer()
-            return
-
         vault.enable_approle_auth()
-
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
+        self._set_kv_relation_data(relation, mount, ca_certificate)
         vault.configure_kv_mount(mount)
-        self.vault_kv.set_mount(relation, mount)
-        vault_url = self._get_relation_api_address(relation)
-        if vault_url is not None:
-            self.vault_kv.set_vault_url(relation, vault_url)
-        self.vault_kv.set_ca_certificate(relation, ca_certificate)
-
-        nonces = []
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")
             nonce = relation.data[unit].get("nonce")
@@ -441,13 +425,8 @@ class VaultCharm(CharmBase):
                     unit.name,
                 )
                 continue
-            nonces.append(nonce)
             self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
-
-        # Remove any stale nonce
-        credential_nonces = self.vault_kv.get_credentials(relation).keys()
-        stale_nonces = set(credential_nonces) - set(nonces)
-        self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+            self._remove_stale_nonce(relation=relation, nonce=nonce)
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handles create-backup action.
@@ -740,6 +719,20 @@ class VaultCharm(CharmBase):
         storage_location = cert_storage.location
         return f"{storage_location}/ca.pem"
 
+    def _set_kv_relation_data(self, relation: Relation, mount: str, ca_certificate: str) -> None:
+        """Set relation data for vault-kv.
+
+        Args:
+            relation: Relation
+            mount: mount name
+            ca_certificate: CA certificate
+        """
+        self.vault_kv.set_mount(relation, mount)
+        vault_url = self._get_relation_api_address(relation)
+        self.vault_kv.set_ca_certificate(relation, ca_certificate)
+        if vault_url is not None:
+            self.vault_kv.set_vault_url(relation, vault_url)
+
     def _ensure_unit_credentials(
         self,
         vault: Vault,
@@ -827,6 +820,19 @@ class VaultCharm(CharmBase):
         credentials["role-secret-id"] = vault.generate_role_secret_id(role_name, [egress_subnet])
         secret.set_content(credentials)
         return secret
+
+    def _remove_stale_nonce(self, relation: Relation, nonce: str) -> None:
+        """Remove stale nonce.
+
+        If the nonce is not present in the credentials, it is stale and should be removed.
+
+        Args:
+            relation: Relation
+            nonce: the one to remove if stale
+        """
+        credential_nonces = self.vault_kv.get_credentials(relation).keys()
+        if nonce not in set(credential_nonces):
+            self.vault_kv.remove_unit_credentials(relation, nonce=nonce)
 
     def _get_vault_kv_secrets_in_peer_relation(self) -> Dict[str, str]:
         """Return the vault kv secrets from the peer relation."""
@@ -1225,7 +1231,8 @@ class VaultCharm(CharmBase):
             logger.error("Vault API is not available.")
             return None
         try:
-            self._get_initialization_secret_from_peer_relation()
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+            vault.set_token(token=root_token)
         except PeerSecretError:
             logger.error("Vault initialization secret not set in peer relation.")
             return None
