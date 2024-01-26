@@ -31,7 +31,7 @@ from charms.tls_certificates_interface.v2.tls_certificates import (
     generate_private_key,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault import Vault
+from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (

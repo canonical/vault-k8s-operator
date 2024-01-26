@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import call, patch
 
 import requests
-from charms.vault_k8s.v0.vault import Vault
+from charms.vault_k8s.v0.vault_client import Vault
 
 
 class TestVault(unittest.TestCase):
