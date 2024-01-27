@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
+"""Library for interacting with a Vault cluster.
 
-"""Contains all the specificities to communicate with Vault through its API."""
+This library shares operations that interact with Vault through its API. It is
+intended to be used by charms that need to manage a Vault cluster.
+"""
+
 
 import logging
 from typing import List, Tuple
@@ -11,6 +15,17 @@ import hvac  # type: ignore[import-untyped]
 import requests
 from hvac.exceptions import VaultError  # type: ignore[import-untyped]
 from requests.exceptions import RequestException
+
+# The unique Charmhub library identifier, never change it
+LIBID = "4bf272a4aa314f6397b1823e198f2291"
+
+# Increment this major API version when introducing breaking changes
+LIBAPI = 0
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
+
 
 logger = logging.getLogger(__name__)
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"

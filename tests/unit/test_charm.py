@@ -317,15 +317,15 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for initialization secret to be set in peer relation"),
         )
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -360,14 +360,14 @@ class TestCharm(unittest.TestCase):
         ).get_content()
         self.assertEqual(secret, {"privatekey": ca_private_key, "certificate": ca_certificate})
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("ops.model.Container.exists")
     @patch("charm.generate_vault_unit_certificate")
     @patch("ops.model.Model.get_binding")
@@ -401,15 +401,15 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual((root / "vault/certs/ca.pem").read_text(), ca_certificate)
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("socket.getfqdn")
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("ops.model.Container.exists")
     @patch("charm.generate_vault_unit_certificate")
     @patch("ops.model.Model.get_binding")
@@ -461,14 +461,14 @@ class TestCharm(unittest.TestCase):
         )
         self.assertEqual((root / "vault/certs/cert.pem").read_text(), unit_certificate)
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("socket.getfqdn")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
@@ -504,14 +504,14 @@ class TestCharm(unittest.TestCase):
         expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl"))
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -554,8 +554,8 @@ class TestCharm(unittest.TestCase):
             expected_plan,
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -585,15 +585,15 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for vault to be available"),
         )
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.initialize")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -631,15 +631,15 @@ class TestCharm(unittest.TestCase):
             {"roottoken": "root token", "unsealkeys": '["unseal key 1"]'},
         )
 
-    @patch("vault.Vault.enable_audit_device", new=Mock)
-    @patch("vault.Vault.is_active", new=Mock)
-    @patch("vault.Vault.audit_device_enabled", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.initialize")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -673,15 +673,15 @@ class TestCharm(unittest.TestCase):
             ActiveStatus(),
         )
 
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.is_raft_cluster_healthy", new=Mock)
-    @patch("vault.Vault.enable_audit_device")
-    @patch("vault.Vault.is_active")
-    @patch("vault.Vault.audit_device_enabled")
-    @patch("vault.Vault.initialize")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.initialize")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charm.generate_vault_unit_certificate")
     @patch("charm.generate_vault_ca_certificate")
     @patch("ops.model.Model.get_binding")
@@ -732,10 +732,10 @@ class TestCharm(unittest.TestCase):
         self.assertFalse((root / "vault/raft/raft/raft.db").exists())
 
     @patch("ops.model.Model.get_binding")
-    @patch("vault.Vault.get_num_raft_peers")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.is_node_in_raft_peers")
-    @patch("vault.Vault.remove_raft_node")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.get_num_raft_peers")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_node_in_raft_peers")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.remove_raft_node")
     def test_given_node_in_raft_when_on_remove_then_node_is_removed_from_raft(
         self,
         patch_remove_raft_node,
@@ -765,9 +765,9 @@ class TestCharm(unittest.TestCase):
 
         patch_remove_raft_node.assert_called_with(node_id=f"{self.model_name}-{self.app_name}/0")
 
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.is_node_in_raft_peers")
-    @patch("vault.Vault.remove_raft_node")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_node_in_raft_peers")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.remove_raft_node")
     def test_given_node_not_in_raft_when_on_remove_then_node_is_not_removed_from_raft(
         self,
         patch_remove_raft_node,
@@ -788,9 +788,9 @@ class TestCharm(unittest.TestCase):
 
         patch_remove_raft_node.assert_not_called()
 
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.is_node_in_raft_peers")
-    @patch("vault.Vault.remove_raft_node", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_node_in_raft_peers")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.remove_raft_node", new=Mock)
     @patch("ops.model.Container.get_service", new=Mock)
     @patch("ops.model.Container.stop")
     def test_given_service_is_running_when_on_remove_then_service_is_stopped(
@@ -934,12 +934,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_is_not_initialized_when_create_backup_action_then_action_fails(
         self,
         patch_is_initialized,
@@ -965,12 +965,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_api_not_available_when_create_backup_action_then_action_fails(
         self,
         patch_is_initialized,
@@ -996,12 +996,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_initialization_secret_not_available_create_backup_action_then_action_fails(
         self,
         patch_is_initialized,
@@ -1021,8 +1021,8 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
     def test_given_snapshot_creation_fails_when_create_backup_action_then_action_fails(
@@ -1050,11 +1050,11 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create raft snapshot.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.create_snapshot", new=Mock)
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.create_snapshot", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
     @patch("s3_session.S3.upload_content")
@@ -1090,11 +1090,11 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to upload backup to S3 bucket.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.create_snapshot", new=Mock)
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.create_snapshot", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch("s3_session.S3.create_bucket")
     @patch("s3_session.S3.upload_content")
@@ -1130,13 +1130,13 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.create_snapshot", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.create_snapshot", new=Mock)
     @patch("s3_session.S3.create_bucket")
     @patch("s3_session.S3.upload_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_content_uploaded_to_s3_when_create_backup_action_then_action_succeeds(
         self,
@@ -1370,7 +1370,7 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
 
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_not_initialized_when_restore_backup_action_then_action_fails(
         self,
@@ -1396,8 +1396,8 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_api_not_available_when_restore_backup_action_then_action_fails(
         self,
@@ -1425,8 +1425,8 @@ class TestCharm(unittest.TestCase):
         event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_initialization_secret_not_available_when_restore_backup_action_then_action_fails(
         self,
@@ -1453,12 +1453,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_restoring_snapshot_fails_when_restore_backup_action_then_action_fails(
         self,
@@ -1494,12 +1494,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_action_succeeds(
         self,
@@ -1542,12 +1542,12 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.set_results.assert_called_with({"restored": "whatever backup id"})
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_restore_snapshot_fails_when_restore_backup_action_then_initialization_secret_is_unchanged(
         self,
@@ -1589,12 +1589,12 @@ class TestCharm(unittest.TestCase):
             {"roottoken": "original token content", "unsealkeys": '["original_unseal_keys"]'},
         )
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_initialization_secret_is_updated(
         self,
@@ -1638,12 +1638,12 @@ class TestCharm(unittest.TestCase):
             {"roottoken": "backup root token", "unsealkeys": '["backup_unseal_keys"]'},
         )
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal")
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_vault_is_unsealed_with_new_keys(
         self,
@@ -1682,13 +1682,13 @@ class TestCharm(unittest.TestCase):
 
         patch_unseal.assert_called_with(unseal_keys=["backup_unseal_keys"])
 
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
-    @patch("vault.Vault.set_token")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token")
     @patch("s3_session.S3.get_content")
-    @patch("vault.Vault.is_initialized")
-    @patch("vault.Vault.is_api_available")
-    @patch("vault.Vault.restore_snapshot")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.restore_snapshot")
     @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_new_vault_root_token_is_set(
         self,
@@ -1728,8 +1728,8 @@ class TestCharm(unittest.TestCase):
 
         patch_set_token.assert_called_with(token="backup root token")
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     def test_given_unit_not_leader_when_set_unseal_keys_action_then_action_fails(self):
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -1743,7 +1743,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_unseal_keys_action(event)
         event.fail.assert_called_with(message="Only leader unit can set unseal keys.")
 
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_not_initialized_when_set_unseal_keys_action_then_action_fails(
         self,
         patch_is_initialized,
@@ -1758,8 +1758,8 @@ class TestCharm(unittest.TestCase):
             message="Cannot set unseal keys, vault is not initialized yet."
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     def test_given_provided_unseal_keys_match_current_when_set_unseal_keys_action_then_action_fails(
         self,
     ):
@@ -1777,10 +1777,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_unseal_keys_action(event)
         event.fail.assert_called_with(message="Provided unseal keys are already set.")
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_unseal_keys_are_set_in_secret(  # noqa: E501
         self,
     ):
@@ -1807,10 +1807,10 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal")
     def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_vault_is_unsealed(  # noqa: E501
         self,
         patch_unseal,
@@ -1829,10 +1829,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_unseal_keys_action(event)
         patch_unseal.assert_called_with(unseal_keys=["new unseal key1", "new unseal key2"])
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_action_succeeds(  # noqa: E501
         self,
     ):
@@ -1852,8 +1852,8 @@ class TestCharm(unittest.TestCase):
             {"unseal-keys": ["new unseal key1", "new unseal key2"]}
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     def test_given_unit_not_leader_when_set_root_token_action_then_action_fails(self):
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -1867,7 +1867,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_root_token_action(event)
         event.fail.assert_called_with(message="Only leader unit can set the root token.")
 
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_not_initialized_when_set_root_token_action_then_action_fails(
         self,
         patch_is_initialized,
@@ -1882,8 +1882,8 @@ class TestCharm(unittest.TestCase):
             message="Cannot set root token, vault is not initialized yet."
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     def test_given_provided_root_token_matches_current_when_set_root_token_action_then_action_fails(
         self,
     ):
@@ -1901,10 +1901,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_root_token_action(event)
         event.fail.assert_called_with(message="Provided root token is already set.")
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_root_token_is_set_in_secret(  # noqa: E501
         self,
     ):
@@ -1931,10 +1931,10 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.set_token")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token")
     def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_vault_root_token_is_set(  # noqa: E501
         self,
         patch_set_token,
@@ -1953,10 +1953,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_set_root_token_action(event)
         patch_set_token.assert_called_with(token="new root token content")
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.is_sealed", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_action_succeeds(  # noqa: E501
         self,
     ):
@@ -2012,7 +2012,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         event.defer.assert_called_with()
 
-    @patch("vault.Vault.is_initialized")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     def test_given_vault_not_initialized_when_new_vault_kv_client_attached_then_event_is_deferred(
         self,
         patch_is_initialized,
@@ -2026,9 +2026,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         event.defer.assert_called_with()
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     def test_given_initialization_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(
         self,
     ):
@@ -2047,9 +2047,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         event.defer.assert_called_with()
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     def test_given_ca_certificate_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(
         self,
     ):
@@ -2068,14 +2068,14 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         event.defer.assert_called_with()
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
-    @patch("vault.Vault.configure_kv_mount", new=Mock)
-    @patch("vault.Vault.configure_kv_policy", new=Mock)
-    @patch("vault.Vault.generate_role_secret_id")
-    @patch("vault.Vault.configure_approle")
-    @patch("vault.Vault.enable_approle_auth")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth")
     @patch("ops.model.Model.get_binding")
     def test_given_prerequisites_are_met_when_new_vault_kv_client_attached_then_approle_auth_is_enabled(
         self,
@@ -2114,14 +2114,14 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         patch_enable_approle_auth.assert_called_once()
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
-    @patch("vault.Vault.configure_kv_mount", new=Mock)
-    @patch("vault.Vault.configure_kv_policy", new=Mock)
-    @patch("vault.Vault.generate_role_secret_id")
-    @patch("vault.Vault.configure_approle")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_mount")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_vault_url")
@@ -2165,16 +2165,16 @@ class TestCharm(unittest.TestCase):
         set_mount.assert_called()
         set_ca_certificate.assert_called()
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
-    @patch("vault.Vault.configure_kv_mount", new=Mock)
-    @patch("vault.Vault.configure_kv_policy", new=Mock)
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.read_role_secret")
-    @patch("vault.Vault.generate_role_secret_id")
-    @patch("vault.Vault.configure_approle")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.read_role_secret")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
     def test_given_prerequisites_are_met_when_related_kv_client_unit_egress_is_updated_then_secret_content_is_updated(
         self,
         configure_approle,
@@ -2212,14 +2212,14 @@ class TestCharm(unittest.TestCase):
             )
             assert set_content.call_count == 1
 
-    @patch("vault.Vault.is_initialized", new=Mock)
-    @patch("vault.Vault.is_api_available", new=Mock)
-    @patch("vault.Vault.set_token", new=Mock)
-    @patch("vault.Vault.enable_approle_auth", new=Mock)
-    @patch("vault.Vault.configure_kv_policy", new=Mock)
-    @patch("vault.Vault.generate_role_secret_id")
-    @patch("vault.Vault.configure_approle")
-    @patch("vault.Vault.configure_kv_mount")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount")
     @patch("ops.model.Model.get_binding")
     def test_given_prerequisites_are_met_when_new_vault_kv_client_attached_then_kv_mount_is_configured(
         self,
