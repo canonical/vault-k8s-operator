@@ -3,7 +3,7 @@
 
 name: vault-k8s
 
-display-name: Vault Operator
+display-name: Vault (K8s)
 summary: A tool for managing secrets
 description: |
   Vault secures, stores, and tightly controls access to
