@@ -4,6 +4,8 @@
 #
 #    pip-compile requirements.in
 #
+annotated-types==0.6.0
+    # via pydantic
 anyio==4.2.0
     # via httpx
 attrs==23.2.0
@@ -77,15 +79,17 @@ pluggy==1.4.0
     # via pytest
 pycparser==2.21
     # via cffi
-pydantic==1.10.14
+pydantic==2.5.3
     # via
     #   -r requirements.in
     #   pytest-interface-tester
+pydantic-core==2.14.6
+    # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
 pytest==8.0.0
     # via pytest-interface-tester
-pytest-interface-tester==1.0.7
+pytest-interface-tester==2.0.0
     # via -r requirements.in
 python-dateutil==2.8.2
     # via botocore
@@ -121,6 +125,7 @@ typing-extensions==4.9.0
     # via
     #   cosl
     #   pydantic
+    #   pydantic-core
 urllib3==2.0.7
     # via
     #   botocore
