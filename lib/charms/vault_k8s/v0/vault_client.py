@@ -17,7 +17,7 @@ from hvac.exceptions import VaultError  # type: ignore[import-untyped]
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
-LIBID = "4bf272a4aa314f6397b1823e198f2291"
+LIBID = "674754a3268d4507b749ec34214706fd"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
