@@ -64,7 +64,7 @@ lightkube-models==1.29.0.6
     #   lightkube
 markupsafe==2.1.4
     # via jinja2
-ops==2.9.0
+ops==2.10.0
     # via
     #   -r requirements.in
     #   cosl
