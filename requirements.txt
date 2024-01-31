@@ -29,7 +29,7 @@ click==8.1.7
     # via typer
 cosl==0.0.7
     # via -r requirements.in
-cryptography==42.0.1
+cryptography==42.0.2
     # via -r requirements.in
 h11==0.14.0
     # via httpcore
