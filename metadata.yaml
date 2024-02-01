@@ -3,7 +3,7 @@
 
 name: vault-k8s
 
-display-name: Vault Operator
+display-name: Vault (K8s)
 summary: A tool for managing secrets
 description: |
   Vault secures, stores, and tightly controls access to
@@ -36,7 +36,7 @@ resources:
   vault-image:
     type: oci-image
     description: OCI image for Vault
-    upstream-source: ghcr.io/canonical/vault:1.15.2
+    upstream-source: ghcr.io/canonical/vault:1.15.4
 
 storage:
   vault-raft:
@@ -80,3 +80,5 @@ requires:
     description: |
       Communication between the vault units and from a client to Vault should 
       be done using the certificates provided by this integration.
+  s3-parameters:
+    interface: s3

@@ -1,37 +1,41 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
+"""Library for interacting with a Vault cluster.
 
-"""Contains all the specificities to communicate with Vault through its API."""
+This library shares operations that interact with Vault through its API. It is
+intended to be used by charms that need to manage a Vault cluster.
+"""
+
 
 import logging
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
+from hvac.exceptions import VaultError  # type: ignore[import-untyped]
+from requests.exceptions import RequestException
+
+# The unique Charmhub library identifier, never change it
+LIBID = "674754a3268d4507b749ec34214706fd"
+
+# Increment this major API version when introducing breaking changes
+LIBAPI = 0
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
+
 
 logger = logging.getLogger(__name__)
-
-
-class VaultError(Exception):
-    """Exception raised for Vault errors."""
-
-    pass
+RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
 
 
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, auth_details: Dict[str, str]):
-        if ca_cert := auth_details.get("ca-cert-path"):
-            if (cert := auth_details.get("cert")) and (pk := auth_details.get("key")):
-                self._client = hvac.Client(url=url, cert=(cert, pk), verify=ca_cert)
-            else:
-                self._client = hvac.Client(url=url, verify=ca_cert)
-        else:
-            raise VaultError(
-                "The authentication provided to the vault client was incomplete or wrong."
-            )
+    def __init__(self, url: str, ca_cert_path: str):
+        self._client = hvac.Client(url=url, verify=ca_cert_path)
 
     def initialize(
         self, secret_shares: int = 1, secret_threshold: int = 1
@@ -56,23 +60,33 @@ class Vault:
         return self._client.sys.is_sealed()
 
     def is_active(self) -> bool:
-        """Returns whether Vault is active."""
-        health_status = self._client.sys.read_health_status()
-        return health_status.status_code == 200
+        """Returns the health status of Vault.
+
+        Returns:
+            True if initialized, unsealed and active, False otherwise.
+                Will return True if Vault is in standby mode too (standby_ok=True).
+        """
+        try:
+            health_status = self._client.sys.read_health_status(standby_ok=True)
+            return health_status.status_code == 200
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
+
+    def is_api_available(self) -> bool:
+        """Returns whether Vault is available."""
+        try:
+            self._client.sys.read_health_status(standby_ok=True)
+            return True
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
         for unseal_key in unseal_keys:
             self._client.sys.submit_unseal_key(unseal_key)
         logger.info("Vault is unsealed")
-
-    def is_api_available(self) -> bool:
-        """Returns whether Vault is available."""
-        try:
-            self._client.sys.read_health_status()
-        except requests.exceptions.ConnectionError:
-            return False
-        return True
 
     def set_token(self, token: str) -> None:
         """Sets the Vault token for authentication."""
@@ -134,6 +148,18 @@ class Vault:
         )
         logger.info("Enabled audit device %s", device_type)
 
+    def create_snapshot(self) -> requests.Response:
+        """Create a snapshot of the Vault data."""
+        return self._client.sys.take_raft_snapshot()
+
+    def restore_snapshot(self, snapshot: bytes) -> requests.Response:
+        """Restore a snapshot of the Vault data.
+
+        Uses force_restore_raft_snapshot to restore the snapshot
+        even if the unseal key used at backup time is different from the current one.
+        """
+        return self._client.sys.force_restore_raft_snapshot(snapshot)
+
     def configure_approle(self, name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies."""
         self._client.auth.approle.create_or_update_approle(
@@ -156,3 +182,12 @@ class Vault:
         """Get definition of a secret tied to an AppRole."""
         response = self._client.auth.approle.read_secret_id(name, id)
         return response["data"]
+
+    def get_raft_cluster_state(self) -> dict:
+        """Get raft cluster state."""
+        response = self._client.adapter.get(RAFT_STATE_ENDPOINT)
+        return response["data"]
+
+    def is_raft_cluster_healthy(self) -> bool:
+        """Check if raft cluster is healthy."""
+        return self.get_raft_cluster_state()["healthy"]
