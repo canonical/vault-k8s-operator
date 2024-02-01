@@ -6,8 +6,7 @@ import unittest
 from unittest.mock import call, patch
 
 import requests
-
-from vault import Vault
+from charms.vault_k8s.v0.vault_client import Vault
 
 
 class TestVault(unittest.TestCase):
@@ -17,7 +16,7 @@ class TestVault(unittest.TestCase):
     ):
         root_token = "whatever root token"
         unseal_keys = ["key 1", "key 2", "key 3"]
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         patch_initialize.return_value = {"root_token": root_token, "keys": unseal_keys}
 
         returned_root_token, returned_unseal_keys = vault.initialize(
@@ -33,7 +32,7 @@ class TestVault(unittest.TestCase):
     ):
         n = 7  # arbitrary number
         unseal_keys = [f"unseal key #{i}" for i in range(n)]
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.unseal(unseal_keys=unseal_keys)
 
@@ -46,14 +45,14 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         self.assertFalse(vault.is_api_available())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_api_returns_when_is_api_available_then_return_true(self, patch_health_status):
         patch_health_status.return_value = requests.Response()
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         self.assertTrue(vault.is_api_available())
 
@@ -62,7 +61,7 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         node_id = "whatever node id"
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         patch_health_status.return_value = {
             "data": {"config": {"servers": [{"node_id": node_id}]}}
         }
@@ -74,7 +73,7 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         node_id = "whatever node id"
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         patch_health_status.return_value = {
             "data": {"config": {"servers": [{"node_id": "not our node"}]}}
         }
@@ -97,7 +96,7 @@ class TestVault(unittest.TestCase):
             }
         }
 
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.get_num_raft_peers()
 
@@ -109,7 +108,7 @@ class TestVault(unittest.TestCase):
         self, patch_list_auth_methods, patch_enable_auth_method
     ):
         patch_list_auth_methods.return_value = {}
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.enable_approle_auth()
 
@@ -121,7 +120,7 @@ class TestVault(unittest.TestCase):
         self, patch_list_auth_methods, patch_enable_auth_method
     ):
         patch_list_auth_methods.return_value = {"approle/": "whatever"}
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.enable_approle_auth()
 
@@ -135,7 +134,7 @@ class TestVault(unittest.TestCase):
         patch_list_enabled_audit_devices,
     ):
         patch_list_enabled_audit_devices.return_value = {"data": {}}
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_audit_device(device_type="file", path="stdout")
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
@@ -148,17 +147,23 @@ class TestVault(unittest.TestCase):
         response = requests.Response()
         response.status_code = 200
         patch_health_status.return_value = response
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertTrue(vault.is_active())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
-    def test_given_health_status_returns_4xx_when_is_active_then_return_false(
+    def test_given_health_status_returns_5xx_when_is_active_then_return_false(
         self, patch_health_status
     ):
         response = requests.Response()
-        response.status_code = 429
+        response.status_code = 501
         patch_health_status.return_value = response
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        self.assertFalse(vault.is_active())
+
+    @patch("hvac.api.system_backend.health.Health.read_health_status")
+    def test_given_connection_error_when_is_active_then_return_false(self, patch_health_status):
+        patch_health_status.side_effect = requests.exceptions.ConnectionError()
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active())
 
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
@@ -170,7 +175,7 @@ class TestVault(unittest.TestCase):
         patch_list_enabled_audit_devices.return_value = {
             "data": {f"{device_type}/": {"options": {"file_path": path}}}
         }
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertTrue(vault.audit_device_enabled(device_type=device_type, path=path))
 
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
@@ -180,7 +185,7 @@ class TestVault(unittest.TestCase):
         device_type = "file"
         path = "stdout"
         patch_list_enabled_audit_devices.return_value = {"data": {}}
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
 
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
@@ -192,5 +197,5 @@ class TestVault(unittest.TestCase):
         patch_list_enabled_audit_devices.return_value = {
             "data": {f"{device_type}/": {"options": {"file_path": "WRONG PATH"}}}
         }
-        vault = Vault(url="http://whatever-url", auth_details={"ca-cert-path": "whatever path"})
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))

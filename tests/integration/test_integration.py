@@ -14,7 +14,10 @@ import pytest
 import yaml
 from juju.application import Application
 from juju.unit import Unit
+from lightkube import Client as KubernetesClient
 from pytest_operator.plugin import OpsTest
+
+from tests.integration.helpers import crash_pod
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -27,6 +30,10 @@ VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
+
+NUM_VAULT_UNITS = 5
+
+k8s = KubernetesClient()
 
 
 def copy_lib_content() -> None:
@@ -52,7 +59,7 @@ class TestVaultK8s:
             application_name=APPLICATION_NAME,
             trust=True,
             series="jammy",
-            num_units=5,
+            num_units=NUM_VAULT_UNITS,
         )
 
     async def _get_vault_endpoint(self, ops_test: OpsTest, timeout: int = 60) -> str:
@@ -179,7 +186,25 @@ class TestVaultK8s:
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
-            wait_for_exact_units=5,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
+        self,
+        ops_test: OpsTest,
+        build_and_deploy,
+    ):
+        assert ops_test.model
+        unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
+        assert isinstance(unit, Unit)
+        k8s_namespace = ops_test.model.name
+        crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
     async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
@@ -304,50 +329,52 @@ class TestVaultK8s:
 
         assert action_output["value"] == secret_value
 
-    async def test_given_vault_deployed_when_tls_access_relation_created_then_status_certificate_replaced(
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
         self, ops_test: OpsTest
     ):
         assert ops_test.model
 
-        vault_leader_unit = await ops_test.model.units[f"{APPLICATION_NAME}/leader"]
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        initial_ca_cert = action.results
+        await action.wait()
+        initial_ca_cert = action.results["stdout"]
 
         await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:tls-certificates-access",
-            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation2=f"{APPLICATION_NAME}:tls-certificates-access",
+        )
+
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        final_ca_cert = action.results["stdout"]
+        assert initial_ca_cert != final_ca_cert
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
+        self, ops_test
+    ):
+        assert ops_test.model
+
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        initial_ca_cert = action.results
+
+        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
+            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
         )
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
-        # We have to wait for the certificate to actually be produced, which takes about 3 seconds
-        # locally. Due to the low performance of the github runners this number could be tweaked.
-        time.sleep(15)
-
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        final_ca_cert = action.results
-        assert initial_ca_cert != final_ca_cert
-
-    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
-        self, ops_test
-    ):
-        assert ops_test.model
-
-        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/leader"]
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        initial_ca_cert = action.results
-
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:tls-certificates-access",
-            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
-        )
-        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
-            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
-        )
-        # Same situation as above but this should be a bit faster
-        time.sleep(10)
 
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         final_ca_cert = action.results
@@ -394,15 +421,13 @@ class TestVaultK8s:
         build_and_deploy,
     ):
         assert ops_test.model
-        num_units = 3
-
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
-        await app.scale(num_units)
+        await app.scale(NUM_VAULT_UNITS)
 
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
-            wait_for_exact_units=num_units,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
