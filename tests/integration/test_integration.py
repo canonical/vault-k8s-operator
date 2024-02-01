@@ -277,7 +277,7 @@ class TestVaultK8s:
         # 472: {{Description: "data recovery mode replication secondary and active"}}
         # 501: {{Description: "not initialized"}}
         # 503: {{Description: "sealed"}}
-        assert str(response) == "<Response [200]>" or "<Response [429]>"
+        assert response.status_code in (200, 429)
         os.remove("ca_file.txt")
 
     async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
