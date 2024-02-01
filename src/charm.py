@@ -559,20 +559,6 @@ class VaultCharm(CharmBase):
         if vault_url is not None:
             self.vault_kv.set_vault_url(relation, vault_url)
 
-    def _set_kv_relation_data(self, relation: Relation, mount: str, ca_certificate: str) -> None:
-        """Set relation data for vault-kv.
-
-        Args:
-            relation: Relation
-            mount: mount name
-            ca_certificate: CA certificate
-        """
-        self.vault_kv.set_mount(relation, mount)
-        vault_url = self._get_relation_api_address(relation)
-        self.vault_kv.set_ca_certificate(relation, ca_certificate)
-        if vault_url is not None:
-            self.vault_kv.set_vault_url(relation, vault_url)
-
     def _ensure_unit_credentials(
         self,
         vault: Vault,
