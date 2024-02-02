@@ -330,6 +330,57 @@ class TestVaultK8s:
         assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
+        self, ops_test: OpsTest
+    ):
+        assert ops_test.model
+
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        initial_ca_cert = action.results["stdout"]
+
+        await ops_test.model.integrate(
+            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation2=f"{APPLICATION_NAME}:tls-certificates-access",
+        )
+
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        final_ca_cert = action.results["stdout"]
+        assert initial_ca_cert != final_ca_cert
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
+        self, ops_test
+    ):
+        assert ops_test.model
+
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        initial_ca_cert = action.results
+
+        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
+            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        final_ca_cert = action.results
+        assert initial_ca_cert != final_ca_cert
+
+    @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
         self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
     ):

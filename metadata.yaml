@@ -74,5 +74,11 @@ requires:
   ingress:
     interface: ingress
     limit: 1
+  tls-certificates-access:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Communication between the vault units and from a client to Vault should 
+      be done using the certificates provided by this integration.
   s3-parameters:
     interface: s3
