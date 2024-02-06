@@ -13,7 +13,7 @@ To get started using the library, you just need to fetch the library using `char
 
 ```shell
 cd some-charm
-charmcraft fetch-lib charms.traefik_k8s.v1.ingress
+charmcraft fetch-lib charms.traefik_k8s.v2.ingress
 ```
 
 In the `metadata.yaml` of the charm, add the following:
@@ -72,7 +72,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 PYDEPS = ["pydantic<2.0"]
 
