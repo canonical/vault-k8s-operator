@@ -5,6 +5,7 @@
 """Container abstraction for the Vault charm."""
 
 from typing import TextIO
+
 from charms.vault_k8s.v0.vault_tls import Substrate
 from ops import Container as OpsContainer
 

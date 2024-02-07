@@ -13,8 +13,8 @@ from typing import List, Optional, TextIO, Tuple
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
-from charms.tls_certificates_interface.v2.tls_certificates import (
-    TLSCertificatesRequiresV2,
+from charms.tls_certificates_interface.v3.tls_certificates import (
+    TLSCertificatesRequiresV3,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -111,7 +111,7 @@ class VaultTLSManager(Object):
         self.substrate = substrate
         self.peer_relation = peer_relation
         self.subject_ip = None
-        self.tls_access = TLSCertificatesRequiresV2(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
+        self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         self.tls_folder_path = tls_folder_path
 
@@ -188,11 +188,11 @@ class VaultTLSManager(Object):
 
             existing_csr = self.pull_tls_file_from_workload(File.CSR)
             assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-            if assigned_cert and assigned_cert["certificate"] != self.pull_tls_file_from_workload(
+            if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
                 File.CERT
             ):
-                self._push_tls_file_to_workload(File.CERT, assigned_cert["certificate"])
-                self._push_tls_file_to_workload(File.CA, assigned_cert["ca"])
+                self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
+                self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
                 tls_logger.info(
                     "Certificate from access relation saved for unit %s.",
                     self.charm.unit.name,
@@ -248,9 +248,9 @@ class VaultTLSManager(Object):
         pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
         expired_certs = self.tls_access.get_expiring_certificates()
 
-        existing_csr_is_fulfilled = any([existing_csr in csr.values() for csr in fulfilled_csrs])
-        existing_csr_is_pending = any([existing_csr in csr.values() for csr in pending_csrs])
-        existing_csr_expiring = any([existing_csr in cert.values() for cert in expired_certs])
+        existing_csr_is_fulfilled = any([existing_csr in csr.csr for csr in fulfilled_csrs])
+        existing_csr_is_pending = any([existing_csr in csr.csr for csr in pending_csrs])
+        existing_csr_expiring = any([existing_csr in cert.certificate for cert in expired_certs])
 
         if csr_is_in_workload:
             if existing_csr_is_fulfilled and not existing_csr_expiring:
