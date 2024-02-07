@@ -58,7 +58,7 @@ jsonschema-specifications==2023.12.1
     # via jsonschema
 lightkube==0.15.0
     # via -r requirements.in
-lightkube-models==1.29.0.6
+lightkube-models==1.29.0.7
     # via
     #   -r requirements.in
     #   lightkube
