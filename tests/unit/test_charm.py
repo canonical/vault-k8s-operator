@@ -199,7 +199,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.install.emit()
 
         patch_remove_path.assert_has_calls(
-            calls=[call(path="/vault/raft/vault.db"), call(path="/vault/raft/raft/raft.db")]
+            calls=[
+                call(path="/vault/raft/vault.db", recursive=False),
+                call(path="/vault/raft/raft/raft.db", recursive=False),
+            ]
         )
 
     def test_given_cant_connect_when_install_then_status_is_waiting(self):

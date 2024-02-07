@@ -6,7 +6,7 @@ import json
 import unittest
 from signal import SIGHUP
 from typing import List
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
@@ -321,7 +321,6 @@ class TestCharm(unittest.TestCase):
         assert (root / "vault/certs/cert.pem").exists()
         assert (root / "vault/certs/ca.pem").exists()
 
-    @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
     def test_given_certificate_access_relation_when_wrong_cert_available_then_saved_cert_not_changed(
         self,
     ):
@@ -353,15 +352,19 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.tls.configure_certificates("1.1.1.1")
         assert (root / "vault/certs/cert.pem").read_text().startswith("different cert")
 
-    @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
+    @patch("ops.model.Model.get_binding")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
-        self,
+        self, patch_get_binding
     ):
-        self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.set_can_connect(container=self.container_name, val=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="10.1.0.1"
+        )
         peer_rel_id = self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
         (root / "vault/certs/csr.pem").write_text("first csr")
         (root / "vault/certs/cert.pem").write_text("first cert")
         (root / "vault/certs/ca.pem").write_text("first ca")
@@ -370,11 +373,14 @@ class TestCharm(unittest.TestCase):
         self._set_ca_certificate_secret_in_peer_relation(
             relation_id=peer_rel_id, certificate=EXAMPLE_CA, private_key=EXAMPLE_CA_PK
         )
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_rel_id,
+            root_token="whatever root token",
+            unseal_keys=["whatever unseal key"],
+        )
 
         self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
-
         self.harness.charm.tls._on_tls_certificates_access_relation_broken(event=Mock())
-
         self.harness.charm._container.send_signal.assert_called_with(SIGHUP, self.container_name)
         assert not (root / "vault/certs/csr.pem").exists()
         assert (root / "vault/certs/cert.pem").read_text().startswith("-----BEGIN CERTIFICATE")

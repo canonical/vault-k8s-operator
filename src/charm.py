@@ -24,12 +24,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
-from charms.vault_k8s.v0.vault_tls import (
-    TLS_FILE_FOLDER_PATH,
-    File,
-    Substrate,
-    VaultTLSManager,
-)
+from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
@@ -49,6 +44,7 @@ from ops.model import (
 )
 from ops.pebble import ChangeError, Layer, PathError
 
+from container import Container
 from exceptions import PeerSecretError, VaultCertsError
 from s3_session import S3
 
@@ -65,6 +61,7 @@ VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 BACKUP_KEY_PREFIX = "vault-backup"
+TLS_FILE_FOLDER_PATH = "/vault/certs"
 
 
 class VaultCharm(CharmBase):
@@ -76,7 +73,7 @@ class VaultCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._service_name = self._container_name = "vault"
-        self._container = self.unit.get_container(self._container_name)
+        self._container = Container(container=self.unit.get_container(self._container_name))
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
@@ -96,7 +93,8 @@ class VaultCharm(CharmBase):
         self.tls = VaultTLSManager(
             charm=self,
             peer_relation=PEER_RELATION_NAME,
-            substrate=Substrate.KUBERNETES,
+            substrate=self._container,
+            tls_folder_path=TLS_FILE_FOLDER_PATH,
         )
         self.ingress = IngressPerAppRequirer(
             charm=self,
@@ -146,6 +144,7 @@ class VaultCharm(CharmBase):
                 "Waiting for bind and ingress addresses to be available"
             )
             return
+        self.tls.subject_ip = self._ingress_address  # type: ignore[assignment]
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
