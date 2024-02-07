@@ -376,15 +376,18 @@ class VaultTLSManager(Object):
         tls_logger.debug("Removed existing certificate files from workload.")
 
     def _reload_vault(self) -> None:
-        """Sends a SIGHUP signal to the container which reloads Vault's files. Fails gracefully."""
+        """Sends a SIGHUP signal to the process running Vault.
+
+        Reloads Vault's files and fails gracefully.
+        """
         try:
             self.substrate.send_signal(SIGHUP, "vault")
-            tls_logger.debug("Container restart requested")
+            tls_logger.debug("Vault restart requested")
         except APIError:
-            tls_logger.debug("Couldn't send signal to container. Proceeding normally.")
+            tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
 
     def pull_tls_file_from_workload(self, file: File) -> str:
-        """Get a file related to certs from the container.
+        """Get a file related to certs from the workload.
 
         Args:
             file: a File object that determines which file to read.
