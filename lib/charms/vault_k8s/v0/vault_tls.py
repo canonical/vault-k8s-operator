@@ -104,13 +104,21 @@ class File(Enum):
 class VaultTLSManager(Object):
     """This class configures the certificates within Vault."""
 
-    def __init__(self, charm, peer_relation: str, substrate: Substrate, tls_folder_path: str):
+    def __init__(
+        self,
+        charm,
+        peer_relation: str,
+        container_name: str,
+        substrate: Substrate,
+        tls_folder_path: str,
+    ):
         """Manager of TLS relation and configuration."""
         super().__init__(charm, "tls")
         self.charm = charm
         self.substrate = substrate
         self.peer_relation = peer_relation
         self.subject_ip = None
+        self._container_name = container_name
         self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         self.tls_folder_path = tls_folder_path
@@ -248,9 +256,13 @@ class VaultTLSManager(Object):
         pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
         expired_certs = self.tls_access.get_expiring_certificates()
 
-        existing_csr_is_fulfilled = any([existing_csr in csr.csr for csr in fulfilled_csrs])
-        existing_csr_is_pending = any([existing_csr in csr.csr for csr in pending_csrs])
-        existing_csr_expiring = any([existing_csr in cert.certificate for cert in expired_certs])
+        existing_csr_is_fulfilled = any(
+            [existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs]
+        )
+        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
+        existing_csr_expiring = any(
+            [existing_csr in cert_obj.certificate for cert_obj in expired_certs]
+        )
 
         if csr_is_in_workload:
             if existing_csr_is_fulfilled and not existing_csr_expiring:
@@ -381,7 +393,7 @@ class VaultTLSManager(Object):
         Reloads Vault's files and fails gracefully.
         """
         try:
-            self.substrate.send_signal(SIGHUP, "vault")
+            self.substrate.send_signal(SIGHUP, self._container_name)
             tls_logger.debug("Vault restart requested")
         except APIError:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")

@@ -61,7 +61,7 @@ VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 BACKUP_KEY_PREFIX = "vault-backup"
-TLS_FILE_FOLDER_PATH = "/vault/certs"
+CONTAINER_TLS_FILE_FOLDER_PATH = "/vault/certs"
 
 
 class VaultCharm(CharmBase):
@@ -94,7 +94,8 @@ class VaultCharm(CharmBase):
             charm=self,
             peer_relation=PEER_RELATION_NAME,
             substrate=self._container,
-            tls_folder_path=TLS_FILE_FOLDER_PATH,
+            container_name=self._container_name,
+            tls_folder_path=CONTAINER_TLS_FILE_FOLDER_PATH,
         )
         self.ingress = IngressPerAppRequirer(
             charm=self,
@@ -732,7 +733,7 @@ class VaultCharm(CharmBase):
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
-                "leader_ca_cert_file": f"{TLS_FILE_FOLDER_PATH}/{File.CA.name.lower()}.pem",
+                "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_FOLDER_PATH}/{File.CA.name.lower()}.pem",
             }
             for node_api_address in self._other_peer_node_api_addresses()
         ]
@@ -742,8 +743,8 @@ class VaultCharm(CharmBase):
             cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
-            tls_cert_file=f"{TLS_FILE_FOLDER_PATH}/{File.CERT.name.lower()}.pem",
-            tls_key_file=f"{TLS_FILE_FOLDER_PATH}/{File.KEY.name.lower()}.pem",
+            tls_cert_file=f"{CONTAINER_TLS_FILE_FOLDER_PATH}/{File.CERT.name.lower()}.pem",
+            tls_key_file=f"{CONTAINER_TLS_FILE_FOLDER_PATH}/{File.KEY.name.lower()}.pem",
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
