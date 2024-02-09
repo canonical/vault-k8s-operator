@@ -109,19 +109,18 @@ class VaultTLSManager(Object):
         charm,
         peer_relation: str,
         container_name: str,
-        substrate: Substrate,
         tls_folder_path: str,
+        substrate: Substrate,
     ):
         """Manager of TLS relation and configuration."""
         super().__init__(charm, "tls")
         self.charm = charm
         self.substrate = substrate
         self.peer_relation = peer_relation
-        self.subject_ip = None
         self._container_name = container_name
+        self.tls_folder_path = tls_folder_path
         self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
-        self.tls_folder_path = tls_folder_path
 
         self.framework.observe(
             self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_joined,
@@ -156,15 +155,7 @@ class VaultTLSManager(Object):
         and reloads vault.
         """
         self._remove_all_certs_from_workload()
-        if not self.subject_ip:
-            event.defer()
-            return
-        self._generate_self_signed_certs(self.subject_ip)
-        tls_logger.info(
-            "Saved Vault generated CA and self signed certificate to %s.",
-            self.charm.unit.name,
-        )
-        self._reload_vault()
+        self.charm.on.config_changed.emit()
 
     def configure_certificates(self, subject_ip: str) -> None:
         """Configures the certificates that are used to connect to and communicate with Vault.

@@ -145,7 +145,6 @@ class VaultCharm(CharmBase):
                 "Waiting for bind and ingress addresses to be available"
             )
             return
-        self.tls.subject_ip = self._ingress_address  # type: ignore[assignment]
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
