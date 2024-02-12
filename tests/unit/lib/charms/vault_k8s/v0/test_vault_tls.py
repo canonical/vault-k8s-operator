@@ -315,7 +315,7 @@ class TestCharm(unittest.TestCase):
         )
 
         self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
-        self.harness.charm.tls.configure_certificates("1.1.1.1")
+        self.harness.charm.tls._on_tls_certificates_access_certificate_available(Mock())
 
         self.harness.charm._container.send_signal.assert_called_with(SIGHUP, self.container_name)
         assert (root / "vault/certs/cert.pem").exists()

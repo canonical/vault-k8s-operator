@@ -130,7 +130,8 @@ class VaultTLSManager(Object):
             self._on_tls_certificates_access_relation_broken,
         )
         self.framework.observe(
-            self.tls_access.on.certificate_available, self._on_certificate_config_changed
+            self.tls_access.on.certificate_available,
+            self._on_tls_certificates_access_certificate_available,
         )
         self.framework.observe(
             self.tls_access.on.certificate_expiring, self._on_certificate_config_changed
@@ -162,41 +163,45 @@ class VaultTLSManager(Object):
         Args:
             subject_ip: The ip address for which the certificates will be configured for.
         """
+        # TODO If tls access relation is set, use the provider to generate and store CA.
         if self.charm.unit.is_leader() and not self.ca_certificate_secret_set():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
             self._set_ca_certificate_secret(ca_private_key, ca_certificate)
             tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
 
-        if not self._tls_file_pushed_to_workload(File.CA) or not self._tls_file_pushed_to_workload(
-            File.CERT
-        ):
-            self._generate_self_signed_certs(subject_ip)
-            tls_logger.info(
-                "Saved Vault generated CA and self signed certificate to %s.",
-                self.charm.unit.name,
-            )
-            self._reload_vault()
+        if not self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+            if not self._tls_file_pushed_to_workload(
+                File.CA
+            ) or not self._tls_file_pushed_to_workload(File.CERT):
+                self._generate_self_signed_certs(subject_ip)
+                tls_logger.info(
+                    "Saved Vault generated CA and self signed certificate to %s.",
+                    self.charm.unit.name,
+                )
+                self._reload_vault()
 
-        elif self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+        else:
             if self._should_request_new_certificate():
                 self._send_new_certificate_request_to_provider(
                     self.pull_tls_file_from_workload(File.CSR), subject_ip
                 )
                 tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
 
-            existing_csr = self.pull_tls_file_from_workload(File.CSR)
-            assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-            if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
-                File.CERT
-            ):
-                self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
-                self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
-                tls_logger.info(
-                    "Certificate from access relation saved for unit %s.",
-                    self.charm.unit.name,
-                )
-                self._reload_vault()
-                return
+    def _on_tls_certificates_access_certificate_available(self, event: EventBase) -> None:
+        existing_csr = self.pull_tls_file_from_workload(File.CSR)
+        assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
+        if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
+            File.CERT
+        ):
+            self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
+            self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
+            tls_logger.info(
+                "Certificate from access relation saved for unit %s.",
+                self.charm.unit.name,
+            )
+            self._reload_vault()
+            return
+        return
 
     def send_ca_cert(self):
         """Sends the existing CA cert in the workload to all relations."""
@@ -241,24 +246,27 @@ class VaultTLSManager(Object):
         if not self.charm.model.relations.get(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             return False
 
-        csr_is_in_workload = (existing_csr := self.pull_tls_file_from_workload(File.CSR))
-        fulfilled_csrs = self.tls_access.get_certificate_signing_requests(fulfilled_only=True)
-        pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
-        expired_certs = self.tls_access.get_expiring_certificates()
+        if not (existing_csr := self.pull_tls_file_from_workload(File.CSR)):
+            return True
 
+        pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
+        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
+        if existing_csr_is_pending:
+            return False
+
+        fulfilled_csrs = self.tls_access.get_certificate_signing_requests(fulfilled_only=True)
         existing_csr_is_fulfilled = any(
             [existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs]
         )
-        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
+
+        expired_certs = self.tls_access.get_expiring_certificates()
         existing_csr_expiring = any(
             [existing_csr in cert_obj.certificate for cert_obj in expired_certs]
         )
 
-        if csr_is_in_workload:
-            if existing_csr_is_fulfilled and not existing_csr_expiring:
-                return False
-            if existing_csr_is_pending:
-                return False
+        if existing_csr_is_fulfilled and not existing_csr_expiring:
+            return False
+
         return True
 
     def _send_new_certificate_request_to_provider(
@@ -373,7 +381,8 @@ class VaultTLSManager(Object):
             file: a File object that determines which file to read.
 
         Returns:
-            str: The file content without whitespace.
+            str: The file content without whitespace
+                Or an empty string if the file does not exist.
         """
         try:
             file_content: TextIO = self.workload.pull(
