@@ -59,8 +59,10 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
-    def _set_initialization_secret_in_peer_relation(
-        self, relation_id: int, root_token: str, unseal_keys: List[str]
+    def _set_initialization_secret(
+        self,
+        root_token: str,
+        unseal_keys: List[str],
     ) -> None:
         """Set the initialization secret in the peer relation."""
         content = {
@@ -74,15 +76,11 @@ class TestCharm(unittest.TestCase):
             secret = self.harness.model.get_secret(id=secret_id)
             secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
-        key_values = {"vault-initialization-secret-id": secret_id}
-        self.harness.update_relation_data(
-            app_or_unit=self.app_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
 
-    def _set_ca_certificate_secret_in_peer_relation(
-        self, relation_id: int, private_key: str, certificate: str
+    def _set_ca_certificate_secret(
+        self,
+        private_key: str,
+        certificate: str,
     ) -> None:
         """Set the certificate secret in the peer relation."""
         content = {
@@ -96,14 +94,12 @@ class TestCharm(unittest.TestCase):
             secret = self.harness.model.get_secret(id=secret_id)
             secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
-        key_values = {"vault-ca-certificates-secret-id": secret_id}
-        self.harness.update_relation_data(
-            app_or_unit=self.app_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
 
-    def _set_other_node_api_address_in_peer_relation(self, relation_id: int, unit_name: str):
+    def _set_other_node_api_address_in_peer_relation(
+        self,
+        relation_id: int,
+        unit_name: str,
+    ):
         """Set the other node api address in the peer relation."""
         key_values = {"node_api_address": "http://5.2.1.9:8200"}
         self.harness.update_relation_data(
@@ -141,7 +137,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate to be set in peer relation"),
+            WaitingStatus("Waiting for CA certificate to be set."),
         )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
@@ -160,9 +156,8 @@ class TestCharm(unittest.TestCase):
     ):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
-        relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=relation_id,
+        self._set_peer_relation()
+        self._set_initialization_secret(
             root_token="whatever root token",
             unseal_keys=["whatever unseal key"],
         )
@@ -198,12 +193,12 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="config", attach=True)
 
         patch_exists.return_value = False
-        relation_id = self._set_peer_relation()
-        self._set_ca_certificate_secret_in_peer_relation(
-            certificate=EXAMPLE_CA, private_key=EXAMPLE_CA_PK, relation_id=relation_id
+        self._set_peer_relation()
+        self._set_ca_certificate_secret(
+            certificate=EXAMPLE_CA,
+            private_key=EXAMPLE_CA_PK,
         )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=relation_id,
+        self._set_initialization_secret(
             root_token="whatever root token",
             unseal_keys=["whatever unseal key"],
         )
@@ -242,14 +237,12 @@ class TestCharm(unittest.TestCase):
         patch_exists.return_value = False
         ingress_address = "10.1.0.1"
         bind_address = "1.2.1.2"
-        relation_id = self._set_peer_relation()
-        self._set_ca_certificate_secret_in_peer_relation(
+        self._set_peer_relation()
+        self._set_ca_certificate_secret(
             certificate=EXAMPLE_CA,
             private_key=EXAMPLE_CA_PK,
-            relation_id=relation_id,
         )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=relation_id,
+        self._set_initialization_secret(
             root_token="whatever root token",
             unseal_keys=["whatever unseal key"],
         )
@@ -363,18 +356,18 @@ class TestCharm(unittest.TestCase):
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
-        peer_rel_id = self._set_peer_relation()
+        self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
         (root / "vault/certs/csr.pem").write_text("first csr")
         (root / "vault/certs/cert.pem").write_text("first cert")
         (root / "vault/certs/ca.pem").write_text("first ca")
         (root / "vault/certs/key.pem").write_text(EXAMPLE_PK)
 
-        self._set_ca_certificate_secret_in_peer_relation(
-            relation_id=peer_rel_id, certificate=EXAMPLE_CA, private_key=EXAMPLE_CA_PK
+        self._set_ca_certificate_secret(
+            certificate=EXAMPLE_CA,
+            private_key=EXAMPLE_CA_PK,
         )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_rel_id,
+        self._set_initialization_secret(
             root_token="whatever root token",
             unseal_keys=["whatever unseal key"],
         )

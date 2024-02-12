@@ -148,10 +148,8 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_set():
-            self.unit.status = WaitingStatus(
-                "Waiting for CA certificate to be set in peer relation"
-            )
+        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+            self.unit.status = WaitingStatus("Waiting for CA certificate to be set.")
             return
         if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
             self.unit.status = WaitingStatus(

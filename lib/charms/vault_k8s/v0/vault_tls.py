@@ -52,8 +52,7 @@ tls_logger = TLSAdapter(logger, {})
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
-CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
-CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
+CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
 
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
@@ -163,13 +162,11 @@ class VaultTLSManager(Object):
         Args:
             subject_ip: The ip address for which the certificates will be configured for.
         """
-        # TODO If tls access relation is set, use the provider to generate and store CA.
-        if self.charm.unit.is_leader() and not self.ca_certificate_secret_set():
-            ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self._set_ca_certificate_secret(ca_private_key, ca_certificate)
-            tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
-
         if not self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+            if self.charm.unit.is_leader() and not self.ca_certificate_secret_set():
+                ca_private_key, ca_certificate = generate_vault_ca_certificate()
+                self._set_ca_certificate_secret(ca_private_key, ca_certificate)
+                tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
             if not self._tls_file_pushed_to_workload(
                 File.CA
             ) or not self._tls_file_pushed_to_workload(File.CERT):
@@ -326,7 +323,7 @@ class VaultTLSManager(Object):
             content = juju_secret.get_content()
             return content["privatekey"], content["certificate"]
         except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
+            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_LABEL)
 
     def _set_ca_certificate_secret(
         self,
@@ -355,6 +352,10 @@ class VaultTLSManager(Object):
         except PeerSecretError:
             return False
         return False
+
+    def ca_certificate_is_saved(self) -> bool:
+        """Returns wether a CA cert is saved in the charm."""
+        return self.ca_certificate_secret_set() or self._tls_file_pushed_to_workload(File.CA)
 
     def _remove_all_certs_from_workload(self) -> None:
         """Removes the certificate files that are used for authentication."""
