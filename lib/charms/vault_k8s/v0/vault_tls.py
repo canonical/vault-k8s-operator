@@ -21,6 +21,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_private_key,
 )
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
+from ops.charm import CharmBase
 from ops.pebble import APIError, PathError
 
 from exceptions import VaultCertsError
@@ -106,17 +107,26 @@ class VaultTLSManager(Object):
 
     def __init__(
         self,
-        charm,
+        charm: CharmBase,
         service_name: str,
-        tls_folder_path: str,
+        tls_directory_path: str,
         workload: WorkloadBase,
     ):
-        """Manager of TLS relation and configuration."""
+        """Manager of TLS relation and configuration.
+
+        Args:
+            charm: CharmBase
+            service_name: Name of the container in k8s and
+                name of the process in machine.
+            tls_directory_path: Path of the directory
+                where certificates should be stored on the workload.
+            workload: Either a Container or a Machine.
+        """
         super().__init__(charm, "tls")
         self.charm = charm
         self.workload = workload
         self._service_name = service_name
-        self.tls_folder_path = tls_folder_path
+        self.tls_directory_path = tls_directory_path
         self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
 
@@ -176,27 +186,25 @@ class VaultTLSManager(Object):
                     self.charm.unit.name,
                 )
                 self._reload_vault()
-
-        else:
-            if self._should_request_new_certificate():
-                self._send_new_certificate_request_to_provider(
-                    self.pull_tls_file_from_workload(File.CSR), subject_ip
-                )
-                tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
-            existing_csr = self.pull_tls_file_from_workload(File.CSR)
-            assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-            if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
-                File.CERT
-            ):
-                self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
-                self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
-                tls_logger.info(
-                    "Certificate from access relation saved for unit %s.",
-                    self.charm.unit.name,
-                )
-                self._reload_vault()
-                return
             return
+
+        if self._should_request_new_certificate():
+            self._send_new_certificate_request_to_provider(
+                self.pull_tls_file_from_workload(File.CSR), subject_ip
+            )
+            tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
+        existing_csr = self.pull_tls_file_from_workload(File.CSR)
+        assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
+        if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
+            File.CERT
+        ):
+            self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
+            self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
+            tls_logger.info(
+                "Certificate from access relation saved for unit %s.",
+                self.charm.unit.name,
+            )
+            self._reload_vault()
 
     def send_ca_cert(self):
         """Sends the existing CA cert in the workload to all relations."""
@@ -241,27 +249,24 @@ class VaultTLSManager(Object):
         if not self.charm.model.relations.get(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             return False
 
-        if not (existing_csr := self.pull_tls_file_from_workload(File.CSR)):
-            return True
-
-        pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
-        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
-        if existing_csr_is_pending:
-            return False
-
+        csr_is_in_workload = (existing_csr := self.pull_tls_file_from_workload(File.CSR))
         fulfilled_csrs = self.tls_access.get_certificate_signing_requests(fulfilled_only=True)
+        pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
+        expired_certs = self.tls_access.get_expiring_certificates()
+
         existing_csr_is_fulfilled = any(
             [existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs]
         )
-
-        expired_certs = self.tls_access.get_expiring_certificates()
+        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
         existing_csr_expiring = any(
             [existing_csr in cert_obj.certificate for cert_obj in expired_certs]
         )
 
-        if existing_csr_is_fulfilled and not existing_csr_expiring:
-            return False
-
+        if csr_is_in_workload:
+            if existing_csr_is_fulfilled and not existing_csr_expiring:
+                return False
+            if existing_csr_is_pending:
+                return False
         return True
 
     def _send_new_certificate_request_to_provider(
@@ -335,8 +340,12 @@ class VaultTLSManager(Object):
             "privatekey": private_key,
             "certificate": certificate,
         }
-        self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-        tls_logger.debug("Vault CA certificate secret set")
+        if not self.ca_certificate_secret_exists():
+            self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+            tls_logger.debug("Vault CA certificate secret set")
+            return
+        secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+        secret.set_content(juju_secret_content)
 
     def ca_certificate_secret_exists(self) -> bool:
         """Returns whether CA certificate is stored in secret."""
@@ -382,7 +391,7 @@ class VaultTLSManager(Object):
         """
         try:
             file_content: TextIO = self.workload.pull(
-                f"{self.tls_folder_path}/{file.name.lower()}.pem",
+                f"{self.tls_directory_path}/{file.name.lower()}.pem",
             )
         except (PathError, FileNotFoundError):
             return ""
@@ -395,7 +404,7 @@ class VaultTLSManager(Object):
             file: a File object that determines which file to write.
             data: the data to write into that file.
         """
-        self.workload.push(path=f"{self.tls_folder_path}/{file.name.lower()}.pem", source=data)
+        self.workload.push(path=f"{self.tls_directory_path}/{file.name.lower()}.pem", source=data)
         tls_logger.debug("Pushed %s file to workload", file.name)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
@@ -405,7 +414,7 @@ class VaultTLSManager(Object):
             file: a File object that determines which file to remove.
         """
         try:
-            self.workload.remove_path(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
+            self.workload.remove_path(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
         except PathError:
             pass
         tls_logger.debug("Removed %s file from workload.", file.name)
@@ -419,7 +428,7 @@ class VaultTLSManager(Object):
         Returns:
             bool: True if file exists.
         """
-        return self.workload.exists(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
+        return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
 
 
 def generate_vault_ca_certificate() -> Tuple[str, str]:
