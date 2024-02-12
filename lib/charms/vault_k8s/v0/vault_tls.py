@@ -130,7 +130,7 @@ class VaultTLSManager(Object):
         )
         self.framework.observe(
             self.tls_access.on.certificate_available,
-            self._on_tls_certificates_access_certificate_available,
+            self._on_certificate_config_changed,
         )
         self.framework.observe(
             self.tls_access.on.certificate_expiring, self._on_certificate_config_changed
@@ -183,22 +183,20 @@ class VaultTLSManager(Object):
                     self.pull_tls_file_from_workload(File.CSR), subject_ip
                 )
                 tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
-
-    def _on_tls_certificates_access_certificate_available(self, event: EventBase) -> None:
-        existing_csr = self.pull_tls_file_from_workload(File.CSR)
-        assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-        if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
-            File.CERT
-        ):
-            self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
-            self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
-            tls_logger.info(
-                "Certificate from access relation saved for unit %s.",
-                self.charm.unit.name,
-            )
-            self._reload_vault()
+            existing_csr = self.pull_tls_file_from_workload(File.CSR)
+            assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
+            if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
+                File.CERT
+            ):
+                self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
+                self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
+                tls_logger.info(
+                    "Certificate from access relation saved for unit %s.",
+                    self.charm.unit.name,
+                )
+                self._reload_vault()
+                return
             return
-        return
 
     def send_ca_cert(self):
         """Sends the existing CA cert in the workload to all relations."""
