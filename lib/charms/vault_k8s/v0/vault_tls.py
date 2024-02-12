@@ -23,7 +23,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.pebble import APIError, PathError
 
-from exceptions import PeerSecretError, VaultCertsError
+from exceptions import VaultCertsError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "61b41a053d9847ce8a14eb02197d12cb"
@@ -163,7 +163,7 @@ class VaultTLSManager(Object):
             subject_ip: The ip address for which the certificates will be configured for.
         """
         if not self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
-            if self.charm.unit.is_leader() and not self.ca_certificate_secret_set():
+            if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 self._set_ca_certificate_secret(ca_private_key, ca_certificate)
                 tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
@@ -318,12 +318,9 @@ class VaultTLSManager(Object):
         Returns:
             Tuple[Optional[str], Optional[str]]: The CA private key and certificate
         """
-        try:
-            juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            content = juju_secret.get_content()
-            return content["privatekey"], content["certificate"]
-        except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+        juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+        content = juju_secret.get_content()
+        return content["privatekey"], content["certificate"]
 
     def _set_ca_certificate_secret(
         self,
@@ -343,19 +340,19 @@ class VaultTLSManager(Object):
         self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
         tls_logger.debug("Vault CA certificate secret set")
 
-    def ca_certificate_secret_set(self) -> bool:
+    def ca_certificate_secret_exists(self) -> bool:
         """Returns whether CA certificate is stored in secret."""
         try:
             ca_private_key, ca_certificate = self._get_ca_certificate_secret()
             if ca_private_key and ca_certificate:
                 return True
-        except PeerSecretError:
+        except SecretNotFoundError:
             return False
         return False
 
     def ca_certificate_is_saved(self) -> bool:
         """Returns wether a CA cert is saved in the charm."""
-        return self.ca_certificate_secret_set() or self._tls_file_pushed_to_workload(File.CA)
+        return self.ca_certificate_secret_exists() or self._tls_file_pushed_to_workload(File.CA)
 
     def _remove_all_certs_from_workload(self) -> None:
         """Removes the certificate files that are used for authentication."""
