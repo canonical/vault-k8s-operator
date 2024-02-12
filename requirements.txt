@@ -85,7 +85,7 @@ pyhcl==0.4.5
     # via -r requirements.in
 pytest==8.0.0
     # via pytest-interface-tester
-pytest-interface-tester==1.0.7
+pytest-interface-tester==2.0.1
     # via -r requirements.in
 python-dateutil==2.8.2
     # via botocore
