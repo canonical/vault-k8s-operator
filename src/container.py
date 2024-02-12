@@ -6,12 +6,12 @@
 
 from typing import TextIO
 
-from charms.vault_k8s.v0.vault_tls import Substrate
+from charms.vault_k8s.v0.vault_tls import WorkloadBase
 from ops import Container as OpsContainer
 
 
-class Container(Substrate):
-    """Adapter class for ops.Container to make of type Substrate."""
+class Container(WorkloadBase):
+    """Adapter class that wraps ops.Container into WorkloadBase."""
 
     def __init__(self, container: OpsContainer):
         self._container = container

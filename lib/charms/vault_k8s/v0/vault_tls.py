@@ -58,7 +58,8 @@ CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
 
-class Substrate(ABC):
+# TODO Move this class, it doesn't belong here.
+class WorkloadBase(ABC):
     """Defines an interface for the Machine and Container classes."""
 
     @abstractmethod
@@ -107,17 +108,15 @@ class VaultTLSManager(Object):
     def __init__(
         self,
         charm,
-        peer_relation: str,
-        container_name: str,
+        service_name: str,
         tls_folder_path: str,
-        substrate: Substrate,
+        workload: WorkloadBase,
     ):
         """Manager of TLS relation and configuration."""
         super().__init__(charm, "tls")
         self.charm = charm
-        self.substrate = substrate
-        self.peer_relation = peer_relation
-        self._container_name = container_name
+        self.workload = workload
+        self._service_name = service_name
         self.tls_folder_path = tls_folder_path
         self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
@@ -163,9 +162,9 @@ class VaultTLSManager(Object):
         Args:
             subject_ip: The ip address for which the certificates will be configured for.
         """
-        if self.charm.unit.is_leader() and not self.ca_certificate_set_in_peer_relation():
+        if self.charm.unit.is_leader() and not self.ca_certificate_secret_set():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self._set_ca_certificate_secret_in_peer_relation(ca_private_key, ca_certificate)
+            self._set_ca_certificate_secret(ca_private_key, ca_certificate)
             tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
 
         if not self._tls_file_pushed_to_workload(File.CA) or not self._tls_file_pushed_to_workload(
@@ -224,7 +223,7 @@ class VaultTLSManager(Object):
             private_key = generate_private_key().decode()
             self._push_tls_file_to_workload(File.KEY, private_key)
 
-        ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+        ca_private_key, ca_certificate = self._get_ca_certificate_secret()
         self._push_tls_file_to_workload(File.CA, ca_certificate)
         sans_ip = [subject_ip]
         certificate = generate_vault_unit_certificate(
@@ -308,63 +307,41 @@ class VaultTLSManager(Object):
         storage_location = cert_storage.location
         return f"{storage_location}/{file.name.lower()}.pem"
 
-    def _get_ca_certificate_secret_in_peer_relation(self) -> Tuple[str, str]:
-        """Get the vault CA certificate secret from the peer relation.
+    def _get_ca_certificate_secret(self) -> Tuple[str, str]:
+        """Get the vault CA certificate secret.
 
         Returns:
             Tuple[Optional[str], Optional[str]]: The CA private key and certificate
         """
         try:
-            peer_relation = self.charm.model.get_relation(self.peer_relation)
-            juju_secret_id = peer_relation.data[peer_relation.app].get(
-                CA_CERTIFICATE_JUJU_SECRET_KEY
-            )
-            juju_secret = self.charm.model.get_secret(id=juju_secret_id)
+            juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             content = juju_secret.get_content()
             return content["privatekey"], content["certificate"]
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
 
-    def _set_ca_certificate_secret_in_peer_relation(
+    def _set_ca_certificate_secret(
         self,
         private_key: str,
         certificate: str,
     ) -> None:
-        """Set the vault CA certificate secret in the peer relation.
+        """Set the vault CA certificate secret.
 
         Args:
             private_key: Private key
             certificate: certificate
         """
-        if not self.charm._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
         juju_secret_content = {
             "privatekey": private_key,
             "certificate": certificate,
         }
-        juju_secret = self.charm.app.add_secret(
-            juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL
-        )
-        peer_relation = self.charm.model.get_relation(self.peer_relation)
-        peer_relation.data[self.charm.app].update({CA_CERTIFICATE_JUJU_SECRET_KEY: juju_secret.id})
-        tls_logger.debug("Vault CA certificate secret set in peer relation")
+        self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
+        tls_logger.debug("Vault CA certificate secret set")
 
-    def _remove_ca_certificate_secret_in_peer_relation(self) -> None:
-        """Removes the vault CA certificate secret in the peer relation.
-
-        Only the key from the relation is removed. The actual juju secret is unmodified.
-        """
-        if not self.charm._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        peer_relation = self.model.get_relation(self.peer_relation)
-        if peer_relation:
-            peer_relation.data[self.charm.app].pop(CA_CERTIFICATE_JUJU_SECRET_KEY)
-            tls_logger.debug("Vault CA certificate secret removed from peer relation")
-
-    def ca_certificate_set_in_peer_relation(self) -> bool:
-        """Returns whether CA certificate is stored in peer relation data."""
+    def ca_certificate_secret_set(self) -> bool:
+        """Returns whether CA certificate is stored in secret."""
         try:
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
+            ca_private_key, ca_certificate = self._get_ca_certificate_secret()
             if ca_private_key and ca_certificate:
                 return True
         except PeerSecretError:
@@ -384,7 +361,7 @@ class VaultTLSManager(Object):
         Reloads Vault's files and fails gracefully.
         """
         try:
-            self.substrate.send_signal(SIGHUP, self._container_name)
+            self.workload.send_signal(SIGHUP, self._service_name)
             tls_logger.debug("Vault restart requested")
         except APIError:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
@@ -399,7 +376,7 @@ class VaultTLSManager(Object):
             str: The file content without whitespace.
         """
         try:
-            file_content: TextIO = self.substrate.pull(
+            file_content: TextIO = self.workload.pull(
                 f"{self.tls_folder_path}/{file.name.lower()}.pem",
             )
         except (PathError, FileNotFoundError):
@@ -413,7 +390,7 @@ class VaultTLSManager(Object):
             file: a File object that determines which file to write.
             data: the data to write into that file.
         """
-        self.substrate.push(path=f"{self.tls_folder_path}/{file.name.lower()}.pem", source=data)
+        self.workload.push(path=f"{self.tls_folder_path}/{file.name.lower()}.pem", source=data)
         tls_logger.debug("Pushed %s file to workload", file.name)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
@@ -423,7 +400,7 @@ class VaultTLSManager(Object):
             file: a File object that determines which file to remove.
         """
         try:
-            self.substrate.remove_path(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
+            self.workload.remove_path(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
         except PathError:
             pass
         tls_logger.debug("Removed %s file from workload.", file.name)
@@ -437,7 +414,7 @@ class VaultTLSManager(Object):
         Returns:
             bool: True if file exists.
         """
-        return self.substrate.exists(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
+        return self.workload.exists(path=f"{self.tls_folder_path}/{file.name.lower()}.pem")
 
 
 def generate_vault_ca_certificate() -> Tuple[str, str]:

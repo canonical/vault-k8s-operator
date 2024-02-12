@@ -62,6 +62,7 @@ S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 BACKUP_KEY_PREFIX = "vault-backup"
 CONTAINER_TLS_FILE_FOLDER_PATH = "/vault/certs"
+CONTAINER_NAME = "vault"
 
 
 class VaultCharm(CharmBase):
@@ -72,7 +73,7 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._service_name = self._container_name = "vault"
+        self._service_name = self._container_name = CONTAINER_NAME
         self._container = Container(container=self.unit.get_container(self._container_name))
         self.service_patcher = KubernetesServicePatch(
             charm=self,
@@ -92,9 +93,8 @@ class VaultCharm(CharmBase):
         )
         self.tls = VaultTLSManager(
             charm=self,
-            peer_relation=PEER_RELATION_NAME,
-            substrate=self._container,
-            container_name=self._container_name,
+            workload=self._container,
+            service_name=self._container_name,
             tls_folder_path=CONTAINER_TLS_FILE_FOLDER_PATH,
         )
         self.ingress = IngressPerAppRequirer(
@@ -148,7 +148,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_set_in_peer_relation():
+        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_set():
             self.unit.status = WaitingStatus(
                 "Waiting for CA certificate to be set in peer relation"
             )
