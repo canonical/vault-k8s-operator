@@ -8,7 +8,7 @@ storage "raft" {
     leader_ca_cert_file = "{{ retry.leader_ca_cert_file }}"
   }
   {% endfor %}
-  }
+}
 listener "tcp" {
   telemetry {
     unauthenticated_metrics_access = true

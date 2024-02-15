@@ -1,0 +1,10 @@
+seal "transit" {
+  address         = "{{ vault_addr }}"
+  disable_renewal = "false"
+  key_name        = "{{ key_name }}"
+  mount_path      = "{{ mount_path }}"
+  token           = "{{ vault_token }}"
+  {% if tls_ca_cert %}
+  tls_ca_cert     = "{{ tls_ca_cert }}"
+  {% endif %}
+}
