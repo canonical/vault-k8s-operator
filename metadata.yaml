@@ -59,6 +59,8 @@ peers:
 provides:
   vault-kv:
     interface: vault-kv
+  transit-provides:
+    interface: vault-transit
   vault-pki:
     interface: tls-certificates
   metrics-endpoint:
@@ -75,6 +77,8 @@ assumes:
   - k8s-api
 
 requires:
+  transit-requires:
+    interface: vault-transit
   ingress:
     interface: ingress
     limit: 1
