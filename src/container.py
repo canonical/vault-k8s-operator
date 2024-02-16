@@ -43,3 +43,7 @@ class Container(WorkloadBase):
     def send_signal(self, signal: int, process: str) -> None:
         """Send a signal to a process in the workload."""
         self._container.send_signal(signal, process)
+
+    def stop(self, process: str) -> None:
+        """Stop the workload."""
+        self._container.stop(process)

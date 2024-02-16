@@ -310,7 +310,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
         self.harness.charm.tls.configure_certificates("1.1.1.1")
 
-        self.harness.charm._container.send_signal.assert_called_with(SIGHUP, self.container_name)
+        self.harness.charm._container.send_signal.assert_called_with(
+            signal=SIGHUP, process=self.container_name
+        )
         assert (root / "vault/certs/cert.pem").exists()
         assert (root / "vault/certs/ca.pem").exists()
 
@@ -374,7 +376,9 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
         self.harness.charm.tls._on_tls_certificates_access_relation_broken(event=Mock())
-        self.harness.charm._container.send_signal.assert_called_with(SIGHUP, self.container_name)
+        self.harness.charm._container.send_signal.assert_called_with(
+            signal=SIGHUP, process=self.container_name
+        )
         assert not (root / "vault/certs/csr.pem").exists()
         assert (root / "vault/certs/cert.pem").read_text().startswith("-----BEGIN CERTIFICATE")
         assert (root / "vault/certs/key.pem").read_text().startswith("-----BEGIN RSA PRIVATE KEY")
