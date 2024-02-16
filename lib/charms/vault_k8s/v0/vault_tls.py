@@ -34,7 +34,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,11 @@ class WorkloadBase(ABC):
     @abstractmethod
     def send_signal(self, signal: int, process: str) -> None:
         """Send a signal to a process in the workload."""
+        pass
+
+    @abstractmethod
+    def stop(self, process: str) -> None:
+        """Stop a service in the workload."""
         pass
 
 
@@ -374,7 +379,7 @@ class VaultTLSManager(Object):
         Reloads Vault's files and fails gracefully.
         """
         try:
-            self.workload.send_signal(SIGHUP, self._service_name)
+            self.workload.send_signal(signal=SIGHUP, process=self._service_name)
             tls_logger.debug("Vault restart requested")
         except APIError:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
@@ -390,12 +395,12 @@ class VaultTLSManager(Object):
                 Or an empty string if the file does not exist.
         """
         try:
-            file_content: TextIO = self.workload.pull(
+            with self.workload.pull(
                 f"{self.tls_directory_path}/{file.name.lower()}.pem",
-            )
+            ) as file_content:
+                return file_content.read().strip()
         except (PathError, FileNotFoundError):
             return ""
-        return file_content.read().strip()
 
     def _push_tls_file_to_workload(self, file: File, data: str) -> None:
         """Push one of the given file types to the workload.
