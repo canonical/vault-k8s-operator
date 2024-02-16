@@ -10,9 +10,9 @@ bcrypt==4.1.2
     # via paramiko
 black==24.2.0
     # via -r test-requirements.in
-boto3-stubs==1.34.28
+boto3-stubs==1.34.43
     # via types-boto3
-botocore-stubs==1.34.28
+botocore-stubs==1.34.43
     # via
     #   boto3-stubs
     #   types-botocore
@@ -20,20 +20,30 @@ cachetools==5.3.2
     # via google-auth
 certifi==2023.11.17
     # via
+    #   -c requirements.txt
     #   kubernetes
     #   requests
 cffi==1.16.0
     # via
+    #   -c requirements.txt
     #   cryptography
     #   pynacl
 charset-normalizer==3.3.2
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   requests
 click==8.1.7
-    # via black
+    # via
+    #   -c requirements.txt
+    #   black
+codespell==2.2.6
+    # via -r test-requirements.in
 coverage[toml]==7.4.1
     # via -r test-requirements.in
 cryptography==42.0.3
-    # via paramiko
+    # via
+    #   -c requirements.txt
+    #   paramiko
 decorator==5.1.1
     # via
     #   ipdb
@@ -53,24 +63,30 @@ flake8-copyright==0.2.4
     # via -r test-requirements.in
 flake8-docstrings==1.7.0
     # via -r test-requirements.in
-google-auth==2.27.0
+google-auth==2.28.0
     # via kubernetes
 hvac==2.1.0
-    # via juju
+    # via
+    #   -c requirements.txt
+    #   juju
 idna==3.6
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   requests
 iniconfig==2.0.0
-    # via pytest
+    # via
+    #   -c requirements.txt
+    #   pytest
 ipdb==0.13.13
     # via pytest-operator
-ipython==8.20.0
+ipython==8.21.0
     # via ipdb
-isort==5.13.2
-    # via -r test-requirements.in
 jedi==0.19.1
     # via ipython
 jinja2==3.1.3
-    # via pytest-operator
+    # via
+    #   -c requirements.txt
+    #   pytest-operator
 juju==3.3.1.1
     # via
     #   -r test-requirements.in
@@ -82,7 +98,9 @@ macaroonbakery==1.3.4
     #   -r test-requirements.in
     #   juju
 markupsafe==2.1.4
-    # via jinja2
+    # via
+    #   -c requirements.txt
+    #   jinja2
 matplotlib-inline==0.1.6
     # via ipython
 mccabe==0.7.0
@@ -100,10 +118,11 @@ oauthlib==3.2.2
     #   requests-oauthlib
 packaging==23.2
     # via
+    #   -c requirements.txt
     #   black
     #   juju
     #   pytest
-paramiko==2.12.0
+paramiko==3.4.0
     # via juju
 parso==0.8.3
     # via jedi
@@ -113,13 +132,15 @@ pep8-naming==0.13.3
     # via -r test-requirements.in
 pexpect==4.9.0
     # via ipython
-platformdirs==4.1.0
+platformdirs==4.2.0
     # via black
 pluggy==1.4.0
-    # via pytest
+    # via
+    #   -c requirements.txt
+    #   pytest
 prompt-toolkit==3.0.43
     # via ipython
-protobuf==4.25.2
+protobuf==4.25.3
     # via macaroonbakery
 ptyprocess==0.7.0
     # via pexpect
@@ -135,7 +156,9 @@ pyasn1-modules==0.3.0
 pycodestyle==2.11.1
     # via flake8
 pycparser==2.21
-    # via cffi
+    # via
+    #   -c requirements.txt
+    #   cffi
 pydocstyle==6.3.0
     # via flake8-docstrings
 pyflakes==3.1.0
@@ -157,6 +180,7 @@ pyrfc3339==1.1
     #   macaroonbakery
 pytest==8.0.0
     # via
+    #   -c requirements.txt
     #   -r test-requirements.in
     #   pytest-asyncio
     #   pytest-operator
@@ -165,16 +189,20 @@ pytest-asyncio==0.21.1
 pytest-operator==0.32.0
     # via -r test-requirements.in
 python-dateutil==2.8.2
-    # via kubernetes
-pytz==2023.3.post1
+    # via
+    #   -c requirements.txt
+    #   kubernetes
+pytz==2024.1
     # via pyrfc3339
 pyyaml==6.0.1
     # via
+    #   -c requirements.txt
     #   juju
     #   kubernetes
     #   pytest-operator
 requests==2.31.0
     # via
+    #   -c requirements.txt
     #   hvac
     #   kubernetes
     #   macaroonbakery
@@ -183,12 +211,14 @@ requests-oauthlib==1.3.1
     # via kubernetes
 rsa==4.9
     # via google-auth
+ruff==0.2.1
+    # via -r test-requirements.in
 six==1.16.0
     # via
+    #   -c requirements.txt
     #   asttokens
     #   kubernetes
     #   macaroonbakery
-    #   paramiko
     #   pymacaroons
     #   python-dateutil
 snowballstemmer==2.2.0
@@ -201,7 +231,7 @@ traitlets==5.14.1
     # via
     #   ipython
     #   matplotlib-inline
-types-awscrt==0.20.2
+types-awscrt==0.20.3
     # via botocore-stubs
 types-boto3==1.0.2
     # via -r test-requirements.in
@@ -219,6 +249,7 @@ types-toml==0.10.8.7
     # via -r test-requirements.in
 typing-extensions==4.9.0
     # via
+    #   -c requirements.txt
     #   boto3-stubs
     #   mypy
     #   typing-inspect
@@ -226,13 +257,16 @@ typing-inspect==0.9.0
     # via juju
 urllib3==2.0.7
     # via
+    #   -c requirements.txt
     #   kubernetes
     #   requests
     #   types-requests
 wcwidth==0.2.13
     # via prompt-toolkit
 websocket-client==1.7.0
-    # via kubernetes
+    # via
+    #   -c requirements.txt
+    #   kubernetes
 websockets==12.0
     # via juju
 

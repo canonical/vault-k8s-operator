@@ -31,12 +31,11 @@ lint.extend-ignore = [
     "D408",
     "D409",
     "D413",
+    "C901",
 ]
 lint.ignore = ["E501", "D107"]
 lint.mccabe.max-complexity = 10
 lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
-[tool.isort]
-profile = "black"
 
 [tool.flake8]
 max-line-length = 99

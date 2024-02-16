@@ -71,14 +71,14 @@ class S3:
             logger.info("Bucket %s doesn't exist, creating it.", bucket_name)
             pass
         except BotoCoreError as e:
-            logger.error("Failed to check wether bucket exists. %s", e)
+            logger.error("Failed to check whether bucket exists. %s", e)
             return False
         except ConnectTimeoutError as e:
-            logger.error("Failed to check wether bucket exists. %s", e)
+            logger.error("Failed to check whether bucket exists. %s", e)
             raise e
 
         try:
-            # AWS client does't allow LocationConstraint to be set to us-east-1
+            # AWS client doesn't allow LocationConstraint to be set to us-east-1
             # If that's the regions used, we don't set LocationConstraint
             # us-east-1 is the default region for AWS
             if self.region == AWS_DEFAULT_REGION:
@@ -102,7 +102,7 @@ class S3:
         bucket_name: str,
         key: str,
     ) -> bool:
-        """Uploads the provided contents to the provided S3 bucket.
+        """Upload the provided contents to the provided S3 bucket.
 
         Args:
             content: File like object containing the content to upload.

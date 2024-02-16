@@ -8,11 +8,10 @@ from signal import SIGHUP
 from typing import List
 from unittest.mock import Mock, patch
 
+from charm import VAULT_INITIALIZATION_SECRET_LABEL, VaultCharm
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
 from ops.model import WaitingStatus
-
-from charm import VAULT_INITIALIZATION_SECRET_LABEL, VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v2.tls_certificates"
 EXAMPLE_CA = "-----BEGIN CERTIFICATE-----\nMIIDTzCCAjegAwIBAgIUC+ohQChfeaZDz6MnMTXnJ6gkJN4wDQYJKoZIhvcNAQEL\nBQAwLDELMAkGA1UEBhMCVVMxHTAbBgNVBAMMFFZhdWx0IHNlbGYgc2lnbmVkIENB\nMCAXDTI0MDExOTA5NTcyMFoYDzIwNzQwMTA2MDk1NzIwWjAsMQswCQYDVQQGEwJV\nUzEdMBsGA1UEAwwUVmF1bHQgc2VsZiBzaWduZWQgQ0EwggEiMA0GCSqGSIb3DQEB\nAQUAA4IBDwAwggEKAoIBAQDHdlv5i5rbQjm9qVhGpHFhAincmuocP0OiJm/QANT/\nFqJKnwogMTkb69jn73nXQCqmiNT/r06tTux6nHCjdzjYu/SzfYIUTzrYFbiXJc8e\n9YfyO1bykiZ5W4QoZvuj2QqWp+n2fuXEoBKSbYzKnlwWSk0uhwdYkJ/yZU5zWnOO\nFSsFASGvgHMpo5NZ+qB9/r+jqwofpJbB7VsRlwVukZdqqblE2c4dL2KT/nv5DNko\nqTxQOymG+c/yiGkU5+UUWGyS34u51E9+iAhtome+Tl54PptCnXCyKqzjOz5Kj8F0\noGmsWEk0L1oSog9yNJaVN2pzZDLnHBvo6oSp+tPDX+exAgMBAAGjZzBlMB8GA1Ud\nDgQYBBYEFLAfjFTRAA+o3iE6xPyo3BPPg9LMMCEGA1UdIwQaMBiAFgQUsB+MVNEA\nD6jeITrE/KjcE8+D0swwDgYDVR0PAQH/BAQDAgKkMA8GA1UdEwEB/wQFMAMBAf8w\nDQYJKoZIhvcNAQELBQADggEBAJOkUoMxS3arCbtXXr+3O35FJThy2V643zyAQAoF\n/ndgZPMhPbx8WfAltkylUgj4LXcZw98BhYe49YfGvlQwu8oh/8ENavNzZVNdJcMO\nCliN1ZjV9goRXAl/sUesswMojGJTQaDuWfOXn4NCA6B72NDKz+vPVj1DLe/bDOQ2\noi5KbaJsRbkfW7dj61iwXtOW6PYT6gDeQLJRvLGU2v0ORXet7yu1aVkdPIsfhl6G\nfC+Tdubb1GTRF5JgzXxTMFgaKOmy5u9KHK36TLUX034YfYzksMya7y7SeRT18Uxd\npQSmmO0rHitHDAi9O1bsZCBmbyJhxyE3mGdYKhk1pouedUg=\n-----END CERTIFICATE-----"
@@ -46,7 +45,7 @@ class TestCharm(unittest.TestCase):
         self.app_name = "vault-k8s"
 
     def get_valid_s3_params(self):
-        """Returns valid S3 parameters for mocking."""
+        """Return a valid S3 parameters for mocking."""
         return {
             "bucket": "BUCKET",
             "access-key": "whatever access key",

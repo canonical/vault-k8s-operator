@@ -9,7 +9,6 @@ from unittest.mock import Mock, patch
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from botocore.response import StreamingBody
-
 from s3_session import S3
 
 
