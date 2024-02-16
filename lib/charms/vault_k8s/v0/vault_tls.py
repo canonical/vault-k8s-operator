@@ -92,6 +92,11 @@ class WorkloadBase(ABC):
         """Send a signal to a process in the workload."""
         pass
 
+    @abstractmethod
+    def stop(self, process: str) -> None:
+        """Stop a service in the workload."""
+        pass
+
 
 class File(Enum):
     """This enum determines which files are expected of the library to read."""
@@ -374,7 +379,9 @@ class VaultTLSManager(Object):
         Reloads Vault's files and fails gracefully.
         """
         try:
-            self.workload.send_signal(SIGHUP, self._service_name)
+            self.workload.send_signal(
+                signal=SIGHUP, process=self._service_name
+            )
             tls_logger.debug("Vault restart requested")
         except APIError:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
