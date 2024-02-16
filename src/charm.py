@@ -24,12 +24,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
-from charms.vault_k8s.v0.vault_tls import (
-    TLS_FILE_FOLDER_PATH,
-    File,
-    Substrate,
-    VaultTLSManager,
-)
+from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
@@ -49,6 +44,7 @@ from ops.model import (
 )
 from ops.pebble import ChangeError, Layer, PathError
 
+from container import Container
 from exceptions import PeerSecretError, VaultCertsError
 from s3_session import S3
 
@@ -65,6 +61,8 @@ VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 BACKUP_KEY_PREFIX = "vault-backup"
+CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
+CONTAINER_NAME = "vault"
 
 
 class VaultCharm(CharmBase):
@@ -75,8 +73,8 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._service_name = self._container_name = "vault"
-        self._container = self.unit.get_container(self._container_name)
+        self._service_name = self._container_name = CONTAINER_NAME
+        self._container = Container(container=self.unit.get_container(self._container_name))
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
@@ -95,8 +93,9 @@ class VaultCharm(CharmBase):
         )
         self.tls = VaultTLSManager(
             charm=self,
-            peer_relation=PEER_RELATION_NAME,
-            substrate=Substrate.KUBERNETES,
+            workload=self._container,
+            service_name=self._container_name,
+            tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
         )
         self.ingress = IngressPerAppRequirer(
             charm=self,
@@ -149,10 +148,8 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_set_in_peer_relation():
-            self.unit.status = WaitingStatus(
-                "Waiting for CA certificate to be set in peer relation"
-            )
+        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+            self.unit.status = WaitingStatus("Waiting for CA certificate to be set.")
             return
         if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
             self.unit.status = WaitingStatus(
@@ -733,7 +730,7 @@ class VaultCharm(CharmBase):
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
-                "leader_ca_cert_file": f"{TLS_FILE_FOLDER_PATH}/{File.CA.name.lower()}.pem",
+                "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
             for node_api_address in self._other_peer_node_api_addresses()
         ]
@@ -743,8 +740,8 @@ class VaultCharm(CharmBase):
             cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
-            tls_cert_file=f"{TLS_FILE_FOLDER_PATH}/{File.CERT.name.lower()}.pem",
-            tls_key_file=f"{TLS_FILE_FOLDER_PATH}/{File.KEY.name.lower()}.pem",
+            tls_cert_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CERT.name.lower()}.pem",
+            tls_key_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.KEY.name.lower()}.pem",
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
