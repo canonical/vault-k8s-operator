@@ -7,13 +7,13 @@ from lightkube.resources.core_v1 import Pod
 
 
 def crash_pod(name: str, namespace: str) -> None:
-    """Simulates a pod crash by deleting the pod."""
+    """Simulate a pod crash by deleting the pod."""
     k8s = KubernetesClient()
     k8s.delete(Pod, name=name, namespace=namespace)
 
 
 async def get_leader_unit(model, application_name: str) -> Unit:
-    """Returns the leader unit for the given application."""
+    """Return the leader unit for the given application."""
     for unit in model.units.values():
         if unit.application == application_name and await unit.is_leader_from_status():
             return unit

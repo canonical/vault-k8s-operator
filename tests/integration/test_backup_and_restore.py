@@ -31,7 +31,7 @@ NUM_VAULT_UNITS = 5
 class TestBackupAndRestore:
     @staticmethod
     async def deploy_charm(ops_test: OpsTest, charm: Path) -> None:
-        """Deploys charm.
+        """Deploy the given charm.
 
         Args:
             ops_test: Ops test Framework.
@@ -53,7 +53,7 @@ class TestBackupAndRestore:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def build_and_deploy(self, ops_test: OpsTest):
-        """Builds and deploys vault-k8s charm.
+        """Build and deploy vault-k8s charm.
 
         Args:
             ops_test: Ops test Framework.
@@ -66,7 +66,7 @@ class TestBackupAndRestore:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def deploy_s3_integrator(self, ops_test: OpsTest) -> None:
-        """Deploys S3 Integrator.
+        """Deploy the S3 Integrator.
 
         Args:
             ops_test: Ops test Framework.
@@ -81,7 +81,7 @@ class TestBackupAndRestore:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def deploy_minio(self, ops_test: OpsTest) -> None:
-        """Deploys minio-operator.
+        """Deploy the minio-operator.
 
         Args:
             ops_test: Ops test Framework.
@@ -97,10 +97,12 @@ class TestBackupAndRestore:
         access_key: str,
         secret_key: str,
     ) -> dict:
-        """Runs `sync-s3-credentials` action on the `s3-integrator` leader unit.
+        """Run the `sync-s3-credentials` action on the `s3-integrator` leader unit.
 
         Args:
             ops_test (OpsTest): OpsTest
+            access_key (str): Access key of the S3 compatible storage
+            secret_key (str): Secret key of the S3 compatible storage
 
         Returns:
             dict: Action output
@@ -122,7 +124,7 @@ class TestBackupAndRestore:
         self,
         ops_test: OpsTest,
     ) -> dict:
-        """Runs `create-backup` action on the `vault-k8s` leader unit.
+        """Run the `create-backup` action on the `vault-k8s` leader unit.
 
         Args:
             ops_test (OpsTest): OpsTest
@@ -143,7 +145,7 @@ class TestBackupAndRestore:
         self,
         ops_test: OpsTest,
     ) -> dict:
-        """Runs `list-backups` action on the `vault-k8s` leader unit.
+        """Run the `list-backups` action on the `vault-k8s` leader unit.
 
         Args:
             ops_test (OpsTest): OpsTest
@@ -167,10 +169,13 @@ class TestBackupAndRestore:
         root_token: str,
         unseal_keys: List[str],
     ) -> dict:
-        """Runs `restore-backup` action on the `vault-k8s` leader unit.
+        """Run the `restore-backup` action on the `vault-k8s` leader unit.
 
         Args:
             ops_test (OpsTest): OpsTest
+            backup_id (str): Backup ID
+            root_token (str): Root token of the Vault
+            unseal_keys (List[str]): Unseal keys of the Vault
 
         Returns:
             dict: Action output

@@ -20,11 +20,10 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from exceptions import VaultCertsError
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.pebble import APIError, PathError
-
-from exceptions import VaultCertsError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "61b41a053d9847ce8a14eb02197d12cb"
@@ -34,7 +33,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +59,7 @@ VAULT_CA_SUBJECT = "Vault self signed CA"
 
 # TODO Move this class, it doesn't belong here.
 class WorkloadBase(ABC):
-    """Defines an interface for the Machine and Container classes."""
+    """Define an interface for the Machine and Container classes."""
 
     @abstractmethod
     def exists(self, path: str) -> bool:
@@ -117,7 +116,7 @@ class VaultTLSManager(Object):
         tls_directory_path: str,
         workload: WorkloadBase,
     ):
-        """Manager of TLS relation and configuration.
+        """Create a new VaultTLSManager object.
 
         Args:
             charm: CharmBase
@@ -163,7 +162,7 @@ class VaultTLSManager(Object):
         self.charm.on.config_changed.emit()
 
     def _on_tls_certificates_access_relation_broken(self, event: RelationBrokenEvent):
-        """Handles leaving the tls access relation.
+        """Handle leaving the tls access relation.
 
         Regenerates self signed certificates from the saved self generated root CA
         and reloads vault.
@@ -172,7 +171,7 @@ class VaultTLSManager(Object):
         self.charm.on.config_changed.emit()
 
     def configure_certificates(self, subject_ip: str) -> None:
-        """Configures the certificates that are used to connect to and communicate with Vault.
+        """Configure the certificates that are used to connect to and communicate with Vault.
 
         Args:
             subject_ip: The ip address for which the certificates will be configured for.
@@ -212,7 +211,7 @@ class VaultTLSManager(Object):
             self._reload_vault()
 
     def send_ca_cert(self):
-        """Sends the existing CA cert in the workload to all relations."""
+        """Send the existing CA cert in the workload to all relations."""
         if ca := self.pull_tls_file_from_workload(File.CA):
             for relation in self.charm.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
                 self.certificate_transfer.set_certificate(
@@ -225,7 +224,7 @@ class VaultTLSManager(Object):
             tls_logger.info("Removed CA cert from relations")
 
     def _generate_self_signed_certs(self, subject_ip: str) -> None:
-        """Recreates a unit certificate from the Vault CA certificate, then saves it.
+        """Recreate a unit certificate from the Vault CA certificate, then saves it.
 
         Args:
             subject_ip: The subject of the unit certificate.
@@ -250,7 +249,7 @@ class VaultTLSManager(Object):
         self._push_tls_file_to_workload(File.CERT, certificate)
 
     def _should_request_new_certificate(self) -> bool:
-        """Determines if we should request a new certificate from the tls relation."""
+        """Determine if we should request a new certificate from the tls relation."""
         if not self.charm.model.relations.get(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             return False
 
@@ -259,12 +258,10 @@ class VaultTLSManager(Object):
         pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
         expired_certs = self.tls_access.get_expiring_certificates()
 
-        existing_csr_is_fulfilled = any(
-            [existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs]
-        )
-        existing_csr_is_pending = any([existing_csr in csr_obj.csr for csr_obj in pending_csrs])
+        existing_csr_is_fulfilled = any(existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs)
+        existing_csr_is_pending = any(existing_csr in csr_obj.csr for csr_obj in pending_csrs)
         existing_csr_expiring = any(
-            [existing_csr in cert_obj.certificate for cert_obj in expired_certs]
+            existing_csr in cert_obj.certificate for cert_obj in expired_certs
         )
 
         if csr_is_in_workload:
@@ -277,7 +274,7 @@ class VaultTLSManager(Object):
     def _send_new_certificate_request_to_provider(
         self, old_csr: Optional[str], subject_ip: str
     ) -> None:
-        """This function creates and sends a new certificate signing request to the provider.
+        """Create and send a new certificate signing request to the provider.
 
         Args:
             old_csr: Optional value that is used to decide wether to send a renewal or new request.
@@ -300,7 +297,7 @@ class VaultTLSManager(Object):
             self.tls_access.request_certificate_creation(new_csr)
 
     def get_tls_file_path_in_charm(self, file: File) -> str:
-        """Returns the requested file's location in the charm (not in the workload).
+        """Return the requested file's location in the charm (not in the workload).
 
         This path would typically be: /var/lib/juju/storage/certs/0/{file}.pem
 
@@ -353,7 +350,7 @@ class VaultTLSManager(Object):
         secret.set_content(juju_secret_content)
 
     def ca_certificate_secret_exists(self) -> bool:
-        """Returns whether CA certificate is stored in secret."""
+        """Return whether CA certificate is stored in secret."""
         try:
             ca_private_key, ca_certificate = self._get_ca_certificate_secret()
             if ca_private_key and ca_certificate:
@@ -363,18 +360,18 @@ class VaultTLSManager(Object):
         return False
 
     def ca_certificate_is_saved(self) -> bool:
-        """Returns wether a CA cert is saved in the charm."""
+        """Return wether a CA cert is saved in the charm."""
         return self.ca_certificate_secret_exists() or self._tls_file_pushed_to_workload(File.CA)
 
     def _remove_all_certs_from_workload(self) -> None:
-        """Removes the certificate files that are used for authentication."""
+        """Remove the certificate files that are used for authentication."""
         self._remove_tls_file_from_workload(File.CA)
         self._remove_tls_file_from_workload(File.CERT)
         self._remove_tls_file_from_workload(File.CSR)
         tls_logger.debug("Removed existing certificate files from workload.")
 
     def _reload_vault(self) -> None:
-        """Sends a SIGHUP signal to the process running Vault.
+        """Send a SIGHUP signal to the process running Vault.
 
         Reloads Vault's files and fails gracefully.
         """
@@ -413,7 +410,7 @@ class VaultTLSManager(Object):
         tls_logger.debug("Pushed %s file to workload", file.name)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
-        """Removes the certificate files that are used for authentication.
+        """Remove the certificate files that are used for authentication.
 
         Args:
             file: a File object that determines which file to remove.
@@ -425,7 +422,7 @@ class VaultTLSManager(Object):
         tls_logger.debug("Removed %s file from workload.", file.name)
 
     def _tls_file_pushed_to_workload(self, file: File) -> bool:
-        """Returns whether tls file is pushed to the workload.
+        """Return whether tls file is pushed to the workload.
 
         Args:
             file: a File object that determines which file to check.
@@ -468,6 +465,7 @@ def generate_vault_unit_certificate(
         sans_dns: List of DNS subject alternative names
         ca_certificate: CA certificate
         ca_private_key: CA private key
+        unit_private_key: Unit private key
 
     Returns:
         Tuple[str, str]: Unit private key, Unit certificate

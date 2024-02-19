@@ -25,6 +25,8 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
+from container import Container
+from exceptions import PeerSecretError, VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
@@ -43,9 +45,6 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
-
-from container import Container
-from exceptions import PeerSecretError, VaultCertsError
 from s3_session import S3
 
 logger = logging.getLogger(__name__)
@@ -121,7 +120,7 @@ class VaultCharm(CharmBase):
         )
 
     def _on_install(self, event: InstallEvent):
-        """Handler triggered when the charm is installed."""
+        """Handle the install charm event."""
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
@@ -129,7 +128,7 @@ class VaultCharm(CharmBase):
         self._delete_vault_data()
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:
-        """Handler triggered whenever there is a config-changed event.
+        """Handle config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
         service, and unseals Vault.
@@ -190,7 +189,7 @@ class VaultCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_remove(self, event: RemoveEvent):
-        """Handler triggered when the charm is removed.
+        """Handle remove charm event.
 
         Removes the vault service and the raft data and removes the node from the raft cluster.
         """
@@ -224,7 +223,7 @@ class VaultCharm(CharmBase):
             self._delete_vault_data()
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
-        """Handler triggered when a new vault-kv client is attached."""
+        """Handle vault-kv-client attached event."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can configure a vault-kv client, skipping")
             return
@@ -272,7 +271,7 @@ class VaultCharm(CharmBase):
             self._remove_stale_nonce(relation=relation, nonce=nonce)
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
-        """Handles create-backup action.
+        """Handle the create-backup action.
 
         Creates a snapshot and stores it on S3 storage.
         Outputs the ID of the backup to the user.
@@ -340,7 +339,7 @@ class VaultCharm(CharmBase):
         event.set_results({"backup-id": backup_key})
 
     def _on_list_backups_action(self, event: ActionEvent) -> None:
-        """Handles list-backups action.
+        """Handle the list-backups action.
 
         Lists all backups stored in S3 bucket.
 
@@ -387,7 +386,7 @@ class VaultCharm(CharmBase):
         event.set_results({"backup-ids": json.dumps(backup_ids)})
 
     def _on_restore_backup_action(self, event: ActionEvent) -> None:
-        """Handles restore-backup action.
+        """Handle the restore-backup action.
 
         Restores the snapshot with the provided ID.
         Unseals Vault using the provided unseal key.
@@ -457,7 +456,7 @@ class VaultCharm(CharmBase):
         event.set_results({"restored": event.params.get("backup-id")})
 
     def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
-        """Handles set-unseal-keys action.
+        """Handle the set-unseal-keys action.
 
         Updates the initialization secret in the peer relation
             with the provided unseal keys.
@@ -487,7 +486,7 @@ class VaultCharm(CharmBase):
         event.set_results({"unseal-keys": new_keys})
 
     def _on_set_root_token_action(self, event: ActionEvent) -> None:
-        """Handles set-root-token action.
+        """Handle the set-root-token action.
 
         Updates the initialization secret in the peer relation
             with the provided root token.
@@ -516,7 +515,7 @@ class VaultCharm(CharmBase):
         event.set_results({"root-token": new_root_token})
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
-        """Validates the requirements for creating S3.
+        """Validate the requirements for creating S3.
 
         It will check if the S3 relation is created
             and if the required S3 parameters are set.
@@ -534,7 +533,7 @@ class VaultCharm(CharmBase):
         return True, None
 
     def _get_backup_key(self) -> str:
-        """Returns the backup key.
+        """Return the backup key.
 
         Returns:
             str: The backup key
@@ -565,7 +564,7 @@ class VaultCharm(CharmBase):
         nonce: str,
         egress_subnet: str,
     ):
-        """Ensures a unit has credentials to access the vault-kv mount."""
+        """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
         vault.configure_kv_policy(policy_name, mount)
         role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
@@ -700,7 +699,7 @@ class VaultCharm(CharmBase):
         return True
 
     def _get_relation_api_address(self, relation: Relation) -> Optional[str]:
-        """Fetches api address from relation and returns it.
+        """Fetch the api address from relation and returns it.
 
         Example: "https://10.152.183.20:8200"
         """
@@ -711,7 +710,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _api_address(self) -> str:
-        """Returns the FQDN with the https schema and vault port.
+        """Return the FQDN with the https schema and vault port.
 
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
         """
@@ -719,14 +718,14 @@ class VaultCharm(CharmBase):
 
     @property
     def _cluster_address(self) -> str:
-        """Returns the FQDN with the https schema and vault cluster port.
+        """Return the FQDN with the https schema and vault cluster port.
 
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
     def _generate_vault_config_file(self) -> None:
-        """Handles creation of the Vault config file."""
+        """Handle the creation of the Vault config file."""
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
@@ -799,7 +798,7 @@ class VaultCharm(CharmBase):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
 
     def _get_missing_s3_parameters(self) -> List[str]:
-        """Returns list of missing S3 parameters.
+        """Return the list of missing S3 parameters.
 
         Returns:
             List[str]: List of missing required S3 parameters.
@@ -844,7 +843,7 @@ class VaultCharm(CharmBase):
             logger.info("Pebble layer added")
 
     def _initialization_secret_set_in_peer_relation(self) -> bool:
-        """Returns whether initialization secret is stored in peer relation data."""
+        """Return whether initialization secret is stored in peer relation data."""
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if root_token and unseal_keys:
@@ -854,7 +853,7 @@ class VaultCharm(CharmBase):
         return False
 
     def _create_raft_snapshot(self) -> Optional[IO[bytes]]:
-        """Creates a snapshot of Vault.
+        """Create a snapshot of Vault.
 
         Returns:
             IO[bytes]: The snapshot content as a file like object.
@@ -924,7 +923,7 @@ class VaultCharm(CharmBase):
         return True
 
     def _get_initialized_vault_client(self) -> Optional[Vault]:
-        """Returns an initialized vault client.
+        """Return an initialized vault client.
 
         Creates a Vault client and returns it if:
             - Vault is initialized
@@ -955,7 +954,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _bind_address(self) -> Optional[str]:
-        """Fetches bind address from peer relation and returns it.
+        """Fetch the bind address from peer relation and returns it.
 
         Returns:
             str: Bind address
@@ -973,7 +972,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _ingress_address(self) -> Optional[str]:
-        """Fetches ingress address from peer relation and returns it.
+        """Fetch the ingress address from peer relation and returns it.
 
         Returns:
             str: Ingress address
@@ -991,7 +990,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _vault_layer(self) -> Layer:
-        """Returns pebble layer to start Vault."""
+        """Return the pebble layer to start Vault."""
         return Layer(
             {
                 "summary": "vault layer",
@@ -1015,7 +1014,7 @@ class VaultCharm(CharmBase):
         peer_relation.data[self.unit].update({"node_api_address": self._api_address})
 
     def _get_peer_relation_node_api_addresses(self) -> List[str]:
-        """Returns list of peer unit addresses."""
+        """Return a list of peer unit addresses."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         node_api_addresses = []
         if not peer_relation:
@@ -1026,7 +1025,7 @@ class VaultCharm(CharmBase):
         return node_api_addresses
 
     def _other_peer_node_api_addresses(self) -> List[str]:
-        """Returns list of other peer unit addresses.
+        """Return a list of other peer unit addresses.
 
         We exclude our own unit address from the list.
         """
@@ -1038,7 +1037,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _node_id(self) -> str:
-        """Returns node id for vault.
+        """Return the node id for vault.
 
         Example of node id: "vault-k8s-0"
         """
@@ -1080,7 +1079,7 @@ def render_vault_config_file(
 
 
 def config_file_content_matches(existing_content: str, new_content: str) -> bool:
-    """Returns whether two Vault config file contents match.
+    """Return whether two Vault config file contents match.
 
     We check if the retry_join addresses match, and then we check if the rest of the config
     file matches.
@@ -1106,10 +1105,10 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
     if isinstance(existing_retry_joins, dict):
         existing_retry_joins = [existing_retry_joins]
 
-    new_retry_join_api_addresses = set(address["leader_api_addr"] for address in new_retry_joins)
-    existing_retry_join_api_addresses = set(
+    new_retry_join_api_addresses = {address["leader_api_addr"] for address in new_retry_joins}
+    existing_retry_join_api_addresses = {
         address["leader_api_addr"] for address in existing_retry_joins
-    )
+    }
     return (
         new_retry_join_api_addresses == existing_retry_join_api_addresses
         and new_content_hcl == existing_config_hcl

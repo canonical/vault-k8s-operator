@@ -63,7 +63,7 @@ class TestVaultK8s:
         )
 
     async def _get_vault_endpoint(self, ops_test: OpsTest, timeout: int = 60) -> str:
-        """Retrieves the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+        """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
 
         Args:
             ops_test: Ops test Framework.
@@ -99,10 +99,11 @@ class TestVaultK8s:
         raise TimeoutError("Traefik did not return proxied endpoints")
 
     async def run_get_ca_certificate_action(self, ops_test: OpsTest, timeout: int = 60) -> dict:
-        """Runs `get-certificate` on the `vault-k8s` unit.
+        """Run the `get-certificate` on the `vault-k8s` unit.
 
         Args:
             ops_test (OpsTest): OpsTest
+            timeout (int, optional): Timeout in seconds. Defaults to 60.
 
         Returns:
             dict: Action output
@@ -120,7 +121,7 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def deploy_prometheus(self, ops_test: OpsTest) -> None:
-        """Deploys Prometheus.
+        """Deploy Prometheus.
 
         Args:
             ops_test: Ops test Framework.
@@ -135,7 +136,7 @@ class TestVaultK8s:
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def build_and_deploy(self, ops_test: OpsTest):
-        """Builds and deploys vault-k8s charm.
+        """Build and deploys vault-k8s charm.
 
         Args:
             ops_test: Ops test Framework.

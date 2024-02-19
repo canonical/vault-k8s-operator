@@ -12,16 +12,15 @@ import hcl  # type: ignore[import-untyped]
 import requests
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
-from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
-from ops import testing
-from ops.model import ActiveStatus, WaitingStatus
-
 from charm import (
     S3_RELATION_NAME,
     VAULT_INITIALIZATION_SECRET_LABEL,
     VaultCharm,
     config_file_content_matches,
 )
+from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
+from ops import testing
+from ops.model import ActiveStatus, WaitingStatus
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
@@ -30,7 +29,7 @@ VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 
 
 def read_file(path: str) -> str:
-    """Reads a file and returns as a string.
+    """Read a file and returns as a string.
 
     Args:
         path (str): path to the file.
@@ -101,7 +100,7 @@ class TestCharm(unittest.TestCase):
         self.app_name = "vault-k8s"
 
     def get_valid_s3_params(self):
-        """Returns valid S3 parameters for mocking."""
+        """Return a valid S3 parameters for mocking."""
         return {
             "bucket": "BUCKET",
             "access-key": "whatever access key",
