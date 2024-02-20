@@ -136,7 +136,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def _set_ca_certificate_secret(self, private_key: str, certificate: str) -> None:
-        """Set the certificate secret in the peer relation."""
+        """Set the certificate secret."""
         content = {
             "certificate": certificate,
             "privatekey": private_key,

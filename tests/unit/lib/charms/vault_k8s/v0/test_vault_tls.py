@@ -81,7 +81,7 @@ class TestCharm(unittest.TestCase):
         private_key: str,
         certificate: str,
     ) -> None:
-        """Set the certificate secret in the peer relation."""
+        """Set the certificate secret."""
         content = {
             "certificate": certificate,
             "privatekey": private_key,
