@@ -29,7 +29,7 @@ jobs:
         with:
           provider: microk8s
           channel: 1.27-strict/stable
-          juju-channel: 3.1/stable
+          juju-channel: 3.4/stable
       - name: Enable Metallb
         if: ${{ inputs.enable-metallb == true }}
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
