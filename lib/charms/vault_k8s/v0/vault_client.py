@@ -13,6 +13,7 @@ from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
+from cryptography import x509
 from hvac.exceptions import VaultError  # type: ignore[import-untyped]
 from requests.exceptions import RequestException
 
@@ -24,7 +25,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 
 logger = logging.getLogger(__name__)
@@ -116,14 +117,90 @@ class Vault:
             self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method")
 
-    def configure_kv_mount(self, name: str):
+    def enable_kv_engine(self, name: str):
         """Ensure a KV mount is enabled."""
-        if name + "/" not in self._client.sys.list_mounted_secrets_engines():
-            self._client.sys.enable_secrets_engine(
-                backend_type="kv-v2",
-                description="Charm created KV backend",
-                path=name,
-            )
+        self._client.sys.enable_secrets_engine(
+            backend_type="kv-v2",
+            description="Charm created KV backend",
+            path=name,
+        )
+
+    def enable_pki_engine(self, *, path: str):
+        """Ensure a PKI mount is enabled."""
+        self._client.sys.enable_secrets_engine(
+            backend_type="pki",
+            description="Charm created PKI backend",
+            path=path,
+        )
+        logger.info("Enabled PKI backend")
+
+    def is_secret_engine_enabled(self, *, path: str) -> bool:
+        """Check if a PKI mount is enabled."""
+        return path + "/" in self._client.sys.list_mounted_secrets_engines()
+
+    def is_intermediate_ca_set(self, *, mount: str, certificate: str) -> bool:
+        """Check if the intermediate CA is set for the PKI backend."""
+        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+        return intermediate_ca == certificate
+
+    def is_intermediate_ca_set_with_common_name(self, *, mount: str, common_name: str) -> bool:
+        """Check if the intermediate CA is set for the PKI backend."""
+        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+        if not intermediate_ca:
+            return False
+        loaded_certificate = x509.load_pem_x509_certificate(intermediate_ca.encode("utf-8"))
+        existing_common_name = loaded_certificate.subject.get_attributes_for_oid(
+            x509.oid.NameOID.COMMON_NAME
+        )[0].value
+        return existing_common_name == common_name
+
+    def configure_pki_intermediate_ca(self, mount: str, common_name: str) -> str:
+        """Create an intermediate CA for the PKI backend.
+
+        Generate a CSR for the intermediate CA.
+
+        Returns:
+            The CSR.
+        """
+        response = self._client.secrets.pki.generate_intermediate(
+            mount_point=mount,
+            common_name=common_name,
+            type="internal",
+        )
+        logger.info("Generated a intermediate CA CSR for the PKI backend")
+        return response["data"]["csr"]
+
+    def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
+        """Set the intermediate CA certificate for the PKI backend."""
+        self._client.secrets.pki.set_signed_intermediate(
+            certificate=certificate, mount_point=mount
+        )
+        logger.info("Set the intermediate CA certificate for the PKI backend")
+
+    def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
+        """Check if the CA certificate is set for the PKI backend."""
+        existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+        return existing_certificate == certificate
+
+    def set_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+        """Create a role for the PKI backend."""
+        self._client.secrets.pki.create_or_update_role(
+            name=role,
+            mount_point=mount,
+            extra_params={
+                "allowed_domains": allowed_domains,
+                "allow_subdomains": True,
+            },
+        )
+        logger.info("Created a role for the PKI backend")
+
+    def is_pki_role_set(self, role: str, mount: str) -> bool:
+        """Check if the role is set for the PKI backend."""
+        try:
+            existing_roles = self._client.secrets.pki.list_roles(mount_point=mount)
+            return role in existing_roles["data"]["keys"]
+        except hvac.exceptions.InvalidPath:
+            return False
 
     def configure_kv_policy(self, policy: str, mount: str):
         """Create/update a policy within vault to access the KV mount."""

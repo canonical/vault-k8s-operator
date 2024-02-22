@@ -53,7 +53,7 @@ copyright-check = "True"
 copyright-author = "Canonical Ltd."
 copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 
-[tool.ruff.mccabe]
+[lint.mccabe]
 max-complexity = 10
 
 [tool.codespell]
