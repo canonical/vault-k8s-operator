@@ -9,4 +9,4 @@ For more information including guides, integrations, configuration options, see 
 
 ## OCI Images
 
-- Vault: ghcr.io/canonical/vault:1.15.4
+- Vault: [ghcr.io/canonical/vault](https://github.com/canonical/vault-rock)
