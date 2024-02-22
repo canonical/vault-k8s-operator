@@ -1488,10 +1488,10 @@ class TLSCertificatesRequiresV3(Object):
         Returns:
             list: List of RequirerCSR objects.
         """
-        requirer_csrs = []
         relation = self.model.get_relation(self.relationship_name)
         if not relation:
-            raise RuntimeError(f"Relation {self.relationship_name} does not exist")
+            return []
+        requirer_csrs = []
         requirer_relation_data = _load_relation_data(relation.data[self.model.unit])
         requirer_csrs_dict = requirer_relation_data.get("certificate_signing_requests", [])
         for requirer_csr_dict in requirer_csrs_dict:
@@ -1676,8 +1676,6 @@ class TLSCertificatesRequiresV3(Object):
         Returns:
             List: List[ProviderCertificate]
         """
-        if not self.model.get_relation(self.relationship_name):
-            return []
         assigned_certificates = []
         for requirer_csr in self.get_certificate_signing_requests(fulfilled_only=True):
             if cert := self._find_certificate_in_relation_data(requirer_csr.csr):
