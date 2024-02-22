@@ -125,7 +125,7 @@ class Vault:
             path=name,
         )
 
-    def enable_pki_engine(self, *, path: str):
+    def enable_pki_engine(self, path: str):
         """Ensure a PKI mount is enabled."""
         self._client.sys.enable_secrets_engine(
             backend_type="pki",
@@ -134,16 +134,16 @@ class Vault:
         )
         logger.info("Enabled PKI backend")
 
-    def is_secret_engine_enabled(self, *, path: str) -> bool:
+    def is_secret_engine_enabled(self, path: str) -> bool:
         """Check if a PKI mount is enabled."""
         return path + "/" in self._client.sys.list_mounted_secrets_engines()
 
-    def is_intermediate_ca_set(self, *, mount: str, certificate: str) -> bool:
+    def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
         intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         return intermediate_ca == certificate
 
-    def is_intermediate_ca_set_with_common_name(self, *, mount: str, common_name: str) -> bool:
+    def is_intermediate_ca_set_with_common_name(self, mount: str, common_name: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
         intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         if not intermediate_ca:
