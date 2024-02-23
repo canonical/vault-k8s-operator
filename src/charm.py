@@ -35,6 +35,7 @@ from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
     CharmBase,
+    CollectStatusEvent,
     ConfigChangedEvent,
     InstallEvent,
     RelationJoinedEvent,
@@ -43,6 +44,7 @@ from ops.charm import (
 from ops.main import main
 from ops.model import (
     ActiveStatus,
+    BlockedStatus,
     ModelError,
     Relation,
     Secret,
@@ -116,6 +118,7 @@ class VaultCharm(CharmBase):
         )
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.vault_pebble_ready, self._configure)
         self.framework.observe(self.on.config_changed, self._configure)
@@ -142,10 +145,52 @@ class VaultCharm(CharmBase):
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
         if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
             return
         self._delete_vault_data()
+
+    def _on_collect_status(self, event: CollectStatusEvent):
+        """Handle the collect status event."""
+        if (
+            self._tls_certificates_pki_relation_created()
+            and not self._common_name_config_is_valid()
+        ):
+            event.add_status(
+                BlockedStatus(
+                    "Common name is not set in the charm config, cannot configure PKI secrets engine"
+                )
+            )
+            return
+        if not self._container.can_connect():
+            event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
+            return
+        if not self._is_peer_relation_created():
+            event.add_status(WaitingStatus("Waiting for peer relation"))
+            return
+        if not self._bind_address or not self._ingress_address:
+            event.add_status(
+                WaitingStatus("Waiting for bind and ingress addresses to be available")
+            )
+            return
+        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
+            event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
+            return
+        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+            event.add_status(WaitingStatus("Waiting for CA certificate"))
+            return
+        if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
+            event.add_status(WaitingStatus("Waiting for initialization secret"))
+            return
+        if not self.tls.tls_file_pushed_to_workload(File.CA):
+            event.add_status(WaitingStatus("Waiting for TLS certificates"))
+            return
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+        )
+        if not vault.is_api_available():
+            event.add_status(WaitingStatus("Waiting for vault to be available"))
+            return
+        event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:
         """Handle config-changed event.
@@ -154,26 +199,16 @@ class VaultCharm(CharmBase):
         service, and unseals Vault.
         """
         if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             return
         if not self._is_peer_relation_created():
-            self.unit.status = WaitingStatus("Waiting for peer relation")
             return
         if not self._bind_address or not self._ingress_address:
-            self.unit.status = WaitingStatus(
-                "Waiting for bind and ingress addresses to be available"
-            )
             return
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
-            self.unit.status = WaitingStatus("Waiting for CA certificate to be set.")
             return
         if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
-            self.unit.status = WaitingStatus(
-                "Waiting for initialization secret to be set in peer relation"
-            )
             return
         self.tls.configure_certificates(self._ingress_address)
 
@@ -187,7 +222,6 @@ class VaultCharm(CharmBase):
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
         if not vault.is_api_available():
-            self.unit.status = WaitingStatus("Waiting for vault to be available")
             return
         if self.unit.is_leader() and not vault.is_initialized():
             root_token, unseal_keys = vault.initialize()
@@ -208,7 +242,6 @@ class VaultCharm(CharmBase):
                 "Raft cluster is not healthy. %s",
                 vault.get_raft_cluster_state(),
             )
-        self.unit.status = ActiveStatus()
 
     def _on_remove(self, event: RemoveEvent):
         """Handle remove charm event.
@@ -1182,6 +1215,11 @@ class VaultCharm(CharmBase):
     def _get_config_common_name(self) -> str:
         """Return the common name to use for the PKI backend."""
         return self.config.get("common_name", "")
+
+    def _common_name_config_is_valid(self) -> bool:
+        """Return whether the config value for the common name is valid."""
+        common_name = self._get_config_common_name()
+        return common_name != ""
 
     @property
     def _node_id(self) -> str:

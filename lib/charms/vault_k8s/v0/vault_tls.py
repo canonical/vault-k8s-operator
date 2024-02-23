@@ -181,9 +181,9 @@ class VaultTLSManager(Object):
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 self._set_ca_certificate_secret(ca_private_key, ca_certificate)
                 tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
-            if not self._tls_file_pushed_to_workload(
+            if not self.tls_file_pushed_to_workload(
                 File.CA
-            ) or not self._tls_file_pushed_to_workload(File.CERT):
+            ) or not self.tls_file_pushed_to_workload(File.CERT):
                 self._generate_self_signed_certs(subject_ip)
                 tls_logger.info(
                     "Saved Vault generated CA and self signed certificate to %s.",
@@ -361,7 +361,7 @@ class VaultTLSManager(Object):
 
     def ca_certificate_is_saved(self) -> bool:
         """Return wether a CA cert is saved in the charm."""
-        return self.ca_certificate_secret_exists() or self._tls_file_pushed_to_workload(File.CA)
+        return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _remove_all_certs_from_workload(self) -> None:
         """Remove the certificate files that are used for authentication."""
@@ -421,7 +421,7 @@ class VaultTLSManager(Object):
             pass
         tls_logger.debug("Removed %s file from workload.", file.name)
 
-    def _tls_file_pushed_to_workload(self, file: File) -> bool:
+    def tls_file_pushed_to_workload(self, file: File) -> bool:
         """Return whether tls file is pushed to the workload.
 
         Args:

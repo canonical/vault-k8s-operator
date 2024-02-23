@@ -222,45 +222,34 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
-    def test_given_cant_connect_when_install_then_status_is_waiting(self):
+    def test_given_cant_connect_when_evaluate_status_then_status_is_waiting(self):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=False)
 
-        self.harness.charm.on.install.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
             WaitingStatus("Waiting to be able to connect to vault unit"),
         )
 
-    def test_given_cant_connect_when_configure_then_status_is_waiting(self):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=False)
-
-        self.harness.charm.on.config_changed.emit()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting to be able to connect to vault unit"),
-        )
-
-    def test_given_peer_relation_not_created_when_configure_then_status_is_waiting(self):
+    def test_given_peer_relation_not_created_when_evaluate_status_then_status_is_waiting(self):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
             WaitingStatus("Waiting for peer relation"),
         )
 
-    def test_given_bind_address_not_available_when_configure_then_status_is_waiting(self):
+    def test_given_bind_address_not_available_when_evaluate_status_then_status_is_waiting(self):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         self._set_peer_relation()
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
@@ -268,7 +257,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Model.get_binding")
-    def test_given_not_leader_and_peer_addresses_not_available_when_configure_then_status_is_waiting(
+    def test_given_not_leader_and_peer_addresses_not_available_when_evaluate_status_then_status_is_waiting(
         self, patch_get_binding
     ):
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -279,7 +268,7 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
@@ -287,7 +276,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Model.get_binding")
-    def test_given_not_leader_and_init_secret_not_set_when_configure_then_status_is_waiting(
+    def test_given_not_leader_and_init_secret_not_set_when_evaluate_status_then_status_is_waiting(
         self, patch_get_binding
     ):
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -309,11 +298,11 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for initialization secret to be set in peer relation"),
+            WaitingStatus("Waiting for initialization secret"),
         )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
@@ -401,7 +390,7 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
-    def test_given_api_not_available_when_configure_then_status_is_waiting(
+    def test_given_api_not_available_when_evaluate_status_then_status_is_waiting(
         self,
         patch_get_binding,
         patch_is_api_available,
@@ -416,7 +405,7 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.3.4", ingress_address="1.1.1.1"
         )
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
@@ -473,7 +462,7 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("ops.model.Model.get_binding")
-    def test_given_api_available_when_configure_then_status_is_active(
+    def test_given_api_available_when_evaluate_status_then_status_is_active(
         self,
         patch_get_binding,
         patch_is_api_available,
@@ -486,13 +475,15 @@ class TestCharm(unittest.TestCase):
         self._set_peer_relation()
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.set_leader(is_leader=True)
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.3.4", ingress_address="1.1.1.1"
         )
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
