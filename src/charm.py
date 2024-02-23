@@ -321,7 +321,7 @@ class VaultCharm(CharmBase):
         if not vault.is_intermediate_ca_set_with_common_name(
             mount=PKI_MOUNT, common_name=common_name
         ):
-            csr = vault.configure_pki_intermediate_ca(mount=PKI_MOUNT, common_name=common_name)
+            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
             self.tls_certificates_pki.request_certificate_creation(
                 certificate_signing_request=csr.encode(),
                 is_ca=True,
@@ -350,8 +350,8 @@ class VaultCharm(CharmBase):
             return
         if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-        if not vault.is_pki_role_set(role=PKI_ROLE, mount=PKI_MOUNT):
-            vault.set_pki_charm_role(
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_pki_charm_role(
                 allowed_domains=common_name,
                 mount=PKI_MOUNT,
                 role=PKI_ROLE,

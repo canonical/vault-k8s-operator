@@ -154,20 +154,18 @@ class Vault:
         )[0].value
         return existing_common_name == common_name
 
-    def configure_pki_intermediate_ca(self, mount: str, common_name: str) -> str:
-        """Create an intermediate CA for the PKI backend.
-
-        Generate a CSR for the intermediate CA.
+    def generate_pki_intermediate_ca_csr(self, mount: str, common_name: str) -> str:
+        """Generate an intermediate CA CSR for the PKI backend.
 
         Returns:
-            The CSR.
+            str: The Certificate Signing Request.
         """
         response = self._client.secrets.pki.generate_intermediate(
             mount_point=mount,
             common_name=common_name,
             type="internal",
         )
-        logger.info("Generated a intermediate CA CSR for the PKI backend")
+        logger.info("Generated a intermediate CA for the PKI backend")
         return response["data"]["csr"]
 
     def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
@@ -182,7 +180,7 @@ class Vault:
         existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         return existing_certificate == certificate
 
-    def set_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+    def create_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
         """Create a role for the PKI backend."""
         self._client.secrets.pki.create_or_update_role(
             name=role,
@@ -194,8 +192,8 @@ class Vault:
         )
         logger.info("Created a role for the PKI backend")
 
-    def is_pki_role_set(self, role: str, mount: str) -> bool:
-        """Check if the role is set for the PKI backend."""
+    def is_pki_role_created(self, role: str, mount: str) -> bool:
+        """Check if the role is created for the PKI backend."""
         try:
             existing_roles = self._client.secrets.pki.list_roles(mount_point=mount)
             return role in existing_roles["data"]["keys"]

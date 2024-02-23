@@ -2019,7 +2019,7 @@ class TestCharm(unittest.TestCase):
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_pki_engine")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled")
-    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_pki_intermediate_ca")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_pki_intermediate_ca_csr")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_intermediate_ca_set_with_common_name")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
@@ -2028,7 +2028,7 @@ class TestCharm(unittest.TestCase):
         patch_is_initialized,
         patch_is_api_available,
         patch_is_intermediate_ca_set_with_common_name,
-        patch_configure_pki_intermediate_ca,
+        patch_generate_pki_intermediate_ca_csr,
         patch_is_secret_engine_enabled,
         patch_enable_pki_engine,
         patch_request_certificate_creation,
@@ -2037,7 +2037,7 @@ class TestCharm(unittest.TestCase):
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
         patch_is_intermediate_ca_set_with_common_name.return_value = False
-        patch_configure_pki_intermediate_ca.return_value = csr
+        patch_generate_pki_intermediate_ca_csr.return_value = csr
         patch_is_secret_engine_enabled.return_value = False
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
@@ -2057,7 +2057,7 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation_unit(relation_id, "tls-provider/0")
 
         patch_enable_pki_engine.assert_called_with(path="charm-pki")
-        patch_configure_pki_intermediate_ca.assert_called_with(
+        patch_generate_pki_intermediate_ca_csr.assert_called_with(
             mount="charm-pki", common_name="vault"
         )
         patch_request_certificate_creation.assert_called_with(
@@ -2065,8 +2065,8 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
-    @patch("charms.vault_k8s.v0.vault_client.Vault.set_pki_charm_role")
-    @patch("charms.vault_k8s.v0.vault_client.Vault.is_pki_role_set")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.create_pki_charm_role")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_pki_role_created")
     @patch("charms.vault_k8s.v0.vault_client.Vault.set_pki_intermediate_ca_certificate")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_intermediate_ca_set")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
@@ -2077,8 +2077,8 @@ class TestCharm(unittest.TestCase):
         patch_is_api_available,
         patch_is_intermediate_ca_set,
         patch_set_pki_intermediate_ca_certificate,
-        patch_is_pki_role_set,
-        patch_set_pki_charm_role,
+        patch_is_pki_role_created,
+        patch_create_pki_charm_role,
         patch_get_assigned_certificates,
     ):
         csr = "some csr content"
@@ -2088,7 +2088,7 @@ class TestCharm(unittest.TestCase):
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
         patch_is_intermediate_ca_set.return_value = False
-        patch_is_pki_role_set.return_value = False
+        patch_is_pki_role_created.return_value = False
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -2130,6 +2130,6 @@ class TestCharm(unittest.TestCase):
             certificate=certificate,
             mount="charm-pki",
         )
-        patch_set_pki_charm_role.assert_called_with(
+        patch_create_pki_charm_role.assert_called_with(
             allowed_domains="vault", mount="charm-pki", role="charm"
         )
