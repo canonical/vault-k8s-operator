@@ -357,26 +357,26 @@ class VaultCharm(CharmBase):
                 role=PKI_ROLE,
             )
 
-    def _get_pki_ca_certificate(self) -> str:
+    def _get_pki_ca_certificate(self) -> Optional[str]:
         """Return the PKI CA certificate provided by the TLS provider.
 
         Validate that the CSR matches the one in the peer relation.
         """
         assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
         if not assigned_certificates:
-            return ""
+            return None
         if not self._pki_csr_secret_set_in_peer_relation():
             logger.info("PKI CSR not set in the peer relation")
-            return ""
+            return None
         pki_csr = self._get_pki_csr_secret_in_peer_relation()
         if not pki_csr:
             logger.warning("PKI CSR not found in the peer relation")
-            return ""
+            return None
         for assigned_certificate in assigned_certificates:
             if assigned_certificate.csr == pki_csr:
                 return assigned_certificate.certificate
         logger.info("No certificate matches the PKI CSR in the peer relation")
-        return ""
+        return None
 
     def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
         """Handle the tls-certificates-pki certificate available event."""
