@@ -13,10 +13,15 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charm import (
+    PKI_CSR_SECRET_LABEL,
     S3_RELATION_NAME,
     VAULT_INITIALIZATION_SECRET_LABEL,
     VaultCharm,
     config_file_content_matches,
+)
+from charms.tls_certificates_interface.v3.tls_certificates import (
+    CertificateAvailableEvent,
+    ProviderCertificate,
 )
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
@@ -24,7 +29,9 @@ from ops.model import ActiveStatus, WaitingStatus
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
+TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v3.tls_certificates"
 VAULT_KV_RELATION_NAME = "vault-kv"
+TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 
 
@@ -129,6 +136,25 @@ class TestCharm(unittest.TestCase):
             secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
         key_values = {"vault-initialization-secret-id": secret_id}
+        self.harness.update_relation_data(
+            app_or_unit=self.app_name,
+            relation_id=relation_id,
+            key_values=key_values,
+        )
+
+    def _set_csr_secret_in_peer_relation(self, relation_id: int, csr: str) -> None:
+        """Set the csr secret in the peer relation."""
+        content = {
+            "csr": csr,
+        }
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+            secret = self.harness.model.get_secret(id=secret_id)
+            secret.set_info(label=PKI_CSR_SECRET_LABEL)
+            self.harness.set_leader(original_leader_state)
+        key_values = {"vault-pki-csr-secret-id": secret_id}
         self.harness.update_relation_data(
             app_or_unit=self.app_name,
             relation_id=relation_id,
@@ -1807,7 +1833,8 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_kv_engine", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
@@ -1851,7 +1878,8 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_kv_engine", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
@@ -1899,7 +1927,8 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.set_token", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_approle_auth", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_kv_engine", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.read_role_secret")
@@ -1947,15 +1976,18 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_policy", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.generate_role_secret_id")
     @patch("charms.vault_k8s.v0.vault_client.Vault.configure_approle")
-    @patch("charms.vault_k8s.v0.vault_client.Vault.configure_kv_mount")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_kv_engine")
     @patch("ops.model.Model.get_binding")
     def test_given_prerequisites_are_met_when_new_vault_kv_client_attached_then_kv_mount_is_configured(
         self,
-        patch_configure_kv_mount,
+        patch_enable_kv_engine,
+        patch_is_secret_engine_enabled,
         patch_get_binding,
         patch_configure_approle,
         patch_generate_role_secret_id,
     ):
+        patch_is_secret_engine_enabled.return_value = False
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
@@ -1982,4 +2014,122 @@ class TestCharm(unittest.TestCase):
         event.relation_id = rel_id
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
-        patch_configure_kv_mount.assert_called_once()
+        patch_enable_kv_engine.assert_called_once()
+
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_pki_engine")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.generate_pki_intermediate_ca_csr")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_intermediate_ca_set_with_common_name")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    def test_given_vault_is_available_when_tls_certificates_pki_relation_joined_then_certificate_request_is_made(
+        self,
+        patch_is_initialized,
+        patch_is_api_available,
+        patch_is_intermediate_ca_set_with_common_name,
+        patch_generate_pki_intermediate_ca_csr,
+        patch_is_secret_engine_enabled,
+        patch_enable_pki_engine,
+        patch_request_certificate_creation,
+    ):
+        csr = "some csr content"
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        patch_is_intermediate_ca_set_with_common_name.return_value = False
+        patch_generate_pki_intermediate_ca_csr.return_value = csr
+        patch_is_secret_engine_enabled.return_value = False
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("some ca")
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
+        self.harness.add_relation_unit(relation_id, "tls-provider/0")
+
+        patch_enable_pki_engine.assert_called_with(path="charm-pki")
+        patch_generate_pki_intermediate_ca_csr.assert_called_with(
+            mount="charm-pki", common_name="vault"
+        )
+        patch_request_certificate_creation.assert_called_with(
+            certificate_signing_request=csr.encode(), is_ca=True
+        )
+
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.create_pki_charm_role")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_pki_role_created")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.set_pki_intermediate_ca_certificate")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_intermediate_ca_set")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    def test_given_vault_is_available_when_pki_certificate_is_available_then_certificate_added_to_vault_pki(
+        self,
+        patch_is_initialized,
+        patch_is_api_available,
+        patch_is_intermediate_ca_set,
+        patch_set_pki_intermediate_ca_certificate,
+        patch_is_pki_role_created,
+        patch_create_pki_charm_role,
+        patch_get_assigned_certificates,
+    ):
+        csr = "some csr content"
+        certificate = "some certificate"
+        ca = "some ca"
+        chain = [ca]
+        patch_is_initialized.return_value = True
+        patch_is_api_available.return_value = True
+        patch_is_intermediate_ca_set.return_value = False
+        patch_is_pki_role_created.return_value = False
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("some ca")
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+        self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr="some csr content")
+        event = CertificateAvailableEvent(
+            handle=Mock(),
+            certificate=certificate,
+            certificate_signing_request=csr,
+            ca=ca,
+            chain=chain,
+        )
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
+
+        patch_get_assigned_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=relation_id,
+                application_name="tls-provider",
+                csr=csr,
+                certificate=certificate,
+                ca=ca,
+                chain=chain,
+                revoked=False,
+            )
+        ]
+
+        self.harness.charm._on_tls_certificate_pki_certificate_available(event=event)
+
+        patch_set_pki_intermediate_ca_certificate.assert_called_with(
+            certificate=certificate,
+            mount="charm-pki",
+        )
+        patch_create_pki_charm_role.assert_called_with(
+            allowed_domains="vault", mount="charm-pki", role="charm"
+        )

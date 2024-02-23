@@ -21,6 +21,10 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tls_certificates_interface.v3.tls_certificates import (
+    CertificateAvailableEvent,
+    TLSCertificatesRequiresV3,
+)
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
@@ -33,6 +37,7 @@ from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    RelationJoinedEvent,
     RemoveEvent,
 )
 from ops.main import main
@@ -55,13 +60,17 @@ CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
+TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+PKI_CSR_SECRET_LABEL = "pki-csr"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 BACKUP_KEY_PREFIX = "vault-backup"
 CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 CONTAINER_NAME = "vault"
+PKI_MOUNT = "charm-pki"
+PKI_ROLE = "charm"
 
 
 class VaultCharm(CharmBase):
@@ -79,6 +88,9 @@ class VaultCharm(CharmBase):
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
+        self.tls_certificates_pki = TLSCertificatesRequiresV3(
+            self, TLS_CERTIFICATES_PKI_RELATION_NAME
+        )
         self._metrics_endpoint = MetricsEndpointProvider(
             self,
             jobs=[
@@ -117,6 +129,14 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.set_root_token_action, self._on_set_root_token_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
+        )
+        self.framework.observe(
+            self.on.tls_certificates_pki_relation_joined,
+            self._on_tls_certificates_pki_relation_joined,
+        )
+        self.framework.observe(
+            self.tls_certificates_pki.on.certificate_available,
+            self._on_tls_certificate_pki_certificate_available,
         )
 
     def _on_install(self, event: InstallEvent):
@@ -179,6 +199,8 @@ class VaultCharm(CharmBase):
         if vault.is_active() and not vault.audit_device_enabled(device_type="file", path="stdout"):
             vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
+        self._configure_pki_secrets_engine()
+        self._add_ca_certificate_to_pki_secrets_engine()
         self.tls.send_ca_cert()
         if vault.is_active() and not vault.is_raft_cluster_healthy():
             # Log if a raft node starts reporting unhealthy
@@ -257,7 +279,8 @@ class VaultCharm(CharmBase):
         vault.enable_approle_auth()
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
         self._set_kv_relation_data(relation, mount, ca_certificate)
-        vault.configure_kv_mount(mount)
+        if not vault.is_secret_engine_enabled(path=mount):
+            vault.enable_kv_engine(mount)
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")
             nonce = relation.data[unit].get("nonce")
@@ -269,6 +292,95 @@ class VaultCharm(CharmBase):
                 continue
             self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
             self._remove_stale_nonce(relation=relation, nonce=nonce)
+
+    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
+        """Handle the tls-certificates-pki relation joined event."""
+        self._configure_pki_secrets_engine()
+
+    def _configure_pki_secrets_engine(self) -> None:
+        """Configure the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
+            return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created")
+            return
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created, skipping")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config, skipping")
+            return
+        if not vault.is_secret_engine_enabled(path=PKI_MOUNT):
+            vault.enable_pki_engine(path=PKI_MOUNT)
+        if not vault.is_intermediate_ca_set_with_common_name(
+            mount=PKI_MOUNT, common_name=common_name
+        ):
+            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
+            self.tls_certificates_pki.request_certificate_creation(
+                certificate_signing_request=csr.encode(),
+                is_ca=True,
+            )
+            self._set_pki_csr_secret_in_peer_relation(csr)
+
+    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
+        """Add the CA certificate to the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created")
+            return
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        certificate = self._get_pki_ca_certificate()
+        if not certificate:
+            logger.debug("No certificate available")
+            return
+        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
+            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_pki_charm_role(
+                allowed_domains=common_name,
+                mount=PKI_MOUNT,
+                role=PKI_ROLE,
+            )
+
+    def _get_pki_ca_certificate(self) -> Optional[str]:
+        """Return the PKI CA certificate provided by the TLS provider.
+
+        Validate that the CSR matches the one in the peer relation.
+        """
+        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
+        if not assigned_certificates:
+            return None
+        if not self._pki_csr_secret_set_in_peer_relation():
+            logger.info("PKI CSR not set in the peer relation")
+            return None
+        pki_csr = self._get_pki_csr_secret_in_peer_relation()
+        if not pki_csr:
+            logger.warning("PKI CSR not found in the peer relation")
+            return None
+        for assigned_certificate in assigned_certificates:
+            if assigned_certificate.csr == pki_csr:
+                return assigned_certificate.certificate
+        logger.info("No certificate matches the PKI CSR in the peer relation")
+        return None
+
+    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle the tls-certificates-pki certificate available event."""
+        self._add_ca_certificate_to_pki_secrets_engine()
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
@@ -784,6 +896,34 @@ class VaultCharm(CharmBase):
         secret.set_content(content=juju_secret_content)
         peer_relation.data[self.app].update({"vault-initialization-secret-id": secret.id})  # type: ignore[union-attr]
 
+    def _set_pki_csr_secret_in_peer_relation(self, csr: str) -> None:
+        if not self._is_peer_relation_created():
+            raise RuntimeError("Peer relation not created")
+        juju_secret_content = {"csr": csr}
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not self._pki_csr_secret_set_in_peer_relation():
+            juju_secret = self.app.add_secret(juju_secret_content, label=PKI_CSR_SECRET_LABEL)
+            peer_relation.data[self.app].update({"vault-pki-csr-secret-id": juju_secret.id})  # type: ignore[union-attr]
+            return
+        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+        secret.set_content(content=juju_secret_content)
+        peer_relation.data[self.app].update({"vault-pki-csr-secret-id": secret.id})  # type: ignore[union-attr]
+
+    def _get_pki_csr_secret_in_peer_relation(self) -> Optional[str]:
+        """Return the PKI CSR secret from the peer relation."""
+        if not self._pki_csr_secret_set_in_peer_relation():
+            raise RuntimeError("PKI CSR secret not set in peer relation")
+        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+        return secret.get_content()["csr"]
+
+    def _pki_csr_secret_set_in_peer_relation(self) -> bool:
+        """Return whether PKI CSR secret is stored in peer relation data."""
+        try:
+            self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+            return True
+        except SecretNotFoundError:
+            return False
+
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
 
@@ -824,6 +964,10 @@ class VaultCharm(CharmBase):
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _tls_certificates_pki_relation_created(self) -> bool:
+        """Check if the TLS Certificates PKI relation is created."""
+        return self._is_relation_created(TLS_CERTIFICATES_PKI_RELATION_NAME)
 
     def _is_relation_created(self, relation_name: str) -> bool:
         """Check if the relation is created.
@@ -1034,6 +1178,10 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_relation_node_api_addresses()
             if node_api_address != self._api_address
         ]
+
+    def _get_config_common_name(self) -> str:
+        """Return the common name to use for the PKI backend."""
+        return self.config.get("common_name", "")
 
     @property
     def _node_id(self) -> str:

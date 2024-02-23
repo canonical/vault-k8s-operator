@@ -312,7 +312,7 @@ LIBAPI = 3
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -1488,10 +1488,10 @@ class TLSCertificatesRequiresV3(Object):
         Returns:
             list: List of RequirerCSR objects.
         """
-        requirer_csrs = []
         relation = self.model.get_relation(self.relationship_name)
         if not relation:
-            raise RuntimeError(f"Relation {self.relationship_name} does not exist")
+            return []
+        requirer_csrs = []
         requirer_relation_data = _load_relation_data(relation.data[self.model.unit])
         requirer_csrs_dict = requirer_relation_data.get("certificate_signing_requests", [])
         for requirer_csr_dict in requirer_csrs_dict:

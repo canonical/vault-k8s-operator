@@ -432,3 +432,18 @@ class TestVaultK8s:
             timeout=1000,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
+        self, ops_test: OpsTest
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:tls-certificates-pki",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
