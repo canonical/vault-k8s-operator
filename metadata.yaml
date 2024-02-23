@@ -59,6 +59,8 @@ peers:
 provides:
   vault-kv:
     interface: vault-kv
+  vault-pki:
+    interface: tls-certificates
   metrics-endpoint:
     interface: prometheus_scrape
   send-ca-cert:

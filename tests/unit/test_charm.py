@@ -2020,23 +2020,26 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_pki_engine")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_secret_engine_enabled")
     @patch("charms.vault_k8s.v0.vault_client.Vault.generate_pki_intermediate_ca_csr")
-    @patch("charms.vault_k8s.v0.vault_client.Vault.is_intermediate_ca_set_with_common_name")
+    @patch("charms.vault_k8s.v0.vault_client.Vault.get_intermediate_ca")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available")
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized")
+    @patch("charm.get_common_name_from_certificate")
     def test_given_vault_is_available_when_tls_certificates_pki_relation_joined_then_certificate_request_is_made(
         self,
+        patch_get_common_name_from_certificate,
         patch_is_initialized,
         patch_is_api_available,
-        patch_is_intermediate_ca_set_with_common_name,
+        patch_get_intermediate_ca,
         patch_generate_pki_intermediate_ca_csr,
         patch_is_secret_engine_enabled,
         patch_enable_pki_engine,
         patch_request_certificate_creation,
     ):
+        patch_get_common_name_from_certificate.return_value = "vault"
         csr = "some csr content"
         patch_is_initialized.return_value = True
         patch_is_api_available.return_value = True
-        patch_is_intermediate_ca_set_with_common_name.return_value = False
+        patch_get_intermediate_ca.return_value = "whatever ca"
         patch_generate_pki_intermediate_ca_csr.return_value = csr
         patch_is_secret_engine_enabled.return_value = False
         self.harness.set_leader(is_leader=True)

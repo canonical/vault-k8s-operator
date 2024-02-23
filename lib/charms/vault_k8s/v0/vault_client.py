@@ -13,7 +13,6 @@ from typing import List, Tuple
 
 import hvac  # type: ignore[import-untyped]
 import requests
-from cryptography import x509
 from hvac.exceptions import VaultError  # type: ignore[import-untyped]
 from requests.exceptions import RequestException
 
@@ -25,7 +24,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 
 logger = logging.getLogger(__name__)
@@ -143,16 +142,9 @@ class Vault:
         intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
         return intermediate_ca == certificate
 
-    def is_intermediate_ca_set_with_common_name(self, mount: str, common_name: str) -> bool:
-        """Check if the intermediate CA is set for the PKI backend."""
-        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        if not intermediate_ca:
-            return False
-        loaded_certificate = x509.load_pem_x509_certificate(intermediate_ca.encode("utf-8"))
-        existing_common_name = loaded_certificate.subject.get_attributes_for_oid(
-            x509.oid.NameOID.COMMON_NAME
-        )[0].value
-        return existing_common_name == common_name
+    def get_intermediate_ca(self, mount: str) -> str:
+        """Get the intermediate CA for the PKI backend."""
+        return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
 
     def generate_pki_intermediate_ca_csr(self, mount: str, common_name: str) -> str:
         """Generate an intermediate CA CSR for the PKI backend.
@@ -174,6 +166,34 @@ class Vault:
             certificate=certificate, mount_point=mount
         )
         logger.info("Set the intermediate CA certificate for the PKI backend")
+
+    def sign_pki_certificate_signing_request(
+        self, mount: str, role: str, csr: str, common_name: str
+    ) -> Tuple[str, str, List[str]]:
+        """Sign a certificate signing request for the PKI backend.
+
+        Args:
+            mount: The PKI mount point.
+            role: The role to use for signing the certificate.
+            csr: The certificate signing request.
+            common_name: The common name for the certificate.
+
+        Returns:
+            Tuple[str, str, List[str]]: The signed certificate, the CA certificate and the chain
+        """
+        response = self._client.secrets.pki.sign_certificate(
+            csr=csr,
+            mount_point=mount,
+            common_name=common_name,
+            name=role,
+        )
+
+        logger.info("Signed a certificate for the PKI backend")
+        return (
+            response["data"]["certificate"],
+            response["data"]["issuing_ca"],
+            response["data"]["ca_chain"],
+        )
 
     def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
         """Check if the CA certificate is set for the PKI backend."""

@@ -7,7 +7,6 @@ from unittest.mock import call, patch
 
 import requests
 from charms.vault_k8s.v0.vault_client import Vault
-from tls import generate_ca, generate_private_key  # type: ignore[import-not-found]
 
 
 class TestVault(unittest.TestCase):
@@ -200,35 +199,3 @@ class TestVault(unittest.TestCase):
         }
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
-
-    @patch("hvac.api.secrets_engines.pki.Pki.read_ca_certificate")
-    def test_given_ca_common_name_matches_when_is_intermediate_ca_set_with_common_name_then_return_true(
-        self, patch_read_ca_certificate
-    ):
-        common_name = "whatever.com"
-        private_key = generate_private_key()
-        ca_certificate = generate_ca(private_key=private_key, subject=common_name)
-        patch_read_ca_certificate.return_value = ca_certificate
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        is_set = vault.is_intermediate_ca_set_with_common_name(
-            mount="PKI_MOUNT", common_name=common_name
-        )
-
-        self.assertTrue(is_set)
-
-    @patch("hvac.api.secrets_engines.pki.Pki.read_ca_certificate")
-    def test_given_ca_common_name_does_not_match_when_is_intermediate_ca_set_with_common_name_then_return_false(  # noqa: E501
-        self, patch_read_ca_certificate
-    ):
-        common_name = "whatever.com"
-        private_key = generate_private_key()
-        ca_certificate = generate_ca(private_key=private_key, subject="WRONG SUBJECT")
-        patch_read_ca_certificate.return_value = ca_certificate
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        is_set = vault.is_intermediate_ca_set_with_common_name(
-            mount="PKI_MOUNT", common_name=common_name
-        )
-
-        self.assertFalse(is_set)
