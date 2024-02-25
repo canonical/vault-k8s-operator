@@ -317,6 +317,20 @@ class VaultTLSManager(Object):
         storage_location = cert_storage.location
         return f"{storage_location}/{file.name.lower()}.pem"
 
+    def tls_file_available_in_charm(self, file: File) -> bool:
+        """Return whether the given file is available in the charm.
+
+        Args:
+            file: a File object that determines which file to check
+        Returns:
+            bool: True if file exists
+        """
+        try:
+            self.get_tls_file_path_in_charm(file)
+            return True
+        except VaultCertsError:
+            return False
+
     def _get_ca_certificate_secret(self) -> Tuple[str, str]:
         """Get the vault CA certificate secret.
 
