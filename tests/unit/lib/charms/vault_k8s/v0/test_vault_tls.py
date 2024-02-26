@@ -114,7 +114,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Model.get_binding")
-    def test_given_not_leader_and_ca_not_set_when_configure_then_status_is_waiting(
+    def test_given_not_leader_and_ca_not_set_when_evaluate_status_then_status_is_waiting(
         self, patch_get_binding
     ):
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -132,11 +132,11 @@ class TestCharm(unittest.TestCase):
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
 
-        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate to be set."),
+            WaitingStatus("Waiting for CA certificate"),
         )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)

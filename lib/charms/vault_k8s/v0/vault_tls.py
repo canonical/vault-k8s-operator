@@ -33,7 +33,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 
 logger = logging.getLogger(__name__)
@@ -181,9 +181,9 @@ class VaultTLSManager(Object):
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 self._set_ca_certificate_secret(ca_private_key, ca_certificate)
                 tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
-            if not self._tls_file_pushed_to_workload(
+            if not self.tls_file_pushed_to_workload(
                 File.CA
-            ) or not self._tls_file_pushed_to_workload(File.CERT):
+            ) or not self.tls_file_pushed_to_workload(File.CERT):
                 self._generate_self_signed_certs(subject_ip)
                 tls_logger.info(
                     "Saved Vault generated CA and self signed certificate to %s.",
@@ -317,6 +317,20 @@ class VaultTLSManager(Object):
         storage_location = cert_storage.location
         return f"{storage_location}/{file.name.lower()}.pem"
 
+    def tls_file_available_in_charm(self, file: File) -> bool:
+        """Return whether the given file is available in the charm.
+
+        Args:
+            file: a File object that determines which file to check
+        Returns:
+            bool: True if file exists
+        """
+        try:
+            self.get_tls_file_path_in_charm(file)
+            return True
+        except VaultCertsError:
+            return False
+
     def _get_ca_certificate_secret(self) -> Tuple[str, str]:
         """Get the vault CA certificate secret.
 
@@ -361,7 +375,7 @@ class VaultTLSManager(Object):
 
     def ca_certificate_is_saved(self) -> bool:
         """Return wether a CA cert is saved in the charm."""
-        return self.ca_certificate_secret_exists() or self._tls_file_pushed_to_workload(File.CA)
+        return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _remove_all_certs_from_workload(self) -> None:
         """Remove the certificate files that are used for authentication."""
@@ -421,7 +435,7 @@ class VaultTLSManager(Object):
             pass
         tls_logger.debug("Removed %s file from workload.", file.name)
 
-    def _tls_file_pushed_to_workload(self, file: File) -> bool:
+    def tls_file_pushed_to_workload(self, file: File) -> bool:
         """Return whether tls file is pushed to the workload.
 
         Args:
