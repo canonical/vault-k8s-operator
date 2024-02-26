@@ -182,10 +182,10 @@ class VaultCharm(CharmBase):
             event.add_status(WaitingStatus("Waiting for initialization secret"))
             return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
-            event.add_status(WaitingStatus("Waiting for TLS certificates"))
+            event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
             return
         if not self.tls.tls_file_available_in_charm(File.CA):
-            event.add_status(WaitingStatus("Waiting for CA certificate"))
+            event.add_status(WaitingStatus("Waiting for CA certificate in charm"))
             return
         vault = Vault(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
