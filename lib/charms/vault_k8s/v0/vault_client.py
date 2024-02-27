@@ -167,7 +167,7 @@ class Vault:
             common_name=common_name,
             type="internal",
         )
-        logger.info("Generated a intermediate CA for the PKI backend")
+        logger.info("Generated a CSR for the intermediate CA for the PKI backend")
         return response["data"]["csr"]
 
     def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
