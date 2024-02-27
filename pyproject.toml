@@ -73,10 +73,5 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["charms.*", "ops.*", "kubernetes.*", "flatten_json.*", "git.*"]
-ignore_missing_imports = true
-follow_imports = "silent"
-
-[[tool.mypy.overrides]]
 module = ["charms.*"]
 follow_imports = "silent"
