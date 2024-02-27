@@ -18,8 +18,10 @@ target-version = ["py38"]
 [tool.ruff]
 extend-exclude = ["__pycache__", "*.egg_info"]
 line-length = 99
-lint.select = ["E", "W", "F", "C", "N", "D", "I001"]
-lint.extend-ignore = [
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "C", "N", "D", "I001"]
+extend-ignore = [
     "D203",
     "D204",
     "D213",
@@ -33,9 +35,11 @@ lint.extend-ignore = [
     "D413",
     "C901",
 ]
-lint.ignore = ["E501", "D107"]
-lint.mccabe.max-complexity = 10
-lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+ignore = ["E501", "D107"]
+per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.flake8]
 max-line-length = 99
