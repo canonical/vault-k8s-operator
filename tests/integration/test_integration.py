@@ -27,6 +27,7 @@ PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
+VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
@@ -60,6 +61,7 @@ class TestVaultK8s:
             trust=True,
             series="jammy",
             num_units=NUM_VAULT_UNITS,
+            config={"common_name": "example.com"},
         )
 
     async def _get_vault_endpoint(self, ops_test: OpsTest, timeout: int = 60) -> str:
@@ -447,3 +449,46 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
         )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_pki_relation_when_integrate_then_cert_is_provided(
+        self, ops_test: OpsTest
+    ):
+        assert ops_test.model
+        await ops_test.model.deploy(
+            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            channel="edge",
+            config={"common_name": "test.example.com"},
+        )
+
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:vault-pki",
+            relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        action_output = await run_get_certificate_action(ops_test)
+        assert action_output["certificate"] is not None
+        assert action_output["ca-certificate"] is not None
+        assert action_output["csr"] is not None
+
+
+async def run_get_certificate_action(ops_test) -> dict:
+    """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
+
+    Args:
+        ops_test (OpsTest): OpsTest
+
+    Returns:
+        dict: Action output
+    """
+    tls_requirer_unit = ops_test.model.units[f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"]
+    action = await tls_requirer_unit.run_action(
+        action_name="get-certificate",
+    )
+    action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=240)
+    return action_output
