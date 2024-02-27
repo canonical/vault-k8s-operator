@@ -2162,6 +2162,9 @@ class TestCharm(unittest.TestCase):
                 ),
             },
         )
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
         mock_vault_class.return_value = mock_vault
         common_name = "vault"
         relation_id = 99

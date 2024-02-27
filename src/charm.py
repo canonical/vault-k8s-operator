@@ -459,6 +459,9 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request")
             return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created")
+            return
         if not self._is_peer_relation_created():
             logger.debug("Peer relation not created")
             return
