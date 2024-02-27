@@ -312,7 +312,7 @@ LIBAPI = 3
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -696,7 +696,7 @@ def generate_ca(
 
     Args:
         private_key (bytes): Private key
-        subject (str): Certificate subject
+        subject (str): Common Name that can be an IP or a Full Qualified Domain Name (FQDN).
         private_key_password (bytes): Private key password
         validity (int): Certificate validity time (in days)
         country (str): Certificate Issuing country
@@ -962,7 +962,7 @@ def generate_csr(
 
     Args:
         private_key (bytes): Private key
-        subject (str): CSR Subject.
+        subject (str): CSR Common Name that can be an IP or a Full Qualified Domain Name (FQDN).
         add_unique_id_to_subject_name (bool): Whether a unique ID must be added to the CSR's
             subject name. Always leave to "True" when the CSR is used to request certificates
             using the tls-certificates relation.
