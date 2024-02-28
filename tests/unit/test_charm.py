@@ -21,9 +21,10 @@ from charm import (
 )
 from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateAvailableEvent,
+    CertificateCreationRequestEvent,
     ProviderCertificate,
 )
-from charms.vault_k8s.v0.vault_client import Vault
+from charms.vault_k8s.v0.vault_client import Certificate, Vault
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
@@ -2021,6 +2022,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_new_vault_kv_client_attached(event)
         mock_vault.enable_kv_engine.assert_called_once()
 
+    @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
     @patch("charm.Vault", autospec=True)
     def test_given_vault_is_available_when_tls_certificates_pki_relation_joined_then_certificate_request_is_made(
@@ -2029,12 +2031,13 @@ class TestCharm(unittest.TestCase):
         patch_request_certificate_creation,
     ):
         csr = "some csr content"
+        self.harness.update_config({"common_name": "vault"})
         mock_vault = MagicMock(
             spec=Vault,
             **{
                 "is_initialized.return_value": True,
                 "is_api_available.return_value": True,
-                "is_intermediate_ca_set_with_common_name.return_value": False,
+                "get_intermediate_ca.return_value": "vault",
                 "generate_pki_intermediate_ca_csr.return_value": csr,
                 "is_secret_engine_enabled.return_value": False,
             },
@@ -2087,7 +2090,7 @@ class TestCharm(unittest.TestCase):
         certificate = "some certificate"
         ca = "some ca"
         chain = [ca]
-
+        self.harness.update_config({"common_name": "vault"})
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -2131,4 +2134,74 @@ class TestCharm(unittest.TestCase):
         )
         mock_vault.create_pki_charm_role.assert_called_with(
             allowed_domains="vault", mount="charm-pki", role="charm"
+        )
+
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesProvidesV3.set_relation_certificate")
+    @patch("charm.get_common_name_from_csr")
+    @patch("charm.Vault", autospec=True)
+    def test_given_vault_available_when_vault_pki_certificate_creation_request_then_certificate_is_provided(
+        self,
+        mock_vault_class,
+        patch_get_common_name_from_csr,
+        patch_set_relation_certificate,
+    ):
+        csr = "some csr content"
+        certificate = "some certificate"
+        ca = "some ca"
+        chain = [ca]
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+                "is_pki_role_created.return_value": True,
+                "sign_pki_certificate_signing_request.return_value": Certificate(
+                    certificate=certificate,
+                    ca=ca,
+                    chain=chain,
+                ),
+            },
+        )
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
+        mock_vault_class.return_value = mock_vault
+        common_name = "vault"
+        relation_id = 99
+        patch_get_common_name_from_csr.return_value = common_name
+        self.harness.update_config({"common_name": common_name})
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text(ca)
+        peer_relation_id = self._set_peer_relation()
+        self._set_initialization_secret_in_peer_relation(
+            relation_id=peer_relation_id,
+            root_token="root token content",
+            unseal_keys=["unseal_keys"],
+        )
+
+        event = CertificateCreationRequestEvent(
+            handle=Mock(),
+            certificate_signing_request=csr,
+            relation_id=relation_id,
+            is_ca=False,
+        )
+
+        self.harness.charm._on_vault_pki_certificate_creation_request(event=event)
+
+        mock_vault.sign_pki_certificate_signing_request.assert_called_with(
+            mount="charm-pki",
+            csr=csr,
+            role="charm",
+            common_name=common_name,
+        )
+
+        patch_set_relation_certificate.assert_called_with(
+            relation_id=relation_id,
+            certificate_signing_request=csr,
+            certificate=certificate,
+            ca=ca,
+            chain=chain,
         )
