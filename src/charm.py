@@ -462,9 +462,6 @@ class VaultCharm(CharmBase):
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
             return
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created")
-            return
         vault = self._get_initialized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")

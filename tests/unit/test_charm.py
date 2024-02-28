@@ -2181,7 +2181,6 @@ class TestCharm(unittest.TestCase):
             root_token="root token content",
             unseal_keys=["unseal_keys"],
         )
-        self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr="some csr content")
 
         event = CertificateCreationRequestEvent(
             handle=Mock(),
