@@ -79,11 +79,11 @@ pluggy==1.4.0
     # via pytest
 pycparser==2.21
     # via cffi
-pydantic==2.5.3
+pydantic==2.6.3
     # via
     #   -r requirements.in
     #   pytest-interface-tester
-pydantic-core==2.14.6
+pydantic-core==2.16.3
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
