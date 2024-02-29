@@ -33,9 +33,7 @@ click==8.1.7
 codespell==2.2.6
     # via -r test-requirements.in
 coverage[toml]==7.4.3
-    # via
-    #   -r test-requirements.in
-    #   coverage
+    # via -r test-requirements.in
 cryptography==42.0.5
     # via paramiko
 decorator==5.1.1
@@ -216,7 +214,7 @@ types-requests==2.31.0.20240218
     # via -r test-requirements.in
 types-s3transfer==0.10.0
     # via boto3-stubs
-types-setuptools==69.1.0.20240223
+types-setuptools==69.1.0.20240229
     # via -r test-requirements.in
 types-toml==0.10.8.7
     # via -r test-requirements.in
