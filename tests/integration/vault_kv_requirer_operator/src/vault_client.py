@@ -25,7 +25,7 @@ class Vault:
     def create_secret_in_kv(self, path: str, mount: str, key: str, value: str) -> None:
         """Create a secret in Vault KV."""
         self._client.secrets.kv.v2.create_or_update_secret(
-            path=path, secret=dict(data={key: value}), mount_point=mount
+            path=path, secret={"data": {key: value}}, mount_point=mount
         )
         logger.info("Secret %s created in mount %s", key, mount)
 

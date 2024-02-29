@@ -28,15 +28,15 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.27-strict/stable
-          juju-channel: 3.1/stable
+          channel: 1.29-strict/stable
+          juju-channel: 3.4/stable
       - name: Enable Metallb
         if: ${{ inputs.enable-metallb == true }}
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
       - name: Run integration tests
         run: tox -e integration
       - name: Archive Tested Charm
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ github.ref_name == 'main' }}
         with:
           name: tested-charm
@@ -44,13 +44,13 @@ jobs:
           retention-days: 5
       - name: Archive charmcraft logs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: charmcraft-logs
           path: /home/runner/.local/state/charmcraft/log/*.log
       - name: Archive juju crashdump
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: juju-crashdump
           path: juju-crashdump-*.tar.xz

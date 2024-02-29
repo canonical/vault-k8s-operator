@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 options:
@@ -11,3 +11,8 @@ options:
     type: string
     default: "720h"
     description: Specifies the maximum possible lease duration for Vault's tokens and secrets.
+  common_name:
+    type: string
+    description: |
+      The common name that will be used by Vault as an intermediate CA. This will only be used when the charm is 
+      configured to use a Vault PKI backend through the `vault-pki` relation.

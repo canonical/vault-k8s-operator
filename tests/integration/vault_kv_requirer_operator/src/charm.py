@@ -156,7 +156,7 @@ class VaultKVRequirerCharm(CharmBase):
         return secret.get_content()["nonce"]
 
     def _get_ca_cert_location_in_charm(self) -> Optional[Path]:
-        """Returns the CA certificate location in the charm (not in the workload).
+        """Return the CA certificate location in the charm (not in the workload).
 
         This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
 

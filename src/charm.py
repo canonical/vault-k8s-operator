@@ -6,37 +6,40 @@
 
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
+import datetime
 import json
 import logging
 import socket
-import yaml
-from typing import Dict, List, Optional, Tuple
+from typing import IO, Dict, List, Optional, Tuple
 
 import hcl  # type: ignore[import-untyped]
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateTransferProvides,
-)
-from charms.loki_k8s.v0.loki_push_api import (
-    LokiPushApiConsumer,
-    LokiPushApiEndpointJoined,
-    LokiPushApiEndpointDeparted,
-)
+from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
+from botocore.response import StreamingBody
+from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tls_certificates_interface.v2.tls_certificates import (
-    generate_ca,
-    generate_certificate,
-    generate_csr,
-    generate_private_key,
+from charms.tls_certificates_interface.v3.tls_certificates import (
+    CertificateAvailableEvent,
+    CertificateCreationRequestEvent,
+    TLSCertificatesProvidesV3,
+    TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
+from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
+from container import Container
+from cryptography import x509
+from exceptions import PeerSecretError, VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
+    ActionEvent,
     CharmBase,
+    CollectStatusEvent,
     ConfigChangedEvent,
     InstallEvent,
     RelationJoinedEvent,
@@ -45,6 +48,7 @@ from ops.charm import (
 from ops.main import main
 from ops.model import (
     ActiveStatus,
+    BlockedStatus,
     ModelError,
     Relation,
     Secret,
@@ -52,8 +56,7 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
-
-from vault import Vault
+from s3_session import S3
 
 logger = logging.getLogger(__name__)
 
@@ -61,150 +64,21 @@ VAULT_STORAGE_PATH = "/vault/raft"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
-TLS_CERT_FILE_PATH = "/vault/certs/cert.pem"
-TLS_KEY_FILE_PATH = "/vault/certs/key.pem"
-TLS_CA_FILE_PATH = "/vault/certs/ca.pem"
 PEER_RELATION_NAME = "vault-peers"
 KV_RELATION_NAME = "vault-kv"
+PKI_RELATION_NAME = "vault-pki"
+TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
-CA_CERTIFICATE_JUJU_SECRET_KEY = "vault-ca-certificates-secret-id"
-CA_CERTIFICATE_JUJU_SECRET_LABEL = "vault-ca-certificate"
-SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+LOG_FORWARDING_RELATION_NAME = "logging"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
-LOKI_LOG_FORWARDING_LAYER_NAME = "loki-log-forwarding"
-
-
-def render_vault_config_file(
-    default_lease_ttl: str,
-    max_lease_ttl: str,
-    cluster_address: str,
-    api_address: str,
-    tls_cert_file: str,
-    tls_key_file: str,
-    tcp_address: str,
-    raft_storage_path: str,
-    node_id: str,
-    retry_joins: List[Dict[str, str]],
-) -> str:
-    """Render the Vault config file."""
-    jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
-    template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
-    content = template.render(
-        default_lease_ttl=default_lease_ttl,
-        max_lease_ttl=max_lease_ttl,
-        cluster_address=cluster_address,
-        api_address=api_address,
-        tls_cert_file=tls_cert_file,
-        tls_key_file=tls_key_file,
-        tcp_address=tcp_address,
-        raft_storage_path=raft_storage_path,
-        node_id=node_id,
-        retry_joins=retry_joins,
-    )
-    return content
-
-
-def config_file_content_matches(existing_content: str, new_content: str) -> bool:
-    """Returns whether two Vault config file contents match.
-
-    We check if the retry_join addresses match, and then we check if the rest of the config
-    file matches.
-
-    Returns:
-        bool: Whether the vault config file content matches
-    """
-    existing_config_hcl = hcl.loads(existing_content)
-    new_content_hcl = hcl.loads(new_content)
-    if not existing_config_hcl:
-        logger.info("Existing config file is empty")
-        return existing_config_hcl == new_content_hcl
-    if not new_content_hcl:
-        logger.info("New config file is empty")
-        return existing_config_hcl == new_content_hcl
-
-    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
-    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
-
-    # If there is only one retry join, it is a dict
-    if isinstance(new_retry_joins, dict):
-        new_retry_joins = [new_retry_joins]
-    if isinstance(existing_retry_joins, dict):
-        existing_retry_joins = [existing_retry_joins]
-
-    new_retry_join_api_addresses = set(address["leader_api_addr"] for address in new_retry_joins)
-    existing_retry_join_api_addresses = set(
-        address["leader_api_addr"] for address in existing_retry_joins
-    )
-    return (
-        new_retry_join_api_addresses == existing_retry_join_api_addresses
-        and new_content_hcl == existing_config_hcl
-    )
-
-
-class PeerSecretError(Exception):
-    """Exception raised when a peer secret is not found."""
-
-    def __init__(
-        self, secret_name: str, message: str = "Could not retrieve secret from peer relation"
-    ):
-        self.secret_name = secret_name
-        self.message = message
-        super().__init__(self.message)
-
-
-class VaultCertsError(Exception):
-    """Exception raised when a vault certificate is not found."""
-
-    def __init__(self, message: str = "Could not retrieve vault certificates from local storage"):
-        self.message = message
-        super().__init__(self.message)
-
-
-def generate_vault_ca_certificate() -> Tuple[str, str]:
-    """Generate Vault CA certificates valid for 50 years.
-
-    Returns:
-        Tuple[str, str]: CA Private key, CA certificate
-    """
-    ca_private_key = generate_private_key()
-    ca_certificate = generate_ca(
-        private_key=ca_private_key,
-        subject="Vault self signed CA",
-        validity=365 * 50,
-    )
-    return ca_private_key.decode(), ca_certificate.decode()
-
-
-def generate_vault_unit_certificate(
-    subject: str,
-    sans_ip: List[str],
-    sans_dns: List[str],
-    ca_certificate: bytes,
-    ca_private_key: bytes,
-) -> Tuple[str, str]:
-    """Generate Vault unit certificates valid for 50 years.
-
-    Args:
-        subject: Subject of the certificate
-        sans_ip: List of IP addresses to add to the SAN
-        sans_dns: List of DNS subject alternative names
-        ca_certificate: CA certificate
-        ca_private_key: CA private key
-
-    Returns:
-        Tuple[str, str]: Unit private key, Unit certificate
-    """
-    vault_private_key = generate_private_key()
-    csr = generate_csr(
-        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=sans_dns
-    )
-    vault_certificate = generate_certificate(
-        ca=ca_certificate,
-        ca_key=ca_private_key,
-        csr=csr,
-        validity=365 * 50,
-    )
-    return vault_private_key.decode(), vault_certificate.decode()
+PKI_CSR_SECRET_LABEL = "pki-csr"
+S3_RELATION_NAME = "s3-parameters"
+REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
+BACKUP_KEY_PREFIX = "vault-backup"
+CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
+CONTAINER_NAME = "vault"
+PKI_MOUNT = "charm-pki"
+PKI_ROLE = "charm"
 
 
 class VaultCharm(CharmBase):
@@ -215,13 +89,17 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._service_name = self._container_name = "vault"
-        self._container = self.unit.get_container(self._container_name)
+        self._service_name = self._container_name = CONTAINER_NAME
+        self._container = Container(container=self.unit.get_container(self._container_name))
         self.service_patcher = KubernetesServicePatch(
             charm=self,
             ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
         )
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
+        self.vault_pki = TLSCertificatesProvidesV3(self, PKI_RELATION_NAME)
+        self.tls_certificates_pki = TLSCertificatesRequiresV3(
+            self, TLS_CERTIFICATES_PKI_RELATION_NAME
+        )
         self._metrics_endpoint = MetricsEndpointProvider(
             self,
             jobs=[
@@ -233,102 +111,132 @@ class VaultCharm(CharmBase):
                 }
             ],
         )
-        self._logging = LokiPushApiConsumer(charm=self)
+        self._logging = LogForwarder(charm=self, relation_name=LOG_FORWARDING_RELATION_NAME)
+        self.tls = VaultTLSManager(
+            charm=self,
+            workload=self._container,
+            service_name=self._container_name,
+            tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
+        )
         self.ingress = IngressPerAppRequirer(
             charm=self,
             port=self.VAULT_PORT,
             strip_prefix=True,
             scheme=lambda: "https",
         )
+        self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.vault_pebble_ready, self._configure)
         self.framework.observe(self.on.config_changed, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
+        self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
+        self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
+        self.framework.observe(self.on.set_unseal_keys_action, self._on_set_unseal_keys_action)
+        self.framework.observe(self.on.set_root_token_action, self._on_set_root_token_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
         self.framework.observe(
-            self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
-            self._on_send_ca_cert_relation_joined,
+            self.on.tls_certificates_pki_relation_joined,
+            self._on_tls_certificates_pki_relation_joined,
         )
         self.framework.observe(
-            self._logging.on.loki_push_api_endpoint_joined, self._on_loki_push_api_endpoint_joined
+            self.tls_certificates_pki.on.certificate_available,
+            self._on_tls_certificate_pki_certificate_available,
         )
         self.framework.observe(
-            self._logging.on.loki_push_api_endpoint_departed,
-            self._on_loki_push_api_endpoint_departed,
+            self.vault_pki.on.certificate_creation_request,
+            self._on_vault_pki_certificate_creation_request,
         )
 
     def _on_install(self, event: InstallEvent):
-        """Handler triggered when the charm is installed.
-
-        Sets pebble plan, initializes vault, enable audit device, and unseals vault.
-        """
+        """Handle the install charm event."""
         if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             event.defer()
             return
         self._delete_vault_data()
 
-    def _configure(self, event: ConfigChangedEvent) -> None:
-        """Handler triggered whenever there is a config-changed event.
+    def _on_collect_status(self, event: CollectStatusEvent):
+        """Handle the collect status event."""
+        if (
+            self._tls_certificates_pki_relation_created()
+            and not self._common_name_config_is_valid()
+        ):
+            event.add_status(
+                BlockedStatus(
+                    "Common name is not set in the charm config, cannot configure PKI secrets engine"
+                )
+            )
+            return
+        if not self._container.can_connect():
+            event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
+            return
+        if not self._is_peer_relation_created():
+            event.add_status(WaitingStatus("Waiting for peer relation"))
+            return
+        if not self._bind_address or not self._ingress_address:
+            event.add_status(
+                WaitingStatus("Waiting for bind and ingress addresses to be available")
+            )
+            return
+        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
+            event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
+            return
+        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+            event.add_status(WaitingStatus("Waiting for CA certificate"))
+            return
+        if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
+            event.add_status(WaitingStatus("Waiting for initialization secret"))
+            return
+        if not self.tls.tls_file_pushed_to_workload(File.CA):
+            event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
+            return
+        if not self.tls.tls_file_available_in_charm(File.CA):
+            event.add_status(WaitingStatus("Waiting for CA certificate in charm"))
+            return
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+        )
+        if not vault.is_api_available():
+            event.add_status(WaitingStatus("Waiting for vault to be available"))
+            return
+        event.add_status(ActiveStatus())
+
+    def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:
+        """Handle config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
         service, and unseals Vault.
         """
         if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting to be able to connect to vault unit")
             return
         if not self._is_peer_relation_created():
-            self.unit.status = WaitingStatus("Waiting for peer relation")
             return
         if not self._bind_address or not self._ingress_address:
-            self.unit.status = WaitingStatus(
-                "Waiting for bind and ingress addresses to be available"
-            )
             return
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            self.unit.status = WaitingStatus("Waiting for other units to provide their addresses")
             return
-        if not self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
-            self.unit.status = WaitingStatus(
-                "Waiting for CA certificate to be set in peer relation"
-            )
+        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             return
         if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
-            self.unit.status = WaitingStatus(
-                "Waiting for initialization secret to be set in peer relation"
-            )
             return
-        if self.unit.is_leader() and not self._ca_certificate_set_in_peer_relation():
-            ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self._set_ca_certificate_secret_in_peer_relation(
-                private_key=ca_private_key, certificate=ca_certificate
-            )
-        if not self._ca_certificate_pushed_to_workload():
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-            self._push_ca_certificate_to_workload(certificate=ca_certificate)
-        if not self._unit_certificate_pushed_to_workload():
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-            sans_ip = [self._bind_address, self._ingress_address]
-            private_key, certificate = generate_vault_unit_certificate(
-                subject=self._ingress_address,
-                sans_ip=sans_ip,
-                sans_dns=[socket.getfqdn()],
-                ca_certificate=ca_certificate.encode(),
-                ca_private_key=ca_private_key.encode(),
-            )
-            self._push_unit_certificate_to_workload(
-                certificate=certificate, private_key=private_key
-            )
+        self.tls.configure_certificates(self._ingress_address)
+
+        for relation in self.model.relations[KV_RELATION_NAME]:
+            ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+            self.vault_kv.set_ca_certificate(relation, ca_certificate)
+
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+        )
         if not vault.is_api_available():
-            self.unit.status = WaitingStatus("Waiting for vault to be available")
             return
         if self.unit.is_leader() and not vault.is_initialized():
             root_token, unseal_keys = vault.initialize()
@@ -340,11 +248,19 @@ class VaultCharm(CharmBase):
         if vault.is_active() and not vault.audit_device_enabled(device_type="file", path="stdout"):
             vault.enable_audit_device(device_type="file", path="stdout")
         self._set_peer_relation_node_api_address()
-        self._send_ca_cert()
-        self.unit.status = ActiveStatus()
+        self._configure_pki_secrets_engine()
+        self._add_ca_certificate_to_pki_secrets_engine()
+        self._sync_vault_pki()
+        self.tls.send_ca_cert()
+        if vault.is_active() and not vault.is_raft_cluster_healthy():
+            # Log if a raft node starts reporting unhealthy
+            logger.error(
+                "Raft cluster is not healthy. %s",
+                vault.get_raft_cluster_state(),
+            )
 
     def _on_remove(self, event: RemoveEvent):
-        """Handler triggered when the charm is removed.
+        """Handle remove charm event.
 
         Removes the vault service and the raft data and removes the node from the raft cluster.
         """
@@ -354,7 +270,8 @@ class VaultCharm(CharmBase):
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if self._bind_address:
                 vault = Vault(
-                    url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm()
+                    url=self._api_address,
+                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
                 vault.set_token(token=root_token)
                 if (
@@ -377,7 +294,7 @@ class VaultCharm(CharmBase):
             self._delete_vault_data()
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
-        """Handler triggered when a new vault-kv client is attached."""
+        """Handle vault-kv-client attached event."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can configure a vault-kv client, skipping")
             return
@@ -387,17 +304,15 @@ class VaultCharm(CharmBase):
             event.defer()
             return
 
-        try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault initialization secret not set in peer relation, deferring event")
+        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+        if not ca_certificate:
+            logger.debug("Vault CA certificate not available, deferring event")
             event.defer()
             return
 
-        try:
-            _, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-        except PeerSecretError:
-            logger.debug("Vault CA certificate secret not set in peer relation, deferring event")
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault, deferring event")
             event.defer()
             return
 
@@ -410,25 +325,11 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(url=self._api_address, ca_cert_path=self._get_ca_cert_location_in_charm())
-        vault.set_token(token=root_token)
-
-        if not vault.is_api_available():
-            logger.debug("Vault is not available, deferring event")
-            event.defer()
-            return
-
         vault.enable_approle_auth()
-
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
-        vault.configure_kv_mount(mount)
-        self.vault_kv.set_mount(relation, mount)
-        vault_url = self._get_relation_api_address(relation)
-        if vault_url is not None:
-            self.vault_kv.set_vault_url(relation, vault_url)
-        self.vault_kv.set_ca_certificate(relation, ca_certificate)
-
-        nonces = []
+        self._set_kv_relation_data(relation, mount, ca_certificate)
+        if not vault.is_secret_engine_enabled(path=mount):
+            vault.enable_kv_engine(mount)
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")
             nonce = relation.data[unit].get("nonce")
@@ -438,62 +339,446 @@ class VaultCharm(CharmBase):
                     unit.name,
                 )
                 continue
-            nonces.append(nonce)
             self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
+            self._remove_stale_nonce(relation=relation, nonce=nonce)
 
-        # Remove any stale nonce
-        credential_nonces = self.vault_kv.get_credentials(relation).keys()
-        stale_nonces = set(credential_nonces) - set(nonces)
-        self.vault_kv.remove_unit_credentials(relation, stale_nonces)
+    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
+        """Handle the tls-certificates-pki relation joined event."""
+        self._configure_pki_secrets_engine()
 
-    def _on_loki_push_api_endpoint_joined(
-        self, event: LokiPushApiEndpointJoined
-    ):  # TODO: change to relation changed instead of joined somehow
-        """Adds a layer to forward logs to loki and restarts the vault service"""
-        if len(self._logging.loki_endpoints) < 1:
-            logger.warning("Loki endpoints aren't ready yet. Deferring event.")
-            event.defer()
+    def _configure_pki_secrets_engine(self) -> None:
+        """Configure the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
             return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created")
+            return
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created, skipping")
+            return
+        if not self._common_name_config_is_valid():
+            logger.debug("Common name config is not valid, skipping")
+            return
+        common_name = self._get_config_common_name()
+        if not vault.is_secret_engine_enabled(path=PKI_MOUNT):
+            vault.enable_pki_engine(path=PKI_MOUNT)
+        if not self._is_intermediate_ca_set(vault, common_name):
+            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
+            self.tls_certificates_pki.request_certificate_creation(
+                certificate_signing_request=csr.encode(),
+                is_ca=True,
+            )
+            self._set_pki_csr_secret_in_peer_relation(csr)
 
-        if len(self._logging.loki_endpoints) > 1:
-            logger.warning(
-                "Multiple targets not supported. Logs will be forwarded to the first available endpoint."
+    def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
+        """Check if the intermediate CA is set in the PKI secrets engine."""
+        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
+        if not intermediate_ca:
+            return False
+        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
+        return intermediate_ca_common_name == common_name
+
+    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
+        """Add the CA certificate to the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created")
+            return
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        certificate = self._get_pki_ca_certificate()
+        if not certificate:
+            logger.debug("No certificate available")
+            return
+        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
+            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_pki_charm_role(
+                allowed_domains=common_name,
+                mount=PKI_MOUNT,
+                role=PKI_ROLE,
             )
 
-        logger.warning("Creating new layer for loki")
-        new_layer = self._loki_log_target_layer(self._logging.loki_endpoints[0])
-        logger.info("Created log forwarding layer:\n %s", new_layer)
-        self._container.add_layer(LOKI_LOG_FORWARDING_LAYER_NAME, new_layer, combine=True)
-        self._container.restart(self._service_name)
-        logger.info("Loki logging layer added for endpoint %s", self._logging.loki_endpoints[0])
-        logger.info("Final plan is:\n%s", self._container.get_plan())
+    def _sync_vault_pki(self) -> None:
+        """Goes through all the vault-pki relations and sends necessary TLS certificate."""
+        for relation in self.model.relations[PKI_RELATION_NAME]:
+            outstanding_requests = self.vault_pki.get_outstanding_certificate_requests(
+                relation_id=relation.id
+            )
+            for request in outstanding_requests:
+                self._generate_pki_certificate_for_requirer(
+                    csr=request.csr,
+                    relation_id=relation.id,
+                )
 
-    def _on_loki_push_api_endpoint_departed(self, event: LokiPushApiEndpointDeparted):
-        """Removes the log forwarding layer and restarts the vault service"""
-        self._container.add_layer(LOKI_LOG_FORWARDING_LAYER_NAME, Layer(), combine=True)
-        self._container.replan()
-        logger.info("Loki log forwarding removed from plan")
-        logger.info("Final plan is %s", self._container.get_plan())
+    def _get_pki_ca_certificate(self) -> Optional[str]:
+        """Return the PKI CA certificate provided by the TLS provider.
 
-    def _get_ca_cert_location_in_charm(self) -> str:
-        """Returns the CA certificate location in the charm (not in the workload).
+        Validate that the CSR matches the one in the peer relation.
+        """
+        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
+        if not assigned_certificates:
+            return None
+        if not self._pki_csr_secret_set_in_peer_relation():
+            logger.info("PKI CSR not set in the peer relation")
+            return None
+        pki_csr = self._get_pki_csr_secret_in_peer_relation()
+        if not pki_csr:
+            logger.warning("PKI CSR not found in the peer relation")
+            return None
+        for assigned_certificate in assigned_certificates:
+            if assigned_certificate.csr == pki_csr:
+                return assigned_certificate.certificate
+        logger.info("No certificate matches the PKI CSR in the peer relation")
+        return None
 
-        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
+    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle the tls-certificates-pki certificate available event."""
+        self._add_ca_certificate_to_pki_secrets_engine()
+
+    def _on_vault_pki_certificate_creation_request(
+        self, event: CertificateCreationRequestEvent
+    ) -> None:
+        """Handle the vault-pki certificate creation request event."""
+        self._generate_pki_certificate_for_requirer(
+            event.certificate_signing_request, event.relation_id
+        )
+
+    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
+        """Generate a PKI certificate for a TLS requirer."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created")
+            return
+        vault = self._get_initialized_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            logger.debug("PKI role not created")
+            return
+        requested_csr = csr
+        requested_common_name = get_common_name_from_csr(requested_csr)
+        certificate = vault.sign_pki_certificate_signing_request(
+            mount=PKI_MOUNT,
+            role=PKI_ROLE,
+            csr=requested_csr,
+            common_name=requested_common_name,
+        )
+        if not certificate:
+            logger.debug("Failed to sign the certificate")
+            return
+        self.vault_pki.set_relation_certificate(
+            relation_id=relation_id,
+            certificate=certificate.certificate,
+            certificate_signing_request=csr,
+            ca=certificate.ca,
+            chain=certificate.chain,
+        )
+
+    def _on_create_backup_action(self, event: ActionEvent) -> None:
+        """Handle the create-backup action.
+
+        Creates a snapshot and stores it on S3 storage.
+        Outputs the ID of the backup to the user.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can perform backup operations.")
+            event.fail(message="Only leader unit can perform backup operations.")
+            return
+
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to perform backup.")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+                logger.error("Failed to create S3 bucket")
+                event.fail(message="Failed to create S3 bucket.")
+                return
+        except ConnectTimeoutError as e:
+            logger.error("Failed to create S3 bucket: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
+
+        snapshot = self._create_raft_snapshot()
+        if not snapshot:
+            logger.error("Failed to create raft snapshot")
+            event.fail(message="Failed to create raft snapshot.")
+            return
+        backup_key = self._get_backup_key()
+        try:
+            content_uploaded = s3.upload_content(
+                content=snapshot,
+                bucket_name=s3_parameters["bucket"],
+                key=backup_key,
+            )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to upload backup to S3 bucket: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
+
+        if not content_uploaded:
+            logger.error("Failed to upload backup to S3 bucket")
+            event.fail(message="Failed to upload backup to S3 bucket.")
+            return
+        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
+        event.set_results({"backup-id": backup_key})
+
+    def _on_list_backups_action(self, event: ActionEvent) -> None:
+        """Handle the list-backups action.
+
+        Lists all backups stored in S3 bucket.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can list backups.")
+            event.fail(message="Only leader unit can list backups.")
+            return
+
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to list backups.")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            backup_ids = s3.get_object_key_list(
+                bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
+            )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to list backups: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
+        except (BotoCoreError, ClientError) as e:
+            logger.error("Failed to list backups: %s", e)
+            event.fail(message="Failed to list backups.")
+            return
+        event.set_results({"backup-ids": json.dumps(backup_ids)})
+
+    def _on_restore_backup_action(self, event: ActionEvent) -> None:
+        """Handle the restore-backup action.
+
+        Restores the snapshot with the provided ID.
+        Unseals Vault using the provided unseal key.
+        Sets the root token to the provided root token.
+        Updates the initialization secret in the peer relation
+            with the provided unseal keys.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can restore backups.")
+            event.fail(message="Only leader unit can restore backups.")
+            return
+
+        s3_requirements, error_message = self._check_s3_requirements()
+        if not s3_requirements:
+            logger.error(error_message)
+            event.fail(message=f"{error_message} Failed to restore backup.")
+            return
+
+        s3_parameters = self._retrieve_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except (BotoCoreError, ClientError, ValueError) as e:
+            logger.error("Failed to create S3 session: %s", e)
+            event.fail(message="Failed to create S3 session.")
+            return
+
+        try:
+            snapshot = s3.get_content(
+                bucket_name=s3_parameters["bucket"], object_key=event.params.get("backup-id")  # type: ignore[arg-type]
+            )
+        except ConnectTimeoutError as e:
+            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
+            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            return
+        except (BotoCoreError, ClientError) as e:
+            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
+            event.fail(message="Failed to retrieve snapshot from S3 storage.")
+            return
+        if not snapshot:
+            logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
+            event.fail(message="Backup not found in S3 bucket.")
+            return
+        try:
+            if not (
+                self._restore_vault(
+                    snapshot=snapshot,
+                    restore_unseal_keys=event.params.get("unseal-keys"),  # type: ignore[arg-type]
+                    restore_root_token=event.params.get("root-token"),  # type: ignore[arg-type]
+                )
+            ):
+                logger.error("Failed to restore vault.")
+                event.fail(message="Failed to restore vault.")
+                return
+        except RuntimeError as e:
+            logger.error("Failed to restore vault: %s", e)
+            event.fail(message="Failed to restore vault.")
+            return
+        event.set_results({"restored": event.params.get("backup-id")})
+
+    def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
+        """Handle the set-unseal-keys action.
+
+        Updates the initialization secret in the peer relation
+            with the provided unseal keys.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can set unseal keys.")
+            event.fail(message="Only leader unit can set unseal keys.")
+            return
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Cannot set unseal keys, vault is not initialized yet.")
+            event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
+            return
+        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
+        new_keys = event.params.get("unseal-keys")
+        if set(new_keys) == set(current_keys):  # type: ignore[arg-type]
+            logger.info("Unseal keys are already set to %s", new_keys)
+            event.fail(message="Provided unseal keys are already set.")
+            return
+        self._set_initialization_secret_in_peer_relation(
+            root_token=root_token, unseal_keys=new_keys  # type: ignore[arg-type]
+        )
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
+        event.set_results({"unseal-keys": new_keys})
+
+    def _on_set_root_token_action(self, event: ActionEvent) -> None:
+        """Handle the set-root-token action.
+
+        Updates the initialization secret in the peer relation
+            with the provided root token.
+
+        Args:
+            event: ActionEvent
+        """
+        if not self.unit.is_leader():
+            logger.error("Only leader unit can set the root token.")
+            event.fail(message="Only leader unit can set the root token.")
+            return
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Cannot set root token, vault is not initialized yet.")
+            event.fail(message="Cannot set root token, vault is not initialized yet.")
+            return
+        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
+        new_root_token = event.params.get("root-token")
+        if new_root_token == root_token:
+            logger.info("Root token is already set to %s", new_root_token)
+            event.fail(message="Provided root token is already set.")
+            return
+        self._set_initialization_secret_in_peer_relation(
+            root_token=new_root_token, unseal_keys=current_keys  # type: ignore[arg-type]
+        )
+        vault.set_token(token=new_root_token)  # type: ignore[arg-type]
+        event.set_results({"root-token": new_root_token})
+
+    def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
+        """Validate the requirements for creating S3.
+
+        It will check if the S3 relation is created
+            and if the required S3 parameters are set.
 
         Returns:
-            str: Path
-
-        Raises:
-            VaultCertsError: If the CA certificate is not found
+            bool: True if the requirements are met, False otherwise.
         """
-        storage = self.model.storages
-        if "certs" not in storage:
-            raise VaultCertsError()
-        if len(storage["certs"]) == 0:
-            raise VaultCertsError()
-        cert_storage = storage["certs"][0]
-        storage_location = cert_storage.location
-        return f"{storage_location}/ca.pem"
+        if not self._is_relation_created(S3_RELATION_NAME):
+            return False, "S3 relation not created."
+
+        missing_parameters = self._get_missing_s3_parameters()
+        if missing_parameters:
+            return False, f"S3 parameters missing. {missing_parameters}"
+
+        return True, None
+
+    def _get_backup_key(self) -> str:
+        """Return the backup key.
+
+        Returns:
+            str: The backup key
+        """
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
+
+    def _set_kv_relation_data(self, relation: Relation, mount: str, ca_certificate: str) -> None:
+        """Set relation data for vault-kv.
+
+        Args:
+            relation: Relation
+            mount: mount name
+            ca_certificate: CA certificate
+        """
+        self.vault_kv.set_mount(relation, mount)
+        vault_url = self._get_relation_api_address(relation)
+        self.vault_kv.set_ca_certificate(relation, ca_certificate)
+        if vault_url is not None:
+            self.vault_kv.set_vault_url(relation, vault_url)
 
     def _ensure_unit_credentials(
         self,
@@ -504,7 +789,7 @@ class VaultCharm(CharmBase):
         nonce: str,
         egress_subnet: str,
     ):
-        """Ensures a unit has credentials to access the vault-kv mount."""
+        """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
         vault.configure_kv_policy(policy_name, mount)
         role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
@@ -583,6 +868,19 @@ class VaultCharm(CharmBase):
         secret.set_content(credentials)
         return secret
 
+    def _remove_stale_nonce(self, relation: Relation, nonce: str) -> None:
+        """Remove stale nonce.
+
+        If the nonce is not present in the credentials, it is stale and should be removed.
+
+        Args:
+            relation: Relation
+            nonce: the one to remove if stale
+        """
+        credential_nonces = self.vault_kv.get_credentials(relation).keys()
+        if nonce not in set(credential_nonces):
+            self.vault_kv.remove_unit_credentials(relation, nonce=nonce)
+
     def _get_vault_kv_secrets_in_peer_relation(self) -> Dict[str, str]:
         """Return the vault kv secrets from the peer relation."""
         if not self._is_peer_relation_created():
@@ -626,7 +924,7 @@ class VaultCharm(CharmBase):
         return True
 
     def _get_relation_api_address(self, relation: Relation) -> Optional[str]:
-        """Fetches api address from relation and returns it.
+        """Fetch the api address from relation and returns it.
 
         Example: "https://10.152.183.20:8200"
         """
@@ -637,59 +935,37 @@ class VaultCharm(CharmBase):
 
     @property
     def _api_address(self) -> str:
-        """Returns the API address.
+        """Return the FQDN with the https schema and vault port.
 
-        Example: "https://1.2.3.4:8200"
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
         """
-        return f"https://{self._bind_address}:{self.VAULT_PORT}"
+        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
 
-    def _push_ca_certificate_to_workload(self, certificate: str) -> None:
-        """Push the CA certificate to the workload.
+    @property
+    def _cluster_address(self) -> str:
+        """Return the FQDN with the https schema and vault cluster port.
 
-        Args:
-            certificate: CA certificate
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
         """
-        self._container.push(path=TLS_CA_FILE_PATH, source=certificate)
-        logger.info("Pushed CA certificate to workload")
-
-    def _push_unit_certificate_to_workload(self, private_key: str, certificate: str) -> None:
-        """Push the unit certificate to the workload.
-
-        Args:
-            private_key: Private key
-            certificate: Certificate
-        """
-        self._container.push(path=TLS_KEY_FILE_PATH, source=private_key)
-        self._container.push(path=TLS_CERT_FILE_PATH, source=certificate)
-        logger.info("Pushed unit certificate to workload")
-
-    def _ca_certificate_pushed_to_workload(self) -> bool:
-        """Returns whether CA certificate is pushed to the workload."""
-        return self._container.exists(path=TLS_CA_FILE_PATH)
-
-    def _unit_certificate_pushed_to_workload(self) -> bool:
-        """Returns whether unit certificate is pushed to the workload."""
-        return self._container.exists(path=TLS_KEY_FILE_PATH) and self._container.exists(
-            path=TLS_CERT_FILE_PATH
-        )
+        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
     def _generate_vault_config_file(self) -> None:
-        """Handles creation of the Vault config file."""
+        """Handle the creation of the Vault config file."""
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
-                "leader_ca_cert_file": TLS_CA_FILE_PATH,
+                "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
             for node_api_address in self._other_peer_node_api_addresses()
         ]
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
             max_lease_ttl=self.model.config["max_lease_ttl"],
-            cluster_address=f"https://{self._bind_address}:{self.VAULT_CLUSTER_PORT}",
+            cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
-            tls_cert_file=TLS_CERT_FILE_PATH,
-            tls_key_file=TLS_KEY_FILE_PATH,
+            tls_cert_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CERT.name.lower()}.pem",
+            tls_key_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.KEY.name.lower()}.pem",
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
@@ -707,47 +983,6 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_ca_certificate_secret_in_peer_relation(
-        self,
-        private_key: str,
-        certificate: str,
-    ) -> None:
-        """Set the vault CA certificate secret in the peer relation.
-
-        Args:
-            private_key: Private key
-            certificate: certificate
-        """
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        juju_secret_content = {
-            "privatekey": private_key,
-            "certificate": certificate,
-        }
-        juju_secret = self.app.add_secret(
-            juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL
-        )
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({CA_CERTIFICATE_JUJU_SECRET_KEY: juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
-        logger.info("Vault CA certificate secret set in peer relation")
-
-    def _get_ca_certificate_secret_in_peer_relation(self) -> Tuple[str, str]:
-        """Get the vault CA certificate secret from the peer relation.
-
-        Returns:
-            Tuple[Optional[str], Optional[str]]: The CA private key and certificate
-        """
-        try:
-            peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-            juju_secret_id = peer_relation.data[peer_relation.app].get(  # type: ignore[union-attr, index]  # noqa: E501
-                CA_CERTIFICATE_JUJU_SECRET_KEY
-            )
-            juju_secret = self.model.get_secret(id=juju_secret_id)
-            content = juju_secret.get_content()
-            return content["privatekey"], content["certificate"]
-        except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name=CA_CERTIFICATE_JUJU_SECRET_KEY)
-
     def _set_initialization_secret_in_peer_relation(
         self, root_token: str, unseal_keys: List[str]
     ) -> None:
@@ -763,11 +998,44 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        juju_secret = self.app.add_secret(
-            juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
-        )
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        if not self._initialization_secret_set_in_peer_relation():
+            juju_secret = self.app.add_secret(
+                juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
+            )
+            peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+            return
+        secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
+        secret.set_content(content=juju_secret_content)
+        peer_relation.data[self.app].update({"vault-initialization-secret-id": secret.id})  # type: ignore[union-attr]
+
+    def _set_pki_csr_secret_in_peer_relation(self, csr: str) -> None:
+        if not self._is_peer_relation_created():
+            raise RuntimeError("Peer relation not created")
+        juju_secret_content = {"csr": csr}
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not self._pki_csr_secret_set_in_peer_relation():
+            juju_secret = self.app.add_secret(juju_secret_content, label=PKI_CSR_SECRET_LABEL)
+            peer_relation.data[self.app].update({"vault-pki-csr-secret-id": juju_secret.id})  # type: ignore[union-attr]
+            return
+        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+        secret.set_content(content=juju_secret_content)
+        peer_relation.data[self.app].update({"vault-pki-csr-secret-id": secret.id})  # type: ignore[union-attr]
+
+    def _get_pki_csr_secret_in_peer_relation(self) -> Optional[str]:
+        """Return the PKI CSR secret from the peer relation."""
+        if not self._pki_csr_secret_set_in_peer_relation():
+            raise RuntimeError("PKI CSR secret not set in peer relation")
+        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+        return secret.get_content()["csr"]
+
+    def _pki_csr_secret_set_in_peer_relation(self) -> bool:
+        """Return whether PKI CSR secret is stored in peer relation data."""
+        try:
+            self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
+            return True
+        except SecretNotFoundError:
+            return False
 
     def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret from the peer relation.
@@ -782,9 +1050,45 @@ class VaultCharm(CharmBase):
         except (TypeError, SecretNotFoundError, AttributeError):
             raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
 
+    def _get_missing_s3_parameters(self) -> List[str]:
+        """Return the list of missing S3 parameters.
+
+        Returns:
+            List[str]: List of missing required S3 parameters.
+        """
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
+        return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
+
+    def _retrieve_s3_parameters(self) -> Dict[str, str]:
+        """Retrieve S3 parameters from the S3 integrator relation.
+
+        Removes leading and trailing whitespaces from the parameters.
+
+        Returns:
+            Dict[str, str]: Dictionary of the S3 parameters.
+        """
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+
+        return s3_parameters
+
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
+
+    def _tls_certificates_pki_relation_created(self) -> bool:
+        """Check if the TLS Certificates PKI relation is created."""
+        return self._is_relation_created(TLS_CERTIFICATES_PKI_RELATION_NAME)
+
+    def _is_relation_created(self, relation_name: str) -> bool:
+        """Check if the relation is created.
+
+        Args:
+            relation_name: Checked relation name
+        """
+        return bool(self.model.get_relation(relation_name))
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
@@ -795,48 +1099,8 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _on_send_ca_cert_relation_joined(self, event: RelationJoinedEvent):
-        """Send Vault CA certificate when relation joined.
-
-        Args:
-            event: RelationJoinedEvent
-        """
-        self._send_ca_cert(rel_id=event.relation.id)
-
-    def _send_ca_cert(self, *, rel_id=None) -> None:
-        """There is one (and only one) CA cert that we need to forward to multiple apps.
-
-        Args:
-            rel_id: Relation id. If not given, update all relations.
-        """
-        send_ca_cert = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
-        if self._ca_certificate_set_in_peer_relation():
-            secret = self.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            secret_content = secret.get_content()
-            ca = secret_content["certificate"]
-            if rel_id:
-                send_ca_cert.set_certificate(certificate="", ca=ca, chain=[], relation_id=rel_id)
-            else:
-                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
-                    send_ca_cert.set_certificate(
-                        certificate="", ca=ca, chain=[], relation_id=relation.id
-                    )
-        else:
-            for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
-                send_ca_cert.remove_certificate(relation.id)
-
-    def _ca_certificate_set_in_peer_relation(self) -> bool:
-        """Returns whether CA certificate is stored in peer relation data."""
-        try:
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret_in_peer_relation()
-            if ca_private_key and ca_certificate:
-                return True
-        except PeerSecretError:
-            return False
-        return False
-
     def _initialization_secret_set_in_peer_relation(self) -> bool:
-        """Returns whether initialization secret is stored in peer relation data."""
+        """Return whether initialization secret is stored in peer relation data."""
         try:
             root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
             if root_token and unseal_keys:
@@ -845,9 +1109,109 @@ class VaultCharm(CharmBase):
             return False
         return False
 
+    def _create_raft_snapshot(self) -> Optional[IO[bytes]]:
+        """Create a snapshot of Vault.
+
+        Returns:
+            IO[bytes]: The snapshot content as a file like object.
+        """
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Failed to get Vault client, cannot create snapshot.")
+            return None
+        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        vault.set_token(token=root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=unseal_keys)
+        response = vault.create_snapshot()
+        return response.raw
+
+    def _restore_vault(
+        self, snapshot: StreamingBody, restore_unseal_keys: List[str], restore_root_token: str
+    ) -> bool:
+        """Restore vault using a raft snapshot.
+
+        Updates the initialization secret in the peer relation.
+        Upon successful secret update, it will restore the raft snapshot.
+        Upon successful restore, it will unseal Vault and set root token.
+
+        Args:
+            snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
+            restore_unseal_keys: List of unseal keys used at the time of the backup.
+            restore_root_token: Root token used at the time of the backup.
+
+        Returns:
+            bool: True if the restore was successful, False otherwise.
+        """
+        if not (vault := self._get_initialized_vault_client()):
+            logger.error("Failed to get Vault client, cannot restore snapshot.")
+            return False
+        (
+            current_root_token,
+            current_unseal_keys,
+        ) = self._get_initialization_secret_from_peer_relation()
+        vault.set_token(token=current_root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=current_unseal_keys)
+
+        self._set_initialization_secret_in_peer_relation(
+            root_token=restore_root_token, unseal_keys=restore_unseal_keys
+        )
+        try:
+            # hvac vault client expects bytes or a file-like object to restore the snapshot
+            # StreamingBody implements the read() method
+            # so it can be used as a file-like object in this context
+            response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
+        except Exception as e:
+            # If restore fails for any reason, we reset the initialization secret
+            logger.error("Failed to restore snapshot: %s", e)
+            self._set_initialization_secret_in_peer_relation(
+                root_token=current_root_token, unseal_keys=current_unseal_keys
+            )
+            return False
+        if not 200 <= response.status_code < 300:
+            logger.error("Failed to restore snapshot: %s", response.json())
+            self._set_initialization_secret_in_peer_relation(
+                root_token=current_root_token, unseal_keys=current_unseal_keys
+            )
+            return False
+        vault.set_token(token=restore_root_token)
+        if vault.is_sealed():
+            vault.unseal(unseal_keys=restore_unseal_keys)
+        return True
+
+    def _get_initialized_vault_client(self) -> Optional[Vault]:
+        """Return an initialized vault client.
+
+        Creates a Vault client and returns it if:
+            - Vault is initialized
+            - Vault API is available
+            - Vault is unsealed
+        Otherwise, returns None.
+
+        Returns:
+            Vault: Vault client
+        """
+        vault = Vault(
+            url=self._api_address,
+            ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+        )
+        if not vault.is_initialized():
+            logger.error("Vault is not initialized.")
+            return None
+        if not vault.is_api_available():
+            logger.error("Vault API is not available.")
+            return None
+        try:
+            root_token, _ = self._get_initialization_secret_from_peer_relation()
+            vault.set_token(token=root_token)
+        except PeerSecretError:
+            logger.error("Vault initialization secret not set in peer relation.")
+            return None
+        return vault
+
     @property
     def _bind_address(self) -> Optional[str]:
-        """Fetches bind address from peer relation and returns it.
+        """Fetch the bind address from peer relation and returns it.
 
         Returns:
             str: Bind address
@@ -865,7 +1229,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _ingress_address(self) -> Optional[str]:
-        """Fetches ingress address from peer relation and returns it.
+        """Fetch the ingress address from peer relation and returns it.
 
         Returns:
             str: Ingress address
@@ -883,7 +1247,7 @@ class VaultCharm(CharmBase):
 
     @property
     def _vault_layer(self) -> Layer:
-        """Returns pebble layer to start Vault."""
+        """Return the pebble layer to start Vault."""
         return Layer(
             {
                 "summary": "vault layer",
@@ -899,23 +1263,6 @@ class VaultCharm(CharmBase):
             }
         )
 
-    def _loki_log_target_layer(self, endpoint) -> str:
-        """Returns a layer with an added loki log forwarding service"""
-        # RFC: The Layer object doesn't accept adding a log target here
-        log_targets = {
-            "log-targets": {
-                "loki": {
-                    "override": "replace",
-                    "type": "loki",
-                    "location": endpoint,
-                    "services": "all",
-                    # RFC: Labels?
-                }
-            }
-        }
-
-        return Layer(log_targets)
-
     def _set_peer_relation_node_api_address(self) -> None:
         """Set the unit address in the peer relation."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
@@ -924,7 +1271,7 @@ class VaultCharm(CharmBase):
         peer_relation.data[self.unit].update({"node_api_address": self._api_address})
 
     def _get_peer_relation_node_api_addresses(self) -> List[str]:
-        """Returns list of peer unit addresses."""
+        """Return a list of peer unit addresses."""
         peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         node_api_addresses = []
         if not peer_relation:
@@ -935,7 +1282,7 @@ class VaultCharm(CharmBase):
         return node_api_addresses
 
     def _other_peer_node_api_addresses(self) -> List[str]:
-        """Returns list of other peer unit addresses.
+        """Return a list of other peer unit addresses.
 
         We exclude our own unit address from the list.
         """
@@ -945,9 +1292,18 @@ class VaultCharm(CharmBase):
             if node_api_address != self._api_address
         ]
 
+    def _get_config_common_name(self) -> str:
+        """Return the common name to use for the PKI backend."""
+        return self.config.get("common_name", "")
+
+    def _common_name_config_is_valid(self) -> bool:
+        """Return whether the config value for the common name is valid."""
+        common_name = self._get_config_common_name()
+        return common_name != ""
+
     @property
     def _node_id(self) -> str:
-        """Returns node id for vault.
+        """Return the node id for vault.
 
         Example of node id: "vault-k8s-0"
         """
@@ -956,6 +1312,87 @@ class VaultCharm(CharmBase):
     @property
     def _certificate_subject(self) -> str:
         return f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+
+def render_vault_config_file(
+    default_lease_ttl: str,
+    max_lease_ttl: str,
+    cluster_address: str,
+    api_address: str,
+    tls_cert_file: str,
+    tls_key_file: str,
+    tcp_address: str,
+    raft_storage_path: str,
+    node_id: str,
+    retry_joins: List[Dict[str, str]],
+) -> str:
+    """Render the Vault config file."""
+    jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
+    template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
+    content = template.render(
+        default_lease_ttl=default_lease_ttl,
+        max_lease_ttl=max_lease_ttl,
+        cluster_address=cluster_address,
+        api_address=api_address,
+        tls_cert_file=tls_cert_file,
+        tls_key_file=tls_key_file,
+        tcp_address=tcp_address,
+        raft_storage_path=raft_storage_path,
+        node_id=node_id,
+        retry_joins=retry_joins,
+    )
+    return content
+
+
+def config_file_content_matches(existing_content: str, new_content: str) -> bool:
+    """Return whether two Vault config file contents match.
+
+    We check if the retry_join addresses match, and then we check if the rest of the config
+    file matches.
+
+    Returns:
+        bool: Whether the vault config file content matches
+    """
+    existing_config_hcl = hcl.loads(existing_content)
+    new_content_hcl = hcl.loads(new_content)
+    if not existing_config_hcl:
+        logger.info("Existing config file is empty")
+        return existing_config_hcl == new_content_hcl
+    if not new_content_hcl:
+        logger.info("New config file is empty")
+        return existing_config_hcl == new_content_hcl
+
+    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
+    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
+
+    # If there is only one retry join, it is a dict
+    if isinstance(new_retry_joins, dict):
+        new_retry_joins = [new_retry_joins]
+    if isinstance(existing_retry_joins, dict):
+        existing_retry_joins = [existing_retry_joins]
+
+    new_retry_join_api_addresses = {address["leader_api_addr"] for address in new_retry_joins}
+    existing_retry_join_api_addresses = {
+        address["leader_api_addr"] for address in existing_retry_joins
+    }
+    return (
+        new_retry_join_api_addresses == existing_retry_join_api_addresses
+        and new_content_hcl == existing_config_hcl
+    )
+
+
+def get_common_name_from_certificate(certificate: str) -> str:
+    """Get the common name from a certificate."""
+    loaded_certificate = x509.load_pem_x509_certificate(certificate.encode("utf-8"))
+    return str(
+        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
+    )
+
+
+def get_common_name_from_csr(csr: str) -> str:
+    """Get the common name from a CSR."""
+    loaded_csr = x509.load_pem_x509_csr(csr.encode("utf-8"))
+    return str(loaded_csr.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value)
 
 
 if __name__ == "__main__":  # pragma: no cover

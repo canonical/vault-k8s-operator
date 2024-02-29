@@ -3,7 +3,7 @@
 
 name: vault-k8s
 
-display-name: Vault Operator
+display-name: Vault (K8s)
 summary: A tool for managing secrets
 description: |
   Vault secures, stores, and tightly controls access to
@@ -36,7 +36,7 @@ resources:
   vault-image:
     type: oci-image
     description: OCI image for Vault
-    upstream-source: ghcr.io/canonical/vault:1.15.2
+    upstream-source: ghcr.io/canonical/vault:1.15.5
 
 storage:
   vault-raft:
@@ -59,6 +59,8 @@ peers:
 provides:
   vault-kv:
     interface: vault-kv
+  vault-pki:
+    interface: tls-certificates
   metrics-endpoint:
     interface: prometheus_scrape
   send-ca-cert:
@@ -74,5 +76,19 @@ requires:
   ingress:
     interface: ingress
     limit: 1
+  tls-certificates-access:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Communication between the vault units and from a client to Vault should 
+      be done using the certificates provided by this integration.
+  tls-certificates-pki:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Interface to be used to provide Vault with its CA certificate. Vault will
+      use this certificate to sign the certificates it issues on the `vault-pki` interface.
   logging:
     interface: loki_push_api
+  s3-parameters:
+    interface: s3

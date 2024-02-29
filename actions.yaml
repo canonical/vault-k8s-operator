@@ -1,0 +1,52 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+create-backup:
+  description: >-
+    Creates a snapshot of the Raft backend and saves it to the S3 storage.
+    Returns backup ID.
+
+list-backups:
+  description: >-
+    Lists all available backups.
+
+restore-backup:
+  description: >-
+    Restores a backup from the S3 storage to the Raft backend.
+    Returns backup ID.
+  params:
+    backup-id:
+      type: string
+      description: >-
+        Backup ID to restore.
+    unseal-keys:
+      type: array
+      description: >-
+        Unseal keys to use for unsealing the Vault after the restore.
+    root-token:
+      type: string
+      description: >-
+        Root token to use for unsealing the Vault after the restore.
+  required: [backup-id, unseal-keys, root-token]
+
+set-unseal-keys:
+  description: >-
+    Sets unseal keys for Vault.
+    Used to recover Vault if Vault's unseal key and the one used by the charm mismatch for some reason.
+  params:
+    unseal-keys:
+      type: array
+      description: >-
+        Unseal keys to set.
+  required: [unseal-keys]
+
+set-root-token:
+  description: >-
+    Sets root token for Vault.
+    Used to recover Vault if Vault's root token and the one used by the charm mismatch for some reason.
+  params:
+    root-token:
+      type: string
+      description: >-
+        Root token to set.
+  required: [root-token]
