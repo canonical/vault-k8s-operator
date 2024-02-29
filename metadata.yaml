@@ -88,5 +88,7 @@ requires:
     description: |
       Interface to be used to provide Vault with its CA certificate. Vault will
       use this certificate to sign the certificates it issues on the `vault-pki` interface.
+  logging:
+    interface: loki_push_api
   s3-parameters:
     interface: s3

@@ -16,6 +16,7 @@ import hcl  # type: ignore[import-untyped]
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
@@ -68,6 +69,7 @@ KV_RELATION_NAME = "vault-kv"
 PKI_RELATION_NAME = "vault-pki"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
+LOG_FORWARDING_RELATION_NAME = "logging"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 S3_RELATION_NAME = "s3-parameters"
@@ -109,6 +111,7 @@ class VaultCharm(CharmBase):
                 }
             ],
         )
+        self._logging = LogForwarder(charm=self, relation_name=LOG_FORWARDING_RELATION_NAME)
         self.tls = VaultTLSManager(
             charm=self,
             workload=self._container,

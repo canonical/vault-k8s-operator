@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 APPLICATION_NAME = "vault-k8s"
+LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_APPLICATION_NAME = "traefik"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
@@ -132,6 +133,21 @@ class TestVaultK8s:
         await ops_test.model.deploy(
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
+            trust=True,
+        )
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def deploy_loki(self, ops_test: OpsTest) -> None:
+        """Deploys Loki.
+
+        Args:
+            ops_test: Ops test Framework.
+        """
+        assert ops_test.model
+        await ops_test.model.deploy(
+            "loki-k8s",
+            application_name=LOKI_APPLICATION_NAME,
             trust=True,
         )
 
@@ -394,6 +410,20 @@ class TestVaultK8s:
         )
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_active(
+        self, ops_test: OpsTest, build_and_deploy, deploy_loki
+    ):
+        await ops_test.model.integrate(  # type: ignore[union-attr]
+            relation1=f"{APPLICATION_NAME}:logging",
+            relation2=f"{LOKI_APPLICATION_NAME}",
+        )
+        await ops_test.model.wait_for_idle(  # type: ignore[union-attr]
+            apps=[APPLICATION_NAME, LOKI_APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
