@@ -49,6 +49,13 @@ NUM_VAULT_UNITS = 3
 k8s = KubernetesClient()
 
 
+# TODO: tests that are scaling down are giving false positives. if the crashed pod recovers
+# faster than an update_status, nothing happens. If not, the other nodes will throw:
+# hvac.exceptions.InternalServerError: local node not active but active cluster node not found
+# This means the unit that has a lock on raft can't be reached (it crashed or is gone). The raft
+# backend config needs to get some updated logic for this
+
+
 class TestVaultK8s:
     @pytest.fixture(scope="module", autouse=True)
     async def deploy_all_charms(self, ops_test: OpsTest):
@@ -131,6 +138,38 @@ class TestVaultK8s:
         assert isinstance(unit, Unit)
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
+        self, ops_test: OpsTest
+    ):
+        assert ops_test.model
+        num_units = 7
+        app: Application = ops_test.model.applications[APPLICATION_NAME]
+        await app.scale(num_units)
+
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=num_units,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
+        self, ops_test: OpsTest
+    ):
+        assert ops_test.model
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
+        await app.scale(NUM_VAULT_UNITS)
+
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
@@ -330,38 +369,6 @@ class TestVaultK8s:
             apps=[APPLICATION_NAME, LOKI_APPLICATION_NAME],
             status="active",
             timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
-        self, ops_test: OpsTest
-    ):
-        assert ops_test.model
-        num_units = 7
-        app: Application = ops_test.model.applications[APPLICATION_NAME]
-        await app.scale(num_units)
-
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=num_units,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
-        self, ops_test: OpsTest
-    ):
-        assert ops_test.model
-        app = ops_test.model.applications[APPLICATION_NAME]
-        assert isinstance(app, Application)
-        await app.scale(NUM_VAULT_UNITS)
-
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
     @pytest.mark.abort_on_fail
