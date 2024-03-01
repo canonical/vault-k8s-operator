@@ -142,7 +142,7 @@ class S3:
                 keys.append(obj.key)
             return keys
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchBucket":
+            if e.response["Error"]["Code"] == "NoSuchBucket":  # type: ignore[reportTypedDictNotRequiredAccess]
                 logger.error("Bucket %s does not exist.", bucket_name)
                 return []
             else:
@@ -171,10 +171,10 @@ class S3:
         try:
             obj = bucket.Object(object_key).get()
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+            if e.response["Error"]["Code"] == "NoSuchKey":  # type: ignore[reportTypedDictNotRequiredAccess]
                 logger.error("Object %s does not exist.", object_key)
                 return None
-            elif e.response["Error"]["Code"] == "NoSuchBucket":
+            elif e.response["Error"]["Code"] == "NoSuchBucket":  # type: ignore[reportTypedDictNotRequiredAccess]
                 logger.error("Bucket %s does not exist.", bucket_name)
                 return None
             else:
