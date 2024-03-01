@@ -9,7 +9,7 @@ from typing import IO, List, Optional
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
+from botocore.exceptions import BotoCoreError, ClientError
 from botocore.response import StreamingBody
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class S3:
         self.region = region
         self.endpoint = endpoint
         try:
-            self.session = boto3.session.Session(
+            self.session = boto3.session.Session(  # type: ignore[reportAttributeAccessIssue]
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
                 region_name=self.region,
@@ -73,9 +73,6 @@ class S3:
         except BotoCoreError as e:
             logger.error("Failed to check whether bucket exists. %s", e)
             return False
-        except ConnectTimeoutError as e:
-            logger.error("Failed to check whether bucket exists. %s", e)
-            raise e
 
         try:
             # AWS client doesn't allow LocationConstraint to be set to us-east-1
@@ -122,9 +119,6 @@ class S3:
         except (BotoCoreError, ClientError) as e:
             logger.error("Error uploading content to bucket %s: %s", bucket_name, e)
             return False
-        except ConnectTimeoutError as e:
-            logger.error("Error uploading content to bucket %s: %s", bucket_name, e)
-            raise e
 
     def get_object_key_list(self, bucket_name: str, prefix: str) -> List[str]:
         """Get list of object key in an S3 bucket.
@@ -155,9 +149,6 @@ class S3:
                 logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
                 raise e
         except BotoCoreError as e:
-            logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
-            raise e
-        except ConnectTimeoutError as e:
             logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
             raise e
 
@@ -192,9 +183,6 @@ class S3:
                 )
                 raise e
         except BotoCoreError as e:
-            logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
-            raise e
-        except ConnectTimeoutError as e:
             logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
             raise e
 

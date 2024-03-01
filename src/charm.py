@@ -12,7 +12,7 @@ import logging
 import socket
 from typing import IO, Dict, List, Optional, Tuple
 
-import hcl  # type: ignore[import-untyped]
+import hcl
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -161,7 +161,7 @@ class VaultCharm(CharmBase):
             return
         self._delete_vault_data()
 
-    def _on_collect_status(self, event: CollectStatusEvent):
+    def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
         if (
             self._tls_certificates_pki_relation_created()
@@ -207,7 +207,7 @@ class VaultCharm(CharmBase):
             return
         event.add_status(ActiveStatus())
 
-    def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:
+    def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
         """Handle config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
@@ -1385,14 +1385,14 @@ def get_common_name_from_certificate(certificate: str) -> str:
     """Get the common name from a certificate."""
     loaded_certificate = x509.load_pem_x509_certificate(certificate.encode("utf-8"))
     return str(
-        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
+        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
     )
 
 
 def get_common_name_from_csr(csr: str) -> str:
     """Get the common name from a CSR."""
     loaded_csr = x509.load_pem_x509_csr(csr.encode("utf-8"))
-    return str(loaded_csr.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value)
+    return str(loaded_csr.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value)  # type: ignore[reportAttributeAccessIssue]
 
 
 if __name__ == "__main__":  # pragma: no cover
