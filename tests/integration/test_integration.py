@@ -212,6 +212,7 @@ class TestVaultK8s:
     async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
         self, ops_test: OpsTest
     ):
+        assert ops_test.model
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:vault-kv",
             relation2=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}:vault-kv",
