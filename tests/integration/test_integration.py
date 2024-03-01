@@ -305,7 +305,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
-        self, ops_test: OpsTest, build_and_deploy, deploy_prometheus
+        self, ops_test: OpsTest
     ):
         assert ops_test.model
         await ops_test.model.integrate(
