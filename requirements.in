@@ -1,11 +1,11 @@
 cosl
-ops~=2.11.0
+ops
 hvac
 jinja2
 jsonschema
 lightkube
 lightkube-models
-pydantic==2.6.3
+pydantic
 pytest-interface-tester
 pyhcl
 requests
