@@ -87,7 +87,7 @@ pydantic-core==2.16.3
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
-pytest==8.0.2
+pytest==8.1.0
     # via pytest-interface-tester
 pytest-interface-tester==2.0.1
     # via -r requirements.in
