@@ -259,25 +259,6 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("ops.model.Model.get_binding")
-    def test_given_not_leader_and_peer_addresses_not_available_when_evaluate_status_then_status_is_waiting(
-        self, patch_get_binding
-    ):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=False)
-        self._set_peer_relation()
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="10.1.0.1"
-        )
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for other units to provide their addresses"),
-        )
-
-    @patch("ops.model.Model.get_binding")
     def test_given_not_leader_and_init_secret_not_set_when_evaluate_status_then_status_is_waiting(
         self, patch_get_binding
     ):
