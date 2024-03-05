@@ -724,7 +724,7 @@ class VaultCharm(CharmBase):
             event.fail(message="Cannot set root token, vault is not initialized yet.")
             return
         root_token, current_keys = self._get_initialization_secret_from_peer_relation()
-        new_root_token = event.params.get("root-token")
+        new_root_token = event.params.get("root-token", "")
         if new_root_token == root_token:
             logger.info("Root token is already set to %s", new_root_token)
             event.fail(message="Provided root token is already set.")
@@ -1264,7 +1264,7 @@ class VaultCharm(CharmBase):
         """Return a list of unit addresses that should be a part of the raft cluster."""
         return [
             f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
-            for i in range(self.app.planned_units)
+            for i in range(self.app.planned_units())
         ]
 
     def _get_config_common_name(self) -> str:
