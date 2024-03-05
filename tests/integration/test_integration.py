@@ -177,7 +177,7 @@ class TestVaultK8s:
             "traefik-k8s",
             application_name=TRAEFIK_APPLICATION_NAME,
             trust=True,
-            channel="edge",
+            channel="stable",
         )
 
     @pytest.mark.abort_on_fail
