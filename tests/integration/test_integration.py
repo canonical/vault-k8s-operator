@@ -33,7 +33,7 @@ VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
 
-NUM_VAULT_UNITS = 5
+NUM_VAULT_UNITS = 4
 
 k8s = KubernetesClient()
 
