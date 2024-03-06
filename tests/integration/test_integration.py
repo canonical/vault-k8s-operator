@@ -69,6 +69,12 @@ class TestVaultK8s:
             num_units=NUM_VAULT_UNITS,
             config={"common_name": "example.com"},
         )
+        deploy_traefik = ops_test.model.deploy(
+            "traefik-k8s",
+            application_name=TRAEFIK_APPLICATION_NAME,
+            trust=True,
+            channel="edge",
+        )
         deploy_s3_integrator = ops_test.model.deploy(
             "s3-integrator",
             application_name=S3_INTEGRATOR_APPLICATION_NAME,
@@ -87,6 +93,7 @@ class TestVaultK8s:
             deploy_minio,
             deploy_vault_kv_requirer,
             deploy_vault,
+            deploy_traefik,
         )
         await ops_test.model.wait_for_idle(
             apps=[S3_INTEGRATOR_APPLICATION_NAME],
@@ -98,6 +105,7 @@ class TestVaultK8s:
             apps=[
                 MINIO_APPLICATION_NAME,
                 VAULT_KV_REQUIRER_APPLICATION_NAME,
+                TRAEFIK_APPLICATION_NAME,
             ],
             status="active",
             timeout=600,
@@ -128,12 +136,6 @@ class TestVaultK8s:
             application_name=LOKI_APPLICATION_NAME,
             trust=True,
         )
-        deploy_traefik = ops_test.model.deploy(
-            "traefik-k8s",
-            application_name=TRAEFIK_APPLICATION_NAME,
-            trust=True,
-            channel="edge",
-        )
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -150,7 +152,6 @@ class TestVaultK8s:
         await asyncio.gather(
             deploy_prometheus,
             deploy_loki,
-            deploy_traefik,
             deploy_self_signed_certificates,
             deploy_tls_requirer,
         )
@@ -159,7 +160,6 @@ class TestVaultK8s:
             apps=[
                 PROMETHEUS_APPLICATION_NAME,
                 LOKI_APPLICATION_NAME,
-                TRAEFIK_APPLICATION_NAME,
                 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
                 VAULT_PKI_REQUIRER_APPLICATION_NAME,
             ],
@@ -213,6 +213,21 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
             wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
+        self, ops_test: OpsTest, deploy_phase_2
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:vault-kv",
+            relation2=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}:vault-kv",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_KV_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
         )
 
     @pytest.mark.abort_on_fail
@@ -421,21 +436,6 @@ class TestVaultK8s:
         # 503: {{Description: "sealed"}}
         assert response.status_code in (200, 429)
         os.remove("ca_file.txt")
-
-    @pytest.mark.abort_on_fail
-    async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:vault-kv",
-            relation2=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}:vault-kv",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_KV_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
