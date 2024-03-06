@@ -34,7 +34,7 @@ from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvP
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
 from cryptography import x509
-from exceptions import PeerSecretError, VaultCertsError
+from exceptions import VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
@@ -190,7 +190,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             event.add_status(WaitingStatus("Waiting for CA certificate"))
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
+        if not self.unit.is_leader() and not self._initialization_secret_set():
             event.add_status(WaitingStatus("Waiting for initialization secret"))
             return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
@@ -223,7 +223,7 @@ class VaultCharm(CharmBase):
             return
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set_in_peer_relation():
+        if not self.unit.is_leader() and not self._initialization_secret_set():
             return
         self.tls.configure_certificates(self._ingress_address)
 
@@ -240,8 +240,8 @@ class VaultCharm(CharmBase):
             return
         if self.unit.is_leader() and not vault.is_initialized():
             root_token, unseal_keys = vault.initialize()
-            self._set_initialization_secret_in_peer_relation(root_token, unseal_keys)
-        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            self._set_initialization_secret(root_token, unseal_keys)
+        root_token, unseal_keys = self._get_initialization_secret()
         vault.set_token(token=root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
@@ -267,7 +267,7 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             return
         try:
-            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            root_token, unseal_keys = self._get_initialization_secret()
             if self._bind_address:
                 vault = Vault(
                     url=self._api_address,
@@ -280,8 +280,8 @@ class VaultCharm(CharmBase):
                     and vault.get_num_raft_peers() > 1
                 ):
                     vault.remove_raft_node(node_id=self._node_id)
-        except PeerSecretError:
-            logger.info("Vault initialization secret not set in peer relation")
+        except SecretNotFoundError:
+            logger.info("Vault initialization secret not set")
         except VaultCertsError:
             logger.info("Vault CA certificate not found")
         finally:
@@ -351,9 +351,6 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
             return
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created")
-            return
         vault = self._get_initialized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
@@ -373,7 +370,7 @@ class VaultCharm(CharmBase):
                 certificate_signing_request=csr.encode(),
                 is_ca=True,
             )
-            self._set_pki_csr_secret_in_peer_relation(csr)
+            self._set_pki_csr_secret(csr)
 
     def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
         """Check if the intermediate CA is set in the PKI secrets engine."""
@@ -387,9 +384,6 @@ class VaultCharm(CharmBase):
         """Add the CA certificate to the PKI secrets engine."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created")
             return
         vault = self._get_initialized_vault_client()
         if not vault:
@@ -427,22 +421,22 @@ class VaultCharm(CharmBase):
     def _get_pki_ca_certificate(self) -> Optional[str]:
         """Return the PKI CA certificate provided by the TLS provider.
 
-        Validate that the CSR matches the one in the peer relation.
+        Validate that the CSR matches the one in secrets.
         """
         assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
         if not assigned_certificates:
             return None
-        if not self._pki_csr_secret_set_in_peer_relation():
-            logger.info("PKI CSR not set in the peer relation")
+        if not self._pki_csr_secret_set():
+            logger.info("PKI CSR not set in secrets")
             return None
-        pki_csr = self._get_pki_csr_secret_in_peer_relation()
+        pki_csr = self._get_pki_csr_secret()
         if not pki_csr:
-            logger.warning("PKI CSR not found in the peer relation")
+            logger.warning("PKI CSR not found in secrets")
             return None
         for assigned_certificate in assigned_certificates:
             if assigned_certificate.csr == pki_csr:
                 return assigned_certificate.certificate
-        logger.info("No certificate matches the PKI CSR in the peer relation")
+        logger.info("No certificate matches the PKI CSR in secrets")
         return None
 
     def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
@@ -460,7 +454,7 @@ class VaultCharm(CharmBase):
     def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
         """Generate a PKI certificate for a TLS requirer."""
         if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            logger.debug("Only leader unit can handle a vault-pki certificate request")  # RFC: Why
             return
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
@@ -616,8 +610,7 @@ class VaultCharm(CharmBase):
         Restores the snapshot with the provided ID.
         Unseals Vault using the provided unseal key.
         Sets the root token to the provided root token.
-        Updates the initialization secret in the peer relation
-            with the provided unseal keys.
+        Updates the initialization secret with the provided unseal keys.
 
         Args:
             event: ActionEvent
@@ -649,7 +642,8 @@ class VaultCharm(CharmBase):
 
         try:
             snapshot = s3.get_content(
-                bucket_name=s3_parameters["bucket"], object_key=event.params.get("backup-id")  # type: ignore[arg-type]
+                bucket_name=s3_parameters["bucket"],
+                object_key=event.params.get("backup-id"),  # type: ignore[arg-type]
             )
         except ConnectTimeoutError as e:
             logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
@@ -683,8 +677,7 @@ class VaultCharm(CharmBase):
     def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
         """Handle the set-unseal-keys action.
 
-        Updates the initialization secret in the peer relation
-            with the provided unseal keys.
+        Updates the initialization secret with the provided unseal keys.
 
         Args:
             event: ActionEvent
@@ -697,14 +690,15 @@ class VaultCharm(CharmBase):
             logger.error("Cannot set unseal keys, vault is not initialized yet.")
             event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
             return
-        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
+        root_token, current_keys = self._get_initialization_secret()
         new_keys = event.params.get("unseal-keys")
         if set(new_keys) == set(current_keys):  # type: ignore[arg-type]
             logger.info("Unseal keys are already set to %s", new_keys)
             event.fail(message="Provided unseal keys are already set.")
             return
-        self._set_initialization_secret_in_peer_relation(
-            root_token=root_token, unseal_keys=new_keys  # type: ignore[arg-type]
+        self._set_initialization_secret(
+            root_token=root_token,
+            unseal_keys=new_keys,  # type: ignore[arg-type]
         )
         if vault.is_sealed():
             vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
@@ -713,8 +707,7 @@ class VaultCharm(CharmBase):
     def _on_set_root_token_action(self, event: ActionEvent) -> None:
         """Handle the set-root-token action.
 
-        Updates the initialization secret in the peer relation
-            with the provided root token.
+        Updates the initialization secret with the provided root token.
 
         Args:
             event: ActionEvent
@@ -727,16 +720,17 @@ class VaultCharm(CharmBase):
             logger.error("Cannot set root token, vault is not initialized yet.")
             event.fail(message="Cannot set root token, vault is not initialized yet.")
             return
-        root_token, current_keys = self._get_initialization_secret_from_peer_relation()
-        new_root_token = event.params.get("root-token")
+        root_token, current_keys = self._get_initialization_secret()
+        new_root_token = event.params.get("root-token", "")
         if new_root_token == root_token:
             logger.info("Root token is already set to %s", new_root_token)
             event.fail(message="Provided root token is already set.")
             return
-        self._set_initialization_secret_in_peer_relation(
-            root_token=new_root_token, unseal_keys=current_keys  # type: ignore[arg-type]
+        self._set_initialization_secret(
+            root_token=new_root_token,
+            unseal_keys=current_keys,
         )
-        vault.set_token(token=new_root_token)  # type: ignore[arg-type]
+        vault.set_token(token=new_root_token)
         event.set_results({"root-token": new_root_token})
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
@@ -983,10 +977,8 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_initialization_secret_in_peer_relation(
-        self, root_token: str, unseal_keys: List[str]
-    ) -> None:
-        """Set the vault initialization secret in the peer relation.
+    def _set_initialization_secret(self, root_token: str, unseal_keys: List[str]) -> None:
+        """Set the vault initialization secret.
 
         Args:
             root_token: The root token.
@@ -998,57 +990,44 @@ class VaultCharm(CharmBase):
             "roottoken": root_token,
             "unsealkeys": json.dumps(unseal_keys),
         }
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not self._initialization_secret_set_in_peer_relation():
-            juju_secret = self.app.add_secret(
-                juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL
-            )
-            peer_relation.data[self.app].update({"vault-initialization-secret-id": juju_secret.id})  # type: ignore[union-attr]  # noqa: E501
+        if not self._initialization_secret_set():
+            self.app.add_secret(juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL)
             return
         secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
         secret.set_content(content=juju_secret_content)
-        peer_relation.data[self.app].update({"vault-initialization-secret-id": secret.id})  # type: ignore[union-attr]
 
-    def _set_pki_csr_secret_in_peer_relation(self, csr: str) -> None:
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
+    def _set_pki_csr_secret(self, csr: str) -> None:
         juju_secret_content = {"csr": csr}
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not self._pki_csr_secret_set_in_peer_relation():
-            juju_secret = self.app.add_secret(juju_secret_content, label=PKI_CSR_SECRET_LABEL)
-            peer_relation.data[self.app].update({"vault-pki-csr-secret-id": juju_secret.id})  # type: ignore[union-attr]
+        if not self._pki_csr_secret_set():
+            self.app.add_secret(juju_secret_content, label=PKI_CSR_SECRET_LABEL)
             return
         secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
         secret.set_content(content=juju_secret_content)
-        peer_relation.data[self.app].update({"vault-pki-csr-secret-id": secret.id})  # type: ignore[union-attr]
 
-    def _get_pki_csr_secret_in_peer_relation(self) -> Optional[str]:
-        """Return the PKI CSR secret from the peer relation."""
-        if not self._pki_csr_secret_set_in_peer_relation():
-            raise RuntimeError("PKI CSR secret not set in peer relation")
+    def _get_pki_csr_secret(self) -> Optional[str]:
+        """Return the PKI CSR secret."""
+        if not self._pki_csr_secret_set():
+            raise RuntimeError("PKI CSR secret not set.")
         secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
         return secret.get_content()["csr"]
 
-    def _pki_csr_secret_set_in_peer_relation(self) -> bool:
-        """Return whether PKI CSR secret is stored in peer relation data."""
+    def _pki_csr_secret_set(self) -> bool:
+        """Return whether PKI CSR secret is stored."""
         try:
             self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
             return True
         except SecretNotFoundError:
             return False
 
-    def _get_initialization_secret_from_peer_relation(self) -> Tuple[str, List[str]]:
-        """Get the vault initialization secret from the peer relation.
+    def _get_initialization_secret(self) -> Tuple[str, List[str]]:
+        """Get the vault initialization secret.
 
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        try:
-            juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-            content = juju_secret.get_content()
-            return content["roottoken"], json.loads(content["unsealkeys"])
-        except (TypeError, SecretNotFoundError, AttributeError):
-            raise PeerSecretError(secret_name=VAULT_INITIALIZATION_SECRET_LABEL)
+        juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
+        content = juju_secret.get_content()
+        return content["roottoken"], json.loads(content["unsealkeys"])
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
@@ -1099,13 +1078,13 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _initialization_secret_set_in_peer_relation(self) -> bool:
-        """Return whether initialization secret is stored in peer relation data."""
+    def _initialization_secret_set(self) -> bool:
+        """Return whether initialization secret is stored."""
         try:
-            root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+            root_token, unseal_keys = self._get_initialization_secret()
             if root_token and unseal_keys:
                 return True
-        except PeerSecretError:
+        except SecretNotFoundError:
             return False
         return False
 
@@ -1118,7 +1097,7 @@ class VaultCharm(CharmBase):
         if not (vault := self._get_initialized_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
-        root_token, unseal_keys = self._get_initialization_secret_from_peer_relation()
+        root_token, unseal_keys = self._get_initialization_secret()
         vault.set_token(token=root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=unseal_keys)
@@ -1130,7 +1109,7 @@ class VaultCharm(CharmBase):
     ) -> bool:
         """Restore vault using a raft snapshot.
 
-        Updates the initialization secret in the peer relation.
+        Updates the initialization secret.
         Upon successful secret update, it will restore the raft snapshot.
         Upon successful restore, it will unseal Vault and set root token.
 
@@ -1148,12 +1127,12 @@ class VaultCharm(CharmBase):
         (
             current_root_token,
             current_unseal_keys,
-        ) = self._get_initialization_secret_from_peer_relation()
+        ) = self._get_initialization_secret()
         vault.set_token(token=current_root_token)
         if vault.is_sealed():
             vault.unseal(unseal_keys=current_unseal_keys)
 
-        self._set_initialization_secret_in_peer_relation(
+        self._set_initialization_secret(
             root_token=restore_root_token, unseal_keys=restore_unseal_keys
         )
         try:
@@ -1164,13 +1143,13 @@ class VaultCharm(CharmBase):
         except Exception as e:
             # If restore fails for any reason, we reset the initialization secret
             logger.error("Failed to restore snapshot: %s", e)
-            self._set_initialization_secret_in_peer_relation(
+            self._set_initialization_secret(
                 root_token=current_root_token, unseal_keys=current_unseal_keys
             )
             return False
         if not 200 <= response.status_code < 300:
             logger.error("Failed to restore snapshot: %s", response.json())
-            self._set_initialization_secret_in_peer_relation(
+            self._set_initialization_secret(
                 root_token=current_root_token, unseal_keys=current_unseal_keys
             )
             return False
@@ -1202,10 +1181,10 @@ class VaultCharm(CharmBase):
             logger.error("Vault API is not available.")
             return None
         try:
-            root_token, _ = self._get_initialization_secret_from_peer_relation()
+            root_token, _ = self._get_initialization_secret()
             vault.set_token(token=root_token)
-        except PeerSecretError:
-            logger.error("Vault initialization secret not set in peer relation.")
+        except Exception:
+            logger.error("Vault initialization secret not set.")
             return None
         return vault
 
@@ -1216,7 +1195,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: Bind address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)  # TODO: is this needed?
         if not peer_relation:
             return None
         try:
@@ -1234,7 +1213,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: Ingress address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)  # TODO: is this needed?
         if not peer_relation:
             return None
         try:
