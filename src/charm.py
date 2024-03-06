@@ -953,7 +953,7 @@ class VaultCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._generate_node_api_addresses()
+            for node_api_address in self._get_peer_node_api_addresses()
         ]
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
@@ -1260,7 +1260,7 @@ class VaultCharm(CharmBase):
             }
         )
 
-    def _generate_node_api_addresses(self) -> List[str]:
+    def _get_peer_node_api_addresses(self) -> List[str]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
         return [
             f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
