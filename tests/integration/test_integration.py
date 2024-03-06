@@ -117,11 +117,16 @@ class TestVaultK8s:
             timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
-        return [
+        yield
+        deployed_apps = [
             S3_INTEGRATOR_APPLICATION_NAME,
             MINIO_APPLICATION_NAME,
             VAULT_KV_REQUIRER_APPLICATION_NAME,
         ]
+        remove_coroutines = [
+            ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
+        ]
+        await asyncio.gather(*remove_coroutines)
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
@@ -156,17 +161,25 @@ class TestVaultK8s:
             deploy_tls_requirer,
         )
         # Wait for all charms to be deployed
+        deployed_apps = [
+            PROMETHEUS_APPLICATION_NAME,
+            LOKI_APPLICATION_NAME,
+            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+        ]
         await ops_test.model.wait_for_idle(
-            apps=[
-                PROMETHEUS_APPLICATION_NAME,
-                LOKI_APPLICATION_NAME,
-                SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-                VAULT_PKI_REQUIRER_APPLICATION_NAME,
-            ],
+            apps=deployed_apps,
             status="active",
             timeout=600,
             wait_for_at_least_units=1,
         )
+
+        yield
+
+        remove_coroutines = [
+            ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
+        ]
+        await asyncio.gather(*remove_coroutines)
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
@@ -359,13 +372,6 @@ class TestVaultK8s:
             unseal_keys=["RandomUnsealKey"],
         )
         assert restore_backup_action_output["restored"] == backup_id
-
-    @pytest.mark.abort_on_fail
-    async def remove_phase_1(self, ops_test: OpsTest, deploy_phase_1):
-        remove_coroutines = [
-            ops_test.model.remove_application(app_name=app_name) for app_name in deploy_phase_1
-        ]
-        await asyncio.gather(*remove_coroutines)
 
     @pytest.mark.abort_on_fail
     async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
