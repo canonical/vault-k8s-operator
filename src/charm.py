@@ -184,9 +184,6 @@ class VaultCharm(CharmBase):
                 WaitingStatus("Waiting for bind and ingress addresses to be available")
             )
             return
-        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
-            return
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             event.add_status(WaitingStatus("Waiting for CA certificate"))
             return
@@ -219,8 +216,6 @@ class VaultCharm(CharmBase):
             return
         if not self._bind_address or not self._ingress_address:
             return
-        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            return
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             return
         if not self.unit.is_leader() and not self._initialization_secret_set():
@@ -247,7 +242,6 @@ class VaultCharm(CharmBase):
             vault.unseal(unseal_keys=unseal_keys)
         if vault.is_active() and not vault.audit_device_enabled(device_type="file", path="stdout"):
             vault.enable_audit_device(device_type="file", path="stdout")
-        self._set_peer_relation_node_api_address()
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
         self._sync_vault_pki()
@@ -950,7 +944,7 @@ class VaultCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._other_peer_node_api_addresses()
+            for node_api_address in self._get_peer_node_api_addresses()
         ]
         content = render_vault_config_file(
             default_lease_ttl=self.model.config["default_lease_ttl"],
@@ -1242,33 +1236,11 @@ class VaultCharm(CharmBase):
             }
         )
 
-    def _set_peer_relation_node_api_address(self) -> None:
-        """Set the unit address in the peer relation."""
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not peer_relation:
-            raise RuntimeError("Peer relation not created")
-        peer_relation.data[self.unit].update({"node_api_address": self._api_address})
-
-    def _get_peer_relation_node_api_addresses(self) -> List[str]:
-        """Return a list of peer unit addresses."""
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        node_api_addresses = []
-        if not peer_relation:
-            return []
-        for peer in peer_relation.units:
-            if "node_api_address" in peer_relation.data[peer]:
-                node_api_addresses.append(peer_relation.data[peer]["node_api_address"])
-        return node_api_addresses
-
-    def _other_peer_node_api_addresses(self) -> List[str]:
-        """Return a list of other peer unit addresses.
-
-        We exclude our own unit address from the list.
-        """
+    def _get_peer_node_api_addresses(self) -> List[str]:
+        """Return a list of unit addresses that should be a part of the raft cluster."""
         return [
-            node_api_address
-            for node_api_address in self._get_peer_relation_node_api_addresses()
-            if node_api_address != self._api_address
+            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
+            for i in range(self.app.planned_units())
         ]
 
     def _get_config_common_name(self) -> str:

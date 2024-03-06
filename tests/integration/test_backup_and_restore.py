@@ -25,7 +25,7 @@ MINIO_CONFIG = {
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
-NUM_VAULT_UNITS = 5
+NUM_VAULT_UNITS = 4
 
 
 class TestBackupAndRestore:
