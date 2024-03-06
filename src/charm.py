@@ -448,7 +448,7 @@ class VaultCharm(CharmBase):
     def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
         """Generate a PKI certificate for a TLS requirer."""
         if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")  # RFC: Why
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
             return
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
@@ -1189,7 +1189,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: Bind address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)  # TODO: is this needed?
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         if not peer_relation:
             return None
         try:
@@ -1207,7 +1207,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: Ingress address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)  # TODO: is this needed?
+        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
         if not peer_relation:
             return None
         try:
