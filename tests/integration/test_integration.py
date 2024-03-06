@@ -73,7 +73,7 @@ class TestVaultK8s:
             "traefik-k8s",
             application_name=TRAEFIK_APPLICATION_NAME,
             trust=True,
-            channel="edge",
+            channel="stable",
         )
         deploy_s3_integrator = ops_test.model.deploy(
             "s3-integrator",
