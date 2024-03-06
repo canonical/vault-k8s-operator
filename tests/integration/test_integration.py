@@ -89,15 +89,25 @@ class TestVaultK8s:
             deploy_vault,
         )
         await ops_test.model.wait_for_idle(
+            apps=[S3_INTEGRATOR_APPLICATION_NAME],
+            status="blocked",
+            timeout=600,
+            wait_for_exact_units=1,
+        )
+        await ops_test.model.wait_for_idle(
             apps=[
-                APPLICATION_NAME,
-                S3_INTEGRATOR_APPLICATION_NAME,
                 MINIO_APPLICATION_NAME,
                 VAULT_KV_REQUIRER_APPLICATION_NAME,
             ],
             status="active",
             timeout=600,
-            wait_for_at_least_units=1,
+            wait_for_exact_units=1,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=600,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
         return [
             S3_INTEGRATOR_APPLICATION_NAME,
@@ -105,6 +115,7 @@ class TestVaultK8s:
             VAULT_KV_REQUIRER_APPLICATION_NAME,
         ]
 
+    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
     async def deploy_phase_2(self, ops_test: OpsTest):
         deploy_prometheus = ops_test.model.deploy(
@@ -178,7 +189,7 @@ class TestVaultK8s:
         self, ops_test: OpsTest, deploy_phase_1
     ):
         assert ops_test.model
-        num_units = 7
+        num_units = 5
         app: Application = ops_test.model.applications[APPLICATION_NAME]
         await app.scale(num_units)
 
@@ -194,8 +205,7 @@ class TestVaultK8s:
         self, ops_test: OpsTest, deploy_phase_1
     ):
         assert ops_test.model
-        app = ops_test.model.applications[APPLICATION_NAME]
-        assert isinstance(app, Application)
+        app: Application = ops_test.model.applications[APPLICATION_NAME]
         await app.scale(NUM_VAULT_UNITS)
 
         await ops_test.model.wait_for_idle(
@@ -232,6 +242,7 @@ class TestVaultK8s:
             action_uuid=vault_kv_get_secret_action.entity_id, wait=30
         )
 
+        print(action_output)
         assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
@@ -334,6 +345,7 @@ class TestVaultK8s:
         )
         assert restore_backup_action_output["restored"] == backup_id
 
+    @pytest.mark.abort_on_fail
     async def remove_phase_1(self, ops_test: OpsTest, deploy_phase_1):
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deploy_phase_1
