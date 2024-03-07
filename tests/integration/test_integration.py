@@ -140,6 +140,7 @@ class TestVaultK8s:
             "loki-k8s",
             application_name=LOKI_APPLICATION_NAME,
             trust=True,
+            channel="stable",
         )
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
