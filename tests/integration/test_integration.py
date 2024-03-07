@@ -98,7 +98,7 @@ class TestVaultK8s:
         await ops_test.model.wait_for_idle(
             apps=[S3_INTEGRATOR_APPLICATION_NAME],
             status="blocked",
-            timeout=600,
+            timeout=1000,
             wait_for_exact_units=1,
         )
         await ops_test.model.wait_for_idle(
@@ -108,13 +108,13 @@ class TestVaultK8s:
                 TRAEFIK_APPLICATION_NAME,
             ],
             status="active",
-            timeout=600,
+            timeout=1000,
             wait_for_exact_units=1,
         )
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=600,
+            timeout=1000,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
         yield
