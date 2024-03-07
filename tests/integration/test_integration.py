@@ -145,7 +145,7 @@ class TestVaultK8s:
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             trust=True,
-            channel="beta",
+            channel="stable",
         )
         deploy_tls_requirer = ops_test.model.deploy(
             VAULT_PKI_REQUIRER_APPLICATION_NAME,
