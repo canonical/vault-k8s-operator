@@ -79,9 +79,10 @@ class TestVaultK8s:
             "s3-integrator",
             application_name=S3_INTEGRATOR_APPLICATION_NAME,
             trust=True,
+            channel="stable",
         )
         deploy_minio = ops_test.model.deploy(
-            "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG
+            "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG, channel="stable"
         )
         deploy_vault_kv_requirer = ops_test.model.deploy(
             vault_kv_requirer_charm,
@@ -140,17 +141,18 @@ class TestVaultK8s:
             "loki-k8s",
             application_name=LOKI_APPLICATION_NAME,
             trust=True,
+            channel="stable",
         )
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             trust=True,
-            channel="beta",
+            channel="stable",
         )
         deploy_tls_requirer = ops_test.model.deploy(
             VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
-            channel="edge",
+            channel="stable",
             config={"common_name": "test.example.com"},
         )
 
