@@ -79,6 +79,7 @@ class TestVaultK8s:
             "s3-integrator",
             application_name=S3_INTEGRATOR_APPLICATION_NAME,
             trust=True,
+            channel="stable",
         )
         deploy_minio = ops_test.model.deploy(
             "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG, channel="stable"
