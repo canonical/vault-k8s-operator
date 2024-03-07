@@ -81,7 +81,7 @@ class TestVaultK8s:
             trust=True,
         )
         deploy_minio = ops_test.model.deploy(
-            "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG
+            "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG, channel="stable"
         )
         deploy_vault_kv_requirer = ops_test.model.deploy(
             vault_kv_requirer_charm,
