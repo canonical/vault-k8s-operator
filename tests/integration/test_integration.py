@@ -150,7 +150,7 @@ class TestVaultK8s:
         deploy_tls_requirer = ops_test.model.deploy(
             VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
-            channel="edge",
+            channel="stable",
             config={"common_name": "test.example.com"},
         )
 
