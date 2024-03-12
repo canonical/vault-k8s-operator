@@ -110,7 +110,7 @@ class TestVault(unittest.TestCase):
         patch_list_auth_methods.return_value = {}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
-        vault.enable_approle_auth()
+        vault.enable_auth_method("approle")
 
         patch_enable_auth_method.assert_called_with("approle")
 
@@ -122,7 +122,7 @@ class TestVault(unittest.TestCase):
         patch_list_auth_methods.return_value = {"approle/": "whatever"}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
-        vault.enable_approle_auth()
+        vault.enable_auth_method("approle")
 
         patch_enable_auth_method.assert_not_called()
 
@@ -165,37 +165,3 @@ class TestVault(unittest.TestCase):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active())
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_file_and_path_in_audit_device_list_when_audit_device_enabled_then_return_true(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {
-            "data": {f"{device_type}/": {"options": {"file_path": path}}}
-        }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertTrue(vault.audit_device_enabled(device_type=device_type, path=path))
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_file_not_in_audit_device_list_when_audit_device_enabled_then_return_false(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {"data": {}}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_wrong_path_in_audit_device_list_when_audit_device_enabled_then_return_false(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {
-            "data": {f"{device_type}/": {"options": {"file_path": "WRONG PATH"}}}
-        }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))

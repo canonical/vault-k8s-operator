@@ -24,7 +24,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateCreationRequestEvent,
     ProviderCertificate,
 )
-from charms.vault_k8s.v0.vault_client import Certificate, Vault
+from charms.vault_k8s.v0.vault_client import Certificate, Token, Vault
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
@@ -1498,7 +1498,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_restore_backup_action(event)
 
-        mock_vault.set_token.assert_called_with(token="backup root token")
+        mock_vault.authenticate.assert_called_with(Token("backup root token"))
 
     @patch("charm.Vault", autospec=True)
     def test_given_unit_not_leader_when_set_unseal_keys_action_then_action_fails(
@@ -1719,7 +1719,7 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         event.params = {"root-token": "new root token content"}
         self.harness.charm._on_set_root_token_action(event)
-        mock_vault.set_token.assert_called_with(token="new root token content")
+        mock_vault.authenticate.assert_called_with(Token("new root token content"))
 
     @patch("charm.Vault", autospec=True)
     def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_action_succeeds(  # noqa: E501
@@ -1873,7 +1873,7 @@ class TestCharm(unittest.TestCase):
         event.relation_id = rel_id
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
-        mock_vault.enable_approle_auth.assert_called_once()
+        mock_vault.enable_auth_method.assert_called_with("approle")
 
     @patch("charm.Vault", autospec=True)
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
@@ -2001,7 +2001,7 @@ class TestCharm(unittest.TestCase):
         event.relation_id = rel_id
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
-        mock_vault.enable_kv_engine.assert_called_once()
+        mock_vault.enable_secrets_engine.assert_called_with("kv-v2")
 
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
@@ -2041,7 +2041,7 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.add_relation_unit(relation_id, "tls-provider/0")
 
-        mock_vault.enable_pki_engine.assert_called_with(path="charm-pki")
+        mock_vault.enable_secrets_engine.assert_called_with(path="charm-pki")
         mock_vault.generate_pki_intermediate_ca_csr.assert_called_with(
             mount="charm-pki", common_name="vault"
         )
