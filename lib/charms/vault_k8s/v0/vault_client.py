@@ -108,13 +108,13 @@ class Vault:
 
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
-        for unseal_key in unseal_keys:
-            self._client.sys.submit_unseal_key(unseal_key)
-        logger.info("Vault is unsealed")
-
-    def is_sealed(self) -> bool:
-        """Return whether Vault is sealed."""
-        return self._client.sys.is_sealed()
+        try:
+            for unseal_key in unseal_keys:
+                self._client.sys.submit_unseal_key(unseal_key)
+            logger.info("Vault is unsealed")
+        except InvalidRequest as e:
+            if self._client.sys.is_sealed():
+                raise e
 
     def is_active(self) -> bool:
         """Return the health status of Vault.

@@ -652,8 +652,8 @@ class VaultCharm(CharmBase):
             if not (
                 self._restore_vault(
                     snapshot=snapshot,
-                    restore_unseal_keys=event.params.get("unseal-keys"),  # type: ignore[arg-type]
-                    restore_root_token=event.params.get("root-token"),  # type: ignore[arg-type]
+                    restore_unseal_keys=event.params.get("unseal-keys", ""),
+                    restore_root_token=event.params.get("root-token", ""),
                 )
             ):
                 logger.error("Failed to restore vault.")
