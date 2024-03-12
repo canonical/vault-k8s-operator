@@ -34,6 +34,7 @@ from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvP
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
 from cryptography import x509
+from exceptions import VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
@@ -259,12 +260,32 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
-        if self._vault_service_is_running():
-            try:
-                self._container.stop(self._service_name)
-            except ChangeError:
-                logger.warning("Failed to stop Vault service")
-        self._delete_vault_data()
+        try:
+            root_token, unseal_keys = self._get_initialization_secret()
+            if self._bind_address:
+                vault = Vault(
+                    url=self._api_address,
+                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+                )
+                vault.set_token(token=root_token)
+                if (
+                    vault.is_api_available()
+                    and vault.is_node_in_raft_peers(node_id=self._node_id)
+                    and vault.get_num_raft_peers() > 1
+                ):
+                    vault.remove_raft_node(node_id=self._node_id)
+        except SecretNotFoundError:
+            logger.info("Vault initialization secret not set")
+        except VaultCertsError:
+            logger.info("Vault CA certificate not found")
+        finally:
+            if self._vault_service_is_running():
+                try:
+                    self._container.stop(self._service_name)
+                except ChangeError:
+                    logger.warning("Failed to stop Vault service")
+                    pass
+            self._delete_vault_data()
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""

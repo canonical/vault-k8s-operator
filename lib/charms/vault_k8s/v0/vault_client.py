@@ -144,7 +144,7 @@ class Vault:
                 device_type=device_type,
                 options={"file_path": path},
             )
-            logger.info("Enabled audit device %s for path", device_type, path)
+            logger.info("Enabled audit device %s for path %s", device_type, path)
         except InvalidRequest:
             # TODO: make sure this only catches when device already enabled
             logger.info("Audit device already enabled.")
@@ -331,3 +331,21 @@ class Vault:
     def is_raft_cluster_healthy(self) -> bool:
         """Check if raft cluster is healthy."""
         return self.get_raft_cluster_state()["healthy"]
+
+    def remove_raft_node(self, node_id: str) -> None:
+        """Remove raft peer."""
+        self._client.sys.remove_raft_node(server_id=node_id)
+        logger.info("Removed raft node %s", node_id)
+
+    def is_node_in_raft_peers(self, node_id: str) -> bool:
+        """Check if node is in raft peers."""
+        raft_config = self._client.sys.read_raft_config()
+        for peer in raft_config["data"]["config"]["servers"]:
+            if peer["node_id"] == node_id:
+                return True
+        return False
+
+    def get_num_raft_peers(self) -> int:
+        """Return the number of raft peers."""
+        raft_config = self._client.sys.read_raft_config()
+        return len(raft_config["data"]["config"]["servers"])

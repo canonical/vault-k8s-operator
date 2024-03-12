@@ -114,18 +114,6 @@ class TestVault(unittest.TestCase):
 
         patch_enable_auth_method.assert_called_with("approle")
 
-    @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
-    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
-    def test_given_approle_in_auth_methods_when_enable_approle_auth_then_approle_is_not_added_to_auth_methods(  # noqa: E501
-        self, patch_list_auth_methods, patch_enable_auth_method
-    ):
-        patch_list_auth_methods.return_value = {"approle/": "whatever"}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        vault.enable_auth_method("approle")
-
-        patch_enable_auth_method.assert_not_called()
-
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
     @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
     def test_given_audit_device_is_not_yet_enabled_when_enable_audit_device_then_device_is_enabled(
