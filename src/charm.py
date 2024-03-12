@@ -267,7 +267,7 @@ class VaultCharm(CharmBase):
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
-                vault.set_token(token=root_token)
+                vault.authenticate(Token(root_token))
                 if (
                     vault.is_api_available()
                     and vault.is_node_in_raft_peers(node_id=self._node_id)

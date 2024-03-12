@@ -141,7 +141,6 @@ class TestCharm(unittest.TestCase):
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
@@ -175,7 +174,6 @@ class TestCharm(unittest.TestCase):
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
@@ -212,7 +210,6 @@ class TestCharm(unittest.TestCase):
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.audit_device_enabled", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)

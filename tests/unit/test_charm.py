@@ -473,7 +473,6 @@ class TestCharm(unittest.TestCase):
                 "is_api_available.return_value": True,
                 "is_initialized.return_value": False,
                 "is_active.return_value": True,
-                "audit_device_enabled.return_value": False,
                 "initialize.return_value": ("root token", ["unseal key 1"]),
             },
         )
@@ -1970,7 +1969,6 @@ class TestCharm(unittest.TestCase):
         mock_vault = MagicMock(
             spec=Vault,
             **{
-                "is_secret_engine_enabled.return_value": False,
                 "configure_approle.return_value": "12345678",
                 "generate_role_secret_id.return_value": "11111111",
             },
@@ -2001,7 +1999,9 @@ class TestCharm(unittest.TestCase):
         event.relation_id = rel_id
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
-        mock_vault.enable_secrets_engine.assert_called_with("kv-v2")
+        mock_vault.enable_secrets_engine.assert_called_with(
+            "kv-v2", "charm-vault-kv-requirer-suffix"
+        )
 
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
@@ -2020,7 +2020,6 @@ class TestCharm(unittest.TestCase):
                 "is_api_available.return_value": True,
                 "get_intermediate_ca.return_value": "vault",
                 "generate_pki_intermediate_ca_csr.return_value": csr,
-                "is_secret_engine_enabled.return_value": False,
             },
         )
         mock_vault_class.return_value = mock_vault
@@ -2041,7 +2040,7 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.add_relation_unit(relation_id, "tls-provider/0")
 
-        mock_vault.enable_secrets_engine.assert_called_with(path="charm-pki")
+        mock_vault.enable_secrets_engine.assert_called_with("pki", "charm-pki")
         mock_vault.generate_pki_intermediate_ca_csr.assert_called_with(
             mount="charm-pki", common_name="vault"
         )
