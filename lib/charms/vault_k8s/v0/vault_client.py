@@ -24,7 +24,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,15 @@ class Vault:
         """Find and use the token related with the given auth method."""
         auth_details.login(self._client)
 
+    def is_api_available(self) -> bool:
+        """Return whether Vault is available."""
+        try:
+            self._client.sys.read_health_status(standby_ok=True)
+            return True
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
+
     def initialize(
         self, secret_shares: int = 1, secret_threshold: int = 1
     ) -> Tuple[str, List[str]]:
@@ -115,15 +124,6 @@ class Vault:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
-    def is_api_available(self) -> bool:
-        """Return whether Vault is available."""
-        try:
-            self._client.sys.read_health_status(standby_ok=True)
-            return True
-        except (VaultError, RequestException) as e:
-            logger.error("Error while checking Vault health status: %s", e)
-            return False
-
     def unseal(self, unseal_keys: List[str]) -> None:
         """Unseal Vault."""
         for unseal_key in unseal_keys:
@@ -146,7 +146,6 @@ class Vault:
             )
             logger.info("Enabled audit device %s for path %s", device_type, path)
         except InvalidRequest:
-            # TODO: make sure this only catches when device already enabled
             logger.info("Audit device already enabled.")
 
     def enable_auth_method(self, auth_method: Literal["approle"]) -> None:
@@ -213,7 +212,7 @@ class Vault:
         """Enable given secret engine on the given path."""
         try:
             self._client.sys.enable_secrets_engine(
-                backend_type="kv-v2",
+                backend_type=backend_type,
                 description="Charm created KV backend",
                 path=path,
             )
