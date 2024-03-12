@@ -682,14 +682,14 @@ class VaultCharm(CharmBase):
             event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
             return
         root_token, current_keys = self._get_initialization_secret()
-        new_keys = event.params.get("unseal-keys")
-        if set(new_keys) == set(current_keys):  # type: ignore[arg-type]
+        new_keys = event.params.get("unseal-keys", "")
+        if set(new_keys) == set(current_keys):
             logger.info("Unseal keys are already set to %s", new_keys)
             event.fail(message="Provided unseal keys are already set.")
             return
         self._set_initialization_secret(
             root_token=root_token,
-            unseal_keys=new_keys,  # type: ignore[arg-type]
+            unseal_keys=new_keys,
         )
         vault.unseal(unseal_keys=new_keys)
         event.set_results({"unseal-keys": new_keys})
