@@ -238,8 +238,7 @@ class VaultCharm(CharmBase):
             self._set_initialization_secret(root_token, unseal_keys)
         root_token, unseal_keys = self._get_initialization_secret()
         vault.authenticate(Token(root_token))
-        if vault.is_sealed():
-            vault.unseal(unseal_keys=unseal_keys)
+        vault.unseal(unseal_keys=unseal_keys)
         if vault.is_active():
             vault.enable_audit_device(device_type="file", path="stdout")
         self._configure_pki_secrets_engine()
@@ -692,8 +691,7 @@ class VaultCharm(CharmBase):
             root_token=root_token,
             unseal_keys=new_keys,  # type: ignore[arg-type]
         )
-        if vault.is_sealed():
-            vault.unseal(unseal_keys=new_keys)  # type: ignore[arg-type]
+        vault.unseal(unseal_keys=new_keys)
         event.set_results({"unseal-keys": new_keys})
 
     def _on_set_root_token_action(self, event: ActionEvent) -> None:
@@ -1091,8 +1089,7 @@ class VaultCharm(CharmBase):
             return None
         root_token, unseal_keys = self._get_initialization_secret()
         vault.authenticate(Token(root_token))
-        if vault.is_sealed():
-            vault.unseal(unseal_keys=unseal_keys)
+        vault.unseal(unseal_keys=unseal_keys)
         response = vault.create_snapshot()
         return response.raw
 
@@ -1121,8 +1118,7 @@ class VaultCharm(CharmBase):
             current_unseal_keys,
         ) = self._get_initialization_secret()
         vault.authenticate(Token(current_root_token))
-        if vault.is_sealed():
-            vault.unseal(unseal_keys=current_unseal_keys)
+        vault.unseal(unseal_keys=current_unseal_keys)
 
         self._set_initialization_secret(
             root_token=restore_root_token, unseal_keys=restore_unseal_keys
@@ -1146,17 +1142,13 @@ class VaultCharm(CharmBase):
             )
             return False
         vault.authenticate(Token(restore_root_token))
-        if vault.is_sealed():
-            vault.unseal(unseal_keys=restore_unseal_keys)
+        vault.unseal(unseal_keys=restore_unseal_keys)
         return True
 
     def _get_initialized_vault_client(self) -> Optional[Vault]:
         """Return an initialized vault client.
 
-        Creates a Vault client and returns it if:
-            - Vault is initialized
-            - Vault API is available
-            - Vault is unsealed
+        Creates a Vault client and returns it if is active
         Otherwise, returns None.
 
         Returns:
@@ -1166,17 +1158,13 @@ class VaultCharm(CharmBase):
             url=self._api_address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
-        if not vault.is_initialized():
-            logger.error("Vault is not initialized.")
-            return None
-        if not vault.is_api_available():
-            logger.error("Vault API is not available.")
-            return None
         try:
             root_token, _ = self._get_initialization_secret()
             vault.authenticate(Token(root_token))
         except Exception:
             logger.error("Vault initialization secret not set.")
+            return None
+        if not vault.is_active():
             return None
         return vault
 

@@ -106,6 +106,12 @@ class Vault:
         """Return whether Vault is initialized."""
         return self._client.sys.is_initialized()
 
+    def unseal(self, unseal_keys: List[str]) -> None:
+        """Unseal Vault."""
+        for unseal_key in unseal_keys:
+            self._client.sys.submit_unseal_key(unseal_key)
+        logger.info("Vault is unsealed")
+
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
         return self._client.sys.is_sealed()
@@ -123,12 +129,6 @@ class Vault:
         except (VaultError, RequestException) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
-
-    def unseal(self, unseal_keys: List[str]) -> None:
-        """Unseal Vault."""
-        for unseal_key in unseal_keys:
-            self._client.sys.submit_unseal_key(unseal_key)
-        logger.info("Vault is unsealed")
 
     def enable_audit_device(
         self, device_type: Literal["file", "syslog", "socket"], path: str
