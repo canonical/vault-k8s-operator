@@ -255,7 +255,7 @@ class VaultCharm(CharmBase):
     def _on_remove(self, event: RemoveEvent):
         """Handle remove charm event.
 
-        Removes the vault service and the raft data.
+        Removes the vault service and the raft data and removes the node from the raft cluster.
         """
         if not self._container.can_connect():
             return

@@ -197,7 +197,6 @@ class Vault:
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    # TODO: Combine these 2 functions?
     def generate_role_secret_id(self, name: str, cidrs: List[str]) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
@@ -213,7 +212,7 @@ class Vault:
         try:
             self._client.sys.enable_secrets_engine(
                 backend_type=backend_type,
-                description="Charm created KV backend",
+                description=f"Charm created '{backend_type}' backend",
                 path=path,
             )
             logger.info("Enabled %s backend", backend_type)
