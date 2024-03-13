@@ -29,7 +29,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_client import AuditDeviceType, SecretsBackend, Token, Vault
+from charms.vault_k8s.v0.vault_client import AppRole, AuditDeviceType, SecretsBackend, Token, Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
@@ -70,7 +70,6 @@ PKI_RELATION_NAME = "vault-pki"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
-VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
@@ -79,6 +78,9 @@ CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 CONTAINER_NAME = "vault"
 PKI_MOUNT = "charm-pki"
 PKI_ROLE = "charm"
+CHARM_POLICY_NAME = "charm-access"
+CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
+VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 
 
 class VaultCharm(CharmBase):
@@ -133,11 +135,10 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on.authorize_charm_action, self._on_authorize_charm_action)
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
-        self.framework.observe(self.on.set_unseal_keys_action, self._on_set_unseal_keys_action)
-        self.framework.observe(self.on.set_root_token_action, self._on_set_root_token_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -187,9 +188,6 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             event.add_status(WaitingStatus("Waiting for CA certificate"))
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set():
-            event.add_status(WaitingStatus("Waiting for initialization secret"))
-            return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
             return
@@ -201,6 +199,15 @@ class VaultCharm(CharmBase):
         )
         if not vault.is_api_available():
             event.add_status(WaitingStatus("Waiting for vault to be available"))
+            return
+        if not vault.is_initialized():
+            event.add_status(WaitingStatus("Waiting for vault to be initialized"))
+            return
+        if not vault.is_sealed():
+            event.add_status(WaitingStatus("Waiting for vault to be unsealed"))
+            return
+        if not self._get_authorized_vault_client():
+            event.add_status(WaitingStatus("Waiting for charm to be authorized"))
             return
         event.add_status(ActiveStatus())
 
@@ -218,8 +225,6 @@ class VaultCharm(CharmBase):
             return
         if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set():
-            return
         self.tls.configure_certificates(self._ingress_address)
 
         for relation in self.model.relations[KV_RELATION_NAME]:
@@ -233,14 +238,12 @@ class VaultCharm(CharmBase):
         )
         if not vault.is_api_available():
             return
-        if self.unit.is_leader() and not vault.is_initialized():
-            root_token, unseal_keys = vault.initialize()
-            self._set_initialization_secret(root_token, unseal_keys)
-        root_token, unseal_keys = self._get_initialization_secret()
-        vault.authenticate(Token(root_token))
-        vault.unseal(unseal_keys=unseal_keys)
-        if vault.is_active():
-            vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        if not vault.is_initialized():
+            return
+        if vault.is_sealed():
+            return
+        if not (vault := self._get_authorized_vault_client()):
+            return
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
         self._sync_vault_pki()
@@ -260,13 +263,13 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             return
         try:
-            root_token, unseal_keys = self._get_initialization_secret()
+            role_id, secret_id = self._get_approle_auth_secret()
             if self._bind_address:
                 vault = Vault(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
-                vault.authenticate(Token(root_token))
+                vault.authenticate(AppRole(role_id, secret_id))
                 if (
                     vault.is_api_available()
                     and vault.is_node_in_raft_peers(node_id=self._node_id)
@@ -286,6 +289,31 @@ class VaultCharm(CharmBase):
                     pass
             self._delete_vault_data()
 
+    def _on_authorize_charm_action(self, event: ActionEvent) -> None:
+        if not self.unit.is_leader():
+            event.fail("This action must be ran on the leader unit.")
+            return
+
+        root_token = event.params.get("token", "")
+        v = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
+        v.authenticate(Token(root_token))
+        v.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        v.enable_approle_auth_method()
+        v.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
+        cidrs = [f"{self._bind_address}/24"]
+        role_id = v.configure_approle(
+            name="charm",
+            cidrs=cidrs,
+            policies=[CHARM_POLICY_NAME, "default"],
+        )
+        secret_id = v.generate_role_secret_id(name="charm", cidrs=cidrs)
+        self.app.add_secret(
+            content={"role-id": role_id, "secret-id": secret_id},
+            label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+            description="The authentication details for the charm's access to vault.",
+        )
+        self.on.config_changed.emit()
+
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""
         if not self.unit.is_leader():
@@ -303,7 +331,7 @@ class VaultCharm(CharmBase):
             event.defer()
             return
 
-        vault = self._get_initialized_vault_client()
+        vault = self._get_authorized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault, deferring event")
             event.defer()
@@ -343,7 +371,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
             return
-        vault = self._get_initialized_vault_client()
+        vault = self._get_authorized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -376,7 +404,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request")
             return
-        vault = self._get_initialized_vault_client()
+        vault = self._get_authorized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -450,7 +478,7 @@ class VaultCharm(CharmBase):
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
             return
-        vault = self._get_initialized_vault_client()
+        vault = self._get_authorized_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -600,8 +628,6 @@ class VaultCharm(CharmBase):
 
         Restores the snapshot with the provided ID.
         Unseals Vault using the provided unseal key.
-        Sets the root token to the provided root token.
-        Updates the initialization secret with the provided unseal keys.
 
         Args:
             event: ActionEvent
@@ -649,13 +675,7 @@ class VaultCharm(CharmBase):
             event.fail(message="Backup not found in S3 bucket.")
             return
         try:
-            if not (
-                self._restore_vault(
-                    snapshot=snapshot,
-                    restore_unseal_keys=event.params.get("unseal-keys", ""),
-                    restore_root_token=event.params.get("root-token", ""),
-                )
-            ):
+            if not (self._restore_vault(snapshot=snapshot)):
                 logger.error("Failed to restore vault.")
                 event.fail(message="Failed to restore vault.")
                 return
@@ -664,64 +684,6 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         event.set_results({"restored": event.params.get("backup-id")})
-
-    def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
-        """Handle the set-unseal-keys action.
-
-        Updates the initialization secret with the provided unseal keys.
-
-        Args:
-            event: ActionEvent
-        """
-        if not self.unit.is_leader():
-            logger.error("Only leader unit can set unseal keys.")
-            event.fail(message="Only leader unit can set unseal keys.")
-            return
-        if not (vault := self._get_initialized_vault_client()):
-            logger.error("Cannot set unseal keys, vault is not initialized yet.")
-            event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
-            return
-        root_token, current_keys = self._get_initialization_secret()
-        new_keys = event.params.get("unseal-keys", "")
-        if set(new_keys) == set(current_keys):
-            logger.info("Unseal keys are already set to %s", new_keys)
-            event.fail(message="Provided unseal keys are already set.")
-            return
-        self._set_initialization_secret(
-            root_token=root_token,
-            unseal_keys=new_keys,
-        )
-        vault.unseal(unseal_keys=new_keys)
-        event.set_results({"unseal-keys": new_keys})
-
-    def _on_set_root_token_action(self, event: ActionEvent) -> None:
-        """Handle the set-root-token action.
-
-        Updates the initialization secret with the provided root token.
-
-        Args:
-            event: ActionEvent
-        """
-        if not self.unit.is_leader():
-            logger.error("Only leader unit can set the root token.")
-            event.fail(message="Only leader unit can set the root token.")
-            return
-        if not (vault := self._get_initialized_vault_client()):
-            logger.error("Cannot set root token, vault is not initialized yet.")
-            event.fail(message="Cannot set root token, vault is not initialized yet.")
-            return
-        root_token, current_keys = self._get_initialization_secret()
-        new_root_token = event.params.get("root-token", "")
-        if new_root_token == root_token:
-            logger.info("Root token is already set to %s", new_root_token)
-            event.fail(message="Provided root token is already set.")
-            return
-        self._set_initialization_secret(
-            root_token=new_root_token,
-            unseal_keys=current_keys,
-        )
-        vault.authenticate(Token(new_root_token))
-        event.set_results({"root-token": new_root_token})
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
         """Validate the requirements for creating S3.
@@ -967,25 +929,6 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_initialization_secret(self, root_token: str, unseal_keys: List[str]) -> None:
-        """Set the vault initialization secret.
-
-        Args:
-            root_token: The root token.
-            unseal_keys: The unseal keys.
-        """
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        juju_secret_content = {
-            "roottoken": root_token,
-            "unsealkeys": json.dumps(unseal_keys),
-        }
-        if not self._initialization_secret_set():
-            self.app.add_secret(juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL)
-            return
-        secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-        secret.set_content(content=juju_secret_content)
-
     def _set_pki_csr_secret(self, csr: str) -> None:
         juju_secret_content = {"csr": csr}
         if not self._pki_csr_secret_set():
@@ -1009,15 +952,18 @@ class VaultCharm(CharmBase):
         except SecretNotFoundError:
             return False
 
-    def _get_initialization_secret(self) -> Tuple[str, List[str]]:
+    def _get_approle_auth_secret(self) -> Tuple[str, List[str]]:
         """Get the vault initialization secret.
 
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
+        juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
         content = juju_secret.get_content()
-        return content["roottoken"], json.loads(content["unsealkeys"])
+        return content["role-id"], content["secret-id"]
+
+    def _remove_approle_auth_secret(self) -> bool:
+        pass
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
@@ -1068,11 +1014,11 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _initialization_secret_set(self) -> bool:
-        """Return whether initialization secret is stored."""
+    def _approle_secret_set(self) -> bool:
+        """Return whether approle secret is stored."""
         try:
-            root_token, unseal_keys = self._get_initialization_secret()
-            if root_token and unseal_keys:
+            role_id, secret_id = self._get_approle_auth_secret()
+            if role_id and secret_id:
                 return True
         except SecretNotFoundError:
             return False
@@ -1084,18 +1030,15 @@ class VaultCharm(CharmBase):
         Returns:
             IO[bytes]: The snapshot content as a file like object.
         """
-        if not (vault := self._get_initialized_vault_client()):
+        if not (vault := self._get_authorized_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
-        root_token, unseal_keys = self._get_initialization_secret()
-        vault.authenticate(Token(root_token))
-        vault.unseal(unseal_keys=unseal_keys)
+        role_id, secret_id = self._get_approle_auth_secret()
+        vault.authenticate(AppRole(role_id, secret_id))
         response = vault.create_snapshot()
         return response.raw
 
-    def _restore_vault(
-        self, snapshot: StreamingBody, restore_unseal_keys: List[str], restore_root_token: str
-    ) -> bool:
+    def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
 
         Updates the initialization secret.
@@ -1104,25 +1047,21 @@ class VaultCharm(CharmBase):
 
         Args:
             snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
-            restore_unseal_keys: List of unseal keys used at the time of the backup.
-            restore_root_token: Root token used at the time of the backup.
 
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        if not (vault := self._get_initialized_vault_client()):
+        if not (vault := self._get_authorized_vault_client()):
             logger.error("Failed to get Vault client, cannot restore snapshot.")
             return False
-        (
-            current_root_token,
-            current_unseal_keys,
-        ) = self._get_initialization_secret()
-        vault.authenticate(Token(current_root_token))
-        vault.unseal(unseal_keys=current_unseal_keys)
 
-        self._set_initialization_secret(
-            root_token=restore_root_token, unseal_keys=restore_unseal_keys
+        vault = Vault(
+            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
+
+        role_id, secret_id = self._get_approle_auth_secret()
+        vault.authenticate(AppRole(role_id, secret_id))
+
         try:
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
@@ -1131,21 +1070,16 @@ class VaultCharm(CharmBase):
         except Exception as e:
             # If restore fails for any reason, we reset the initialization secret
             logger.error("Failed to restore snapshot: %s", e)
-            self._set_initialization_secret(
-                root_token=current_root_token, unseal_keys=current_unseal_keys
-            )
             return False
         if not 200 <= response.status_code < 300:
             logger.error("Failed to restore snapshot: %s", response.json())
-            self._set_initialization_secret(
-                root_token=current_root_token, unseal_keys=current_unseal_keys
-            )
             return False
-        vault.authenticate(Token(restore_root_token))
-        vault.unseal(unseal_keys=restore_unseal_keys)
+
+        # Check if the approle can still login
+        # If not, remove secret
         return True
 
-    def _get_initialized_vault_client(self) -> Optional[Vault]:
+    def _get_authorized_vault_client(self) -> Optional[Vault]:
         """Return an initialized vault client.
 
         Creates a Vault client and returns it if is active
@@ -1159,8 +1093,8 @@ class VaultCharm(CharmBase):
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
         try:
-            root_token, _ = self._get_initialization_secret()
-            vault.authenticate(Token(root_token))
+            role_id, secret_id = self._get_approle_auth_secret()
+            vault.authenticate(AppRole(role_id, secret_id))
         except Exception:
             logger.error("Vault initialization secret not set.")
             return None
