@@ -145,7 +145,7 @@ class Vault:
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
         return self._client.sys.is_sealed()
-        
+
     def is_active(self) -> bool:
         """Return the health status of Vault.
 
