@@ -9,6 +9,7 @@ intended to be used by charms that need to manage a Vault cluster.
 
 import logging
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import List, Literal, Optional, Tuple, Union
 
 import hvac
@@ -67,6 +68,14 @@ class Certificate:
     certificate: str
     ca: str
     chain: List[str]
+
+
+class AuditDeviceType(Enum):
+    """Class that represents the devices that vault supports as device types for audit."""
+
+    FILE = auto()
+    SYSLOG = auto()
+    SOCKET = auto()
 
 
 class Vault:
@@ -130,9 +139,7 @@ class Vault:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
-    def enable_audit_device(
-        self, device_type: Literal["file", "syslog", "socket"], path: str
-    ) -> None:
+    def enable_audit_device(self, device_type: AuditDeviceType, path: str) -> None:
         """Enable a new audit device at the supplied path.
 
         Args:
@@ -141,10 +148,10 @@ class Vault:
         """
         try:
             self._client.sys.enable_audit_device(
-                device_type=device_type,
+                device_type=device_type.name.lower(),
                 options={"file_path": path},
             )
-            logger.info("Enabled audit device %s for path %s", device_type, path)
+            logger.info("Enabled audit device %s for path %s", device_type.name.lower(), path)
         except InvalidRequest:
             logger.info("Audit device already enabled.")
 

@@ -29,7 +29,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_client import Token, Vault
+from charms.vault_k8s.v0.vault_client import AuditDeviceType, Token, Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
@@ -240,7 +240,7 @@ class VaultCharm(CharmBase):
         vault.authenticate(Token(root_token))
         vault.unseal(unseal_keys=unseal_keys)
         if vault.is_active():
-            vault.enable_audit_device(device_type="file", path="stdout")
+            vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
         self._sync_vault_pki()
