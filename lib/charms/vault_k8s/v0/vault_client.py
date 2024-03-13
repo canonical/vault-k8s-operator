@@ -176,7 +176,7 @@ class Vault:
             name=policy_name,
             policy=policy if not mount else policy.format(mount=mount),
         )
-        logger.debug(f"Created or updated charm policy: {policy_name}")
+        logger.debug("Created or updated charm policy: %s", policy_name)
 
     def configure_approle(self, role_name: str, cidrs: List[str], policies: List[str]) -> str:
         """Create/update a role within vault associating the supplied policies.
