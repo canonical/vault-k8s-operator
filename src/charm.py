@@ -29,7 +29,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_client import AuditDeviceType, Token, Vault
+from charms.vault_k8s.v0.vault_client import AuditDeviceType, SecretsBackend, Token, Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
@@ -321,7 +321,7 @@ class VaultCharm(CharmBase):
         vault.enable_approle_auth_method()
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
         self._set_kv_relation_data(relation, mount, ca_certificate)
-        vault.enable_secrets_engine("kv-v2", mount)
+        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         for unit in relation.units:
             egress_subnet = relation.data[unit].get("egress_subnet")
             nonce = relation.data[unit].get("nonce")
@@ -354,7 +354,7 @@ class VaultCharm(CharmBase):
             logger.debug("Common name config is not valid, skipping")
             return
         common_name = self._get_config_common_name()
-        vault.enable_secrets_engine("pki", PKI_MOUNT)
+        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
         if not self._is_intermediate_ca_set(vault, common_name):
             csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
             self.tls_certificates_pki.request_certificate_creation(

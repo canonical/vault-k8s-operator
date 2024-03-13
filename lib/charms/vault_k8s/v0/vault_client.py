@@ -9,8 +9,8 @@ intended to be used by charms that need to manage a Vault cluster.
 
 import logging
 from dataclasses import dataclass
-from enum import Enum, auto
-from typing import List, Literal, Optional, Tuple, Union
+from enum import Enum
+from typing import List, Optional, Tuple, Union
 
 import hvac
 import requests
@@ -73,9 +73,16 @@ class Certificate:
 class AuditDeviceType(Enum):
     """Class that represents the devices that vault supports as device types for audit."""
 
-    FILE = auto()
-    SYSLOG = auto()
-    SOCKET = auto()
+    FILE = "file"
+    SYSLOG = "syslog"
+    SOCKET = "socket"
+
+
+class SecretsBackend(Enum):
+    """Class that represents the supported secrets backends by Vault."""
+
+    KV_V2 = "kv-v2"
+    PKI = "pki"
 
 
 class Vault:
@@ -148,10 +155,10 @@ class Vault:
         """
         try:
             self._client.sys.enable_audit_device(
-                device_type=device_type.name.lower(),
+                device_type=device_type.value,
                 options={"file_path": path},
             )
-            logger.info("Enabled audit device %s for path %s", device_type.name.lower(), path)
+            logger.info("Enabled audit device %s for path %s", device_type.value, path)
         except InvalidRequest:
             logger.info("Audit device already enabled.")
 
@@ -210,17 +217,17 @@ class Vault:
         response = self._client.auth.approle.read_secret_id(name, id)
         return response["data"]
 
-    def enable_secrets_engine(self, backend_type: Literal["kv-v2", "pki"], path: str) -> None:
+    def enable_secrets_engine(self, backend_type: SecretsBackend, path: str) -> None:
         """Enable given secret engine on the given path."""
         try:
             self._client.sys.enable_secrets_engine(
-                backend_type=backend_type,
-                description=f"Charm created '{backend_type}' backend",
+                backend_type=backend_type.value,
+                description=f"Charm created '{backend_type.value}' backend",
                 path=path,
             )
-            logger.info("Enabled %s backend", backend_type)
+            logger.info("Enabled %s backend", backend_type.value)
         except InvalidRequest:
-            logger.info("%s backend already enabled", backend_type)
+            logger.info("%s backend already enabled", backend_type.value)
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
