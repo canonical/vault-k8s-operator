@@ -148,14 +148,10 @@ class Vault:
         except InvalidRequest:
             logger.info("Audit device already enabled.")
 
-    def enable_auth_method(self, auth_method: Literal["approle"]) -> None:
-        """Enable auth method within vault if not already enabled.
-
-        Args:
-            auth_method: One of existing auth methods supported by this library.
-        """
+    def enable_approle_auth_method(self) -> None:
+        """Enable approle auth method."""
         try:
-            self._client.sys.enable_auth_method(auth_method)
+            self._client.sys.enable_auth_method(method_type="approle")
             logger.info("Enabled approle auth method.")
         except InvalidRequest:
             logger.info("Approle already enabled.")
