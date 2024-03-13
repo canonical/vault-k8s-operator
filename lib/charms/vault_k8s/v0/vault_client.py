@@ -165,7 +165,7 @@ class Vault:
     def enable_approle_auth_method(self) -> None:
         """Enable approle auth method."""
         try:
-            self._client.sys.enable_auth_method(method_type="approle")
+            self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method.")
         except InvalidRequest:
             logger.info("Approle already enabled.")

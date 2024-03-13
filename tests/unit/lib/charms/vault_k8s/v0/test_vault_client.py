@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import call, patch
 
 import requests
-from charms.vault_k8s.v0.vault_client import Vault
+from charms.vault_k8s.v0.vault_client import Vault, SecretsBackend, AuditDeviceType
 
 
 class TestVault(unittest.TestCase):
@@ -110,7 +110,7 @@ class TestVault(unittest.TestCase):
         patch_list_auth_methods.return_value = {}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
-        vault.enable_auth_method("approle")
+        vault.enable_approle_auth_method()
 
         patch_enable_auth_method.assert_called_with("approle")
 
@@ -123,7 +123,7 @@ class TestVault(unittest.TestCase):
     ):
         patch_list_enabled_audit_devices.return_value = {"data": {}}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        vault.enable_audit_device(device_type="file", path="stdout")
+        vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
         )

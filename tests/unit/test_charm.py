@@ -24,7 +24,13 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateCreationRequestEvent,
     ProviderCertificate,
 )
-from charms.vault_k8s.v0.vault_client import Certificate, Token, Vault
+from charms.vault_k8s.v0.vault_client import (
+    AuditDeviceType,
+    Certificate,
+    SecretsBackend,
+    Token,
+    Vault,
+)
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
 from ops.model import ActiveStatus, WaitingStatus
@@ -488,7 +494,9 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm.on.config_changed.emit()
 
-        mock_vault.enable_audit_device.assert_called_with(device_type="file", path="stdout")
+        mock_vault.enable_audit_device.assert_called_with(
+            device_type=AuditDeviceType.FILE, path="stdout"
+        )
 
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
         root = self.harness.get_filesystem_root(self.container_name)
@@ -1872,7 +1880,7 @@ class TestCharm(unittest.TestCase):
         event.relation_id = rel_id
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
-        mock_vault.enable_auth_method.assert_called_with("approle")
+        mock_vault.enable_approle_auth_method.assert_called_once()
 
     @patch("charm.Vault", autospec=True)
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
@@ -2000,7 +2008,7 @@ class TestCharm(unittest.TestCase):
         event.mount_suffix = "suffix"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         mock_vault.enable_secrets_engine.assert_called_with(
-            "kv-v2", "charm-vault-kv-requirer-suffix"
+            SecretsBackend.KV_V2, "charm-vault-kv-requirer-suffix"
         )
 
     @patch("charm.get_common_name_from_certificate", new=Mock)
@@ -2040,7 +2048,7 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.add_relation_unit(relation_id, "tls-provider/0")
 
-        mock_vault.enable_secrets_engine.assert_called_with("pki", "charm-pki")
+        mock_vault.enable_secrets_engine.assert_called_with(SecretsBackend.PKI, "charm-pki")
         mock_vault.generate_pki_intermediate_ca_csr.assert_called_with(
             mount="charm-pki", common_name="vault"
         )
