@@ -141,7 +141,7 @@ class Vault:
         except InvalidRequest as e:
             if self._client.sys.is_sealed():
                 raise e
-                
+
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
         return self._client.sys.is_sealed()
