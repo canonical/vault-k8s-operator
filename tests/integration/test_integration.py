@@ -50,17 +50,16 @@ k8s = KubernetesClient()
 
 
 class TestVaultK8s:
+    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
-    async def deploy_phase_1(self, ops_test: OpsTest):
+    async def build_charms_and_deploy_vault(self, ops_test: OpsTest):
         copy_lib_content()
         resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
-        assert ops_test.model
-
         built_charms = await ops_test.build_charms(".", f"{VAULT_KV_REQUIRER_CHARM_DIR}/")
         vault_charm = built_charms.get("vault-k8s", "")
         vault_kv_requirer_charm = built_charms.get("vault-kv-requirer", "")
 
-        deploy_vault = ops_test.model.deploy(
+        await ops_test.model.deploy(
             vault_charm,
             resources=resources,
             application_name=APPLICATION_NAME,
@@ -69,61 +68,64 @@ class TestVaultK8s:
             num_units=NUM_VAULT_UNITS,
             config={"common_name": "example.com"},
         )
-        deploy_traefik = ops_test.model.deploy(
-            "traefik-k8s",
-            application_name=TRAEFIK_APPLICATION_NAME,
-            trust=True,
-            channel="stable",
-        )
-        deploy_s3_integrator = ops_test.model.deploy(
-            "s3-integrator",
-            application_name=S3_INTEGRATOR_APPLICATION_NAME,
-            trust=True,
-            channel="stable",
-        )
-        deploy_minio = ops_test.model.deploy(
-            "minio", application_name=MINIO_APPLICATION_NAME, trust=True, config=MINIO_CONFIG, channel="stable"
-        )
-        deploy_vault_kv_requirer = ops_test.model.deploy(
-            vault_kv_requirer_charm,
-            application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
-            num_units=1,
-        )
-        await asyncio.gather(
-            deploy_s3_integrator,
-            deploy_minio,
-            deploy_vault_kv_requirer,
-            deploy_vault,
-            deploy_traefik,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[S3_INTEGRATOR_APPLICATION_NAME],
-            status="blocked",
-            timeout=1000,
-            wait_for_exact_units=1,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[
-                MINIO_APPLICATION_NAME,
-                VAULT_KV_REQUIRER_APPLICATION_NAME,
-                TRAEFIK_APPLICATION_NAME,
-            ],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=1,
-        )
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
-        yield
+
+        return {"vault-kv-requirer": vault_kv_requirer_charm}
+
+    @pytest.mark.abort_on_fail
+    @pytest.fixture(scope="module")
+    async def deploy_requiring_charms_part_1(
+        self, ops_test: OpsTest, build_charms_and_deploy_vault
+    ):
+        assert ops_test.model
+
+        deploy_self_signed_certificates = ops_test.model.deploy(
+            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            trust=True,
+            channel="stable",
+        )
+        deploy_traefik = ops_test.model.deploy(
+            "traefik-k8s",
+            application_name=TRAEFIK_APPLICATION_NAME,
+            trust=True,
+            channel="stable",
+        )
+        deploy_vault_kv_requirer = ops_test.model.deploy(
+            build_charms_and_deploy_vault.get("vault-kv-requirer", ""),
+            application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
+            num_units=1,
+        )
+        deploy_vault_pki_requirer = ops_test.model.deploy(
+            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            channel="stable",
+            config={"common_name": "test.example.com"},
+        )
         deployed_apps = [
-            S3_INTEGRATOR_APPLICATION_NAME,
-            MINIO_APPLICATION_NAME,
+            TRAEFIK_APPLICATION_NAME,
+            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             VAULT_KV_REQUIRER_APPLICATION_NAME,
+            VAULT_PKI_REQUIRER_APPLICATION_NAME,
         ]
+        await asyncio.gather(
+            deploy_traefik,
+            deploy_self_signed_certificates,
+            deploy_vault_pki_requirer,
+            deploy_vault_kv_requirer,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=deployed_apps,
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=1,
+        )
+        yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
         ]
@@ -131,7 +133,9 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     @pytest.fixture(scope="module")
-    async def deploy_phase_2(self, ops_test: OpsTest):
+    async def deploy_requiring_charms_part_2(
+        self, ops_test: OpsTest, build_charms_and_deploy_vault
+    ):
         deploy_prometheus = ops_test.model.deploy(
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
@@ -143,41 +147,44 @@ class TestVaultK8s:
             trust=True,
             channel="stable",
         )
-        deploy_self_signed_certificates = ops_test.model.deploy(
-            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-            application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+        deploy_s3_integrator = ops_test.model.deploy(
+            "s3-integrator",
+            application_name=S3_INTEGRATOR_APPLICATION_NAME,
             trust=True,
             channel="stable",
         )
-        deploy_tls_requirer = ops_test.model.deploy(
-            VAULT_PKI_REQUIRER_APPLICATION_NAME,
-            application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+        deploy_minio = ops_test.model.deploy(
+            "minio",
+            application_name=MINIO_APPLICATION_NAME,
+            trust=True,
+            config=MINIO_CONFIG,
             channel="stable",
-            config={"common_name": "test.example.com"},
         )
-
         await asyncio.gather(
             deploy_prometheus,
             deploy_loki,
-            deploy_self_signed_certificates,
-            deploy_tls_requirer,
+            deploy_s3_integrator,
+            deploy_minio,
         )
-        # Wait for all charms to be deployed
         deployed_apps = [
             PROMETHEUS_APPLICATION_NAME,
             LOKI_APPLICATION_NAME,
-            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            S3_INTEGRATOR_APPLICATION_NAME,
+            MINIO_APPLICATION_NAME,
         ]
         await ops_test.model.wait_for_idle(
-            apps=deployed_apps,
+            apps=[app for app in deployed_apps if app != S3_INTEGRATOR_APPLICATION_NAME],
             status="active",
             timeout=600,
             wait_for_at_least_units=1,
         )
-
+        await ops_test.model.wait_for_idle(
+            apps=[S3_INTEGRATOR_APPLICATION_NAME],
+            status="blocked",
+            timeout=1000,
+            wait_for_exact_units=1,
+        )
         yield
-
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
         ]
@@ -185,7 +192,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, build_charms_and_deploy_vault
     ):
         assert ops_test.model
         unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
@@ -201,10 +208,10 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, build_charms_and_deploy_vault
     ):
         assert ops_test.model
-        num_units = 5
+        num_units = NUM_VAULT_UNITS + 2
         app: Application = ops_test.model.applications[APPLICATION_NAME]
         await app.scale(num_units)
 
@@ -217,7 +224,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, build_charms_and_deploy_vault
     ):
         assert ops_test.model
         app: Application = ops_test.model.applications[APPLICATION_NAME]
@@ -232,7 +239,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
     ):
         assert ops_test.model
         await ops_test.model.integrate(
@@ -247,7 +254,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is_created(
-        self, ops_test, deploy_phase_1
+        self, ops_test, deploy_requiring_charms_part_1
     ):
         secret_key = "test-key"
         secret_value = "test-value"
@@ -272,12 +279,167 @@ class TestVaultK8s:
             action_uuid=vault_kv_get_secret_action.entity_id, wait=30
         )
 
-        print(action_output)
         assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
+    async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:tls-certificates-pki",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_pki_relation_when_integrate_then_cert_is_provided(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:vault-pki",
+            relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        action_output = await run_get_certificate_action(ops_test)
+        assert action_output["certificate"] is not None
+        assert action_output["ca-certificate"] is not None
+        assert action_output["csr"] is not None
+
+    @pytest.mark.abort_on_fail
+    async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation2=f"{TRAEFIK_APPLICATION_NAME}",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[TRAEFIK_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:send-ca-cert",
+            relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:ingress",
+            relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_given_traefik_is_related_when_vault_status_checked_then_vault_returns_200_or_429(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        """This proves that vault is reachable behind ingress."""
+        vault_endpoint = await _get_vault_endpoint(ops_test)
+        action_output = await run_get_ca_certificate_action(ops_test)
+        ca_certificate = action_output["ca-certificate"]
+        with open("ca_file.txt", mode="w+") as ca_file:
+            ca_file.write(ca_certificate)
+        client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
+        response = client.sys.read_health_status()
+        # As we have multiple Vault units, the one who gives the response could be in active or standby.  # noqa: E501, W505
+        # According to the Vault upstream code, expected response codes could be "200"
+        # if the unit is active or "429" if the unit is standby.
+        # https://github.com/hashicorp/vault/blob/3c42b15260de8b94388ed2296fc18e89ea80c4c9/vault/logical_system_paths.go#L152  # noqa: E501, W505
+        # Summary: "Returns the health status of Vault.",
+        # 200: {{Description: "initialized, unsealed, and active"}}
+        # 429: {{Description: "unsealed and standby"}}
+        # 472: {{Description: "data recovery mode replication secondary and active"}}
+        # 501: {{Description: "not initialized"}}
+        # 503: {{Description: "sealed"}}
+        assert response.status_code in (200, 429)
+        os.remove("ca_file.txt")
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        initial_ca_cert = action.results["stdout"]
+
+        await ops_test.model.integrate(
+            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+            relation2=f"{APPLICATION_NAME}:tls-certificates-access",
+        )
+
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        final_ca_cert = action.results["stdout"]
+        assert initial_ca_cert != final_ca_cert
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
+        self, ops_test: OpsTest, deploy_requiring_charms_part_1
+    ):
+        assert ops_test.model
+
+        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        await action.wait()
+        initial_ca_cert = action.results
+
+        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
+            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+
+        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+        final_ca_cert = action.results
+        assert initial_ca_cert != final_ca_cert
+
+    @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_and_related_to_s3_integrator_when_create_backup_action_then_backup_is_created(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, deploy_requiring_charms_part_2
     ):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
@@ -327,7 +489,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_and_backup_created_when_list_backups_action_then_backups_are_listed(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, deploy_requiring_charms_part_2
     ):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
@@ -348,7 +510,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_and_backup_created_when_restore_backup_action_then_backup_is_restored(
-        self, ops_test: OpsTest, deploy_phase_1
+        self, ops_test: OpsTest, deploy_requiring_charms_part_2
     ):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
@@ -376,129 +538,8 @@ class TestVaultK8s:
         assert restore_backup_action_output["restored"] == backup_id
 
     @pytest.mark.abort_on_fail
-    async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:send-ca-cert",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:ingress",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_given_traefik_is_related_when_vault_status_checked_then_vault_returns_200_or_429(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        """This proves that vault is reachable behind ingress."""
-        vault_endpoint = await _get_vault_endpoint(ops_test)
-        action_output = await run_get_ca_certificate_action(ops_test)
-        ca_certificate = action_output["ca-certificate"]
-        with open("ca_file.txt", mode="w+") as ca_file:
-            ca_file.write(ca_certificate)
-        client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
-        response = client.sys.read_health_status()
-        # As we have multiple Vault units, the one who gives the response could be in active or standby.  # noqa: E501, W505
-        # According to the Vault upstream code, expected response codes could be "200"
-        # if the unit is active or "429" if the unit is standby.
-        # https://github.com/hashicorp/vault/blob/3c42b15260de8b94388ed2296fc18e89ea80c4c9/vault/logical_system_paths.go#L152  # noqa: E501, W505
-        # Summary: "Returns the health status of Vault.",
-        # 200: {{Description: "initialized, unsealed, and active"}}
-        # 429: {{Description: "unsealed and standby"}}
-        # 472: {{Description: "data recovery mode replication secondary and active"}}
-        # 501: {{Description: "not initialized"}}
-        # 503: {{Description: "sealed"}}
-        assert response.status_code in (200, 429)
-        os.remove("ca_file.txt")
-
-    @pytest.mark.abort_on_fail
-    async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-
-        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        await action.wait()
-        initial_ca_cert = action.results["stdout"]
-
-        await ops_test.model.integrate(
-            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
-            relation2=f"{APPLICATION_NAME}:tls-certificates-access",
-        )
-
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        await action.wait()
-        final_ca_cert = action.results["stdout"]
-        assert initial_ca_cert != final_ca_cert
-
-    @pytest.mark.abort_on_fail
-    async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-
-        vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        await action.wait()
-        initial_ca_cert = action.results
-
-        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
-            "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        final_ca_cert = action.results
-        assert initial_ca_cert != final_ca_cert
-
-    @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
+        self, ops_test: OpsTest, deploy_requiring_charms_part_2
     ):
         assert ops_test.model
         await ops_test.model.integrate(
@@ -513,7 +554,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
+        self, ops_test: OpsTest, deploy_requiring_charms_part_2
     ):
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:logging",
@@ -524,41 +565,6 @@ class TestVaultK8s:
             status="active",
             timeout=1000,
         )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
-        self, ops_test: OpsTest, deploy_phase_2
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:tls-certificates-pki",
-            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_vault_pki_relation_when_integrate_then_cert_is_provided(
-        self, ops_test: OpsTest
-    ):
-        assert ops_test.model
-
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:vault-pki",
-            relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-        action_output = await run_get_certificate_action(ops_test)
-        assert action_output["certificate"] is not None
-        assert action_output["ca-certificate"] is not None
-        assert action_output["csr"] is not None
 
 
 async def run_get_certificate_action(ops_test) -> dict:
