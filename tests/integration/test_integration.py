@@ -51,7 +51,7 @@ k8s = KubernetesClient()
 
 @pytest.mark.abort_on_fail
 @pytest.fixture(scope="module")
-async def build_charms_and_deploy_vault(self, ops_test: OpsTest):
+async def build_charms_and_deploy_vault(ops_test: OpsTest):
     """Build the charms that are required in this test module and deploy Vault."""
     copy_lib_content()
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
