@@ -16,6 +16,7 @@ import hcl
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
@@ -100,6 +101,7 @@ class VaultCharm(CharmBase):
         self.tls_certificates_pki = TLSCertificatesRequiresV3(
             self, TLS_CERTIFICATES_PKI_RELATION_NAME
         )
+        self.grafana_dashboards = GrafanaDashboardProvider(self)
         self._metrics_endpoint = MetricsEndpointProvider(
             self,
             jobs=[
