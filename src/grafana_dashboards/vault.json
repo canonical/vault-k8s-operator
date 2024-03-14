@@ -5,7 +5,7 @@
                 "builtIn": 1,
                 "datasource": {
                     "type": "datasource",
-                    "uid": "${prometheusds}"
+                    "uid": "${prometheus_datasource}"
                 },
                 "enable": true,
                 "hide": true,
@@ -20,7 +20,6 @@
     "fiscalYearStartMonth": 0,
     "gnetId": 12904,
     "graphTooltip": 1,
-    "id": 8,
     "links": [],
     "liveNow": false,
     "panels": [
@@ -40,8 +39,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Indicates whether all nodes are healthy",
             "fieldConfig": {
                 "defaults": {
                     "mappings": [
@@ -70,7 +70,7 @@
                             }
                         ]
                     },
-                    "unit": "Misc"
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -101,10 +101,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "vault_autopilot_healthy{juju_application=\"vault-k8s\"}",
+                    "expr": "vault_autopilot_healthy{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
                     "hide": false,
                     "legendFormat": "__auto",
                     "range": true,
@@ -117,8 +117,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Indicates whether Vault is currently unsealed",
             "fieldConfig": {
                 "defaults": {
                     "mappings": [
@@ -151,7 +152,8 @@
                                 "value": 2
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -181,9 +183,9 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
-                    "expr": "max(1 + vault_core_unsealed{})",
+                    "expr": "max(1 + vault_core_unsealed{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "format": "time_series",
                     "interval": "",
                     "legendFormat": "{{ instance }}",
@@ -196,8 +198,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "The number of peers in the raft cluster configuration",
             "fieldConfig": {
                 "defaults": {
                     "color": {
@@ -220,7 +223,8 @@
                                 "value": 3
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -250,10 +254,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "vault_raft_peers{juju_application=\"vault-k8s\"}",
+                    "expr": "vault_raft_peers{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
                     "range": true,
                     "refId": "A"
                 }
@@ -264,8 +268,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "The number of healthy nodes in excess of quorum",
             "fieldConfig": {
                 "defaults": {
                     "color": {
@@ -292,7 +297,8 @@
                                 "value": 2
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -322,10 +328,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "code",
-                    "expr": "vault_autopilot_failure_tolerance{juju_application=\"vault-k8s\"}",
+                    "expr": "vault_autopilot_failure_tolerance{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
                     "range": true,
                     "refId": "A"
                 }
@@ -349,14 +355,16 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Number of key-value secrets",
             "fieldConfig": {
                 "defaults": {
                     "color": {
                         "mode": "fixed"
                     },
                     "mappings": [],
+                    "noValue": "0",
                     "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -369,7 +377,8 @@
                                 "value": 80
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -399,10 +408,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "sum(vault_secret_kv_count{juju_application=\"vault-k8s\"})",
+                    "expr": "sum(vault_secret_kv_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "range": true,
                     "refId": "A"
                 }
@@ -413,8 +422,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Number of entries in each key-value secrets engine mounts",
             "fieldConfig": {
                 "defaults": {
                     "color": {
@@ -440,7 +450,8 @@
                                 "value": 80
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -468,11 +479,11 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "code",
                     "exemplar": false,
-                    "expr": "avg without(instance) (vault_secret_kv_count)",
+                    "expr": "avg without(instance) (vault_secret_kv_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "format": "table",
                     "instant": true,
                     "legendFormat": "{{mount_point}}",
@@ -480,7 +491,7 @@
                     "refId": "A"
                 }
             ],
-            "title": "Panel Title",
+            "title": "KV secrets",
             "transformations": [
                 {
                     "id": "groupBy",
@@ -503,14 +514,16 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Number of charm generated TLS certificates",
             "fieldConfig": {
                 "defaults": {
                     "color": {
                         "mode": "fixed"
                     },
                     "mappings": [],
+                    "noValue": "0",
                     "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -523,7 +536,8 @@
                                 "value": 80
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -553,10 +567,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "vault_charm_pki_sign_count{juju_application=\"vault-k8s\"}",
+                    "expr": "vault_charm_pki_sign_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
                     "legendFormat": "__auto",
                     "range": true,
                     "refId": "A"
@@ -581,8 +595,9 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
+            "description": "Number of un-expired and un-revoked tokens available for use in the token store",
             "fieldConfig": {
                 "defaults": {
                     "color": {
@@ -597,7 +612,8 @@
                                 "value": null
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -627,10 +643,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "vault_token_count",
+                    "expr": "vault_token_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
                     "legendFormat": "__auto",
                     "range": true,
                     "refId": "A"
@@ -655,7 +671,7 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
             "description": "Total number of Go routines running in memory",
             "fieldConfig": {
@@ -672,7 +688,8 @@
                                 "value": null
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -702,11 +719,11 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
                     "exemplar": false,
-                    "expr": "sum(vault_runtime_num_goroutines{juju_application=\"vault-k8s\"})",
+                    "expr": "sum(vault_runtime_num_goroutines{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "format": "time_series",
                     "instant": false,
                     "legendFormat": "{{juju_unit}}",
@@ -720,7 +737,7 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
             "description": "Total number of objects on the heap in memory",
             "fieldConfig": {
@@ -737,7 +754,8 @@
                                 "value": null
                             }
                         ]
-                    }
+                    },
+                    "unit": "none"
                 },
                 "overrides": []
             },
@@ -767,10 +785,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "sum(vault_runtime_heap_objects{juju_application=\"vault-k8s\"})",
+                    "expr": "sum(vault_runtime_heap_objects{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "legendFormat": "{{juju_unit}}",
                     "range": true,
                     "refId": "A"
@@ -782,7 +800,7 @@
         {
             "datasource": {
                 "type": "prometheus",
-                "uid": "${prometheusds}"
+                "uid": "${prometheus_datasource}"
             },
             "description": "Space currently allocated to Vault processes",
             "fieldConfig": {
@@ -830,10 +848,10 @@
                 {
                     "datasource": {
                         "type": "prometheus",
-                        "uid": "${prometheusds}"
+                        "uid": "${prometheus_datasource}"
                     },
                     "editorMode": "builder",
-                    "expr": "sum(vault_runtime_alloc_bytes{juju_application=\"vault-k8s\"})",
+                    "expr": "sum(vault_runtime_alloc_bytes{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "legendFormat": "{{juju_unit}}",
                     "range": true,
                     "refId": "A"
@@ -843,7 +861,7 @@
             "type": "stat"
         }
     ],
-    "refresh": false,
+    "refresh": "",
     "schemaVersion": 38,
     "style": "dark",
     "tags": [
@@ -853,83 +871,160 @@
         "list": [
             {
                 "current": {
-                    "isNone": true,
                     "selected": false,
-                    "text": "None",
-                    "value": ""
+                    "text": "All",
+                    "value": "$__all"
                 },
-                "datasource": {
-                    "type": "prometheus",
-                    "uid": "${prometheusds}"
-                },
-                "definition": "label_values(up{job=\"vault\"}, instance)",
-                "hide": 2,
-                "includeAll": false,
-                "label": "Host:",
-                "multi": false,
-                "name": "node",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Loki data source",
+                "multi": true,
+                "name": "loki_datasource",
                 "options": [],
-                "query": "label_values(up{job=\"vault\"}, instance)",
+                "query": "loki",
                 "refresh": 1,
-                "regex": "/([^:]+):.*/",
+                "regex": "",
                 "skipUrlSync": false,
-                "sort": 1,
-                "tagValuesQuery": "",
-                "tagsQuery": "",
-                "type": "query",
-                "useTags": false
+                "type": "datasource"
             },
             {
                 "current": {
-                    "isNone": true,
                     "selected": false,
-                    "text": "None",
-                    "value": ""
+                    "text": "All",
+                    "value": "$__all"
                 },
-                "datasource": {
-                    "type": "prometheus",
-                    "uid": "${prometheusds}"
-                },
-                "definition": "label_values(up{job=\"vault\",instance=~\"$node:(.*)\"}, instance)",
-                "hide": 2,
-                "includeAll": false,
-                "multi": false,
-                "name": "port",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Prometheus data source",
+                "multi": true,
+                "name": "prometheus_datasource",
                 "options": [],
-                "query": "label_values(up{job=\"vault\",instance=~\"$node:(.*)\"}, instance)",
+                "query": "prometheus",
                 "refresh": 1,
-                "regex": "/[^:]+:(.*)/",
+                "regex": "",
                 "skipUrlSync": false,
-                "sort": 0,
-                "tagValuesQuery": "",
-                "tagsQuery": "",
-                "type": "query",
-                "useTags": false
+                "type": "datasource"
             },
             {
-                "allValue": "",
+                "allValue": ".*",
                 "current": {
                     "selected": false,
                     "text": "All",
                     "value": "$__all"
                 },
                 "datasource": {
-                    "type": "prometheus",
-                    "uid": "${prometheusds}"
+                    "uid": "${prometheus_datasource}"
                 },
-                "definition": "label_values(vault_secret_kv_count, mount_point)",
+                "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
                 "hide": 0,
                 "includeAll": true,
-                "label": "Mount Point:",
+                "label": "Juju unit",
                 "multi": true,
-                "name": "mountpoint",
+                "name": "juju_unit",
                 "options": [],
-                "query": "label_values(vault_secret_kv_count, mount_point)",
+                "query": {
+                    "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+                    "refId": "StandardVariableQuery"
+                },
                 "refresh": 2,
-                "regex": "/(.*)//",
+                "regex": "",
                 "skipUrlSync": false,
-                "sort": 1,
+                "sort": 0,
                 "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": ".*",
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "datasource": {
+                    "uid": "${prometheus_datasource}"
+                },
+                "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Juju application",
+                "multi": true,
+                "name": "juju_application",
+                "options": [],
+                "query": {
+                    "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+                    "refId": "StandardVariableQuery"
+                },
+                "refresh": 2,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": ".*",
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "datasource": {
+                    "uid": "${prometheus_datasource}"
+                },
+                "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Juju model uuid",
+                "multi": true,
+                "name": "juju_model_uuid",
+                "options": [],
+                "query": {
+                    "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+                    "refId": "StandardVariableQuery"
+                },
+                "refresh": 2,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+            },
+            {
+                "allValue": ".*",
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "datasource": {
+                    "uid": "${prometheus_datasource}"
+                },
+                "definition": "label_values(up,juju_model)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Juju model",
+                "multi": true,
+                "name": "juju_model",
+                "options": [],
+                "query": {
+                    "query": "label_values(up,juju_model)",
+                    "refId": "StandardVariableQuery"
+                },
+                "refresh": 2,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
                 "tagsQuery": "",
                 "type": "query",
                 "useTags": false
@@ -937,7 +1032,7 @@
         ]
     },
     "time": {
-        "from": "now-5m",
+        "from": "now-15m",
         "to": "now"
     },
     "timepicker": {
@@ -966,7 +1061,7 @@
     },
     "timezone": "",
     "title": "Vault",
-    "uid": "vault",
-    "version": 20,
+    "uid": "vaults",
+    "version": 1,
     "weekStart": ""
 }

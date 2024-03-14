@@ -13,6 +13,9 @@ concurrency:
 jobs:
   lint-report:
     uses: ./.github/workflows/lint-report.yaml
+  
+  grafana-dashboard-lint-report:
+    uses: ./.github/workflows/grafana-dashboard-lint-report.yaml
 
   static-analysis:
     name: Static analysis
@@ -30,6 +33,7 @@ jobs:
   publish-charm:
     needs:
       - lint-report
+      - grafana-dashboard-lint-report
       - static-analysis
       - unit-tests-with-coverage
       - integration-test
