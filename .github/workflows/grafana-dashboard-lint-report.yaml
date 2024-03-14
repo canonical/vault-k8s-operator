@@ -17,4 +17,4 @@ jobs:
       - name: Install Grafana Dashboard Linter
         run: go install github.com/grafana/dashboard-linter@latest
       - name: Run Grafana Dashboard Lint
-        run: dashboard-linter lint src/grafana_dashboards/ --strict
+        run: dashboard-linter lint src/grafana_dashboards/* --strict
