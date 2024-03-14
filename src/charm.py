@@ -203,7 +203,7 @@ class VaultCharm(CharmBase):
         if not vault.is_initialized():
             event.add_status(WaitingStatus("Waiting for vault to be initialized"))
             return
-        if not vault.is_sealed():
+        if vault.is_sealed():
             event.add_status(WaitingStatus("Waiting for vault to be unsealed"))
             return
         if not self._get_authorized_vault_client():
@@ -294,9 +294,10 @@ class VaultCharm(CharmBase):
             event.fail("This action must be ran on the leader unit.")
             return
 
-        root_token = event.params.get("token", "")
+        root_token = event.params.get("root-token", "")
         v = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         v.authenticate(Token(root_token))
+        v._client.auth.token.lookup_self()["data"]  # TODO: test this, then put it in client lib
         v.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         v.enable_approle_auth_method()
         v.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
@@ -1096,7 +1097,6 @@ class VaultCharm(CharmBase):
             role_id, secret_id = self._get_approle_auth_secret()
             vault.authenticate(AppRole(role_id, secret_id))
         except Exception:
-            logger.error("Vault initialization secret not set.")
             return None
         if not vault.is_active():
             return None
