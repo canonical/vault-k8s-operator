@@ -7,7 +7,6 @@ This library shares operations that interact with Vault through its API. It is
 intended to be used by charms that need to manage a Vault cluster.
 """
 
-
 import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -25,7 +24,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +100,17 @@ class Vault:
     def set_token(self, token: str) -> None:
         """Set the Vault token for authentication."""
         self._client.token = token
+
+    def approle_login(self, role_id: str, secret_id: str) -> None:
+        """Authenticate to Vault using AppRole."""
+        self._client.auth.approle.login(role_id=role_id, secret_id=secret_id, use_token=True)
+
+    def configure_charm_access_policy(self, name: str) -> None:
+        """Create/update a policy within vault for the charm to access vault."""
+        with open("src/templates/charm_policy.hcl", "r") as f:
+            charm_policy = f.read()
+        self._client.sys.create_or_update_policy(name=name, policy=charm_policy)
+        logger.debug(f"Created charm policy: {name}")
 
     def remove_raft_node(self, node_id: str) -> None:
         """Remove raft peer."""
