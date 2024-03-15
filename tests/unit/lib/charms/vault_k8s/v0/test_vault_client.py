@@ -6,10 +6,29 @@ import unittest
 from unittest.mock import call, patch
 
 import requests
-from charms.vault_k8s.v0.vault_client import Vault
+from charms.vault_k8s.v0.vault_client import AppRole, AuditDeviceType, SecretsBackend, Token, Vault
+
+TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
 
 class TestVault(unittest.TestCase):
+    def test_given_token_as_auth_details_when_authenticate_then_token_is_set(self):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.authenticate(Token("some token"))
+
+        assert vault._client.token == "some token"
+
+    @patch("hvac.api.auth_methods.approle.AppRole.login")
+    def test_given_approle_as_auth_details_when_authenticate_then_approle_login_is_called(
+        self, patch_approle_login
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.authenticate(AppRole(role_id="some role id", secret_id="some secret id"))
+
+        patch_approle_login.assert_called_with(
+            role_id="some role id", secret_id="some secret id", use_token=True
+        )
+
     @patch("hvac.api.system_backend.init.Init.initialize")
     def test_given_shares_and_threshold_when_initialize_then_root_token_and_unseal_key_returned(
         self, patch_initialize
@@ -103,28 +122,14 @@ class TestVault(unittest.TestCase):
         self.assertEqual(3, vault.get_num_raft_peers())
 
     @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
-    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
     def test_given_approle_not_in_auth_methods_when_enable_approle_auth_then_approle_is_added_to_auth_methods(  # noqa: E501
-        self, patch_list_auth_methods, patch_enable_auth_method
+        self, patch_enable_auth_method
     ):
-        patch_list_auth_methods.return_value = {}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
 
-        vault.enable_approle_auth()
+        vault.enable_approle_auth_method()
 
         patch_enable_auth_method.assert_called_with("approle")
-
-    @patch("hvac.api.system_backend.auth.Auth.enable_auth_method")
-    @patch("hvac.api.system_backend.auth.Auth.list_auth_methods")
-    def test_given_approle_in_auth_methods_when_enable_approle_auth_then_approle_is_not_added_to_auth_methods(  # noqa: E501
-        self, patch_list_auth_methods, patch_enable_auth_method
-    ):
-        patch_list_auth_methods.return_value = {"approle/": "whatever"}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        vault.enable_approle_auth()
-
-        patch_enable_auth_method.assert_not_called()
 
     @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
     @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
@@ -135,9 +140,71 @@ class TestVault(unittest.TestCase):
     ):
         patch_list_enabled_audit_devices.return_value = {"data": {}}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        vault.enable_audit_device(device_type="file", path="stdout")
+        vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
+        )
+
+    @patch("hvac.api.system_backend.policy.Policy.create_or_update_policy")
+    def test_given_policy_with_mount_when_configure_policy_then_policy_is_formatted_properly(
+        self, patch_create_policy
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.configure_policy(
+            "test-policy", policy_path=f"{TEST_PATH}/kv_with_mount.hcl", mount="example"
+        )
+        with open(f"{TEST_PATH}/kv_mounted.hcl", "r") as f:
+            policy = f.read()
+            patch_create_policy.assert_called_with(
+                name="test-policy",
+                policy=policy,
+            )
+
+    @patch("hvac.api.system_backend.policy.Policy.create_or_update_policy")
+    def test_given_policy_without_mount_when_configure_policy_then_policy_created_correctly(
+        self, patch_create_policy
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.configure_policy("test-policy", policy_path=f"{TEST_PATH}/kv_mounted.hcl")
+        with open(f"{TEST_PATH}/kv_mounted.hcl", "r") as f:
+            policy = f.read()
+            patch_create_policy.assert_called_with(
+                name="test-policy",
+                policy=policy,
+            )
+
+    @patch("hvac.api.auth_methods.approle.AppRole.read_role_id")
+    @patch("hvac.api.auth_methods.approle.AppRole.create_or_update_approle")
+    def test_given_approle_with_valid_params_when_configure_approle_then_approle_created(
+        self, patch_create_approle, patch_read_role_id
+    ):
+        patch_read_role_id.return_value = {"data": {"role_id": "1234"}}
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        assert "1234" == vault.configure_approle(
+            "test-approle", ["192.168.1.0/24"], ["root", "default"]
+        )
+
+        patch_create_approle.assert_called_with(
+            "test-approle",
+            token_ttl="60s",
+            token_max_ttl="60s",
+            token_policies=["root", "default"],
+            bind_secret_id="true",
+            token_bound_cidrs=["192.168.1.0/24"],
+        )
+        patch_read_role_id.assert_called_once()
+
+    @patch("hvac.api.system_backend.mount.Mount.enable_secrets_engine")
+    def test_given_secrets_engine_with_valid_params_when_enable_secrets_engine_then_secrets_engine_enabled(
+        self, patch_enable_secrets_engine
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.enable_secrets_engine(SecretsBackend.KV_V2, "some/path")
+
+        patch_enable_secrets_engine.assert_called_with(
+            backend_type=SecretsBackend.KV_V2.value,
+            description=f"Charm created '{SecretsBackend.KV_V2.value}' backend",
+            path="some/path",
         )
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
@@ -165,37 +232,3 @@ class TestVault(unittest.TestCase):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active())
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_file_and_path_in_audit_device_list_when_audit_device_enabled_then_return_true(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {
-            "data": {f"{device_type}/": {"options": {"file_path": path}}}
-        }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertTrue(vault.audit_device_enabled(device_type=device_type, path=path))
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_file_not_in_audit_device_list_when_audit_device_enabled_then_return_false(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {"data": {}}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
-
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
-    def test_given_wrong_path_in_audit_device_list_when_audit_device_enabled_then_return_false(
-        self, patch_list_enabled_audit_devices
-    ):
-        device_type = "file"
-        path = "stdout"
-        patch_list_enabled_audit_devices.return_value = {
-            "data": {f"{device_type}/": {"options": {"file_path": "WRONG PATH"}}}
-        }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.audit_device_enabled(device_type=device_type, path=path))
