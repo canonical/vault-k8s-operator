@@ -4,6 +4,7 @@
 """This file includes methods to manage TLS certificates within the Vault charms."""
 
 import logging
+import os
 import socket
 from abc import ABC, abstractmethod
 from enum import Enum, auto
@@ -326,8 +327,8 @@ class VaultTLSManager(Object):
             bool: True if file exists
         """
         try:
-            self.get_tls_file_path_in_charm(file)
-            return True
+            file_path = self.get_tls_file_path_in_charm(file)
+            return os.path.exists(file_path)
         except VaultCertsError:
             return False
 
