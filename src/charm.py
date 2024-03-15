@@ -207,14 +207,16 @@ class VaultCharm(CharmBase):
             event.add_status(WaitingStatus("Waiting for vault to be available"))
             return
         if not vault.is_initialized():
-            event.add_status(WaitingStatus("Waiting for vault to be initialized"))
+            event.add_status(BlockedStatus("Waiting for vault to be initialized"))
             return
         if vault.is_sealed():
-            event.add_status(WaitingStatus("Waiting for vault to be unsealed"))
+            event.add_status(BlockedStatus("Waiting for vault to be unsealed"))
             return
-        if not self._get_authorized_vault_client():
-            event.add_status(WaitingStatus("Waiting for charm to be authorized"))
+        if not all(self._get_approle_auth_secret()):
+            event.add_status(BlockedStatus("Waiting for charm to be authorized"))
             return
+        if not self._get_active_vault_client():
+            event.add_status(BlockedStatus("Charm needs to be authorized again"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
@@ -248,7 +250,9 @@ class VaultCharm(CharmBase):
             return
         if vault.is_sealed():
             return
-        if not (vault := self._get_authorized_vault_client()):
+        if not all(self._get_approle_auth_secret()):
+            return
+        if not (vault := self._get_active_vault_client()):
             return
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
@@ -303,22 +307,25 @@ class VaultCharm(CharmBase):
         root_token = event.params.get("root-token", "")
         v = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         v.authenticate(Token(root_token))
-        v._client.auth.token.lookup_self()["data"]  # TODO: test this, then put it in client lib
+
+        if not (token_data := v.is_authenticated()):
+            event.fail("The token provided is not valid.")
+            return
+        if "root" not in token_data["policies"]:
+            event.fail("The token provided does not have permissions to authorize charm.")
+            return
+
         v.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         v.enable_approle_auth_method()
         v.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
         cidrs = [f"{self._bind_address}/24"]
         role_id = v.configure_approle(
-            name="charm",
+            role_name="charm",
             cidrs=cidrs,
             policies=[CHARM_POLICY_NAME, "default"],
         )
         secret_id = v.generate_role_secret_id(name="charm", cidrs=cidrs)
-        self.app.add_secret(
-            content={"role-id": role_id, "secret-id": secret_id},
-            label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-            description="The authentication details for the charm's access to vault.",
-        )
+        self._set_approle_auth_secret(role_id, secret_id)
         self.on.config_changed.emit()
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
@@ -338,7 +345,7 @@ class VaultCharm(CharmBase):
             event.defer()
             return
 
-        vault = self._get_authorized_vault_client()
+        vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault, deferring event")
             event.defer()
@@ -378,7 +385,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
             return
-        vault = self._get_authorized_vault_client()
+        vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -411,7 +418,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request")
             return
-        vault = self._get_authorized_vault_client()
+        vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -485,7 +492,7 @@ class VaultCharm(CharmBase):
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
             return
-        vault = self._get_authorized_vault_client()
+        vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
@@ -959,18 +966,35 @@ class VaultCharm(CharmBase):
         except SecretNotFoundError:
             return False
 
-    def _get_approle_auth_secret(self) -> Tuple[str, List[str]]:
-        """Get the vault initialization secret.
+    def _get_approle_auth_secret(self) -> Tuple[Optional[str], Optional[str]]:
+        """Get the vault approle login details secret.
 
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-        content = juju_secret.get_content()
+        try:
+            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            content = juju_secret.get_content()
+        except SecretNotFoundError:
+            return None, None
         return content["role-id"], content["secret-id"]
 
-    def _remove_approle_auth_secret(self) -> bool:
-        pass
+    def _set_approle_auth_secret(self, role_id: str, secret_id: str) -> None:
+        """Set the vault approle auth details secret.
+
+        Args:
+            role_id: The role id of the vault approle
+            secret_id: The secret id of the vault approle
+        """
+        if not all(self._get_approle_auth_secret()):
+            self.app.add_secret(
+                content={"role-id": role_id, "secret-id": secret_id},
+                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+                description="The authentication details for the charm's access to vault.",
+            )
+        else:
+            secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            secret.set_content({"role-id": role_id, "secret-id": secret_id})
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
@@ -1037,7 +1061,7 @@ class VaultCharm(CharmBase):
         Returns:
             IO[bytes]: The snapshot content as a file like object.
         """
-        if not (vault := self._get_authorized_vault_client()):
+        if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
         role_id, secret_id = self._get_approle_auth_secret()
@@ -1058,7 +1082,7 @@ class VaultCharm(CharmBase):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        if not (vault := self._get_authorized_vault_client()):
+        if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot restore snapshot.")
             return False
 
@@ -1086,10 +1110,10 @@ class VaultCharm(CharmBase):
         # If not, remove secret
         return True
 
-    def _get_authorized_vault_client(self) -> Optional[Vault]:
+    def _get_active_vault_client(self) -> Optional[Vault]:
         """Return an initialized vault client.
 
-        Creates a Vault client and returns it if is active
+        Creates a Vault client and returns it if is active and the charm is authorized.
         Otherwise, returns None.
 
         Returns:
@@ -1099,10 +1123,9 @@ class VaultCharm(CharmBase):
             url=self._api_address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
-        try:
-            role_id, secret_id = self._get_approle_auth_secret()
-            vault.authenticate(AppRole(role_id, secret_id))
-        except Exception:
+        role_id, secret_id = self._get_approle_auth_secret()
+        vault.authenticate(AppRole(role_id, secret_id))
+        if not vault.is_authenticated():
             return None
         if not vault.is_active():
             return None

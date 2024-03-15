@@ -11,11 +11,11 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol, Tuple
 
 import hvac
 import requests
-from hvac.exceptions import InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 logger = logging.getLogger(__name__)
@@ -101,9 +101,21 @@ class Vault:
     def __init__(self, url: str, ca_cert_path: str):
         self._client = hvac.Client(url=url, verify=ca_cert_path)
 
-    def authenticate(self, auth_details: AuthMethod) -> None:
+    def authenticate(self, auth_details: AuthMethod) -> bool:
         """Find and use the token related with the given auth method."""
-        auth_details.login(self._client)
+        try:
+            auth_details.login(self._client)
+        except Forbidden:
+            return False
+        return True
+
+    def is_authenticated(self) -> Optional[Dict]:
+        """Check if token is valid."""
+        try:
+            token_data = self._client.auth.token.lookup_self()["data"]
+        except Forbidden:
+            return None
+        return token_data
 
     def is_api_available(self) -> bool:
         """Return whether Vault is available."""
