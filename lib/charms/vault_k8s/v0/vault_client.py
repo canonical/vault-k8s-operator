@@ -161,7 +161,7 @@ class Vault:
             return False
 
     def enable_audit_device(self, device_type: AuditDeviceType, path: str) -> None:
-        """Enable a new audit device at the supplied path.
+        """Enable a new audit device at the supplied path if it isn't already enabled.
 
         Args:
             device_type: One of three available device types
@@ -181,7 +181,7 @@ class Vault:
                 raise e
 
     def enable_approle_auth_method(self) -> None:
-        """Enable approle auth method."""
+        """Enable approle auth method if it isn't already enabled."""
         try:
             self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method.")
