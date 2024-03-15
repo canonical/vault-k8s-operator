@@ -175,7 +175,7 @@ class Vault:
             logger.info("Enabled audit device %s for path %s", device_type.value, path)
         except InvalidRequest as e:
             errors = e.json.get("errors")
-            if len(errors) == 1 and errors[0].startswith("path is already in use"):
+            if len(errors) == 1 and errors[0].startswith("path already in use"):
                 logger.info("Audit device already enabled.")
             else:
                 raise e
