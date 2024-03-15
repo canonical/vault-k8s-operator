@@ -161,7 +161,7 @@ class Vault:
             return False
 
     def enable_audit_device(self, device_type: AuditDeviceType, path: str) -> None:
-        """Enable a new audit device at the supplied path.
+        """Enable a new audit device at the supplied path if it isn't already enabled.
 
         Args:
             device_type: One of three available device types
@@ -173,16 +173,24 @@ class Vault:
                 options={"file_path": path},
             )
             logger.info("Enabled audit device %s for path %s", device_type.value, path)
-        except InvalidRequest:
-            logger.info("Audit device already enabled.")
+        except InvalidRequest as e:
+            errors = e.json.get("errors")
+            if len(errors) == 1 and errors[0].startswith("path already in use"):
+                logger.info("Audit device already enabled.")
+            else:
+                raise e
 
     def enable_approle_auth_method(self) -> None:
-        """Enable approle auth method."""
+        """Enable approle auth method if it isn't already enabled."""
         try:
             self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method.")
-        except InvalidRequest:
-            logger.info("Approle already enabled.")
+        except InvalidRequest as e:
+            errors = e.json.get("errors")
+            if len(errors) == 1 and errors[0].startswith("path is already in use"):
+                logger.info("Approle already enabled.")
+            else:
+                raise e
 
     def configure_policy(
         self, policy_name: str, policy_path: str, mount: Optional[str] = None
@@ -240,8 +248,12 @@ class Vault:
                 path=path,
             )
             logger.info("Enabled %s backend", backend_type.value)
-        except InvalidRequest:
-            logger.info("%s backend already enabled", backend_type.value)
+        except InvalidRequest as e:
+            errors = e.json.get("errors")
+            if len(errors) == 1 and errors[0].startswith("path is already in use"):
+                logger.info("%s backend already enabled", backend_type.value)
+            else:
+                raise e
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
