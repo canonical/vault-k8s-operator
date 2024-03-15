@@ -162,12 +162,11 @@ class Vault:
         """Return the health status of Vault.
 
         Returns:
-            True if initialized, unsealed and active, False otherwise.
-                Will return True if Vault is in standby mode too (standby_ok=True).
+            True if initialized, unsealed and active or standby, False otherwise.
         """
         try:
-            health_status = self._client.sys.read_health_status(standby_ok=True)
-            return health_status.status_code == 200
+            health_status = self._client.sys.read_health_status()
+            return health_status.status_code == 200 or health_status.status_code == 429
         except (VaultError, RequestException) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
