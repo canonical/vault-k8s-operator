@@ -67,6 +67,8 @@ provides:
     interface: certificate_transfer
     description: |
       Send our CA certificate so clients can trust the CA by means of forming a relation.
+  grafana-dashboard:
+    interface: grafana_dashboard
 
 assumes:
   - juju >= 3.1
