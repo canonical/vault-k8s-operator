@@ -181,7 +181,7 @@ class TestVault(unittest.TestCase):
         patch_read_role_id.return_value = {"data": {"role_id": "1234"}}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         assert "1234" == vault.configure_approle(
-            "test-approle", ["192.168.1.0/24"], ["root", "default"]
+            "test-approle", ["root", "default"], ["192.168.1.0/24"]
         )
 
         patch_create_approle.assert_called_with(
