@@ -45,6 +45,8 @@ MINIO_CONFIG = {
 }
 
 NUM_VAULT_UNITS = 3
+VAULT_UNIT_ADDRESS = "https://vault-k8s-0.vault-k8s-endpoints.vault.svc.cluster.local:8200"
+VAULT_UNIT_DOMAIN = ".vault-k8s-endpoints.vault.svc.cluster.local"
 
 k8s = KubernetesClient()
 
@@ -76,6 +78,23 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
     )
 
     return {"vault-kv-requirer": vault_kv_requirer_charm}
+
+
+async def activate_vault(self, ops_test: OpsTest, build_charms_and_deploy_vault):
+    vault_endpoints = [
+        f"https://{APPLICATION_NAME}-{i}.{VAULT_UNIT_DOMAIN}:8200" for i in range(NUM_VAULT_UNITS)
+    ]
+    action_output = await run_get_ca_certificate_action(ops_test)
+    ca_certificate = action_output["ca-certificate"]
+    with open("ca_file.txt", mode="w+") as ca_file:
+        ca_file.write(ca_certificate)
+    # client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
+    # run vault init on first unit
+    # run vault unseal on first unit
+    # wait until the rest are blocked
+    # run vault unseal on all units
+    # authorize charm action on the leader
+    pass
 
 
 class TestVaultK8s:
@@ -326,7 +345,7 @@ class TestVaultK8sIntegrationsPart1:
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
         """This proves that vault is reachable behind ingress."""
-        vault_endpoint = await _get_vault_endpoint(ops_test)
+        vault_endpoint = await _get_vault_traefik_endpoint(ops_test)
         action_output = await run_get_ca_certificate_action(ops_test)
         ca_certificate = action_output["ca-certificate"]
         with open("ca_file.txt", mode="w+") as ca_file:
@@ -615,7 +634,7 @@ async def run_get_certificate_action(ops_test) -> dict:
     return action_output
 
 
-async def _get_vault_endpoint(ops_test: OpsTest, timeout: int = 60) -> str:
+async def _get_vault_traefik_endpoint(ops_test: OpsTest, timeout: int = 60) -> str:
     """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
 
     Args:
@@ -650,6 +669,10 @@ async def _get_vault_endpoint(ops_test: OpsTest, timeout: int = 60) -> str:
         time.sleep(2)
 
     raise TimeoutError("Traefik did not return proxied endpoints")
+
+
+async def _get_vault_unit_endpoint():
+    pass
 
 
 async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
