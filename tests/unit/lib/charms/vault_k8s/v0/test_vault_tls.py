@@ -9,7 +9,7 @@ from typing import List
 from unittest.mock import Mock, patch
 
 from charm import VAULT_INITIALIZATION_SECRET_LABEL, VaultCharm
-from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
+from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, File
 from ops import testing
 from ops.model import WaitingStatus
 
@@ -421,3 +421,15 @@ class TestCharm(unittest.TestCase):
         )
 
         self.assertNotIn("ca", relation_data)
+
+    def test_given_ca_cert_is_not_available_when_certificate_written_then_tls_file_available_in_charm_returns_true(
+        self,
+    ):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+
+        assert not self.harness.charm.tls.tls_file_available_in_charm(File.CA)
+
+        (root / "vault/certs/ca.pem").write_text(EXAMPLE_CA)
+
+        assert self.harness.charm.tls.tls_file_available_in_charm(File.CA)
