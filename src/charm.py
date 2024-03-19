@@ -778,7 +778,7 @@ class VaultCharm(CharmBase):
         """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
         vault.configure_policy(policy_name, "src/templates/kv_mount.hcl", mount)
-        role_id = vault.configure_approle(role_name, [egress_subnet], [policy_name])
+        role_id = vault.configure_approle(role_name, [policy_name], [egress_subnet])
         secret = self._create_or_update_kv_secret(
             vault,
             relation,
