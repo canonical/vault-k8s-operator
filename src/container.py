@@ -44,6 +44,10 @@ class Container(WorkloadBase):
         """Send a signal to a process in the workload."""
         self._container.send_signal(signal, process)
 
+    def restart(self, process: str) -> None:
+        """Restart the vault service."""
+        self._container.restart(process)
+
     def stop(self, process: str) -> None:
         """Stop the workload."""
         self._container.stop(process)
