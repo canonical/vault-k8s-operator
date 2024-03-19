@@ -193,14 +193,11 @@ class VaultCharm(CharmBase):
                 WaitingStatus("Waiting for bind and ingress addresses to be available")
             )
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
-            event.add_status(WaitingStatus("Waiting for CA certificate"))
+        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
+            event.add_status(WaitingStatus("Waiting for CA certificate secret"))
             return
-        if not self.tls.tls_file_pushed_to_workload(File.CA):
-            event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
-            return
-        if not self.tls.tls_file_available_in_charm(File.CA):
-            event.add_status(WaitingStatus("Waiting for CA certificate in charm"))
+        if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
+            event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
         vault = Vault(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -233,9 +230,11 @@ class VaultCharm(CharmBase):
             return
         if not self._bind_address or not self._ingress_address:
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
             return
         self.tls.configure_certificates(self._ingress_address)
+        if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
+            return
 
         for relation in self.model.relations[KV_RELATION_NAME]:
             ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)

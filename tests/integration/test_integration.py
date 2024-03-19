@@ -140,6 +140,8 @@ class TestVaultK8s:
         app: Application = ops_test.model.applications[APPLICATION_NAME]
         await app.scale(NUM_VAULT_UNITS)
 
+        # TODO: assert that the nodes were removed and the config is changed to reflect the new expected units
+
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
