@@ -398,7 +398,7 @@ class VaultTLSManager(Object):
         try:
             self.workload.send_signal(signal=SIGHUP, process=self._service_name)
             tls_logger.debug("Vault reload requested")
-        except APIError:
+        except Exception:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
 
     def _restart_vault(self) -> None:
@@ -406,7 +406,7 @@ class VaultTLSManager(Object):
         try:
             self.workload.restart(self._service_name)
             tls_logger.debug("Vault restarted")
-        except APIError:
+        except Exception:
             tls_logger.debug("Couldn't restart Vault. Proceeding normally.")
 
     def pull_tls_file_from_workload(self, file: File) -> str:
