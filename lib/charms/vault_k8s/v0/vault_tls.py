@@ -24,7 +24,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
 from exceptions import VaultCertsError
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
-from ops.pebble import APIError, PathError
+from ops.pebble import PathError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "61b41a053d9847ce8a14eb02197d12cb"

@@ -4,7 +4,6 @@
 
 import json
 import unittest
-from signal import SIGHUP
 from typing import List
 from unittest.mock import Mock, patch
 
