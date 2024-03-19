@@ -146,6 +146,7 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch("ops.model.Container.push", new=Mock)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_unit_is_leader_and_ca_certificate_not_generated_when_configure_then_ca_certificate_is_generated(
         self,
@@ -177,10 +178,11 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("ops.model.Container.restart")
     @patch("ops.model.Container.exists")
     @patch("ops.model.Model.get_binding")
     def test_given_ca_certificate_not_pushed_to_workload_when_configure_then_ca_certificate_pushed(
-        self, patch_get_binding, patch_exists
+        self, patch_get_binding, patch_exists, patch_restart
     ):
         self.harness.set_leader(is_leader=True)
         root = self.harness.get_filesystem_root(self.container_name)
@@ -203,7 +205,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_can_connect(container=self.container_name, val=True)
 
         self.harness.charm.on.config_changed.emit()
-
+        assert patch_restart.called_once()
         self.assertEqual((root / "vault/certs/ca.pem").read_text(), EXAMPLE_CA)
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
@@ -212,6 +214,7 @@ class TestCharm(unittest.TestCase):
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
     @patch("ops.model.Container.exists")
     @patch("ops.model.Model.get_binding")
@@ -300,12 +303,10 @@ class TestCharm(unittest.TestCase):
             {"certificate_signing_requests": json.dumps(requirer_databag)},
         )
 
-        self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
+        self.harness.charm._container.restart = Mock()  # type: ignore [method-assign]
         self.harness.charm.tls.configure_certificates("1.1.1.1")
 
-        self.harness.charm._container.send_signal.assert_called_with(
-            signal=SIGHUP, process=self.container_name
-        )
+        self.harness.charm._container.restart.assert_called_with(self.container_name)
         assert (root / "vault/certs/cert.pem").exists()
         assert (root / "vault/certs/ca.pem").exists()
 
@@ -367,11 +368,9 @@ class TestCharm(unittest.TestCase):
             unseal_keys=["whatever unseal key"],
         )
 
-        self.harness.charm._container.send_signal = Mock()  # type: ignore [method-assign]
+        self.harness.charm._container.restart = Mock()  # type: ignore [method-assign]
         self.harness.charm.tls._on_tls_certificates_access_relation_broken(event=Mock())
-        self.harness.charm._container.send_signal.assert_called_with(
-            signal=SIGHUP, process=self.container_name
-        )
+        self.harness.charm._container.restart.assert_called_with(self.container_name)
         assert not (root / "vault/certs/csr.pem").exists()
         assert (root / "vault/certs/cert.pem").read_text().startswith("-----BEGIN CERTIFICATE")
         assert (root / "vault/certs/key.pem").read_text().startswith("-----BEGIN RSA PRIVATE KEY")
