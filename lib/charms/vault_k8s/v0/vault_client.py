@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 logger = logging.getLogger(__name__)
@@ -210,13 +210,15 @@ class Vault:
         )
         logger.debug("Created or updated charm policy: %s", policy_name)
 
-    def configure_approle(self, role_name: str, cidrs: List[str], policies: List[str]) -> str:
+    def configure_approle(
+        self, role_name: str, policies: List[str], cidrs: List[str] | None = None
+    ) -> str:
         """Create/update a role within vault associating the supplied policies.
 
         Args:
             role_name: Name of the role to be created or updated
-            cidrs: The list of IP networks that are allowed to authenticate
             policies: The attached list of policy names this approle will have access to
+            cidrs: The list of IP networks that are allowed to authenticate
         """
         self._client.auth.approle.create_or_update_approle(
             role_name,
@@ -229,7 +231,7 @@ class Vault:
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    def generate_role_secret_id(self, name: str, cidrs: List[str]) -> str:
+    def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]
