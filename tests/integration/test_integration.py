@@ -45,13 +45,11 @@ MINIO_CONFIG = {
 }
 
 NUM_VAULT_UNITS = 3
-VAULT_UNIT_ADDRESS = "https://vault-k8s-0.vault-k8s-endpoints.vault.svc.cluster.local:8200"
-VAULT_UNIT_DOMAIN = ".vault-k8s-endpoints.vault.svc.cluster.local"
+VAULT_UNIT_DOMAIN = "vault-k8s-endpoints.vault.svc.cluster.local"
 
 k8s = KubernetesClient()
 
 
-@pytest.mark.abort_on_fail
 @pytest.fixture(scope="module")
 async def build_charms_and_deploy_vault(ops_test: OpsTest):
     """Build the charms that are required in this test module and deploy Vault."""
@@ -72,7 +70,7 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
     )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
-        status="active",
+        status="blocked",
         timeout=1000,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
@@ -80,35 +78,67 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
     return {"vault-kv-requirer": vault_kv_requirer_charm}
 
 
-async def activate_vault(self, ops_test: OpsTest, build_charms_and_deploy_vault):
-    vault_endpoints = [
-        f"https://{APPLICATION_NAME}-{i}.{VAULT_UNIT_DOMAIN}:8200" for i in range(NUM_VAULT_UNITS)
-    ]
-    action_output = await run_get_ca_certificate_action(ops_test)
-    ca_certificate = action_output["ca-certificate"]
-    with open("ca_file.txt", mode="w+") as ca_file:
-        ca_file.write(ca_certificate)
-    # client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
-    # run vault init on first unit
-    # run vault unseal on first unit
-    # wait until the rest are blocked
-    # run vault unseal on all units
-    # authorize charm action on the leader
-    pass
+@pytest.fixture(scope="module")
+async def initialize_leader_vault(ops_test: OpsTest, build_charms_and_deploy_vault):
+    leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
+    leader_unit_index = int(leader_unit.name[-1])
+    unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+
+    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
+    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
+    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+    return leader_unit_index, root_token, unseal_key
 
 
 class TestVaultK8s:
     """This test class tests vault's deployment and activation."""
 
     @pytest.mark.abort_on_fail
+    async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized_then_status_is_active(
+        self, ops_test: OpsTest, initialize_leader_vault
+    ):
+        leader_unit_index, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        async with ops_test.fast_forward(fast_interval="10s"):
+            unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
+            await wait_for_vault_status_message(
+                ops_test, count=1, message="Waiting for charm to be authorized"
+            )
+            unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+            await wait_for_vault_status_message(
+                ops_test, count=NUM_VAULT_UNITS, message="Waiting for charm to be authorized"
+            )
+            await authorize_charm(ops_test, initialize_leader_vault[0])
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
+
+    @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault,
     ):
         assert ops_test.model
-        unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
-        assert isinstance(unit, Unit)
+        _, root_token, unseal_key = initialize_leader_vault
+        crashing_pod_index = 1
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS - 1,
+        )
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        await wait_for_vault_status_message(
+            ops_test, count=1, message="Waiting for vault to be unsealed"
+        )
+        unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
@@ -164,7 +194,6 @@ class TestVaultK8sIntegrationsPart1:
             tls-certificates-pki,
     """
 
-    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
@@ -430,7 +459,6 @@ class TestVaultK8sIntegrationsPart2:
             s3-parameters
     """
 
-    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
@@ -673,10 +701,6 @@ async def _get_vault_traefik_endpoint(ops_test: OpsTest, timeout: int = 60) -> s
     raise TimeoutError("Traefik did not return proxied endpoints")
 
 
-async def _get_vault_unit_endpoint():
-    pass
-
-
 async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
     """Run the `get-certificate` on the `vault-k8s` unit.
 
@@ -696,6 +720,12 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
         action_name="get-ca-certificate",
     )
     return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
+
+
+async def get_vault_ca_certificate(vault_unit: Unit):
+    action = await vault_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+    await action.wait()
+    return action.results["stdout"]
 
 
 async def run_s3_integrator_sync_credentials_action(
@@ -795,3 +825,70 @@ async def run_restore_backup_action(
 
 def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
+
+
+async def read_full_vault_status(ops_test: OpsTest):
+    status_tuple = await ops_test.juju("status")
+    if status_tuple[0] != 0:
+        raise Exception
+    output = []
+    for row in status_tuple[1].split("\n"):
+        if not row.startswith(f"{APPLICATION_NAME}/"):
+            continue
+        cells = row.split(maxsplit=5)
+        output.append(
+            {
+                "unit": cells[0],
+                "status": cells[1],
+                "agent": cells[2],
+                "address": cells[3],
+                "message": cells[4],
+            }
+        )
+    return output
+
+
+async def wait_for_vault_status_message(
+    ops_test: OpsTest, count: int, message: str, timeout: int = 100, cadence: int = 5
+):
+    while timeout > 0:
+        message = await read_full_vault_status(ops_test)
+        for line in message:
+            seen = 0
+            if line.get("message") == message:
+                seen += 1
+
+        if seen == count:
+            return
+        time.sleep(cadence)
+        timeout -= cadence
+    raise TimeoutError
+
+
+def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    if not client.sys.is_sealed():
+        return
+    client.sys.submit_unseal_key(unseal_key)
+
+
+def unseal_all_vaults(
+    ops_test: OpsTest, unit_addresses: List[str], root_token: str, unseal_key: str
+):
+    for endpoint in unit_addresses:
+        unseal_vault(endpoint, root_token, unseal_key)
+
+
+async def authorize_charm(ops_test: OpsTest, root_token: str):
+    leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
+    authorize_action = await leader_unit.run_action(
+        action_name="authorize-charm",
+        **{
+            "root-token": root_token,
+        },
+    )
+    result = await ops_test.model.get_action_output(
+        action_uuid=authorize_action.entity_id, wait=120
+    )
+    return result
