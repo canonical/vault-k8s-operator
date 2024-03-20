@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,10 @@ class SecretsBackend(Enum):
     PKI = "pki"
 
 
+class VaultClientError(Exception):
+    """Base class for exceptions raised by the Vault client."""
+
+
 class Vault:
     """Class to interact with Vault through its API."""
 
@@ -152,7 +156,7 @@ class Vault:
             logger.info("Vault is unsealed")
         except InvalidRequest as e:
             if self._client.sys.is_sealed():
-                raise e
+                raise VaultClientError(e) from e
 
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
@@ -189,7 +193,9 @@ class Vault:
             if len(errors) == 1 and errors[0].startswith("path already in use"):
                 logger.info("Audit device already enabled.")
             else:
-                raise e
+                raise VaultClientError(e) from e
+        except VaultError as e:
+            raise VaultClientError(e) from e
 
     def enable_approle_auth_method(self) -> None:
         """Enable approle auth method if it isn't already enabled."""
@@ -201,7 +207,9 @@ class Vault:
             if len(errors) == 1 and errors[0].startswith("path is already in use"):
                 logger.info("Approle already enabled.")
             else:
-                raise e
+                raise VaultClientError(e) from e
+        except VaultError as e:
+            raise VaultClientError(e) from e
 
     def configure_policy(
         self, policy_name: str, policy_path: str, mount: Optional[str] = None
@@ -215,19 +223,24 @@ class Vault:
         """
         with open(policy_path, "r") as f:
             policy = f.read()
-        self._client.sys.create_or_update_policy(
-            name=policy_name,
-            policy=policy if not mount else policy.format(mount=mount),
-        )
+        try:
+            self._client.sys.create_or_update_policy(
+                name=policy_name,
+                policy=policy if not mount else policy.format(mount=mount),
+            )
+        except VaultError as e:
+            raise VaultClientError(e) from e
         logger.debug("Created or updated charm policy: %s", policy_name)
 
-    def configure_approle(self, role_name: str, cidrs: List[str], policies: List[str]) -> str:
+    def configure_approle(
+        self, role_name: str, policies: List[str], cidrs: List[str] | None = None
+    ) -> str:
         """Create/update a role within vault associating the supplied policies.
 
         Args:
             role_name: Name of the role to be created or updated
-            cidrs: The list of IP networks that are allowed to authenticate
             policies: The attached list of policy names this approle will have access to
+            cidrs: The list of IP networks that are allowed to authenticate
         """
         self._client.auth.approle.create_or_update_approle(
             role_name,
@@ -240,7 +253,7 @@ class Vault:
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    def generate_role_secret_id(self, name: str, cidrs: List[str]) -> str:
+    def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]
@@ -264,7 +277,7 @@ class Vault:
             if len(errors) == 1 and errors[0].startswith("path is already in use"):
                 logger.info("%s backend already enabled", backend_type.value)
             else:
-                raise e
+                raise VaultClientError(e) from e
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""

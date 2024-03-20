@@ -24,7 +24,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
 from exceptions import VaultCertsError
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
-from ops.pebble import APIError, PathError
+from ops.pebble import PathError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "61b41a053d9847ce8a14eb02197d12cb"
@@ -34,7 +34,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,10 @@ class WorkloadBase(ABC):
     def send_signal(self, signal: int, process: str) -> None:
         """Send a signal to a process in the workload."""
         pass
+
+    @abstractmethod
+    def restart(self, process: str) -> None:
+        """Restart the workload service."""
 
     @abstractmethod
     def stop(self, process: str) -> None:
@@ -182,15 +186,15 @@ class VaultTLSManager(Object):
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 self._set_ca_certificate_secret(ca_private_key, ca_certificate)
                 tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
-            if not self.tls_file_pushed_to_workload(
-                File.CA
-            ) or not self.tls_file_pushed_to_workload(File.CERT):
+            if (not self.tls_file_pushed_to_workload(File.CA)) or (
+                not self.tls_file_pushed_to_workload(File.CERT)
+            ):
                 self._generate_self_signed_certs(subject_ip)
                 tls_logger.info(
                     "Saved Vault generated CA and self signed certificate to %s.",
                     self.charm.unit.name,
                 )
-                self._reload_vault()
+                self._restart_vault()
             return
 
         if self._should_request_new_certificate():
@@ -199,17 +203,18 @@ class VaultTLSManager(Object):
             )
             tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
         existing_csr = self.pull_tls_file_from_workload(File.CSR)
-        assigned_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-        if assigned_cert and assigned_cert.certificate != self.pull_tls_file_from_workload(
-            File.CERT
-        ):
-            self._push_tls_file_to_workload(File.CERT, assigned_cert.certificate)
-            self._push_tls_file_to_workload(File.CA, assigned_cert.ca)
+        signed_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
+        if signed_cert and signed_cert.certificate != self.pull_tls_file_from_workload(File.CERT):
+            self._push_tls_file_to_workload(File.CERT, signed_cert.certificate)
             tls_logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
-            self._reload_vault()
+            if self.pull_tls_file_from_workload(File.CA) != signed_cert.ca:
+                self._push_tls_file_to_workload(File.CA, signed_cert.ca)
+                self._restart_vault()
+            else:
+                self._reload_vault()
 
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
@@ -392,9 +397,17 @@ class VaultTLSManager(Object):
         """
         try:
             self.workload.send_signal(signal=SIGHUP, process=self._service_name)
-            tls_logger.debug("Vault restart requested")
-        except APIError:
+            tls_logger.debug("Vault reload requested")
+        except Exception:
             tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
+
+    def _restart_vault(self) -> None:
+        """Attempt to restart the Vault server."""
+        try:
+            self.workload.restart(self._service_name)
+            tls_logger.debug("Vault restarted")
+        except Exception:
+            tls_logger.debug("Couldn't restart Vault. Proceeding normally.")
 
     def pull_tls_file_from_workload(self, file: File) -> str:
         """Get a file related to certs from the workload.

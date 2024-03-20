@@ -295,6 +295,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
     @patch("ops.model.Model.get_binding")
     def test_given_peer_relation_created_when_configure_then_config_file_is_pushed(
@@ -326,6 +327,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_peer_relation_created_when_configure_then_pebble_plan_is_set(
         self,
@@ -365,6 +367,7 @@ class TestCharm(unittest.TestCase):
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_api_not_available_when_evaluate_status_then_status_is_waiting(
         self,
@@ -396,6 +399,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_vault_not_initialized_when_configure_then_vault_initialized(
         self,
@@ -467,6 +471,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_audit_device_not_enabled_when_configure_then_audit_device_is_enabled(
         self,
