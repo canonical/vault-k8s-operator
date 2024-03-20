@@ -199,6 +199,11 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
+        try:
+            self.tls.get_tls_file_path_in_charm(File.CA)
+        except VaultCertsError:
+            event.add_status(BlockedStatus("Missing Storage"))
+            return
         vault = Vault(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
