@@ -102,13 +102,15 @@ class TestVaultK8s:
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
             await wait_for_vault_status_message(
-                ops_test, count=1, message="Waiting for charm to be authorized"
+                ops_test=ops_test, count=1, expected_message="Waiting for charm to be authorized"
             )
             unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
             await wait_for_vault_status_message(
-                ops_test, count=NUM_VAULT_UNITS, message="Waiting for charm to be authorized"
+                ops_test=ops_test,
+                count=NUM_VAULT_UNITS,
+                expected_message="Waiting for charm to be authorized",
             )
-            await authorize_charm(ops_test, initialize_leader_vault[0])
+            await authorize_charm(ops_test, initialize_leader_vault[1])
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -136,7 +138,7 @@ class TestVaultK8s:
         )
         unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
         await wait_for_vault_status_message(
-            ops_test, count=1, message="Waiting for vault to be unsealed"
+            ops_test, count=1, expected_message="Waiting for vault to be unsealed"
         )
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
         await ops_test.model.wait_for_idle(
@@ -835,7 +837,7 @@ async def read_full_vault_status(ops_test: OpsTest):
     for row in status_tuple[1].split("\n"):
         if not row.startswith(f"{APPLICATION_NAME}/"):
             continue
-        cells = row.split(maxsplit=5)
+        cells = row.split(maxsplit=4)
         output.append(
             {
                 "unit": cells[0],
@@ -849,13 +851,15 @@ async def read_full_vault_status(ops_test: OpsTest):
 
 
 async def wait_for_vault_status_message(
-    ops_test: OpsTest, count: int, message: str, timeout: int = 100, cadence: int = 5
+    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 5
 ):
     while timeout > 0:
-        message = await read_full_vault_status(ops_test)
-        for line in message:
-            seen = 0
-            if line.get("message") == message:
+        vault_status = await read_full_vault_status(ops_test)
+        seen = 0
+        for row in vault_status:
+            print(row)
+            if row.get("message") == expected_message:
+                print("seen")
                 seen += 1
 
         if seen == count:
