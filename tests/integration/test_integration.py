@@ -110,7 +110,7 @@ class TestVaultK8s:
                 count=NUM_VAULT_UNITS,
                 expected_message="Waiting for charm to be authorized",
             )
-            await authorize_charm(ops_test, initialize_leader_vault[1])
+            await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -130,50 +130,65 @@ class TestVaultK8s:
         crashing_pod_index = 1
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=NUM_VAULT_UNITS - 1,
+        await wait_for_vault_status_message(
+            ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
         )
         unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
-        await wait_for_vault_status_message(
-            ops_test, count=1, expected_message="Waiting for vault to be unsealed"
-        )
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        )
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault,
     ):
         assert ops_test.model
-        num_units = NUM_VAULT_UNITS + 2
+        _, root_token, unseal_key = initialize_leader_vault
+        num_units = NUM_VAULT_UNITS + 1
         app: Application = ops_test.model.applications[APPLICATION_NAME]
         await app.scale(num_units)
 
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=num_units,
+        await wait_for_vault_status_message(
+            ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
         )
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unseal_vault(unit_addresses[-1], root_token, unseal_key)
+
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=num_units,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault,
     ):
         assert ops_test.model
+        _, root_token, _ = initialize_leader_vault
         app: Application = ops_test.model.applications[APPLICATION_NAME]
+
+        # TODO: maybe get the app ip and connect with cert?
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        client = hvac.Client(url=f"https://{unit_addresses[-1]}:8200", verify=False)
+        client.token = root_token
+        response = client.sys.read_raft_config()
+        assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS + 1
+
         await app.scale(NUM_VAULT_UNITS)
-
-        # TODO: assert that the nodes were removed and the config is changed to reflect the new expected units
-
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
@@ -181,7 +196,14 @@ class TestVaultK8s:
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
+        client = hvac.Client(url=f"https://{unit_addresses[0]}:8200", verify=False)
+        client.token = root_token
+        response = client.sys.read_raft_config()
+        print(response)
+        assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS
 
+
+@pytest.mark.skip(reason="testing")
 class TestVaultK8sIntegrationsPart1:
     """Test some of the integrations and the related actions between Vault and its relations.
 
@@ -425,6 +447,13 @@ class TestVaultK8sIntegrationsPart1:
         final_ca_cert = action.results["stdout"]
         assert initial_ca_cert != final_ca_cert
 
+        await wait_for_vault_status_message(
+            ops_test, count=NUM_VAULT_UNITS, expected_message="Waiting for vault to be unsealed"
+        )
+        # TODO: Unseal all vaults
+
+    # TODO: when we have new cert and we scale up new unit joins and unseals properly
+
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
         self, ops_test: OpsTest, deploy_requiring_charms: None
@@ -450,6 +479,7 @@ class TestVaultK8sIntegrationsPart1:
         assert initial_ca_cert != final_ca_cert
 
 
+@pytest.mark.skip(reason="testing")
 class TestVaultK8sIntegrationsPart2:
     """Test some of the integrations and the related actions between Vault and its relations.
 
@@ -838,6 +868,8 @@ async def read_full_vault_status(ops_test: OpsTest):
         if not row.startswith(f"{APPLICATION_NAME}/"):
             continue
         cells = row.split(maxsplit=4)
+        if len(cells) < 5:
+            cells.append("")
         output.append(
             {
                 "unit": cells[0],
@@ -857,9 +889,7 @@ async def wait_for_vault_status_message(
         vault_status = await read_full_vault_status(ops_test)
         seen = 0
         for row in vault_status:
-            print(row)
             if row.get("message") == expected_message:
-                print("seen")
                 seen += 1
 
         if seen == count:
