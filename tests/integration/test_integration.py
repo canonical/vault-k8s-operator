@@ -203,7 +203,6 @@ class TestVaultK8s:
         assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS
 
 
-@pytest.mark.skip(reason="testing")
 class TestVaultK8sIntegrationsPart1:
     """Test some of the integrations and the related actions between Vault and its relations.
 
@@ -220,7 +219,10 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault,
     ):
         assert ops_test.model
 
@@ -265,6 +267,10 @@ class TestVaultK8sIntegrationsPart1:
             timeout=1000,
             wait_for_exact_units=1,
         )
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
@@ -442,17 +448,10 @@ class TestVaultK8sIntegrationsPart1:
             timeout=1000,
         )
 
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        await action.wait()
-        final_ca_cert = action.results["stdout"]
+        final_ca_cert = await get_vault_ca_certificate()
         assert initial_ca_cert != final_ca_cert
 
-        await wait_for_vault_status_message(
-            ops_test, count=NUM_VAULT_UNITS, expected_message="Waiting for vault to be unsealed"
-        )
         # TODO: Unseal all vaults
-
-    # TODO: when we have new cert and we scale up new unit joins and unseals properly
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
@@ -478,8 +477,9 @@ class TestVaultK8sIntegrationsPart1:
         final_ca_cert = action.results
         assert initial_ca_cert != final_ca_cert
 
+        # TODO: Unseal all vaults
 
-@pytest.mark.skip(reason="testing")
+
 class TestVaultK8sIntegrationsPart2:
     """Test some of the integrations and the related actions between Vault and its relations.
 
@@ -543,6 +543,10 @@ class TestVaultK8sIntegrationsPart2:
             timeout=1000,
             wait_for_exact_units=1,
         )
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
@@ -754,7 +758,7 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
     return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
 
 
-async def get_vault_ca_certificate(vault_unit: Unit):
+async def get_vault_ca_certificate(vault_unit: Unit) -> str:
     action = await vault_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
     await action.wait()
     return action.results["stdout"]
