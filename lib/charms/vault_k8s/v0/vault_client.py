@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 
 logger = logging.getLogger(__name__)
@@ -102,8 +102,8 @@ class VaultClientError(Exception):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, ca_cert_path: str):
-        self._client = hvac.Client(url=url, verify=ca_cert_path)
+    def __init__(self, url: str, ca_cert_path: Optional[str]):
+        self._client = hvac.Client(url=url, verify=ca_cert_path if ca_cert_path else False)
 
     def authenticate(self, auth_details: AuthMethod) -> bool:
         """Find and use the token related with the given auth method."""

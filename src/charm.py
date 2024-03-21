@@ -272,7 +272,7 @@ class VaultCharm(CharmBase):
             )
 
     def _on_remove(self, event: RemoveEvent):
-        """Handle remove charm event.
+        """Handle certs removed event.
 
         Removes the vault service and the raft data and removes the node from the raft cluster.
         """
@@ -281,10 +281,7 @@ class VaultCharm(CharmBase):
         try:
             role_id, secret_id = self._get_approle_auth_secret()
             if self._bind_address:
-                vault = Vault(
-                    url=self._api_address,
-                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
-                )
+                vault = Vault(url=self._api_address, ca_cert_path=None)
                 vault.authenticate(AppRole(role_id, secret_id))
                 if (
                     vault.is_api_available()
