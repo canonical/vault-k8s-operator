@@ -367,7 +367,6 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault.enable_approle_auth_method()
         mount = "charm-" + relation.app.name + "-" + event.mount_suffix
         self._set_kv_relation_data(relation, mount, ca_certificate)
         vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
