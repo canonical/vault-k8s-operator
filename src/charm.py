@@ -284,7 +284,7 @@ class VaultCharm(CharmBase):
             return
         try:
             role_id, secret_id = self._get_approle_auth_secret()
-            if self._bind_address:
+            if role_id and secret_id and self._bind_address:
                 vault = Vault(url=self._api_address, ca_cert_path=None)
                 vault.authenticate(AppRole(role_id, secret_id))
                 if (
@@ -293,8 +293,6 @@ class VaultCharm(CharmBase):
                     and vault.get_num_raft_peers() > 1
                 ):
                     vault.remove_raft_node(node_id=self._node_id)
-        except SecretNotFoundError:
-            logger.info("Vault initialization secret not set")
         except VaultCertsError:
             logger.info("Vault CA certificate not found")
         finally:
@@ -1070,8 +1068,6 @@ class VaultCharm(CharmBase):
         if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
-        role_id, secret_id = self._get_approle_auth_secret()
-        vault.authenticate(AppRole(role_id, secret_id))
         response = vault.create_snapshot()
         return response.raw
 
@@ -1091,13 +1087,6 @@ class VaultCharm(CharmBase):
         if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot restore snapshot.")
             return False
-
-        vault = Vault(
-            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
-        )
-
-        role_id, secret_id = self._get_approle_auth_secret()
-        vault.authenticate(AppRole(role_id, secret_id))
 
         try:
             # hvac vault client expects bytes or a file-like object to restore the snapshot
@@ -1130,6 +1119,8 @@ class VaultCharm(CharmBase):
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
         role_id, secret_id = self._get_approle_auth_secret()
+        if not role_id or not secret_id:
+            return None
         vault.authenticate(AppRole(role_id, secret_id))
         if not vault.is_authenticated():
             return None

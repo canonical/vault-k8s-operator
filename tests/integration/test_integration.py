@@ -460,11 +460,12 @@ class TestVaultK8sIntegrationsPart1:
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
@@ -503,11 +504,12 @@ class TestVaultK8sIntegrationsPart1:
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+            )
 
 
 class TestVaultK8sIntegrationsPart2:
