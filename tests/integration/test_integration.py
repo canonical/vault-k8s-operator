@@ -428,7 +428,7 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
+        self, ops_test: OpsTest, deploy_requiring_charms: None, initialize_leader_vault
     ):
         assert ops_test.model
 
@@ -451,11 +451,18 @@ class TestVaultK8sIntegrationsPart1:
         final_ca_cert = await get_vault_ca_certificate()
         assert initial_ca_cert != final_ca_cert
 
-        # TODO: Unseal all vaults
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
+        self, ops_test: OpsTest, deploy_requiring_charms: None, initialize_leader_vault
     ):
         assert ops_test.model
 

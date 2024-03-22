@@ -2,6 +2,10 @@
 path "sys/policy/charm-*" {
   capabilities = ["create", "read", "update", "delete"]
 }
+# Allow operations under the charm prefix
+path "charm-*" {
+  capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
+}
 
 # Allow discovery of all policies
 path "sys/policy/" {
@@ -35,6 +39,7 @@ path "charm-pki-*" {
 path "sys/mounts" {
   capabilities = ["read"]
 }
+
 path "sys/mounts/" {
   capabilities = ["list"]
 }
