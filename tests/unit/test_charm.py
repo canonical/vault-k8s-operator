@@ -15,7 +15,7 @@ from botocore.response import StreamingBody
 from charm import (
     PKI_CSR_SECRET_LABEL,
     S3_RELATION_NAME,
-    VAULT_INITIALIZATION_SECRET_LABEL,
+    VAULT_CHARM_APPROLE_SECRET_LABEL,
     VaultCharm,
     config_file_content_matches,
 )
@@ -33,7 +33,7 @@ from charms.vault_k8s.v0.vault_client import (
 )
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
@@ -128,27 +128,19 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
-    def _set_initialization_secret_in_peer_relation(
-        self, relation_id: int, root_token: str, unseal_keys: List[str]
-    ) -> None:
-        """Set the initialization secret in the peer relation."""
+    def _set_approle_secret(self, relation_id: int, role_id: str, secret_id: str) -> None:
+        """Set the approle secret."""
         content = {
-            "roottoken": root_token,
-            "unsealkeys": json.dumps(unseal_keys),
+            "role-id": role_id,
+            "secret-id": secret_id,
         }
         original_leader_state = self.harness.charm.unit.is_leader()
         with self.harness.hooks_disabled():
             self.harness.set_leader(is_leader=True)
             secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
             secret = self.harness.model.get_secret(id=secret_id)
-            secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
+            secret.set_info(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
-        key_values = {"vault-initialization-secret-id": secret_id}
-        self.harness.update_relation_data(
-            app_or_unit=self.app_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
 
     def _set_csr_secret_in_peer_relation(self, relation_id: int, csr: str) -> None:
         """Set the csr secret in the peer relation."""
@@ -264,36 +256,6 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
-    @patch("ops.model.Model.get_binding")
-    def test_given_not_leader_and_init_secret_not_set_when_evaluate_status_then_status_is_waiting(
-        self, patch_get_binding
-    ):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=False)
-        peer_relation_id = self._set_peer_relation()
-        other_unit_name = f"{self.app_name}/1"
-        self.harness.add_relation_unit(
-            relation_id=peer_relation_id, remote_unit_name=other_unit_name
-        )
-        self._set_other_node_api_address_in_peer_relation(
-            relation_id=peer_relation_id, unit_name=other_unit_name
-        )
-        self._set_ca_certificate_secret(
-            certificate="whatever certificate",
-            private_key="whatever private key",
-        )
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="10.1.0.1"
-        )
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for initialization secret"),
-        )
-
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
@@ -310,10 +272,10 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
         relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=relation_id,
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.3.4", ingress_address="1.1.1.1"
@@ -338,10 +300,10 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
         relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=relation_id,
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_get_binding.return_value = MockBinding(
@@ -399,45 +361,8 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
-    def test_given_vault_not_initialized_when_configure_then_vault_initialized(
-        self,
-        patch_get_binding,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": False,
-                "initialize.return_value": ("root token", ["unseal key 1"]),
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-        self._set_peer_relation()
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.add_storage(storage_name="config", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.3.4", ingress_address="1.1.1.1"
-        )
-
-        self.harness.charm.on.config_changed.emit()
-
-        mock_vault.initialize.assert_called_once()
-        init_secret = self.harness.model.get_secret(
-            label=VAULT_INITIALIZATION_SECRET_LABEL
-        ).get_content()
-        self.assertEqual(
-            init_secret,
-            {"roottoken": "root token", "unsealkeys": '["unseal key 1"]'},
-        )
-
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Model.get_binding")
-    def test_given_api_available_when_evaluate_status_then_status_is_active(
+    def test_given_api_available_when_evaluate_status_then_status_is_blocked(
         self,
         patch_get_binding,
         mock_vault_class,
@@ -467,41 +392,12 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            ActiveStatus(),
+            BlockedStatus("Waiting for vault to be initialized"),
         )
 
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Container.restart", new=Mock)
-    @patch("ops.model.Model.get_binding")
-    def test_given_audit_device_not_enabled_when_configure_then_audit_device_is_enabled(
-        self,
-        patch_get_binding,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": False,
-                "is_active.return_value": True,
-                "initialize.return_value": ("root token", ["unseal key 1"]),
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-        self._set_peer_relation()
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.add_storage(storage_name="config", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.set_leader(is_leader=True)
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.3.4", ingress_address="1.1.1.1"
-        )
+    # TODO: add tests for each new status
 
-        self.harness.charm.on.config_changed.emit()
-
-        mock_vault.enable_audit_device.assert_called_with(
-            device_type=AuditDeviceType.FILE, path="stdout"
-        )
+    # TODO: add tests for authorize charm
 
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
         root = self.harness.get_filesystem_root(self.container_name)
@@ -542,10 +438,10 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
 
         self.harness.charm.on.remove.emit()
@@ -570,10 +466,10 @@ class TestCharm(unittest.TestCase):
 
         self.harness.set_can_connect(container=self.container_name, val=True)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
 
         self.harness.charm.on.remove.emit()
@@ -599,10 +495,10 @@ class TestCharm(unittest.TestCase):
 
         self.harness.set_can_connect(container=self.container_name, val=True)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
 
         self.harness.charm.on.remove.emit()
@@ -838,10 +734,10 @@ class TestCharm(unittest.TestCase):
             certificate="whatever certificate",
             private_key="whatever private key",
         )
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         self.harness.set_leader(is_leader=True)
@@ -878,10 +774,10 @@ class TestCharm(unittest.TestCase):
             certificate="whatever certificate",
             private_key="whatever private key",
         )
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         self.harness.set_leader(is_leader=True)
@@ -919,10 +815,10 @@ class TestCharm(unittest.TestCase):
             certificate="whatever certificate",
             private_key="whatever private key",
         )
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         self.harness.set_leader(is_leader=True)
@@ -1259,10 +1155,10 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.add_storage(storage_name="certs", attach=True)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         event = Mock()
         event.params = {
@@ -1307,10 +1203,10 @@ class TestCharm(unittest.TestCase):
             certificate="whatever certificate",
             private_key="whatever private key",
         )
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         event = Mock()
         event.params = {
@@ -1322,435 +1218,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.set_results.assert_called_with({"restored": "whatever backup id"})
 
-    @patch("s3_session.S3.get_content")
-    @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    def test_given_restore_snapshot_fails_when_restore_backup_action_then_initialization_secret_is_unchanged(
-        self,
-        patch_get_s3_connection_info,
-        mock_vault_class,
-        patch_get_content,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_initialized.return_value": True,
-                "restore_snapshot.return_value": MagicMock(
-                    status_code=500, spec=requests.Response
-                ),
-                "is_api_available.return_value": True,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.set_leader(is_leader=True)
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_get_content.return_value = StreamingBody(
-            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
-        )
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="original token content",
-            unseal_keys=["original_unseal_keys"],
-        )
-        event = Mock()
-        event.params = {
-            "backup-id": "whatever backup id",
-            "root-token": "backup root token",
-            "unseal-keys": ["backup_unseal_keys"],
-        }
-        self.harness.charm._on_restore_backup_action(event)
-        init_secret = self.harness.model.get_secret(
-            label=VAULT_INITIALIZATION_SECRET_LABEL
-        ).get_content(refresh=True)
-        self.assertEqual(
-            init_secret,
-            {"roottoken": "original token content", "unsealkeys": '["original_unseal_keys"]'},
-        )
-
-    @patch("s3_session.S3.get_content")
-    @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_initialization_secret_is_updated(
-        self,
-        patch_get_s3_connection_info,
-        mock_vault_class,
-        patch_get_content,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_initialized.return_value": True,
-                "restore_snapshot.return_value": MagicMock(
-                    status_code=200, spec=requests.Response
-                ),
-                "is_api_available.return_value": True,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.set_leader(is_leader=True)
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_get_content.return_value = StreamingBody(
-            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
-        )
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="original token content",
-            unseal_keys=["original_unseal_keys"],
-        )
-        event = Mock()
-        event.params = {
-            "backup-id": "whatever backup id",
-            "root-token": "backup root token",
-            "unseal-keys": ["backup_unseal_keys"],
-        }
-
-        self.harness.charm._on_restore_backup_action(event)
-
-        init_secret = self.harness.model.get_secret(
-            label=VAULT_INITIALIZATION_SECRET_LABEL
-        ).get_content(refresh=True)
-        self.assertEqual(
-            init_secret,
-            {"roottoken": "backup root token", "unsealkeys": '["backup_unseal_keys"]'},
-        )
-
-    @patch("s3_session.S3.get_content")
-    @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_vault_is_unsealed_with_new_keys(
-        self,
-        patch_get_s3_connection_info,
-        mock_vault_class,
-        patch_get_content,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_initialized.return_value": True,
-                "restore_snapshot.return_value": MagicMock(
-                    status_code=200, spec=requests.Response
-                ),
-                "is_api_available.return_value": True,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.set_leader(is_leader=True)
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_get_content.return_value = StreamingBody(
-            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
-        )
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="original token content",
-            unseal_keys=["original_unseal_keys"],
-        )
-        event = Mock()
-        event.params = {
-            "backup-id": "whatever backup id",
-            "root-token": "backup root token",
-            "unseal-keys": ["backup_unseal_keys"],
-        }
-
-        self.harness.charm._on_restore_backup_action(event)
-
-        mock_vault.unseal.assert_called_with(unseal_keys=["backup_unseal_keys"])
-
-    @patch("s3_session.S3.get_content")
-    @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_new_vault_root_token_is_set(
-        self,
-        patch_get_s3_connection_info,
-        mock_vault_class,
-        patch_get_content,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_initialized.return_value": True,
-                "restore_snapshot.return_value": MagicMock(
-                    status_code=200, spec=requests.Response
-                ),
-                "is_api_available.return_value": True,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.set_leader(is_leader=True)
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_get_content.return_value = StreamingBody(
-            io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
-        )
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="original token content",
-            unseal_keys=["original_unseal_keys"],
-        )
-        event = Mock()
-        event.params = {
-            "backup-id": "whatever backup id",
-            "root-token": "backup root token",
-            "unseal-keys": ["backup_unseal_keys"],
-        }
-
-        self.harness.charm._on_restore_backup_action(event)
-
-        mock_vault.authenticate.assert_called_with(Token("backup root token"))
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_unit_not_leader_when_set_unseal_keys_action_then_action_fails(
-        self, mock_vault_class
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        event = Mock()
-        self.harness.charm._on_set_unseal_keys_action(event)
-        event.fail.assert_called_with(message="Only leader unit can set unseal keys.")
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_vault_not_initialized_when_set_unseal_keys_action_then_action_fails(
-        self,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(spec=Vault, **{"is_initialized.return_value": False})
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        self.harness.charm._on_set_unseal_keys_action(event)
-        event.fail.assert_called_with(
-            message="Cannot set unseal keys, vault is not initialized yet."
-        )
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_provided_unseal_keys_match_current_when_set_unseal_keys_action_then_action_fails(
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"unseal-keys": ["unseal_key2", "unseal_key1"]}
-        self.harness.charm._on_set_unseal_keys_action(event)
-        event.fail.assert_called_with(message="Provided unseal keys are already set.")
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_unseal_keys_are_set_in_secret(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
-        self.harness.charm._on_set_unseal_keys_action(event)
-        init_secret = self.harness.model.get_secret(
-            label=VAULT_INITIALIZATION_SECRET_LABEL
-        ).get_content(refresh=True)
-        self.assertEqual(
-            init_secret,
-            {
-                "roottoken": "root token content",
-                "unsealkeys": '["new unseal key1", "new unseal key2"]',
-            },
-        )
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_vault_is_unsealed(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(spec=Vault)
-        mock_vault_class.return_value = mock_vault
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
-        self.harness.charm._on_set_unseal_keys_action(event)
-        mock_vault.unseal.assert_called_with(unseal_keys=["new unseal key1", "new unseal key2"])
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_unseal_keys_and_unit_is_leader_and_vault_is_initialized_when_set_unseal_keys_action_then_action_succeeds(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"unseal-keys": ["new unseal key1", "new unseal key2"]}
-        self.harness.charm._on_set_unseal_keys_action(event)
-        event.set_results.assert_called_with(
-            {"unseal-keys": ["new unseal key1", "new unseal key2"]}
-        )
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_unit_not_leader_when_set_root_token_action_then_action_fails(
-        self, mock_vault_class
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        event = Mock()
-        self.harness.charm._on_set_root_token_action(event)
-        event.fail.assert_called_with(message="Only leader unit can set the root token.")
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_vault_not_initialized_when_set_root_token_action_then_action_fails(
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        self.harness.charm._on_set_root_token_action(event)
-        event.fail.assert_called_with(
-            message="Cannot set root token, vault is not initialized yet."
-        )
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_provided_root_token_matches_current_when_set_root_token_action_then_action_fails(
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"root-token": "root token content"}
-        self.harness.charm._on_set_root_token_action(event)
-        event.fail.assert_called_with(message="Provided root token is already set.")
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_root_token_is_set_in_secret(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"root-token": "new root token content"}
-        self.harness.charm._on_set_root_token_action(event)
-        init_secret = self.harness.model.get_secret(
-            label=VAULT_INITIALIZATION_SECRET_LABEL
-        ).get_content(refresh=True)
-        self.assertEqual(
-            init_secret,
-            {
-                "roottoken": "new root token content",
-                "unsealkeys": '["unseal_key1", "unseal_key2"]',
-            },
-        )
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_vault_root_token_is_set(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(spec=Vault)
-        mock_vault_class.return_value = mock_vault
-
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"root-token": "new root token content"}
-        self.harness.charm._on_set_root_token_action(event)
-        mock_vault.authenticate.assert_called_with(Token("new root token content"))
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_new_root_token_and_unit_is_leader_and_vault_is_initialized_when_set_root_token_action_then_action_succeeds(  # noqa: E501
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_key1", "unseal_key2"],
-        )
-        self.harness.set_leader(is_leader=True)
-        event = Mock()
-        event.params = {"root-token": "new root token content"}
-        self.harness.charm._on_set_root_token_action(event)
-        event.set_results.assert_called_with({"root-token": "new root token content"})
+    # TODO: write tests for backup and restore
 
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_unit_credentials")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
@@ -1839,53 +1307,13 @@ class TestCharm(unittest.TestCase):
         peer_relation_id = self.harness.add_relation(
             relation_name="vault-peers", remote_app="vault"
         )
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         self.harness.charm._on_new_vault_kv_client_attached(event)
         event.defer.assert_called_with()
-
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Model.get_binding")
-    def test_given_prerequisites_are_met_when_new_vault_kv_client_attached_then_approle_auth_is_enabled(
-        self,
-        patch_get_binding,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "configure_approle.return_value": "12345678",
-                "generate_role_secret_id.return_value": "11111111",
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="10.1.0.1"
-        )
-        peer_relation_id = self.harness.add_relation(
-            relation_name="vault-peers", remote_app="vault"
-        )
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        root = self.harness.get_filesystem_root(self.container_name)
-        (root / "vault/certs/ca.pem").write_text("some ca")
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        event = Mock()
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        rel_id, _ = self.setup_vault_kv_relation()
-        event = Mock()
-        event.relation_name = VAULT_KV_RELATION_NAME
-        event.relation_id = rel_id
-        event.mount_suffix = "suffix"
-        self.harness.charm._on_new_vault_kv_client_attached(event)
-        mock_vault.enable_approle_auth_method.assert_called_once()
 
     @patch("charm.Vault", autospec=True)
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
@@ -1917,10 +1345,10 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         rel_id, _ = self.setup_vault_kv_relation()
         event = Mock()
@@ -1952,10 +1380,10 @@ class TestCharm(unittest.TestCase):
         (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         rel_id, egress_subnet = self.setup_vault_kv_relation()
         mock_vault.read_role_secret.return_value = {"cidr_list": [egress_subnet]}
@@ -2001,10 +1429,10 @@ class TestCharm(unittest.TestCase):
         self.harness.set_can_connect(container=self.container_name, val=True)
         event = Mock()
         event.params = {"relation_name": "relation", "relation_id": "99"}
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         rel_id, _ = self.setup_vault_kv_relation()
         event = Mock()
@@ -2042,10 +1470,10 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
 
         relation_id = self.harness.add_relation(
@@ -2090,10 +1518,10 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
         self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr="some csr content")
         event = CertificateAvailableEvent(
@@ -2169,10 +1597,10 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text(ca)
         peer_relation_id = self._set_peer_relation()
-        self._set_initialization_secret_in_peer_relation(
+        self._set_approle_secret(
             relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
+            role_id="root token content",
+            secret_id="whatever secret id",
         )
 
         event = CertificateCreationRequestEvent(
