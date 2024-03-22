@@ -5,7 +5,6 @@
 import io
 import json
 import unittest
-from typing import List
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
 
 import hcl  # type: ignore[import-untyped]
@@ -25,15 +24,13 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     ProviderCertificate,
 )
 from charms.vault_k8s.v0.vault_client import (
-    AuditDeviceType,
     Certificate,
     SecretsBackend,
-    Token,
     Vault,
 )
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops import testing
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import BlockedStatus, WaitingStatus
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
@@ -128,7 +125,7 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
-    def _set_approle_secret(self, relation_id: int, role_id: str, secret_id: str) -> None:
+    def _set_approle_secret(self, role_id: str, secret_id: str) -> None:
         """Set the approle secret."""
         content = {
             "role-id": role_id,
@@ -140,6 +137,20 @@ class TestCharm(unittest.TestCase):
             secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
             secret = self.harness.model.get_secret(id=secret_id)
             secret.set_info(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            self.harness.set_leader(original_leader_state)
+
+    def _set_ca_certificate_secret(self, private_key: str, certificate: str) -> None:
+        """Set the certificate secret."""
+        content = {
+            "certificate": certificate,
+            "privatekey": private_key,
+        }
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+            secret = self.harness.model.get_secret(id=secret_id)
+            secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
 
     def _set_csr_secret_in_peer_relation(self, relation_id: int, csr: str) -> None:
@@ -161,35 +172,6 @@ class TestCharm(unittest.TestCase):
             key_values=key_values,
         )
 
-    def _set_ca_certificate_secret(self, private_key: str, certificate: str) -> None:
-        """Set the certificate secret."""
-        content = {
-            "certificate": certificate,
-            "privatekey": private_key,
-        }
-        original_leader_state = self.harness.charm.unit.is_leader()
-        with self.harness.hooks_disabled():
-            self.harness.set_leader(is_leader=True)
-            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
-            secret = self.harness.model.get_secret(id=secret_id)
-            secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            self.harness.set_leader(original_leader_state)
-
-    def _set_other_node_api_address_in_peer_relation(self, relation_id: int, unit_name: str):
-        """Set the other node api address in the peer relation."""
-        key_values = {"node_api_address": "http://5.2.1.9:8200"}
-        self.harness.update_relation_data(
-            app_or_unit=unit_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
-
-    def _set_tls_access_certificate_relation(self):
-        """Set the peer relation and return the relation id."""
-        return self.harness.add_relation(
-            relation_name="tls-certificates-access", remote_app="some-tls-provider"
-        )
-
     def setup_vault_kv_relation(self) -> tuple:
         app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
         unit_name = app_name + "/0"
@@ -208,6 +190,7 @@ class TestCharm(unittest.TestCase):
 
         return (rel_id, egress_subnet)
 
+    # Test install
     @patch("ops.model.Container.remove_path")
     def test_given_can_connect_when_install_then_existing_data_is_removed(self, patch_remove_path):
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -222,6 +205,7 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
+    # Test collect status
     def test_given_cant_connect_when_evaluate_status_then_status_is_waiting(self):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=False)
@@ -256,6 +240,7 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
+    # Test configure
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
@@ -399,6 +384,7 @@ class TestCharm(unittest.TestCase):
 
     # TODO: add tests for authorize charm
 
+    # Test remove
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="vault-raft", attach=True)
@@ -505,6 +491,7 @@ class TestCharm(unittest.TestCase):
 
         patch_stop_service.assert_called_with("vault")
 
+    # Test S3
     def test_given_s3_relation_not_created_when_create_backup_action_then_action_fails(self):
         event = Mock()
         self.harness.set_leader(is_leader=True)
@@ -1220,6 +1207,7 @@ class TestCharm(unittest.TestCase):
 
     # TODO: write tests for backup and restore
 
+    # Test Vault KV
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_unit_credentials")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_mount")
@@ -1296,7 +1284,7 @@ class TestCharm(unittest.TestCase):
         event.defer.assert_called_with()
 
     @patch("charm.Vault", autospec=True)
-    def test_given_ca_certificate_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(
+    def test_given_ca_certificate_secret_not_set_when_new_vault_kv_client_attached_then_event_is_deferred(
         self,
         mock_vault_class,
     ):
@@ -1444,6 +1432,7 @@ class TestCharm(unittest.TestCase):
             SecretsBackend.KV_V2, "charm-vault-kv-requirer-suffix"
         )
 
+    # Test PKI
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
     @patch("charm.Vault", autospec=True)

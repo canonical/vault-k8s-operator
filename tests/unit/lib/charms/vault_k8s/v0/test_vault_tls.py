@@ -4,7 +4,6 @@
 
 import json
 import unittest
-from typing import List
 from unittest.mock import Mock, patch
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm

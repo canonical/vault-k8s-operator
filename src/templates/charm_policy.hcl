@@ -48,12 +48,10 @@ path "sys/mounts/" {
 path "sys/storage/raft/autopilot/state" {
   capabilities = ["read"]
 }
-
 # Allow reading raft peers
 path "sys/storage/raft/configuration" {
   capabilities = ["read"]
 }
-
 # Allow removing nodes from the raft backend
 path "sys/storage/raft/remove-peer" {
   capabilities = ["update"]

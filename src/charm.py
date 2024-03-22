@@ -216,7 +216,8 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             event.add_status(BlockedStatus("Waiting for vault to be unsealed"))
             return
-        if not all(self._get_approle_auth_secret()):
+        role_id, secret_id = self._get_approle_auth_secret()
+        if not role_id or not secret_id:
             event.add_status(BlockedStatus("Waiting for charm to be authorized"))
             return
         if not self._get_active_vault_client():
@@ -332,199 +333,6 @@ class VaultCharm(CharmBase):
         secret_id = v.generate_role_secret_id(name="charm", cidrs=cidrs)
         self._set_approle_auth_secret(role_id, secret_id)
         self.on.config_changed.emit()
-
-    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
-        """Handle vault-kv-client attached event."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can configure a vault-kv client, skipping")
-            return
-
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created, deferring event")
-            event.defer()
-            return
-
-        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
-        if not ca_certificate:
-            logger.debug("Vault CA certificate not available, deferring event")
-            event.defer()
-            return
-
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault, deferring event")
-            event.defer()
-            return
-
-        relation = self.model.get_relation(event.relation_name, event.relation_id)
-
-        if relation is None or relation.app is None:
-            logger.warning(
-                "Relation or remote application is missing,"
-                "this should not happen, skipping event"
-            )
-            return
-
-        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
-        self._set_kv_relation_data(relation, mount, ca_certificate)
-        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
-        for unit in relation.units:
-            egress_subnet = relation.data[unit].get("egress_subnet")
-            nonce = relation.data[unit].get("nonce")
-            if egress_subnet is None or nonce is None:
-                logger.debug(
-                    "Skipping configuring access for unit %r, egress_subnet or nonce are missing",
-                    unit.name,
-                )
-                continue
-            self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
-            self._remove_stale_nonce(relation=relation, nonce=nonce)
-
-    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
-        """Handle the tls-certificates-pki relation joined event."""
-        self._configure_pki_secrets_engine()
-
-    def _configure_pki_secrets_engine(self) -> None:
-        """Configure the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        if not self._tls_certificates_pki_relation_created():
-            logger.debug("TLS Certificates PKI relation not created, skipping")
-            return
-        if not self._common_name_config_is_valid():
-            logger.debug("Common name config is not valid, skipping")
-            return
-        common_name = self._get_config_common_name()
-        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
-        if not self._is_intermediate_ca_set(vault, common_name):
-            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
-            self.tls_certificates_pki.request_certificate_creation(
-                certificate_signing_request=csr.encode(),
-                is_ca=True,
-            )
-            self._set_pki_csr_secret(csr)
-
-    def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
-        """Check if the intermediate CA is set in the PKI secrets engine."""
-        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        if not intermediate_ca:
-            return False
-        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
-        return intermediate_ca_common_name == common_name
-
-    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
-        """Add the CA certificate to the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set in the charm config")
-            return
-        certificate = self._get_pki_ca_certificate()
-        if not certificate:
-            logger.debug("No certificate available")
-            return
-        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
-            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
-            vault.create_pki_charm_role(
-                allowed_domains=common_name,
-                mount=PKI_MOUNT,
-                role=PKI_ROLE,
-            )
-
-    def _sync_vault_pki(self) -> None:
-        """Goes through all the vault-pki relations and sends necessary TLS certificate."""
-        for relation in self.model.relations[PKI_RELATION_NAME]:
-            outstanding_requests = self.vault_pki.get_outstanding_certificate_requests(
-                relation_id=relation.id
-            )
-            for request in outstanding_requests:
-                self._generate_pki_certificate_for_requirer(
-                    csr=request.csr,
-                    relation_id=relation.id,
-                )
-
-    def _get_pki_ca_certificate(self) -> Optional[str]:
-        """Return the PKI CA certificate provided by the TLS provider.
-
-        Validate that the CSR matches the one in secrets.
-        """
-        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
-        if not assigned_certificates:
-            return None
-        if not self._pki_csr_secret_set():
-            logger.info("PKI CSR not set in secrets")
-            return None
-        pki_csr = self._get_pki_csr_secret()
-        if not pki_csr:
-            logger.warning("PKI CSR not found in secrets")
-            return None
-        for assigned_certificate in assigned_certificates:
-            if assigned_certificate.csr == pki_csr:
-                return assigned_certificate.certificate
-        logger.info("No certificate matches the PKI CSR in secrets")
-        return None
-
-    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
-        """Handle the tls-certificates-pki certificate available event."""
-        self._add_ca_certificate_to_pki_secrets_engine()
-
-    def _on_vault_pki_certificate_creation_request(
-        self, event: CertificateCreationRequestEvent
-    ) -> None:
-        """Handle the vault-pki certificate creation request event."""
-        self._generate_pki_certificate_for_requirer(
-            event.certificate_signing_request, event.relation_id
-        )
-
-    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
-        """Generate a PKI certificate for a TLS requirer."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        if not self._tls_certificates_pki_relation_created():
-            logger.debug("TLS Certificates PKI relation not created")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set in the charm config")
-            return
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
-            logger.debug("PKI role not created")
-            return
-        requested_csr = csr
-        requested_common_name = get_common_name_from_csr(requested_csr)
-        certificate = vault.sign_pki_certificate_signing_request(
-            mount=PKI_MOUNT,
-            role=PKI_ROLE,
-            csr=requested_csr,
-            common_name=requested_common_name,
-        )
-        if not certificate:
-            logger.debug("Failed to sign the certificate")
-            return
-        self.vault_pki.set_relation_certificate(
-            relation_id=relation_id,
-            certificate=certificate.certificate,
-            certificate_signing_request=csr,
-            ca=certificate.ca,
-            chain=certificate.chain,
-        )
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
@@ -702,6 +510,199 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         event.set_results({"restored": event.params.get("backup-id")})
+
+    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
+        """Handle vault-kv-client attached event."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can configure a vault-kv client, skipping")
+            return
+
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created, deferring event")
+            event.defer()
+            return
+
+        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+        if not ca_certificate:
+            logger.debug("Vault CA certificate not available, deferring event")
+            event.defer()
+            return
+
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault, deferring event")
+            event.defer()
+            return
+
+        relation = self.model.get_relation(event.relation_name, event.relation_id)
+
+        if relation is None or relation.app is None:
+            logger.warning(
+                "Relation or remote application is missing,"
+                "this should not happen, skipping event"
+            )
+            return
+
+        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
+        self._set_kv_relation_data(relation, mount, ca_certificate)
+        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
+        for unit in relation.units:
+            egress_subnet = relation.data[unit].get("egress_subnet")
+            nonce = relation.data[unit].get("nonce")
+            if egress_subnet is None or nonce is None:
+                logger.debug(
+                    "Skipping configuring access for unit %r, egress_subnet or nonce are missing",
+                    unit.name,
+                )
+                continue
+            self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
+            self._remove_stale_nonce(relation=relation, nonce=nonce)
+
+    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
+        """Handle the tls-certificates-pki relation joined event."""
+        self._configure_pki_secrets_engine()
+
+    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle the tls-certificates-pki certificate available event."""
+        self._add_ca_certificate_to_pki_secrets_engine()
+
+    def _on_vault_pki_certificate_creation_request(
+        self, event: CertificateCreationRequestEvent
+    ) -> None:
+        """Handle the vault-pki certificate creation request event."""
+        self._generate_pki_certificate_for_requirer(
+            event.certificate_signing_request, event.relation_id
+        )
+
+    def _configure_pki_secrets_engine(self) -> None:
+        """Configure the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
+            return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created, skipping")
+            return
+        if not self._common_name_config_is_valid():
+            logger.debug("Common name config is not valid, skipping")
+            return
+        common_name = self._get_config_common_name()
+        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
+        if not self._is_intermediate_ca_set(vault, common_name):
+            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
+            self.tls_certificates_pki.request_certificate_creation(
+                certificate_signing_request=csr.encode(),
+                is_ca=True,
+            )
+            self._set_pki_csr_secret(csr)
+
+    def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
+        """Check if the intermediate CA is set in the PKI secrets engine."""
+        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
+        if not intermediate_ca:
+            return False
+        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
+        return intermediate_ca_common_name == common_name
+
+    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
+        """Add the CA certificate to the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        certificate = self._get_pki_ca_certificate()
+        if not certificate:
+            logger.debug("No certificate available")
+            return
+        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
+            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_pki_charm_role(
+                allowed_domains=common_name,
+                mount=PKI_MOUNT,
+                role=PKI_ROLE,
+            )
+
+    def _sync_vault_pki(self) -> None:
+        """Goes through all the vault-pki relations and sends necessary TLS certificate."""
+        for relation in self.model.relations[PKI_RELATION_NAME]:
+            outstanding_requests = self.vault_pki.get_outstanding_certificate_requests(
+                relation_id=relation.id
+            )
+            for request in outstanding_requests:
+                self._generate_pki_certificate_for_requirer(
+                    csr=request.csr,
+                    relation_id=relation.id,
+                )
+
+    def _get_pki_ca_certificate(self) -> Optional[str]:
+        """Return the PKI CA certificate provided by the TLS provider.
+
+        Validate that the CSR matches the one in secrets.
+        """
+        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
+        if not assigned_certificates:
+            return None
+        if not self._pki_csr_secret_set():
+            logger.info("PKI CSR not set in secrets")
+            return None
+        pki_csr = self._get_pki_csr_secret()
+        if not pki_csr:
+            logger.warning("PKI CSR not found in secrets")
+            return None
+        for assigned_certificate in assigned_certificates:
+            if assigned_certificate.csr == pki_csr:
+                return assigned_certificate.certificate
+        logger.info("No certificate matches the PKI CSR in secrets")
+        return None
+
+    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
+        """Generate a PKI certificate for a TLS requirer."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created")
+            return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            logger.debug("PKI role not created")
+            return
+        requested_csr = csr
+        requested_common_name = get_common_name_from_csr(requested_csr)
+        certificate = vault.sign_pki_certificate_signing_request(
+            mount=PKI_MOUNT,
+            role=PKI_ROLE,
+            csr=requested_csr,
+            common_name=requested_common_name,
+        )
+        if not certificate:
+            logger.debug("Failed to sign the certificate")
+            return
+        self.vault_pki.set_relation_certificate(
+            relation_id=relation_id,
+            certificate=certificate.certificate,
+            certificate_signing_request=csr,
+            ca=certificate.ca,
+            chain=certificate.chain,
+        )
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
         """Validate the requirements for creating S3.
