@@ -82,7 +82,7 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
 async def initialize_leader_vault(ops_test: OpsTest, build_charms_and_deploy_vault):
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_index = int(leader_unit.name[-1])
-    unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+    unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
 
     client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
     initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
@@ -98,7 +98,7 @@ class TestVaultK8s:
         self, ops_test: OpsTest, initialize_leader_vault
     ):
         leader_unit_index, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
             await wait_for_vault_status_message(
@@ -133,7 +133,7 @@ class TestVaultK8s:
         await wait_for_vault_status_message(
             ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
         )
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
         async with ops_test.fast_forward(fast_interval="10s"):
             await ops_test.model.wait_for_idle(
@@ -159,7 +159,7 @@ class TestVaultK8s:
         await wait_for_vault_status_message(
             ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
         )
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[-1], root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
@@ -182,7 +182,7 @@ class TestVaultK8s:
         app: Application = ops_test.model.applications[APPLICATION_NAME]
 
         # TODO: maybe get the app ip and connect with cert?
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         client = hvac.Client(url=f"https://{unit_addresses[-1]}:8200", verify=False)
         client.token = root_token
         response = client.sys.read_raft_config()
@@ -269,7 +269,7 @@ class TestVaultK8sIntegrationsPart1:
         )
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
@@ -468,16 +468,25 @@ class TestVaultK8sIntegrationsPart1:
             "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
         )
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
-
+        await wait_for_vault_status_message(
+            ops_test, count=NUM_VAULT_UNITS, expected_message="Waiting for vault to be unsealed"
+        )
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         final_ca_cert = action.results
         assert initial_ca_cert != final_ca_cert
 
-        # TODO: Unseal all vaults
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
 
 
 class TestVaultK8sIntegrationsPart2:
@@ -545,7 +554,7 @@ class TestVaultK8sIntegrationsPart2:
         )
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_full_vault_status(ops_test)]
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
@@ -863,7 +872,7 @@ def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
 
 
-async def read_full_vault_status(ops_test: OpsTest):
+async def read_vault_unit_statuses(ops_test: OpsTest):
     status_tuple = await ops_test.juju("status")
     if status_tuple[0] != 0:
         raise Exception
@@ -890,7 +899,7 @@ async def wait_for_vault_status_message(
     ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 5
 ):
     while timeout > 0:
-        vault_status = await read_full_vault_status(ops_test)
+        vault_status = await read_vault_unit_statuses(ops_test)
         seen = 0
         for row in vault_status:
             if row.get("message") == expected_message:

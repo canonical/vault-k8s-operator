@@ -235,6 +235,10 @@ class VaultCharm(CharmBase):
             return
         if not self._bind_address or not self._ingress_address:
             return
+        try:
+            self.tls.get_tls_file_path_in_charm(File.CA)
+        except VaultCertsError:
+            return
         if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
             return
         self.tls.configure_certificates(self._ingress_address)
