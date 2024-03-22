@@ -273,7 +273,10 @@ class TestVaultK8sIntegrationsPart1:
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
-            ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
+            ops_test.model.remove_application(app_name=app_name)
+            for app_name in deployed_apps
+            # TODO: traefik crashes on remove. Avoid removing it for now
+            if app_name != TRAEFIK_APPLICATION_NAME
         ]
         await asyncio.gather(*remove_coroutines)
 
