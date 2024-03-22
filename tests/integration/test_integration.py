@@ -443,8 +443,13 @@ class TestVaultK8sIntegrationsPart1:
         )
 
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
+            timeout=1000,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
             timeout=1000,
         )
 
@@ -479,16 +484,24 @@ class TestVaultK8sIntegrationsPart1:
             status="active",
             timeout=1000,
         )
-        await wait_for_vault_status_message(
-            ops_test, count=NUM_VAULT_UNITS, expected_message="Waiting for vault to be unsealed"
+        await ops_test.model.wait_for_idle(
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
         )
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        final_ca_cert = action.results
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            timeout=1000,
+        )
+
+        final_ca_cert = await get_vault_ca_certificate()
         assert initial_ca_cert != final_ca_cert
 
         _, root_token, unseal_key = initialize_leader_vault
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
@@ -509,7 +522,10 @@ class TestVaultK8sIntegrationsPart2:
 
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault,
     ):
         deploy_prometheus = ops_test.model.deploy(
             "prometheus-k8s",
