@@ -453,12 +453,13 @@ class TestVaultK8sIntegrationsPart1:
             timeout=1000,
         )
 
-        final_ca_cert = await get_vault_ca_certificate()
+        final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
 
         _, root_token, unseal_key = initialize_leader_vault
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
@@ -495,7 +496,7 @@ class TestVaultK8sIntegrationsPart1:
             timeout=1000,
         )
 
-        final_ca_cert = await get_vault_ca_certificate()
+        final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
 
         _, root_token, unseal_key = initialize_leader_vault
