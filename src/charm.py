@@ -291,6 +291,9 @@ class VaultCharm(CharmBase):
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-kv request")
+            return
         relation = self.model.get_relation(relation_name=KV_RELATION_NAME, relation_id=event.relation_id)
         if not relation:
             logger.error("Relation not found for relation id %s", event.relation_id)
@@ -311,7 +314,7 @@ class VaultCharm(CharmBase):
     def _configure_pki_secrets_engine(self) -> None:
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
             return
         vault = self._get_initialized_vault_client()
         if not vault:
