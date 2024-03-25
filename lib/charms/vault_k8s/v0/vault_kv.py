@@ -117,7 +117,8 @@ juju integrate <vault provider charm> <vault requirer charm>
 import json
 import logging
 from collections.abc import Iterable, Mapping
-from typing import Any, Dict, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
 
 import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
@@ -134,7 +135,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -189,6 +190,16 @@ class RequirerSchema(DataBagSchema):
     app: AppVaultKvRequirerSchema
     unit: UnitVaultKvRequirerSchema
 
+@dataclass
+class KVRequest:
+    """This class represents a kv request from an interface Requirer."""
+    relation_id: int
+    app_name: str
+    unit_name: str
+    mount_suffix: str
+    egress_subnet: str
+    nonce: str
+
 
 def is_requirer_data_valid(app_data: dict, unit_data: dict) -> bool:
     """Return whether the requirer data is valid."""
@@ -220,28 +231,40 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         self,
         handle: ops.Handle,
         relation_id: int,
-        relation_name: str,
+        app_name: str,
+        unit_name: str,
         mount_suffix: str,
+        egress_subnet: str,
+        nonce: str,
     ):
         super().__init__(handle)
         self.relation_id = relation_id
-        self.relation_name = relation_name
+        self.app_name = app_name
+        self.unit_name = unit_name
         self.mount_suffix = mount_suffix
+        self.egress_subnet = egress_subnet
+        self.nonce = nonce
 
     def snapshot(self) -> dict:
         """Return snapshot data that should be persisted."""
         return {
             "relation_id": self.relation_id,
-            "relation_name": self.relation_name,
+            "app_name": self.app_name,
+            "unit_name": self.unit_name,
             "mount_suffix": self.mount_suffix,
+            "egress_subnet": self.egress_subnet,
+            "nonce": self.nonce,
         }
 
     def restore(self, snapshot: Dict[str, Any]):
         """Restore the value state from a given snapshot."""
         super().restore(snapshot)
         self.relation_id = snapshot["relation_id"]
-        self.relation_name = snapshot["relation_name"]
+        self.app_name = snapshot["app_name"]
+        self.unit_name = snapshot["unit_name"]
         self.mount_suffix = snapshot["mount_suffix"]
+        self.egress_subnet = snapshot["egress_subnet"]
+        self.nonce = snapshot["nonce"]
 
 
 class VaultKvProviderEvents(ops.ObjectEvents):
@@ -271,27 +294,24 @@ class VaultKvProvides(ops.Object):
     def _on_relation_changed(self, event: ops.RelationChangedEvent):
         """Handle client changed relation.
 
-        This handler will emit a new_vault_kv_client_attached event if at least one unit data is
-        valid.
+        This handler will emit a new_vault_kv_client_attached event for each requiring unit
+        with valid relation data.
         """
         if event.app is None:
             logger.debug("No remote application yet")
             return
-
         app_data = dict(event.relation.data[event.app])
-
-        any_valid = False
         for unit in event.relation.units:
             if not is_requirer_data_valid(app_data, dict(event.relation.data[unit])):
                 logger.debug("Invalid data from unit %r", unit.name)
                 continue
-            any_valid = True
-
-        if any_valid:
             self.on.new_vault_kv_client_attached.emit(
-                event.relation.id,
-                event.relation.name,
-                event.relation.data[event.app]["mount_suffix"],
+                relation_id=event.relation.id,
+                app_name=event.app.name,
+                unit_name=unit.name,
+                mount_suffix=event.relation.data[event.app]["mount_suffix"],
+                egress_subnet=event.relation.data[unit]["egress_subnet"],
+                nonce=event.relation.data[unit]["nonce"],
             )
 
     def set_vault_url(self, relation: ops.Relation, vault_url: str):
@@ -350,6 +370,53 @@ class VaultKvProvides(ops.Object):
     def get_credentials(self, relation: ops.Relation) -> dict:
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
+
+    def get_outstanding_kv_requests(self, relation_id: Optional[int] = None) -> List[KVRequest]:
+        """Get the outstanding requests for the relation."""
+        outstanding_requests: List[KVRequest] = []
+        kv_requests = self.get_kv_requests(relation_id=relation_id)
+        for request in kv_requests:
+            if not self._credentials_issued_for_request(nonce=request.nonce, relation_id=relation_id):
+                outstanding_requests.append(request)
+        return outstanding_requests
+
+    def get_kv_requests(self, relation_id: Optional[int] = None) -> List[KVRequest]:
+        """Get all KV requests for the relation."""
+        kv_requests: List[KVRequest] = []
+        relations = (
+            [
+                relation
+                for relation in self.model.relations[self.relation_name]
+                if relation.id == relation_id
+            ]
+            if relation_id is not None
+            else self.model.relations.get(self.relation_name, [])
+        )
+        for relation in relations:
+            app_data = dict(relation.data[relation.app])
+            for unit in relation.units:
+                unit_data = dict(relation.data[unit])
+                if not is_requirer_data_valid(app_data=app_data, unit_data=unit_data):
+                    continue
+                kv_requests.append(
+                    KVRequest(
+                        relation_id=relation.id,
+                        app_name=relation.app.name,
+                        unit_name=unit.name,
+                        mount_suffix=app_data["mount_suffix"],
+                        egress_subnet=unit_data["egress_subnet"],
+                        nonce=unit_data["nonce"],
+                    )
+                )
+        return kv_requests
+
+    def _credentials_issued_for_request(self, nonce: str, relation_id: int) -> bool:
+        """Return whether credentials have been issued for the request."""
+        relation = self.model.get_relation(self.relation_name, relation_id)
+        if not relation:
+            return False
+        credentials = self.get_credentials(relation)
+        return credentials.get(nonce) is not None
 
 
 class VaultKvConnectedEvent(ops.EventBase):
