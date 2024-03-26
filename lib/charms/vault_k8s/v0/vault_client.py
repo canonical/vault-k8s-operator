@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Protocol, Tuple
 
 import hvac
 import requests
-from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -126,7 +126,7 @@ class Vault:
         try:
             self._client.sys.read_health_status(standby_ok=True)
             return True
-        except (VaultError, RequestException) as e:
+        except (VaultError, RequestException, InternalServerError) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
