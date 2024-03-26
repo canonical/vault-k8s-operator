@@ -56,7 +56,6 @@ from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
-    MaintenanceStatus,
     ModelError,
     Relation,
     Secret,
@@ -222,7 +221,7 @@ class VaultCharm(CharmBase):
             event.add_status(BlockedStatus("Waiting for charm to be authorized"))
             return
         if not self._get_active_vault_client():
-            event.add_status(BlockedStatus("Waiting for for at least 1 unit to be unsealed"))
+            event.add_status(BlockedStatus("Waiting for a leader unit to be chosen"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
