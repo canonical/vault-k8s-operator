@@ -256,9 +256,8 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
-        relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=relation_id,
             role_id="whatever role id",
             secret_id="whatever secret id",
         )
@@ -284,9 +283,8 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
-        relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=relation_id,
             role_id="whatever role id",
             secret_id="whatever secret id",
         )
@@ -423,9 +421,8 @@ class TestCharm(unittest.TestCase):
             bind_address=bind_address, ingress_address=ingress_address
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -451,9 +448,8 @@ class TestCharm(unittest.TestCase):
         mock_vault_class.return_value = mock_vault
 
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -480,9 +476,8 @@ class TestCharm(unittest.TestCase):
         mock_vault_class.return_value = mock_vault
 
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -716,13 +711,12 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         patch_create_bucket.return_value = True
         patch_upload_content.return_value = False
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_ca_certificate_secret(
             certificate="whatever certificate",
             private_key="whatever private key",
         )
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -756,13 +750,12 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         patch_create_bucket.return_value = True
         patch_upload_content.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_ca_certificate_secret(
             certificate="whatever certificate",
             private_key="whatever private key",
         )
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -797,13 +790,12 @@ class TestCharm(unittest.TestCase):
         patch_create_bucket.return_value = True
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_ca_certificate_secret(
             certificate="whatever certificate",
             private_key="whatever private key",
         )
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1141,9 +1133,8 @@ class TestCharm(unittest.TestCase):
             io.BytesIO(b"whatever content"), content_length=len(b"whatever content")
         )
         self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1185,13 +1176,12 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_ca_certificate_secret(
             certificate="whatever certificate",
             private_key="whatever private key",
         )
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1292,11 +1282,8 @@ class TestCharm(unittest.TestCase):
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         event = Mock()
-        peer_relation_id = self.harness.add_relation(
-            relation_name="vault-peers", remote_app="vault"
-        )
+        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1327,14 +1314,13 @@ class TestCharm(unittest.TestCase):
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1367,9 +1353,8 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1407,9 +1392,7 @@ class TestCharm(unittest.TestCase):
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
         )
-        peer_relation_id = self.harness.add_relation(
-            relation_name="vault-peers", remote_app="vault"
-        )
+        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
         self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="certs", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
@@ -1418,7 +1401,6 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         event.params = {"relation_name": "relation", "relation_id": "99"}
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1458,9 +1440,8 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1508,7 +1489,6 @@ class TestCharm(unittest.TestCase):
         (root / "vault/certs/ca.pem").write_text("some ca")
         peer_relation_id = self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
@@ -1585,9 +1565,8 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text(ca)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
-            relation_id=peer_relation_id,
             role_id="root token content",
             secret_id="whatever secret id",
         )
