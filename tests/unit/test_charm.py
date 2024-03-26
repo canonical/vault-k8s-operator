@@ -1774,78 +1774,12 @@ class TestCharm(unittest.TestCase):
             relation_id=vault_kv_relation_id, remote_unit_name="vault-kv-remote/0"
         )
         event = Mock()
+        event.relation_id = vault_kv_relation_id
         self.harness.charm._on_new_vault_kv_client_attached(event)
         patch_set_vault_url.assert_not_called()
         patch_set_mount.assert_not_called()
         patch_set_ca_certificate.assert_not_called()
         patch_audit_device_enabled.assert_not_called()
-
-    def test_given_peer_relation_not_created_when_new_vault_kv_client_attached_then_event_is_deferred(
-        self,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        event = Mock()
-        self.harness.charm._on_new_vault_kv_client_attached(event)
-        event.defer.assert_called_with()
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_vault_not_initialized_when_new_vault_kv_client_attached_then_event_is_deferred(
-        self,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_initialized.return_value": False,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-        self.harness.set_leader(is_leader=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        event = Mock()
-        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
-        self.harness.charm._on_new_vault_kv_client_attached(event)
-        event.defer.assert_called_with()
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_initialization_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        event = Mock()
-        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
-        self._set_ca_certificate_secret(
-            certificate="whatever certificate",
-            private_key="whatever private key",
-        )
-        self.harness.charm._on_new_vault_kv_client_attached(event)
-        event.defer.assert_called_with()
-
-    @patch("charm.Vault", autospec=True)
-    def test_given_ca_certificate_secret_not_set_in_peer_relation_when_new_vault_kv_client_attached_then_event_is_deferred(
-        self,
-        mock_vault_class,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        event = Mock()
-        peer_relation_id = self.harness.add_relation(
-            relation_name="vault-peers", remote_app="vault"
-        )
-        self._set_initialization_secret_in_peer_relation(
-            relation_id=peer_relation_id,
-            root_token="root token content",
-            unseal_keys=["unseal_keys"],
-        )
-        self.harness.charm._on_new_vault_kv_client_attached(event)
-        event.defer.assert_called_with()
 
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Model.get_binding")
@@ -1873,7 +1807,6 @@ class TestCharm(unittest.TestCase):
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
-        event = Mock()
         self._set_initialization_secret_in_peer_relation(
             relation_id=peer_relation_id,
             root_token="root token content",
@@ -1883,7 +1816,11 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         event.relation_name = VAULT_KV_RELATION_NAME
         event.relation_id = rel_id
+        event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
+        event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
+        event.egress_subnet = "2.2.2.0/24"
+        event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         mock_vault.enable_approle_auth_method.assert_called_once()
 
@@ -1926,7 +1863,11 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         event.relation_name = VAULT_KV_RELATION_NAME
         event.relation_id = rel_id
+        event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
+        event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
+        event.egress_subnet = "2.2.2.0/24"
+        event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         self.harness.get_relation_data(rel_id, self.app_name)
         set_vault_url.assert_called()
@@ -2010,7 +1951,11 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         event.relation_name = VAULT_KV_RELATION_NAME
         event.relation_id = rel_id
+        event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
+        event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
+        event.egress_subnet = "2.2.2.0/24"
+        event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         mock_vault.enable_secrets_engine.assert_called_with(
             SecretsBackend.KV_V2, "charm-vault-kv-requirer-suffix"
