@@ -960,7 +960,7 @@ async def authorize_charm(ops_test: OpsTest, root_token: str):
     authorize_action = await leader_unit.run_action(
         action_name="authorize-charm",
         **{
-            "root-token": root_token,
+            "token": root_token,
         },
     )
     result = await ops_test.model.get_action_output(
