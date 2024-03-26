@@ -1075,10 +1075,6 @@ class VaultCharm(CharmBase):
     def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
 
-        Updates the initialization secret.
-        Upon successful secret update, it will restore the raft snapshot.
-        Upon successful restore, it will unseal Vault and set root token.
-
         Args:
             snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
 
@@ -1096,10 +1092,10 @@ class VaultCharm(CharmBase):
             response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
         except Exception as e:
             # If restore fails for any reason, we reset the initialization secret
-            logger.error("Failed to restore snapshot: %s", e)
+            logger.error("Failed to restore snapshote: %s", e)
             return False
         if not 200 <= response.status_code < 300:
-            logger.error("Failed to restore snapshot: %s", response.json())
+            logger.error("Failed to restore snapshotes: %s", response.json())
             return False
 
         # Check if the approle can still login
