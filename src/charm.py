@@ -423,7 +423,7 @@ class VaultCharm(CharmBase):
             logger.debug("Failed to get initialized Vault")
             return
         vault.enable_approle_auth_method()
-        mount = "charm-" + app_name + "-" + mount_suffix
+        mount = f"charm-{app_name}-{mount_suffix}"
         self._set_kv_relation_data(relation, mount, ca_certificate)
         vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         self._ensure_unit_credentials(vault, relation, unit_name, mount, nonce, egress_subnet)
