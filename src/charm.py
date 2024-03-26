@@ -310,27 +310,27 @@ class VaultCharm(CharmBase):
             event.fail("This action must be ran on the leader unit.")
             return
 
-        root_token = event.params.get("root-token", "")
-        v = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
-        v.authenticate(Token(root_token))
+        token = event.params.get("token", "")
+        vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
+        vault.authenticate(Token(token))
 
-        if not (token_data := v.is_authenticated()):
+        if not (token_data := vault.is_authenticated()):
             event.fail("The token provided is not valid.")
             return
         if "root" not in token_data["policies"]:
             event.fail("The token provided does not have permissions to authorize charm.")
             return
 
-        v.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
-        v.enable_approle_auth_method()
-        v.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
+        vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        vault.enable_approle_auth_method()
+        vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
         cidrs = [f"{self._bind_address}/24"]
-        role_id = v.configure_approle(
+        role_id = vault.configure_approle(
             role_name="charm",
             cidrs=cidrs,
             policies=[CHARM_POLICY_NAME, "default"],
         )
-        secret_id = v.generate_role_secret_id(name="charm", cidrs=cidrs)
+        secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
         self._set_approle_auth_secret(role_id, secret_id)
         self.on.config_changed.emit()
 
@@ -1091,7 +1091,6 @@ class VaultCharm(CharmBase):
             # so it can be used as a file-like object in this context
             response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
         except Exception as e:
-            # If restore fails for any reason, we reset the initialization secret
             logger.error("Failed to restore snapshote: %s", e)
             return False
         if not 200 <= response.status_code < 300:

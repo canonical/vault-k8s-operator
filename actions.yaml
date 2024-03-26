@@ -3,14 +3,17 @@
 
 authorize-charm:
   description: >-
-    Authorizes the charm to be able to interact with Vault to manage its operations. The root token
-    is required for Vault to use to create its own policy and approle once, then discard.
+    Authorizes the charm to be able to interact with Vault to manage its
+    operations. A token is required for Vault to use to create the app role and
+    the policy the charm will use to interact with Vault.
   params:
-    root-token:
+    token:
       type: string
       description: >-
-        A token with root permissions. It is recommended to have a ttl on this token.
-  required: [root-token] 
+        A token for Vault that can create new policies, such as the root token
+        that is provided upon initializing Vault. Used to create the app role
+        and policy for the charm. It is not stored by the charm.
+  required: [token] 
 
 create-backup:
   description: >-

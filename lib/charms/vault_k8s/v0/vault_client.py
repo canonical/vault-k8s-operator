@@ -114,7 +114,7 @@ class Vault:
         return True
 
     def is_authenticated(self) -> Optional[Dict]:
-        """Check if token is valid."""
+        """Check if given token is accepted by vault."""
         try:
             token_data = self._client.auth.token.lookup_self()["data"]
         except Forbidden:
@@ -379,7 +379,7 @@ class Vault:
         Uses force_restore_raft_snapshot to restore the snapshot
         even if the unseal key used at backup time is different from the current one.
         """
-        return self._client.sys.restore_raft_snapshot(snapshot)
+        return self._client.sys.force_restore_raft_snapshot(snapshot)
 
     def get_raft_cluster_state(self) -> dict:
         """Get raft cluster state."""
