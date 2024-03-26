@@ -30,7 +30,13 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_client import AuditDeviceType, SecretsBackend, Token, Vault
+from charms.vault_k8s.v0.vault_client import (
+    AppRole,
+    AuditDeviceType,
+    SecretsBackend,
+    Token,
+    Vault,
+)
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
@@ -71,7 +77,6 @@ PKI_RELATION_NAME = "vault-pki"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
-VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 S3_RELATION_NAME = "s3-parameters"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
@@ -80,6 +85,9 @@ CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 CONTAINER_NAME = "vault"
 PKI_MOUNT = "charm-pki"
 PKI_ROLE = "charm"
+CHARM_POLICY_NAME = "charm-access"
+CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
+VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 
 
 class VaultCharm(CharmBase):
@@ -135,11 +143,10 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on.authorize_charm_action, self._on_authorize_charm_action)
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
-        self.framework.observe(self.on.set_unseal_keys_action, self._on_set_unseal_keys_action)
-        self.framework.observe(self.on.set_root_token_action, self._on_set_root_token_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
@@ -186,17 +193,16 @@ class VaultCharm(CharmBase):
                 WaitingStatus("Waiting for bind and ingress addresses to be available")
             )
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
-            event.add_status(WaitingStatus("Waiting for CA certificate"))
+        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
+            event.add_status(WaitingStatus("Waiting for CA certificate secret"))
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set():
-            event.add_status(WaitingStatus("Waiting for initialization secret"))
+        if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
+            event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
-        if not self.tls.tls_file_pushed_to_workload(File.CA):
-            event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
-            return
-        if not self.tls.tls_file_available_in_charm(File.CA):
-            event.add_status(WaitingStatus("Waiting for CA certificate in charm"))
+        try:
+            self.tls.get_tls_file_path_in_charm(File.CA)
+        except VaultCertsError:
+            event.add_status(BlockedStatus("Missing Storage"))
             return
         vault = Vault(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -204,6 +210,18 @@ class VaultCharm(CharmBase):
         if not vault.is_api_available():
             event.add_status(WaitingStatus("Waiting for vault to be available"))
             return
+        if not vault.is_initialized():
+            event.add_status(BlockedStatus("Waiting for vault to be initialized"))
+            return
+        if vault.is_sealed():
+            event.add_status(BlockedStatus("Waiting for vault to be unsealed"))
+            return
+        role_id, secret_id = self._get_approle_auth_secret()
+        if not role_id or not secret_id:
+            event.add_status(BlockedStatus("Waiting for charm to be authorized"))
+            return
+        if not self._get_active_vault_client():
+            event.add_status(BlockedStatus("Waiting for a leader unit to be chosen"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
@@ -218,11 +236,15 @@ class VaultCharm(CharmBase):
             return
         if not self._bind_address or not self._ingress_address:
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_is_saved():
+        try:
+            self.tls.get_tls_file_path_in_charm(File.CA)
+        except VaultCertsError:
             return
-        if not self.unit.is_leader() and not self._initialization_secret_set():
+        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
             return
         self.tls.configure_certificates(self._ingress_address)
+        if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
+            return
 
         for relation in self.model.relations[KV_RELATION_NAME]:
             ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
@@ -235,14 +257,14 @@ class VaultCharm(CharmBase):
         )
         if not vault.is_api_available():
             return
-        if self.unit.is_leader() and not vault.is_initialized():
-            root_token, unseal_keys = vault.initialize()
-            self._set_initialization_secret(root_token, unseal_keys)
-        root_token, unseal_keys = self._get_initialization_secret()
-        vault.authenticate(Token(root_token))
-        vault.unseal(unseal_keys=unseal_keys)
-        if vault.is_active():
-            vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        if not vault.is_initialized():
+            return
+        if vault.is_sealed():
+            return
+        if not all(self._get_approle_auth_secret()):
+            return
+        if not (vault := self._get_active_vault_client()):
+            return
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
         self._sync_vault_pki()
@@ -255,28 +277,23 @@ class VaultCharm(CharmBase):
             )
 
     def _on_remove(self, event: RemoveEvent):
-        """Handle remove charm event.
+        """Handle certs removed event.
 
         Removes the vault service and the raft data and removes the node from the raft cluster.
         """
         if not self._container.can_connect():
             return
         try:
-            root_token, unseal_keys = self._get_initialization_secret()
-            if self._bind_address:
-                vault = Vault(
-                    url=self._api_address,
-                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
-                )
-                vault.authenticate(Token(root_token))
+            role_id, secret_id = self._get_approle_auth_secret()
+            if role_id and secret_id and self._bind_address:
+                vault = Vault(url=self._api_address, ca_cert_path=None)
+                vault.authenticate(AppRole(role_id, secret_id))
                 if (
                     vault.is_api_available()
                     and vault.is_node_in_raft_peers(node_id=self._node_id)
                     and vault.get_num_raft_peers() > 1
                 ):
                     vault.remove_raft_node(node_id=self._node_id)
-        except SecretNotFoundError:
-            logger.info("Vault initialization secret not set")
         except VaultCertsError:
             logger.info("Vault CA certificate not found")
         finally:
@@ -288,199 +305,34 @@ class VaultCharm(CharmBase):
                     pass
             self._delete_vault_data()
 
-    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
-        """Handle vault-kv-client attached event."""
+    def _on_authorize_charm_action(self, event: ActionEvent) -> None:
         if not self.unit.is_leader():
-            logger.debug("Only leader unit can configure a vault-kv client, skipping")
+            event.fail("This action must be ran on the leader unit.")
             return
 
-        if not self._is_peer_relation_created():
-            logger.debug("Peer relation not created, deferring event")
-            event.defer()
+        root_token = event.params.get("root-token", "")
+        v = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
+        v.authenticate(Token(root_token))
+
+        if not (token_data := v.is_authenticated()):
+            event.fail("The token provided is not valid.")
+            return
+        if "root" not in token_data["policies"]:
+            event.fail("The token provided does not have permissions to authorize charm.")
             return
 
-        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
-        if not ca_certificate:
-            logger.debug("Vault CA certificate not available, deferring event")
-            event.defer()
-            return
-
-        vault = self._get_initialized_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault, deferring event")
-            event.defer()
-            return
-
-        relation = self.model.get_relation(event.relation_name, event.relation_id)
-
-        if relation is None or relation.app is None:
-            logger.warning(
-                "Relation or remote application is missing,"
-                "this should not happen, skipping event"
-            )
-            return
-
-        vault.enable_approle_auth_method()
-        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
-        self._set_kv_relation_data(relation, mount, ca_certificate)
-        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
-        for unit in relation.units:
-            egress_subnet = relation.data[unit].get("egress_subnet")
-            nonce = relation.data[unit].get("nonce")
-            if egress_subnet is None or nonce is None:
-                logger.debug(
-                    "Skipping configuring access for unit %r, egress_subnet or nonce are missing",
-                    unit.name,
-                )
-                continue
-            self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
-            self._remove_stale_nonce(relation=relation, nonce=nonce)
-
-    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
-        """Handle the tls-certificates-pki relation joined event."""
-        self._configure_pki_secrets_engine()
-
-    def _configure_pki_secrets_engine(self) -> None:
-        """Configure the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
-            return
-        vault = self._get_initialized_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        if not self._tls_certificates_pki_relation_created():
-            logger.debug("TLS Certificates PKI relation not created, skipping")
-            return
-        if not self._common_name_config_is_valid():
-            logger.debug("Common name config is not valid, skipping")
-            return
-        common_name = self._get_config_common_name()
-        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
-        if not self._is_intermediate_ca_set(vault, common_name):
-            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
-            self.tls_certificates_pki.request_certificate_creation(
-                certificate_signing_request=csr.encode(),
-                is_ca=True,
-            )
-            self._set_pki_csr_secret(csr)
-
-    def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
-        """Check if the intermediate CA is set in the PKI secrets engine."""
-        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        if not intermediate_ca:
-            return False
-        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
-        return intermediate_ca_common_name == common_name
-
-    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
-        """Add the CA certificate to the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        vault = self._get_initialized_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set in the charm config")
-            return
-        certificate = self._get_pki_ca_certificate()
-        if not certificate:
-            logger.debug("No certificate available")
-            return
-        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
-            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
-            vault.create_pki_charm_role(
-                allowed_domains=common_name,
-                mount=PKI_MOUNT,
-                role=PKI_ROLE,
-            )
-
-    def _sync_vault_pki(self) -> None:
-        """Goes through all the vault-pki relations and sends necessary TLS certificate."""
-        for relation in self.model.relations[PKI_RELATION_NAME]:
-            outstanding_requests = self.vault_pki.get_outstanding_certificate_requests(
-                relation_id=relation.id
-            )
-            for request in outstanding_requests:
-                self._generate_pki_certificate_for_requirer(
-                    csr=request.csr,
-                    relation_id=relation.id,
-                )
-
-    def _get_pki_ca_certificate(self) -> Optional[str]:
-        """Return the PKI CA certificate provided by the TLS provider.
-
-        Validate that the CSR matches the one in secrets.
-        """
-        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
-        if not assigned_certificates:
-            return None
-        if not self._pki_csr_secret_set():
-            logger.info("PKI CSR not set in secrets")
-            return None
-        pki_csr = self._get_pki_csr_secret()
-        if not pki_csr:
-            logger.warning("PKI CSR not found in secrets")
-            return None
-        for assigned_certificate in assigned_certificates:
-            if assigned_certificate.csr == pki_csr:
-                return assigned_certificate.certificate
-        logger.info("No certificate matches the PKI CSR in secrets")
-        return None
-
-    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
-        """Handle the tls-certificates-pki certificate available event."""
-        self._add_ca_certificate_to_pki_secrets_engine()
-
-    def _on_vault_pki_certificate_creation_request(
-        self, event: CertificateCreationRequestEvent
-    ) -> None:
-        """Handle the vault-pki certificate creation request event."""
-        self._generate_pki_certificate_for_requirer(
-            event.certificate_signing_request, event.relation_id
+        v.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        v.enable_approle_auth_method()
+        v.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
+        cidrs = [f"{self._bind_address}/24"]
+        role_id = v.configure_approle(
+            role_name="charm",
+            cidrs=cidrs,
+            policies=[CHARM_POLICY_NAME, "default"],
         )
-
-    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
-        """Generate a PKI certificate for a TLS requirer."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        if not self._tls_certificates_pki_relation_created():
-            logger.debug("TLS Certificates PKI relation not created")
-            return
-        vault = self._get_initialized_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set in the charm config")
-            return
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
-            logger.debug("PKI role not created")
-            return
-        requested_csr = csr
-        requested_common_name = get_common_name_from_csr(requested_csr)
-        certificate = vault.sign_pki_certificate_signing_request(
-            mount=PKI_MOUNT,
-            role=PKI_ROLE,
-            csr=requested_csr,
-            common_name=requested_common_name,
-        )
-        if not certificate:
-            logger.debug("Failed to sign the certificate")
-            return
-        self.vault_pki.set_relation_certificate(
-            relation_id=relation_id,
-            certificate=certificate.certificate,
-            certificate_signing_request=csr,
-            ca=certificate.ca,
-            chain=certificate.chain,
-        )
+        secret_id = v.generate_role_secret_id(name="charm", cidrs=cidrs)
+        self._set_approle_auth_secret(role_id, secret_id)
+        self.on.config_changed.emit()
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
@@ -602,8 +454,6 @@ class VaultCharm(CharmBase):
 
         Restores the snapshot with the provided ID.
         Unseals Vault using the provided unseal key.
-        Sets the root token to the provided root token.
-        Updates the initialization secret with the provided unseal keys.
 
         Args:
             event: ActionEvent
@@ -651,13 +501,7 @@ class VaultCharm(CharmBase):
             event.fail(message="Backup not found in S3 bucket.")
             return
         try:
-            if not (
-                self._restore_vault(
-                    snapshot=snapshot,
-                    restore_unseal_keys=event.params.get("unseal-keys", ""),
-                    restore_root_token=event.params.get("root-token", ""),
-                )
-            ):
+            if not (self._restore_vault(snapshot=snapshot)):
                 logger.error("Failed to restore vault.")
                 event.fail(message="Failed to restore vault.")
                 return
@@ -667,63 +511,198 @@ class VaultCharm(CharmBase):
             return
         event.set_results({"restored": event.params.get("backup-id")})
 
-    def _on_set_unseal_keys_action(self, event: ActionEvent) -> None:
-        """Handle the set-unseal-keys action.
-
-        Updates the initialization secret with the provided unseal keys.
-
-        Args:
-            event: ActionEvent
-        """
+    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
+        """Handle vault-kv-client attached event."""
         if not self.unit.is_leader():
-            logger.error("Only leader unit can set unseal keys.")
-            event.fail(message="Only leader unit can set unseal keys.")
+            logger.debug("Only leader unit can configure a vault-kv client, skipping")
             return
-        if not (vault := self._get_initialized_vault_client()):
-            logger.error("Cannot set unseal keys, vault is not initialized yet.")
-            event.fail(message="Cannot set unseal keys, vault is not initialized yet.")
+
+        if not self._is_peer_relation_created():
+            logger.debug("Peer relation not created, deferring event")
+            event.defer()
             return
-        root_token, current_keys = self._get_initialization_secret()
-        new_keys = event.params.get("unseal-keys", "")
-        if set(new_keys) == set(current_keys):
-            logger.info("Unseal keys are already set to %s", new_keys)
-            event.fail(message="Provided unseal keys are already set.")
+
+        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+        if not ca_certificate:
+            logger.debug("Vault CA certificate not available, deferring event")
+            event.defer()
             return
-        self._set_initialization_secret(
-            root_token=root_token,
-            unseal_keys=new_keys,
+
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault, deferring event")
+            event.defer()
+            return
+
+        relation = self.model.get_relation(event.relation_name, event.relation_id)
+
+        if relation is None or relation.app is None:
+            logger.warning(
+                "Relation or remote application is missing,"
+                "this should not happen, skipping event"
+            )
+            return
+
+        mount = "charm-" + relation.app.name + "-" + event.mount_suffix
+        self._set_kv_relation_data(relation, mount, ca_certificate)
+        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
+        for unit in relation.units:
+            egress_subnet = relation.data[unit].get("egress_subnet")
+            nonce = relation.data[unit].get("nonce")
+            if egress_subnet is None or nonce is None:
+                logger.debug(
+                    "Skipping configuring access for unit %r, egress_subnet or nonce are missing",
+                    unit.name,
+                )
+                continue
+            self._ensure_unit_credentials(vault, relation, unit.name, mount, nonce, egress_subnet)
+            self._remove_stale_nonce(relation=relation, nonce=nonce)
+
+    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
+        """Handle the tls-certificates-pki relation joined event."""
+        self._configure_pki_secrets_engine()
+
+    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle the tls-certificates-pki certificate available event."""
+        self._add_ca_certificate_to_pki_secrets_engine()
+
+    def _on_vault_pki_certificate_creation_request(
+        self, event: CertificateCreationRequestEvent
+    ) -> None:
+        """Handle the vault-pki certificate creation request event."""
+        self._generate_pki_certificate_for_requirer(
+            event.certificate_signing_request, event.relation_id
         )
-        vault.unseal(unseal_keys=new_keys)
-        event.set_results({"unseal-keys": new_keys})
 
-    def _on_set_root_token_action(self, event: ActionEvent) -> None:
-        """Handle the set-root-token action.
-
-        Updates the initialization secret with the provided root token.
-
-        Args:
-            event: ActionEvent
-        """
+    def _configure_pki_secrets_engine(self) -> None:
+        """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
-            logger.error("Only leader unit can set the root token.")
-            event.fail(message="Only leader unit can set the root token.")
+            logger.debug("Only leader unit can handle a vault-pki certificate request, skipping")
             return
-        if not (vault := self._get_initialized_vault_client()):
-            logger.error("Cannot set root token, vault is not initialized yet.")
-            event.fail(message="Cannot set root token, vault is not initialized yet.")
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
             return
-        root_token, current_keys = self._get_initialization_secret()
-        new_root_token = event.params.get("root-token", "")
-        if new_root_token == root_token:
-            logger.info("Root token is already set to %s", new_root_token)
-            event.fail(message="Provided root token is already set.")
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created, skipping")
             return
-        self._set_initialization_secret(
-            root_token=new_root_token,
-            unseal_keys=current_keys,
+        if not self._common_name_config_is_valid():
+            logger.debug("Common name config is not valid, skipping")
+            return
+        common_name = self._get_config_common_name()
+        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
+        if not self._is_intermediate_ca_set(vault, common_name):
+            csr = vault.generate_pki_intermediate_ca_csr(mount=PKI_MOUNT, common_name=common_name)
+            self.tls_certificates_pki.request_certificate_creation(
+                certificate_signing_request=csr.encode(),
+                is_ca=True,
+            )
+            self._set_pki_csr_secret(csr)
+
+    def _is_intermediate_ca_set(self, vault: Vault, common_name: str) -> bool:
+        """Check if the intermediate CA is set in the PKI secrets engine."""
+        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
+        if not intermediate_ca:
+            return False
+        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
+        return intermediate_ca_common_name == common_name
+
+    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
+        """Add the CA certificate to the PKI secrets engine."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        certificate = self._get_pki_ca_certificate()
+        if not certificate:
+            logger.debug("No certificate available")
+            return
+        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
+            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_pki_charm_role(
+                allowed_domains=common_name,
+                mount=PKI_MOUNT,
+                role=PKI_ROLE,
+            )
+
+    def _sync_vault_pki(self) -> None:
+        """Goes through all the vault-pki relations and sends necessary TLS certificate."""
+        for relation in self.model.relations[PKI_RELATION_NAME]:
+            outstanding_requests = self.vault_pki.get_outstanding_certificate_requests(
+                relation_id=relation.id
+            )
+            for request in outstanding_requests:
+                self._generate_pki_certificate_for_requirer(
+                    csr=request.csr,
+                    relation_id=relation.id,
+                )
+
+    def _get_pki_ca_certificate(self) -> Optional[str]:
+        """Return the PKI CA certificate provided by the TLS provider.
+
+        Validate that the CSR matches the one in secrets.
+        """
+        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
+        if not assigned_certificates:
+            return None
+        if not self._pki_csr_secret_set():
+            logger.info("PKI CSR not set in secrets")
+            return None
+        pki_csr = self._get_pki_csr_secret()
+        if not pki_csr:
+            logger.warning("PKI CSR not found in secrets")
+            return None
+        for assigned_certificate in assigned_certificates:
+            if assigned_certificate.csr == pki_csr:
+                return assigned_certificate.certificate
+        logger.info("No certificate matches the PKI CSR in secrets")
+        return None
+
+    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
+        """Generate a PKI certificate for a TLS requirer."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-pki certificate request")
+            return
+        if not self._tls_certificates_pki_relation_created():
+            logger.debug("TLS Certificates PKI relation not created")
+            return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
+            return
+        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+            logger.debug("PKI role not created")
+            return
+        requested_csr = csr
+        requested_common_name = get_common_name_from_csr(requested_csr)
+        certificate = vault.sign_pki_certificate_signing_request(
+            mount=PKI_MOUNT,
+            role=PKI_ROLE,
+            csr=requested_csr,
+            common_name=requested_common_name,
         )
-        vault.authenticate(Token(new_root_token))
-        event.set_results({"root-token": new_root_token})
+        if not certificate:
+            logger.debug("Failed to sign the certificate")
+            return
+        self.vault_pki.set_relation_certificate(
+            relation_id=relation_id,
+            certificate=certificate.certificate,
+            certificate_signing_request=csr,
+            ca=certificate.ca,
+            chain=certificate.chain,
+        )
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
         """Validate the requirements for creating S3.
@@ -969,25 +948,6 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_initialization_secret(self, root_token: str, unseal_keys: List[str]) -> None:
-        """Set the vault initialization secret.
-
-        Args:
-            root_token: The root token.
-            unseal_keys: The unseal keys.
-        """
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        juju_secret_content = {
-            "roottoken": root_token,
-            "unsealkeys": json.dumps(unseal_keys),
-        }
-        if not self._initialization_secret_set():
-            self.app.add_secret(juju_secret_content, label=VAULT_INITIALIZATION_SECRET_LABEL)
-            return
-        secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-        secret.set_content(content=juju_secret_content)
-
     def _set_pki_csr_secret(self, csr: str) -> None:
         juju_secret_content = {"csr": csr}
         if not self._pki_csr_secret_set():
@@ -1011,15 +971,35 @@ class VaultCharm(CharmBase):
         except SecretNotFoundError:
             return False
 
-    def _get_initialization_secret(self) -> Tuple[str, List[str]]:
-        """Get the vault initialization secret.
+    def _get_approle_auth_secret(self) -> Tuple[Optional[str], Optional[str]]:
+        """Get the vault approle login details secret.
 
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        juju_secret = self.model.get_secret(label=VAULT_INITIALIZATION_SECRET_LABEL)
-        content = juju_secret.get_content()
-        return content["roottoken"], json.loads(content["unsealkeys"])
+        try:
+            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            content = juju_secret.get_content()
+        except SecretNotFoundError:
+            return None, None
+        return content["role-id"], content["secret-id"]
+
+    def _set_approle_auth_secret(self, role_id: str, secret_id: str) -> None:
+        """Set the vault approle auth details secret.
+
+        Args:
+            role_id: The role id of the vault approle
+            secret_id: The secret id of the vault approle
+        """
+        if not all(self._get_approle_auth_secret()):
+            self.app.add_secret(
+                content={"role-id": role_id, "secret-id": secret_id},
+                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+                description="The authentication details for the charm's access to vault.",
+            )
+        else:
+            secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            secret.set_content({"role-id": role_id, "secret-id": secret_id})
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
@@ -1070,11 +1050,11 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _initialization_secret_set(self) -> bool:
-        """Return whether initialization secret is stored."""
+    def _approle_secret_set(self) -> bool:
+        """Return whether approle secret is stored."""
         try:
-            root_token, unseal_keys = self._get_initialization_secret()
-            if root_token and unseal_keys:
+            role_id, secret_id = self._get_approle_auth_secret()
+            if role_id and secret_id:
                 return True
         except SecretNotFoundError:
             return False
@@ -1086,45 +1066,25 @@ class VaultCharm(CharmBase):
         Returns:
             IO[bytes]: The snapshot content as a file like object.
         """
-        if not (vault := self._get_initialized_vault_client()):
+        if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
-        root_token, unseal_keys = self._get_initialization_secret()
-        vault.authenticate(Token(root_token))
-        vault.unseal(unseal_keys=unseal_keys)
         response = vault.create_snapshot()
         return response.raw
 
-    def _restore_vault(
-        self, snapshot: StreamingBody, restore_unseal_keys: List[str], restore_root_token: str
-    ) -> bool:
+    def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
-
-        Updates the initialization secret.
-        Upon successful secret update, it will restore the raft snapshot.
-        Upon successful restore, it will unseal Vault and set root token.
 
         Args:
             snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
-            restore_unseal_keys: List of unseal keys used at the time of the backup.
-            restore_root_token: Root token used at the time of the backup.
 
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        if not (vault := self._get_initialized_vault_client()):
+        if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot restore snapshot.")
             return False
-        (
-            current_root_token,
-            current_unseal_keys,
-        ) = self._get_initialization_secret()
-        vault.authenticate(Token(current_root_token))
-        vault.unseal(unseal_keys=current_unseal_keys)
 
-        self._set_initialization_secret(
-            root_token=restore_root_token, unseal_keys=restore_unseal_keys
-        )
         try:
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
@@ -1132,25 +1092,20 @@ class VaultCharm(CharmBase):
             response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
         except Exception as e:
             # If restore fails for any reason, we reset the initialization secret
-            logger.error("Failed to restore snapshot: %s", e)
-            self._set_initialization_secret(
-                root_token=current_root_token, unseal_keys=current_unseal_keys
-            )
+            logger.error("Failed to restore snapshote: %s", e)
             return False
         if not 200 <= response.status_code < 300:
-            logger.error("Failed to restore snapshot: %s", response.json())
-            self._set_initialization_secret(
-                root_token=current_root_token, unseal_keys=current_unseal_keys
-            )
+            logger.error("Failed to restore snapshotes: %s", response.json())
             return False
-        vault.authenticate(Token(restore_root_token))
-        vault.unseal(unseal_keys=restore_unseal_keys)
+
+        # Check if the approle can still login
+        # If not, remove secret
         return True
 
-    def _get_initialized_vault_client(self) -> Optional[Vault]:
+    def _get_active_vault_client(self) -> Optional[Vault]:
         """Return an initialized vault client.
 
-        Creates a Vault client and returns it if is active
+        Creates a Vault client and returns it if is active and the charm is authorized.
         Otherwise, returns None.
 
         Returns:
@@ -1160,11 +1115,12 @@ class VaultCharm(CharmBase):
             url=self._api_address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
-        try:
-            root_token, _ = self._get_initialization_secret()
-            vault.authenticate(Token(root_token))
-        except Exception:
-            logger.error("Vault initialization secret not set.")
+        if not vault.is_api_available():
+            return None
+        role_id, secret_id = self._get_approle_auth_secret()
+        if not role_id or not secret_id:
+            return None
+        if not vault.authenticate(AppRole(role_id, secret_id)):
             return None
         if not vault.is_active():
             return None

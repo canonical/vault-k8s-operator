@@ -11,11 +11,11 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol, Tuple
 
 import hvac
 import requests
-from hvac.exceptions import InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 
 logger = logging.getLogger(__name__)
@@ -102,19 +102,31 @@ class VaultClientError(Exception):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, ca_cert_path: str):
-        self._client = hvac.Client(url=url, verify=ca_cert_path)
+    def __init__(self, url: str, ca_cert_path: Optional[str]):
+        self._client = hvac.Client(url=url, verify=ca_cert_path if ca_cert_path else False)
 
-    def authenticate(self, auth_details: AuthMethod) -> None:
+    def authenticate(self, auth_details: AuthMethod) -> bool:
         """Find and use the token related with the given auth method."""
-        auth_details.login(self._client)
+        try:
+            auth_details.login(self._client)
+        except (Forbidden, InternalServerError):
+            return False
+        return True
+
+    def is_authenticated(self) -> Optional[Dict]:
+        """Check if token is valid."""
+        try:
+            token_data = self._client.auth.token.lookup_self()["data"]
+        except Forbidden:
+            return None
+        return token_data
 
     def is_api_available(self) -> bool:
         """Return whether Vault is available."""
         try:
             self._client.sys.read_health_status(standby_ok=True)
             return True
-        except (VaultError, RequestException) as e:
+        except (VaultError, RequestException, InternalServerError) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
@@ -154,12 +166,11 @@ class Vault:
         """Return the health status of Vault.
 
         Returns:
-            True if initialized, unsealed and active, False otherwise.
-                Will return True if Vault is in standby mode too (standby_ok=True).
+            True if initialized, unsealed and active or standby, False otherwise.
         """
         try:
-            health_status = self._client.sys.read_health_status(standby_ok=True)
-            return health_status.status_code == 200
+            health_status = self._client.sys.read_health_status()
+            return health_status.status_code == 200 or health_status.status_code == 429
         except (VaultError, RequestException) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
@@ -368,7 +379,7 @@ class Vault:
         Uses force_restore_raft_snapshot to restore the snapshot
         even if the unseal key used at backup time is different from the current one.
         """
-        return self._client.sys.force_restore_raft_snapshot(snapshot)
+        return self._client.sys.restore_raft_snapshot(snapshot)
 
     def get_raft_cluster_state(self) -> dict:
         """Get raft cluster state."""

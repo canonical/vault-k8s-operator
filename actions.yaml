@@ -1,6 +1,17 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+authorize-charm:
+  description: >-
+    Authorizes the charm to be able to interact with Vault to manage its operations. The root token
+    is required for Vault to use to create its own policy and approle once, then discard.
+  params:
+    root-token:
+      type: string
+      description: >-
+        A token with root permissions. It is recommended to have a ttl on this token.
+  required: [root-token] 
+
 create-backup:
   description: >-
     Creates a snapshot of the Raft backend and saves it to the S3 storage.
@@ -19,34 +30,4 @@ restore-backup:
       type: string
       description: >-
         Backup ID to restore.
-    unseal-keys:
-      type: array
-      description: >-
-        Unseal keys to use for unsealing the Vault after the restore.
-    root-token:
-      type: string
-      description: >-
-        Root token to use for unsealing the Vault after the restore.
-  required: [backup-id, unseal-keys, root-token]
-
-set-unseal-keys:
-  description: >-
-    Sets unseal keys for Vault.
-    Used to recover Vault if Vault's unseal key and the one used by the charm mismatch for some reason.
-  params:
-    unseal-keys:
-      type: array
-      description: >-
-        Unseal keys to set.
-  required: [unseal-keys]
-
-set-root-token:
-  description: >-
-    Sets root token for Vault.
-    Used to recover Vault if Vault's root token and the one used by the charm mismatch for some reason.
-  params:
-    root-token:
-      type: string
-      description: >-
-        Root token to set.
-  required: [root-token]
+  required: [backup-id]
