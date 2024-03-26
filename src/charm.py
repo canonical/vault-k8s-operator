@@ -56,6 +56,7 @@ from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
+    MaintenanceStatus,
     ModelError,
     Relation,
     Secret,
@@ -221,7 +222,7 @@ class VaultCharm(CharmBase):
             event.add_status(BlockedStatus("Waiting for charm to be authorized"))
             return
         if not self._get_active_vault_client():
-            event.add_status(BlockedStatus("Charm needs to be authorized again"))
+            event.add_status(BlockedStatus("Waiting for for at least 1 unit to be unsealed"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
@@ -1119,11 +1120,12 @@ class VaultCharm(CharmBase):
             url=self._api_address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
+        if not vault.is_api_available():
+            return None
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
             return None
-        vault.authenticate(AppRole(role_id, secret_id))
-        if not vault.is_authenticated():
+        if not vault.authenticate(AppRole(role_id, secret_id)):
             return None
         if not vault.is_active():
             return None

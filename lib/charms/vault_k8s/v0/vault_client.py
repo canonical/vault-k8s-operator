@@ -109,7 +109,7 @@ class Vault:
         """Find and use the token related with the given auth method."""
         try:
             auth_details.login(self._client)
-        except Forbidden:
+        except (Forbidden, InternalServerError):
             return False
         return True
 

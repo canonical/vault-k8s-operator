@@ -199,7 +199,6 @@ class TestVaultK8s:
         client = hvac.Client(url=f"https://{unit_addresses[0]}:8200", verify=False)
         client.token = root_token
         response = client.sys.read_raft_config()
-        print(response)
         assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS
 
 
