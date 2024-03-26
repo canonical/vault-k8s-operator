@@ -201,7 +201,7 @@ class KVRequest:
     nonce: str
 
 
-def is_requirer_data_valid(app_data: dict, unit_data: dict) -> bool:
+def is_requirer_data_valid(app_data: Mapping[str, str], unit_data: Mapping[str, str]) -> bool:
     """Return whether the requirer data is valid."""
     try:
         RequirerSchema(
@@ -214,7 +214,7 @@ def is_requirer_data_valid(app_data: dict, unit_data: dict) -> bool:
         return False
 
 
-def is_provider_data_valid(data: dict) -> bool:
+def is_provider_data_valid(data: Mapping[str, str]) -> bool:
     """Return whether the provider data is valid."""
     try:
         ProviderSchema(app=VaultKvProviderSchema(**data))
@@ -300,9 +300,9 @@ class VaultKvProvides(ops.Object):
         if event.app is None:
             logger.debug("No remote application yet")
             return
-        app_data = dict(event.relation.data[event.app])
+        app_data = event.relation.data[event.app]
         for unit in event.relation.units:
-            if not is_requirer_data_valid(app_data, dict(event.relation.data[unit])):
+            if not is_requirer_data_valid(app_data, event.relation.data[unit]):
                 logger.debug("Invalid data from unit %r", unit.name)
                 continue
             self.on.new_vault_kv_client_attached.emit(
@@ -367,7 +367,7 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def get_credentials(self, relation: ops.Relation) -> dict:
+    def get_credentials(self, relation: ops.Relation) -> Mapping[str, str]:
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
@@ -393,9 +393,9 @@ class VaultKvProvides(ops.Object):
             else self.model.relations.get(self.relation_name, [])
         )
         for relation in relations:
-            app_data = dict(relation.data[relation.app])
+            app_data = relation.data[relation.app]
             for unit in relation.units:
-                unit_data = dict(relation.data[unit])
+                unit_data = relation.data[unit]
                 if not is_requirer_data_valid(app_data=app_data, unit_data=unit_data):
                     continue
                 kv_requests.append(
@@ -543,7 +543,7 @@ class VaultKvRequires(ops.Object):
             return
 
         if (
-            is_provider_data_valid(dict(event.relation.data[event.app]))
+            is_provider_data_valid(event.relation.data[event.app])
             and self.get_unit_credentials(event.relation) is not None
         ):
             self.on.ready.emit(
