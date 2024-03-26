@@ -5,3 +5,4 @@ pyright
 pytest
 pytest-operator
 ruff
+types-boto3

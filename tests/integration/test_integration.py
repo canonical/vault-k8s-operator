@@ -16,7 +16,6 @@ import pytest
 import yaml
 from juju.application import Application
 from juju.unit import Unit
-from lightkube import Client as KubernetesClient
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.helpers import crash_pod, get_leader_unit
@@ -46,13 +45,12 @@ MINIO_CONFIG = {
 
 NUM_VAULT_UNITS = 3
 
-k8s = KubernetesClient()
-
 
 @pytest.mark.abort_on_fail
 @pytest.fixture(scope="module")
 async def build_charms_and_deploy_vault(ops_test: OpsTest):
     """Build the charms that are required in this test module and deploy Vault."""
+    assert ops_test.model
     copy_lib_content()
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
     built_charms = await ops_test.build_charms(".", f"{VAULT_KV_REQUIRER_CHARM_DIR}/")
@@ -103,7 +101,8 @@ class TestVaultK8s:
     ):
         assert ops_test.model
         num_units = NUM_VAULT_UNITS + 2
-        app: Application = ops_test.model.applications[APPLICATION_NAME]
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
         await app.scale(num_units)
 
         await ops_test.model.wait_for_idle(
@@ -118,7 +117,8 @@ class TestVaultK8s:
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
     ):
         assert ops_test.model
-        app: Application = ops_test.model.applications[APPLICATION_NAME]
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
         await app.scale(NUM_VAULT_UNITS)
 
         await ops_test.model.wait_for_idle(
@@ -353,6 +353,7 @@ class TestVaultK8sIntegrationsPart1:
         assert ops_test.model
 
         vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        assert isinstance(vault_leader_unit, Unit)
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         await action.wait()
         initial_ca_cert = action.results["stdout"]
@@ -380,11 +381,14 @@ class TestVaultK8sIntegrationsPart1:
         assert ops_test.model
 
         vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
+        assert isinstance(vault_leader_unit, Unit)
         action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
         await action.wait()
         initial_ca_cert = action.results
 
-        await ops_test.model.applications[APPLICATION_NAME].remove_relation(
+        app = ops_test.model.applications[APPLICATION_NAME]
+        assert isinstance(app, Application)
+        await app.remove_relation(
             "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
         )
         await ops_test.model.wait_for_idle(
@@ -414,6 +418,7 @@ class TestVaultK8sIntegrationsPart2:
     async def deploy_requiring_charms(
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
     ):
+        assert ops_test.model
         deploy_prometheus = ops_test.model.deploy(
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
@@ -487,6 +492,7 @@ class TestVaultK8sIntegrationsPart2:
         )
         endpoint = f"http://{minio_ip}:9000"
         s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
+        assert s3_integrator
         await run_s3_integrator_sync_credentials_action(
             ops_test,
             secret_key=MINIO_S3_SECRET_KEY,
@@ -587,6 +593,7 @@ class TestVaultK8sIntegrationsPart2:
     async def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_active(
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
+        assert ops_test.model
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:logging",
             relation2=f"{LOKI_APPLICATION_NAME}",
