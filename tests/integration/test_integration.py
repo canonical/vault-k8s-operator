@@ -49,7 +49,6 @@ NUM_VAULT_UNITS = 3
 k8s = KubernetesClient()
 
 
-@pytest.mark.abort_on_fail
 @pytest.fixture(scope="module")
 async def build_charms_and_deploy_vault(ops_test: OpsTest):
     """Build the charms that are required in this test module and deploy Vault."""
@@ -143,7 +142,6 @@ class TestVaultK8sIntegrationsPart1:
             tls-certificates-pki,
     """
 
-    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
@@ -409,7 +407,6 @@ class TestVaultK8sIntegrationsPart2:
             s3-parameters
     """
 
-    @pytest.mark.abort_on_fail
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
         self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
