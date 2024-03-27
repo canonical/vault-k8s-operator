@@ -267,6 +267,37 @@ class Vault:
                 logger.info("%s backend already enabled", backend_type.value)
             else:
                 raise VaultClientError(e) from e
+            logger.info("Enabled approle auth method")
+
+    def enable_kv_engine(self, name: str):
+        """Ensure a KV mount is enabled."""
+        self._client.sys.enable_secrets_engine(
+            backend_type="kv-v2",
+            description="Charm created KV backend",
+            path=name,
+        )
+
+    def enable_pki_engine(self, path: str):
+        """Ensure a PKI mount is enabled."""
+        self._client.sys.enable_secrets_engine(
+            backend_type="pki",
+            description="Charm created PKI backend",
+            path=path,
+        )
+        logger.info("Enabled PKI backend")
+
+    def enable_transit_engine(self, path: str):
+        """Ensure a Transit mount is enabled."""
+        # TODO: Should path be configurable? Or should this just be hardcoded?
+        self._client.sys.enable_secrets_engine(
+            backend_type="transit",
+            description="Charm created Transit backend",
+            path=path,
+        )
+
+    def is_secret_engine_enabled(self, path: str) -> bool:
+        """Check if a PKI mount is enabled."""
+        return path + "/" in self._client.sys.list_mounted_secrets_engines()
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
@@ -396,3 +427,37 @@ class Vault:
         """Return the number of raft peers."""
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
+
+    def configure_transit_policy(self, mount: str, relation_id: int):
+        """Create/update a policy within vault to use the transit key."""
+        mount_policy = f"""
+        path "{mount}/encrypt/{relation_id}" {{
+            capabilities = ["update"]
+        }}
+
+        path "{mount}/decrypt/{relation_id}" {{
+            capabilities = ["update"]
+        }}
+        """
+        policy_name = f"autounseal-{relation_id}"
+        self._client.sys.create_or_update_policy(
+            policy_name,
+            mount_policy.format(mount=mount),
+        )
+
+    def create_autounseal_key(self, path, relation_id):
+        """Create a new autounseal key."""
+        response = self._client.secrets.transit.create_or_update_secret(
+            path=f"{path}/keys/{relation_id}"
+        )
+        logging.info(f"Created a new autounseal key: {response}")
+
+    def create_transit_policy_token(self, relation_id: int):
+        """Create a token for the transit policy."""
+        return self._client.token.create(
+            policies=[f"autounseal-{relation_id}"],
+            ttl="15m",
+            orphan=True,
+            period="24h",
+            field="token",
+        )

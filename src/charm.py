@@ -10,6 +10,7 @@ import datetime
 import json
 import logging
 import socket
+from operator import is_
 from typing import IO, Dict, List, Optional, Tuple
 
 import hcl
@@ -33,6 +34,12 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_client import AuditDeviceType, SecretsBackend, Token, Vault
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
+from charms.vault_k8s.v0.vault_transit import (
+    VaultTransitDetailsReadyEvent,
+    VaultTransitEnableAutounseal,
+    VaultTransitProvides,
+    VaultTransitRequires,
+)
 from container import Container
 from cryptography import x509
 from exceptions import VaultCertsError
@@ -61,29 +68,33 @@ from s3_session import S3
 
 logger = logging.getLogger(__name__)
 
-VAULT_STORAGE_PATH = "/vault/raft"
+BACKUP_KEY_PREFIX = "vault-backup"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
-VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
-PEER_RELATION_NAME = "vault-peers"
+CONTAINER_NAME = "vault"
+CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
-PKI_RELATION_NAME = "vault-pki"
-TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
-VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+PEER_RELATION_NAME = "vault-peers"
 PKI_CSR_SECRET_LABEL = "pki-csr"
-S3_RELATION_NAME = "s3-parameters"
-REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
-BACKUP_KEY_PREFIX = "vault-backup"
-CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
-CONTAINER_NAME = "vault"
 PKI_MOUNT = "charm-pki"
+PKI_RELATION_NAME = "vault-pki"
 PKI_ROLE = "charm"
+REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
+S3_RELATION_NAME = "s3-parameters"
+TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
+TRANSIT_PROVIDES_RELATION_NAME = "transit-provides"
+TRANSIT_REQUIRES_RELATION_NAME = "transit-requires"
+TRANSIT_MOUNT_PATH = "charm-transit"
+TRANSIT_POLICY_TOKEN_LABEL = "transit-policy-token"
+VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
+VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
+VAULT_STORAGE_PATH = "/vault/raft"
 
 
 class VaultCharm(CharmBase):
-    """Main class for to handle Juju events for the vault-k8s charm."""
+    """Main class to handle Juju events for the vault-k8s charm."""
 
     VAULT_PORT = 8200
     VAULT_CLUSTER_PORT = 8201
@@ -101,6 +112,8 @@ class VaultCharm(CharmBase):
         self.tls_certificates_pki = TLSCertificatesRequiresV3(
             self, TLS_CERTIFICATES_PKI_RELATION_NAME
         )
+        self.vault_transit_provides = VaultTransitProvides(self, TRANSIT_PROVIDES_RELATION_NAME)
+        self.vault_transit_requires = VaultTransitRequires(self, TRANSIT_REQUIRES_RELATION_NAME)
         self.grafana_dashboards = GrafanaDashboardProvider(self)
         self._metrics_endpoint = MetricsEndpointProvider(
             self,
@@ -155,6 +168,64 @@ class VaultCharm(CharmBase):
             self.vault_pki.on.certificate_creation_request,
             self._on_vault_pki_certificate_creation_request,
         )
+        self.framework.observe(
+            self.vault_transit_requires.on.vault_transit_details_ready,
+            self._on_vault_transit_details_ready,
+        )
+        self.framework.observe(
+            self.vault_transit_provides.on.vault_transit_enable_autounseal,
+            self._on_vault_transit_enable_autounseal,
+        )
+
+    def _on_vault_transit_enable_autounseal(self, event: VaultTransitEnableAutounseal):
+        logger.info("Vault transit: get your engine started!: %s", event)
+
+        vault = self._initialize_vault_client()
+        if not vault.is_secret_engine_enabled(TRANSIT_MOUNT_PATH):
+            vault.enable_transit_engine(TRANSIT_MOUNT_PATH)
+
+        vault.create_autounseal_key(TRANSIT_MOUNT_PATH, event.relation.id)
+
+        vault.configure_transit_policy(TRANSIT_MOUNT_PATH, event.relation.id)
+
+        token = vault.create_transit_policy_token(event.relation.id)
+
+        secret = self._create_transit_token_secret(event.relation, token)
+
+        self._set_transit_relation_data(event.relation, secret.id)
+
+    def _set_transit_relation_data(self, relation, token_secret_id):
+        vault_address = self._get_relation_api_address(relation)
+        if vault_address is not None:
+            self.vault_transit_provides.set_vault_url(relation, vault_address)
+        self.vault_transit_provides.set_token_secret_id(relation, token_secret_id)
+
+    def _create_transit_token_secret(self, relation: Relation, token: str):
+        """Create a new secret with the token."""
+        juju_secret_content = {
+            "token": token,
+        }
+        secret = self.app.add_secret(juju_secret_content, label=TRANSIT_POLICY_TOKEN_LABEL)
+        secret.grant(relation)
+
+        return secret
+
+    def _initialize_vault_client(self):
+        return Vault(
+            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+        )
+
+    def _on_vault_transit_details_ready(self, event: VaultTransitDetailsReadyEvent):
+        logger.info("Vault transit details ready: %s", event)
+        vault = self._initialize_vault_client()
+        if vault.is_initialized():
+            logger.info("Vault is already initialized")
+            return
+
+        token = self.vault_transit_requires.get_token_from_relation(event.relation)
+
+        # TODO: Configure Vault with the seal "transit" stanza
+        pass
 
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
@@ -254,6 +325,10 @@ class VaultCharm(CharmBase):
                 "Raft cluster is not healthy. %s",
                 vault.get_raft_cluster_state(),
             )
+        # TODO: If vault is already initialized or unsealed, and vault-transit relation is added:
+        #  - Set the relation to a blocked status until
+        #    - The relation is removed
+        #    - The user authorizes the destruction of the existing vault (Juju Action)
 
     def _on_remove(self, event: RemoveEvent):
         """Handle remove charm event.
