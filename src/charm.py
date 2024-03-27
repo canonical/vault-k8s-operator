@@ -277,7 +277,7 @@ class VaultCharm(CharmBase):
             )
 
     def _on_remove(self, event: RemoveEvent):
-        """Handle certs removed event.
+        """Handle remove charm event.
 
         Removes the vault service and the raft data and removes the node from the raft cluster.
         """
@@ -307,7 +307,7 @@ class VaultCharm(CharmBase):
 
     def _on_authorize_charm_action(self, event: ActionEvent) -> None:
         if not self.unit.is_leader():
-            event.fail("This action must be ran on the leader unit.")
+            event.fail("This action must be run on the leader unit.")
             return
 
         token = event.params.get("token", "")

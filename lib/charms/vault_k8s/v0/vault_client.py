@@ -126,7 +126,7 @@ class Vault:
         try:
             self._client.sys.read_health_status(standby_ok=True)
             return True
-        except (VaultError, RequestException, InternalServerError) as e:
+        except (VaultError, RequestException) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
