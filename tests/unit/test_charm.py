@@ -248,6 +248,86 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding: MagicMock, mock_vault_class: MagicMock
+    ):
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for vault to be initialized"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": True,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for vault to be unsealed"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_no_approle_auth_secret_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for charm to be authorized"),
+        )
+
     # Test configure
     @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
