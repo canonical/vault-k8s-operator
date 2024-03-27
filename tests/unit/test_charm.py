@@ -106,11 +106,7 @@ class TestCharm(unittest.TestCase):
         "charm.KubernetesServicePatch",
         lambda charm, ports: None,
     )
-    @patch(
-        "charm.VaultTLSManager",
-        spec=VaultTLSManager,
-    )
-    def setUp(self, mock_vault_tls_manager_class):
+    def setUp(self):
         self.model_name = "whatever"
         self.harness = testing.Harness(VaultCharm)
         self.addCleanup(self.harness.cleanup)
@@ -253,6 +249,7 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
         self, mock_get_binding: MagicMock, mock_vault_class: MagicMock
     ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         mock_vault = mock_vault_class.return_value
         mock_vault.configure_mock(
             spec=Vault,
@@ -279,6 +276,7 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
         self, mock_get_binding, mock_vault_class
     ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         mock_vault = mock_vault_class.return_value
         mock_vault.configure_mock(
             spec=Vault,
@@ -320,6 +318,7 @@ class TestCharm(unittest.TestCase):
         )
         self._set_peer_relation()
         self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
 
         self.harness.evaluate_status()
 
@@ -336,7 +335,6 @@ class TestCharm(unittest.TestCase):
         self,
         patch_get_binding,
         patch_socket_getfqdn,
-        mock_vault_class,
     ):
         self.harness.set_leader(is_leader=True)
         patch_socket_getfqdn.return_value = "myhostname"
@@ -474,6 +472,7 @@ class TestCharm(unittest.TestCase):
         mock_get_binding: MagicMock,
         mock_vault_class: MagicMock,
     ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         self.harness.set_leader()
         mock_vault = mock_vault_class.return_value
         mock_get_binding.return_value = MockBinding(
@@ -535,6 +534,7 @@ class TestCharm(unittest.TestCase):
         mock_get_binding: MagicMock,
         mock_vault_class: MagicMock,
     ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         self.harness.set_leader()
         mock_vault = mock_vault_class.return_value
         mock_get_binding.return_value = MockBinding(
