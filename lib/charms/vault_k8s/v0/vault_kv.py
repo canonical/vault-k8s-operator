@@ -369,7 +369,7 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def get_credentials(self, relation: ops.Relation) -> Any:
+    def get_credentials(self, relation: ops.Relation) -> dict:
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
