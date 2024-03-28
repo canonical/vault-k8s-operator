@@ -270,6 +270,7 @@ class VaultCharm(CharmBase):
             return
         self._configure_pki_secrets_engine()
         self._add_ca_certificate_to_pki_secrets_engine()
+        self._sync_vault_kv()
         self._sync_vault_pki()
         self.tls.send_ca_cert()
         if vault.is_active() and not vault.is_raft_cluster_healthy():

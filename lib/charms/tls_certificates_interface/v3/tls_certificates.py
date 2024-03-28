@@ -7,6 +7,9 @@
 This library contains the Requires and Provides classes for handling the tls-certificates
 interface.
 
+Pre-requisites:
+  - Juju >= 3.0
+
 ## Getting Started
 From a charm directory, fetch the library using `charmcraft`:
 
@@ -295,6 +298,7 @@ from ops.charm import (
     SecretExpiredEvent,
 )
 from ops.framework import EventBase, EventSource, Handle, Object
+from ops.jujuversion import JujuVersion
 from ops.model import (
     Application,
     ModelError,
@@ -312,7 +316,7 @@ LIBAPI = 3
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 8
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -450,6 +454,10 @@ class ProviderCertificate:
     chain: List[str]
     revoked: bool
 
+    def chain_as_pem(self) -> str:
+        """Return full certificate chain as a PEM string."""
+        return "\n\n".join(reversed(self.chain))
+
 
 class CertificateAvailableEvent(EventBase):
     """Charm Event triggered when a TLS certificate is available."""
@@ -483,6 +491,10 @@ class CertificateAvailableEvent(EventBase):
         self.certificate_signing_request = snapshot["certificate_signing_request"]
         self.ca = snapshot["ca"]
         self.chain = snapshot["chain"]
+
+    def chain_as_pem(self) -> str:
+        """Return full certificate chain as a PEM string."""
+        return "\n\n".join(reversed(self.chain))
 
 
 class CertificateExpiringEvent(EventBase):
@@ -1474,6 +1486,8 @@ class TLSCertificatesRequiresV3(Object):
                 Used to trigger the CertificateExpiring event. Default: 7 days.
         """
         super().__init__(charm, relationship_name)
+        if not JujuVersion.from_environ().has_secrets:
+            logger.warning("This version of the TLS library requires Juju secrets (Juju >= 3.0)")
         self.relationship_name = relationship_name
         self.charm = charm
         self.expiry_notification_time = expiry_notification_time
@@ -1738,9 +1752,8 @@ class TLSCertificatesRequiresV3(Object):
         If the provider certificate is revoked, emit a CertificateInvalidateEvent,
         otherwise emit a CertificateAvailableEvent.
 
-        When Juju secrets are available, remove the secret for revoked certificate,
-        or add a secret with the correct expiry time for new certificates.
-
+        Remove the secret for revoked certificate, or add a secret with the correct expiry
+        time for new certificates.
 
         Args:
             event: Juju event
