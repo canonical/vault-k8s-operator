@@ -113,8 +113,8 @@ class Vault:
             return False
         return True
 
-    def is_authenticated(self) -> Optional[Dict]:
-        """Check if given token is accepted by vault."""
+    def get_token_data(self) -> Optional[Dict]:
+        """Check if given token is accepted by vault, and returns the token data if so."""
         try:
             token_data = self._client.auth.token.lookup_self()["data"]
         except Forbidden:
