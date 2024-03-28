@@ -296,8 +296,6 @@ class VaultCharm(CharmBase):
                     and vault.get_num_raft_peers() > 1
                 ):
                     vault.remove_raft_node(node_id=self._node_id)
-        except VaultCertsError:
-            logger.info("Vault CA certificate not found")
         finally:
             if self._vault_service_is_running():
                 try:
