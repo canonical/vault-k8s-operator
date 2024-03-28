@@ -36,6 +36,7 @@ from charms.vault_k8s.v0.vault_client import (
     SecretsBackend,
     Token,
     Vault,
+    VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
@@ -314,24 +315,26 @@ class VaultCharm(CharmBase):
         vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         vault.authenticate(Token(token))
 
-        if not (token_data := vault.get_token_data()):
+        if not vault.get_token_data():
             event.fail("The token provided is not valid.")
             return
-        if "root" not in token_data["policies"]:
-            event.fail("The token provided does not have permissions to authorize charm.")
-            return
 
-        vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
-        vault.enable_approle_auth_method()
-        vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
-        cidrs = [f"{self._bind_address}/24"]
-        role_id = vault.configure_approle(
-            role_name="charm",
-            cidrs=cidrs,
-            policies=[CHARM_POLICY_NAME, "default"],
-        )
-        secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
-        self._set_approle_auth_secret(role_id, secret_id)
+        try:
+            vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+            vault.enable_approle_auth_method()
+            vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
+            cidrs = [f"{self._bind_address}/24"]
+            role_id = vault.configure_approle(
+                role_name="charm",
+                cidrs=cidrs,
+                policies=[CHARM_POLICY_NAME, "default"],
+            )
+            secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
+            self._set_approle_auth_secret(role_id, secret_id)
+        except VaultClientError as e:
+            logger.exception("Vault returned an error while authorizing the charm")
+            event.fail(f"Vault returned an error while authorizing the charm: {str(e)}")
+            return
         self.on.config_changed.emit()
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
