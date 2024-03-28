@@ -202,7 +202,7 @@ class VaultCharm(CharmBase):
         try:
             self.tls.get_tls_file_path_in_charm(File.CA)
         except VaultCertsError:
-            event.add_status(BlockedStatus("Missing Storage"))
+            event.add_status(BlockedStatus("Storage for certificates not mounted"))
             return
         vault = Vault(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -211,17 +211,19 @@ class VaultCharm(CharmBase):
             event.add_status(WaitingStatus("Waiting for vault to be available"))
             return
         if not vault.is_initialized():
-            event.add_status(BlockedStatus("Waiting for vault to be initialized"))
+            event.add_status(BlockedStatus("Please initialize Vault"))
             return
         if vault.is_sealed():
-            event.add_status(BlockedStatus("Waiting for vault to be unsealed"))
+            event.add_status(BlockedStatus("Please unseal Vault"))
             return
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
-            event.add_status(BlockedStatus("Waiting for charm to be authorized"))
+            event.add_status(
+                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
+            )
             return
         if not self._get_active_vault_client():
-            event.add_status(BlockedStatus("Waiting for a leader unit to be chosen"))
+            event.add_status(WaitingStatus("Waiting for a leader unit to be chosen"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
