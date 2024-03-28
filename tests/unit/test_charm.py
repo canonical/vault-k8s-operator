@@ -268,7 +268,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("Waiting for vault to be initialized"),
+            BlockedStatus("Please initialize Vault"),
         )
 
     @patch("charm.Vault", autospec=True)
@@ -296,7 +296,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("Waiting for vault to be unsealed"),
+            BlockedStatus("Please unseal Vault"),
         )
 
     @patch("charm.Vault", autospec=True)
@@ -324,7 +324,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("Waiting for charm to be authorized"),
+            BlockedStatus("Please authorize charm (see `authorize-charm` action)"),
         )
 
     # Test configure
@@ -460,7 +460,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("Waiting for vault to be initialized"),
+            BlockedStatus("Please initialize Vault"),
         )
 
     # TODO: add tests for each new status
@@ -487,7 +487,7 @@ class TestCharm(unittest.TestCase):
         mock_vault.configure_mock(
             spec=Vault,
             **{
-                "is_authenticated.return_value": {"policies": ["root"]},
+                "get_token_data.return_value": {"policies": ["root"]},
                 "configure_approle.return_value": "approle_id",
                 "generate_role_secret_id.return_value": "secret_id",
             },
@@ -549,7 +549,7 @@ class TestCharm(unittest.TestCase):
         mock_vault.configure_mock(
             spec=Vault,
             **{
-                "is_authenticated.return_value": None,
+                "get_token_data.return_value": None,
                 "configure_approle.return_value": "approle_id",
                 "generate_role_secret_id.return_value": "secret_id",
             },

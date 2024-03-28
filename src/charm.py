@@ -335,7 +335,6 @@ class VaultCharm(CharmBase):
             logger.exception("Vault returned an error while authorizing the charm")
             event.fail(f"Vault returned an error while authorizing the charm: {str(e)}")
             return
-        self.on.config_changed.emit()
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
@@ -1109,7 +1108,7 @@ class VaultCharm(CharmBase):
 
         if self._approle_secret_set():
             role_id, secret_id = self._get_approle_auth_secret()
-            if not vault.authenticate(AppRole(role_id, secret_id)):
+            if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
                 self._remove_approle_auth_secret()
         return True
 
