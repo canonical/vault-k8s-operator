@@ -184,7 +184,6 @@ class TestVaultK8s:
         _, root_token, _ = initialize_leader_vault
         app: Application = ops_test.model.applications[APPLICATION_NAME]
 
-        # TODO: maybe get the app ip and connect with cert?
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         client = hvac.Client(url=f"https://{unit_addresses[-1]}:8200", verify=False)
         client.token = root_token
