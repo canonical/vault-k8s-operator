@@ -744,43 +744,6 @@ async def run_get_certificate_action(ops_test) -> dict:
     return action_output
 
 
-async def _get_vault_traefik_endpoint(ops_test: OpsTest, timeout: int = 60) -> str:
-    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
-
-    Args:
-        ops_test: Ops test Framework.
-        timeout: Wait time in seconds to get proxied endpoints.
-
-    Returns:
-        vault_endpoint: Vault proxied endpoint by Traefik.
-
-    Raises:
-        TimeoutError: If proxied endpoints are not retrieved.
-
-    """
-    assert ops_test.model
-    traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
-    assert isinstance(traefik, Application)
-    traefik_unit = traefik.units[0]
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        proxied_endpoint_action = await traefik_unit.run_action(
-            action_name="show-proxied-endpoints"
-        )
-        action_output = await ops_test.model.get_action_output(
-            action_uuid=proxied_endpoint_action.entity_id, wait=30
-        )
-
-        if "proxied-endpoints" in action_output:
-            proxied_endpoints = json.loads(action_output["proxied-endpoints"])
-            return proxied_endpoints[APPLICATION_NAME]["url"]
-        else:
-            logger.info("Traefik did not return proxied endpoints yet")
-        time.sleep(2)
-
-    raise TimeoutError("Traefik did not return proxied endpoints")
-
-
 async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
     """Run the `get-certificate` on the `vault-k8s` unit.
 
@@ -931,8 +894,20 @@ async def read_vault_unit_statuses(ops_test: OpsTest) -> Dict[str, str]:
 
 
 async def wait_for_vault_status_message(
-    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 5
-):
+    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
+) -> None:
+    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+
+    Args:
+        ops_test: Ops test Framework.
+        count: How many units that are expected to be emitting the expected message
+        expected_message: The message that vault units should be setting as a status message
+        timeout: Wait time in seconds to get proxied endpoints.
+        cadence: How long to wait before running the command again
+
+    Raises:
+        TimeoutError: If proxied endpoints are not retrieved.
+    """
     while timeout > 0:
         vault_status = await read_vault_unit_statuses(ops_test)
         seen = 0
@@ -944,7 +919,47 @@ async def wait_for_vault_status_message(
             return
         time.sleep(cadence)
         timeout -= cadence
-    raise TimeoutError
+    raise TimeoutError("Vault didn't show the expected status")
+
+
+async def _get_vault_traefik_endpoint(
+    ops_test: OpsTest, timeout: int = 60, cadence: int = 2
+) -> str:
+    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+
+    Args:
+        ops_test: Ops test Framework.
+        timeout: Wait time in seconds to get proxied endpoints.
+        cadence: How long to wait before running the command again
+
+    Returns:
+        vault_endpoint: Vault proxied endpoint by Traefik.
+
+    Raises:
+        TimeoutError: If proxied endpoints are not retrieved.
+
+    """
+    assert ops_test.model
+    traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
+    assert isinstance(traefik, Application)
+    traefik_unit = traefik.units[0]
+    while timeout > 0:
+        proxied_endpoint_action = await traefik_unit.run_action(
+            action_name="show-proxied-endpoints"
+        )
+        action_output = await ops_test.model.get_action_output(
+            action_uuid=proxied_endpoint_action.entity_id, wait=30
+        )
+
+        if "proxied-endpoints" in action_output:
+            proxied_endpoints = json.loads(action_output["proxied-endpoints"])
+            return proxied_endpoints[APPLICATION_NAME]["url"]
+        else:
+            logger.info("Traefik did not return proxied endpoints yet")
+        time.sleep(cadence)
+        timeout -= cadence
+
+    raise TimeoutError("Traefik did not return proxied endpoints")
 
 
 def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
