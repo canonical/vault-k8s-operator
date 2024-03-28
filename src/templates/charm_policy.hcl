@@ -59,5 +59,8 @@ path "sys/storage/raft/remove-peer" {
 
 # Allow taking and restoring snapshots of Vault
 path "sys/storage/raft/snapshot" {
-  capabilities = ["read", "update"]
+  capabilities = ["read"]
+}
+path "sys/storage/raft/snapshot-force" {
+  capabilities = ["update"]
 }

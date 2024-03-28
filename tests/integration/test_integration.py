@@ -692,11 +692,10 @@ class TestVaultK8sIntegrationsPart2:
         backup_id = json.loads(list_backups_action_output["backup-ids"])[0]
         # In this test we are not using the correct unsealed keys and root token.
         restore_backup_action_output = await run_restore_backup_action(
-            ops_test,
-            backup_id=backup_id,
-            root_token="RandomRootToken",
-            unseal_keys=["RandomUnsealKey"],
+            ops_test, backup_id=backup_id
         )
+        logger.warning(backup_id)
+        logger.warning(restore_backup_action_output)
         assert restore_backup_action_output["restored"] == backup_id
 
     @pytest.mark.abort_on_fail
@@ -838,9 +837,7 @@ async def run_list_backups_action(ops_test: OpsTest) -> dict:
     )
 
 
-async def run_restore_backup_action(
-    ops_test: OpsTest, backup_id: str, root_token: str, unseal_keys: List[str]
-) -> dict:
+async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
     """Run the `restore-backup` action on the `vault-k8s` leader unit.
 
     Args:
@@ -856,11 +853,7 @@ async def run_restore_backup_action(
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     restore_backup_action = await leader_unit.run_action(
         action_name="restore-backup",
-        **{
-            "backup-id": backup_id,
-            "unseal-keys": unseal_keys,
-            "root-token": root_token,
-        },
+        **{"backup-id": backup_id},
     )
     restore_backup_action_output = await ops_test.model.get_action_output(
         action_uuid=restore_backup_action.entity_id, wait=120
