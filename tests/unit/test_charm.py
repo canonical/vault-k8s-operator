@@ -12,6 +12,8 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charm import (
+    CHARM_POLICY_NAME,
+    CHARM_POLICY_PATH,
     PKI_CSR_SECRET_LABEL,
     S3_RELATION_NAME,
     VAULT_CHARM_APPROLE_SECRET_LABEL,
@@ -24,11 +26,13 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     ProviderCertificate,
 )
 from charms.vault_k8s.v0.vault_client import (
+    AuditDeviceType,
     Certificate,
     SecretsBackend,
+    Token,
     Vault,
 )
-from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
+from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, VaultTLSManager
 from ops import testing
 from ops.model import BlockedStatus, WaitingStatus
 
@@ -240,8 +244,90 @@ class TestCharm(unittest.TestCase):
             WaitingStatus("Waiting for bind and ingress addresses to be available"),
         )
 
-    # Test configure
     @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding: MagicMock, mock_vault_class: MagicMock
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for vault to be initialized"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": True,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for vault to be unsealed"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_no_approle_auth_secret_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Waiting for charm to be authorized"),
+        )
+
+    # Test configure
     @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
     @patch("ops.model.Model.get_binding")
@@ -249,7 +335,6 @@ class TestCharm(unittest.TestCase):
         self,
         patch_get_binding,
         patch_socket_getfqdn,
-        mock_vault_class,
     ):
         self.harness.set_leader(is_leader=True)
         patch_socket_getfqdn.return_value = "myhostname"
@@ -380,7 +465,100 @@ class TestCharm(unittest.TestCase):
 
     # TODO: add tests for each new status
 
-    # TODO: add tests for authorize charm
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_unit_is_leader_when_authorize_charm_then_approle_configured_and_secrets_stored(
+        self,
+        mock_get_binding: MagicMock,
+        mock_vault_class: MagicMock,
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        self.harness.set_leader()
+        mock_vault = mock_vault_class.return_value
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        peer_relation_id = self._set_peer_relation()
+        other_unit_name = f"{self.harness.charm.app.name}/1"
+        self.harness.add_relation_unit(
+            relation_id=peer_relation_id, remote_unit_name=other_unit_name
+        )
+
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_authenticated.return_value": {"policies": ["root"]},
+                "configure_approle.return_value": "approle_id",
+                "generate_role_secret_id.return_value": "secret_id",
+            },
+        )
+
+        self.harness.run_action("authorize-charm", {"token": "test-token"})
+
+        # Assertions
+        mock_vault.authenticate.assert_called_once_with(Token("test-token"))
+        mock_vault.enable_audit_device.assert_called_once_with(
+            device_type=AuditDeviceType.FILE, path="stdout"
+        )
+        mock_vault.enable_approle_auth_method.assert_called_once()
+        mock_vault.configure_policy.assert_called_once_with(
+            policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH
+        )
+        mock_vault.configure_approle.assert_called_once_with(
+            role_name="charm", policies=[CHARM_POLICY_NAME, "default"], cidrs=["1.2.1.2/24"]
+        )
+        mock_vault.generate_role_secret_id.assert_called_once_with(
+            name="charm", cidrs=["1.2.1.2/24"]
+        )
+
+        secret_content = self.harness.model.get_secret(
+            label=VAULT_CHARM_APPROLE_SECRET_LABEL
+        ).get_content()
+
+        assert secret_content["role-id"] == "approle_id"
+        assert secret_content["secret-id"] == "secret_id"
+
+    def test_given_unit_is_not_leader_when_authorize_charm_then_action_fails(
+        self,
+    ):
+        self.harness.set_leader(False)
+        try:
+            self.harness.run_action("authorize-charm", {"token": "test-token"})
+        except testing.ActionFailed as e:
+            self.assertEqual(e.message, "This action must be run on the leader unit.")
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_unit_is_leader_and_token_is_invalid_when_authorize_charm_then_action_fails(
+        self,
+        mock_get_binding: MagicMock,
+        mock_vault_class: MagicMock,
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        self.harness.set_leader()
+        mock_vault = mock_vault_class.return_value
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        peer_relation_id = self._set_peer_relation()
+        other_unit_name = f"{self.harness.charm.app.name}/1"
+        self.harness.add_relation_unit(
+            relation_id=peer_relation_id, remote_unit_name=other_unit_name
+        )
+
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_authenticated.return_value": None,
+                "configure_approle.return_value": "approle_id",
+                "generate_role_secret_id.return_value": "secret_id",
+            },
+        )
+
+        try:
+            self.harness.run_action("authorize-charm", {"token": "test-token"})
+        except testing.ActionFailed as e:
+            self.assertEqual(e.message, "The token provided is not valid.")
 
     # Test remove
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
