@@ -456,7 +456,6 @@ class VaultCharm(CharmBase):
         """Handle the restore-backup action.
 
         Restores the snapshot with the provided ID.
-        Unseals Vault using the provided unseal key.
 
         Args:
             event: ActionEvent
