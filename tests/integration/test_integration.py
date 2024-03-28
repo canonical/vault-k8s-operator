@@ -103,13 +103,15 @@ class TestVaultK8s:
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
             await wait_for_vault_status_message(
-                ops_test=ops_test, count=1, expected_message="Waiting for charm to be authorized"
+                ops_test=ops_test,
+                count=1,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
             )
             unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=NUM_VAULT_UNITS,
-                expected_message="Waiting for charm to be authorized",
+                expected_message="Please authorize charm (see `authorize-charm` action)",
             )
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
@@ -132,7 +134,7 @@ class TestVaultK8s:
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
         await wait_for_vault_status_message(
-            ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
+            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
@@ -158,7 +160,7 @@ class TestVaultK8s:
         await app.scale(num_units)
 
         await wait_for_vault_status_message(
-            ops_test, count=1, expected_message="Waiting for vault to be unsealed", timeout=300
+            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[-1], root_token, unseal_key)
@@ -871,6 +873,14 @@ def copy_lib_content() -> None:
 
 
 async def read_vault_unit_statuses(ops_test: OpsTest) -> Dict[str, str]:
+    """Read the complete status from vault units.
+
+    Reads the statuses that juju emits that aren't captured by ops_test together. Captures a vault
+    units: name, status (active, blocked etc.), agent (idle, executing), address and message.
+
+    Args:
+        ops_test: Ops test Framework
+    """
     status_tuple = await ops_test.juju("status")
     if status_tuple[0] != 0:
         raise Exception
@@ -896,7 +906,10 @@ async def read_vault_unit_statuses(ops_test: OpsTest) -> Dict[str, str]:
 async def wait_for_vault_status_message(
     ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
 ) -> None:
-    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+    """Wait for the correct vault status messages to appear.
+
+    This function is necessary because ops_test doesn't provide the facilities to discriminate
+    depending on the status message of the units, just the statuses themselves.
 
     Args:
         ops_test: Ops test Framework.
@@ -906,7 +919,7 @@ async def wait_for_vault_status_message(
         cadence: How long to wait before running the command again
 
     Raises:
-        TimeoutError: If proxied endpoints are not retrieved.
+        TimeoutError: If the expected amount of statuses weren't found in the given timeout.
     """
     while timeout > 0:
         vault_status = await read_vault_unit_statuses(ops_test)
