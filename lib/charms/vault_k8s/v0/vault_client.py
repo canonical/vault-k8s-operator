@@ -178,7 +178,9 @@ class Vault:
             )
             logger.info("Enabled audit device %s for path %s", device_type.value, path)
         except InvalidRequest as e:
-            errors = e.json.get("errors")
+            if not e.json or not isinstance(e.json, dict):
+                raise VaultClientError(e) from e
+            errors = e.json.get("errors", [])
             if len(errors) == 1 and errors[0].startswith("path already in use"):
                 logger.info("Audit device already enabled.")
             else:
@@ -192,7 +194,9 @@ class Vault:
             self._client.sys.enable_auth_method("approle")
             logger.info("Enabled approle auth method.")
         except InvalidRequest as e:
-            errors = e.json.get("errors")
+            if not e.json or not isinstance(e.json, dict):
+                raise VaultClientError(e) from e
+            errors = e.json.get("errors", [])
             if len(errors) == 1 and errors[0].startswith("path is already in use"):
                 logger.info("Approle already enabled.")
             else:
@@ -262,7 +266,10 @@ class Vault:
             )
             logger.info("Enabled %s backend", backend_type.value)
         except InvalidRequest as e:
-            errors = e.json.get("errors")
+            # TODO: Fix the type stubs for hvac to properly identify the json attribute
+            if not e.json or not isinstance(e.json, dict):
+                raise VaultClientError(e) from e
+            errors = e.json.get("errors", [])
             if len(errors) == 1 and errors[0].startswith("path is already in use"):
                 logger.info("%s backend already enabled", backend_type.value)
             else:
