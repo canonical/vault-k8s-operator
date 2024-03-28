@@ -181,18 +181,20 @@ class UnitVaultKvRequirerSchema(BaseModel):
 class ProviderSchema(DataBagSchema):
     """The schema for the provider side of this interface."""
 
-    app: VaultKvProviderSchema
+    app: VaultKvProviderSchema  # type: ignore
 
 
 class RequirerSchema(DataBagSchema):
     """The schema for the requirer side of this interface."""
 
-    app: AppVaultKvRequirerSchema
-    unit: UnitVaultKvRequirerSchema
+    app: AppVaultKvRequirerSchema  # type: ignore
+    unit: UnitVaultKvRequirerSchema  # type: ignore
+
 
 @dataclass
 class KVRequest:
     """This class represents a kv request from an interface Requirer."""
+
     relation_id: int
     app_name: str
     unit_name: str
@@ -217,7 +219,7 @@ def is_requirer_data_valid(app_data: Mapping[str, str], unit_data: Mapping[str, 
 def is_provider_data_valid(data: Mapping[str, str]) -> bool:
     """Return whether the provider data is valid."""
     try:
-        ProviderSchema(app=VaultKvProviderSchema(**data))
+        ProviderSchema(app=VaultKvProviderSchema(**data))  # type: ignore https://github.com/pydantic/pydantic/issues/8616
         return True
     except ValidationError as e:
         logger.debug("Invalid data: %s", e)
@@ -276,7 +278,7 @@ class VaultKvProviderEvents(ops.ObjectEvents):
 class VaultKvProvides(ops.Object):
     """Class to be instanciated by the providing side of the relation."""
 
-    on = VaultKvProviderEvents()
+    on = VaultKvProviderEvents()  # type: ignore
 
     def __init__(
         self,
@@ -367,7 +369,7 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def get_credentials(self, relation: ops.Relation) -> Mapping[str, str]:
+    def get_credentials(self, relation: ops.Relation) -> dict:
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
@@ -376,7 +378,9 @@ class VaultKvProvides(ops.Object):
         outstanding_requests: List[KVRequest] = []
         kv_requests = self.get_kv_requests(relation_id=relation_id)
         for request in kv_requests:
-            if not self._credentials_issued_for_request(nonce=request.nonce, relation_id=relation_id):
+            if not self._credentials_issued_for_request(
+                nonce=request.nonce, relation_id=relation_id
+            ):
                 outstanding_requests.append(request)
         return outstanding_requests
 
@@ -393,6 +397,7 @@ class VaultKvProvides(ops.Object):
             else self.model.relations.get(self.relation_name, [])
         )
         for relation in relations:
+            assert isinstance(relation.app, ops.Application)
             app_data = relation.data[relation.app]
             for unit in relation.units:
                 unit_data = relation.data[unit]
@@ -410,7 +415,7 @@ class VaultKvProvides(ops.Object):
                 )
         return kv_requests
 
-    def _credentials_issued_for_request(self, nonce: str, relation_id: int) -> bool:
+    def _credentials_issued_for_request(self, nonce: str, relation_id: Optional[int]) -> bool:
         """Return whether credentials have been issued for the request."""
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
@@ -490,7 +495,7 @@ class VaultKvRequireEvents(ops.ObjectEvents):
 class VaultKvRequires(ops.Object):
     """Class to be instanciated by the requiring side of the relation."""
 
-    on = VaultKvRequireEvents()
+    on = VaultKvRequireEvents()  # type: ignore
 
     def __init__(
         self,
