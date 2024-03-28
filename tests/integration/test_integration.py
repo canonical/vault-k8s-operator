@@ -9,7 +9,7 @@ import shutil
 import time
 from os.path import abspath
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import hvac
 import pytest
@@ -45,7 +45,6 @@ MINIO_CONFIG = {
 }
 
 NUM_VAULT_UNITS = 3
-VAULT_UNIT_DOMAIN = "vault-k8s-endpoints.vault.svc.cluster.local"
 
 k8s = KubernetesClient()
 
@@ -79,7 +78,9 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
 
 
 @pytest.fixture(scope="module")
-async def initialize_leader_vault(ops_test: OpsTest, build_charms_and_deploy_vault):
+async def initialize_leader_vault(
+    ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
+) -> Tuple[int | str]:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_index = int(leader_unit.name[-1])
     unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
@@ -95,7 +96,7 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized_then_status_is_active(
-        self, ops_test: OpsTest, initialize_leader_vault
+        self, ops_test: OpsTest, initialize_leader_vault: Tuple[int | str]
     ):
         leader_unit_index, root_token, unseal_key = initialize_leader_vault
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
@@ -123,7 +124,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
         _, root_token, unseal_key = initialize_leader_vault
@@ -148,7 +149,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
         _, root_token, unseal_key = initialize_leader_vault
@@ -175,7 +176,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
         _, root_token, _ = initialize_leader_vault
@@ -221,7 +222,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
 
@@ -430,7 +431,10 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
-        self, ops_test: OpsTest, deploy_requiring_charms: None, initialize_leader_vault
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
 
@@ -471,7 +475,10 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
-        self, ops_test: OpsTest, deploy_requiring_charms: None, initialize_leader_vault
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int | str],
     ):
         assert ops_test.model
 
@@ -530,7 +537,7 @@ class TestVaultK8sIntegrationsPart2:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault,
+        initialize_leader_vault: Tuple[int | str],
     ):
         deploy_prometheus = ops_test.model.deploy(
             "prometheus-k8s",
@@ -900,7 +907,7 @@ def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
 
 
-async def read_vault_unit_statuses(ops_test: OpsTest):
+async def read_vault_unit_statuses(ops_test: OpsTest) -> Dict[str, str]:
     status_tuple = await ops_test.juju("status")
     if status_tuple[0] != 0:
         raise Exception
@@ -955,7 +962,7 @@ def unseal_all_vaults(
         unseal_vault(endpoint, root_token, unseal_key)
 
 
-async def authorize_charm(ops_test: OpsTest, root_token: str):
+async def authorize_charm(ops_test: OpsTest, root_token: str) -> Any | Dict:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     authorize_action = await leader_unit.run_action(
         action_name="authorize-charm",
