@@ -78,10 +78,10 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def initialize_leader_vault(
     ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
-) -> Tuple[int | str]:
+) -> Tuple[int, str, str]:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_index = int(leader_unit.name[-1])
-    unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
 
     client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
     initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
@@ -94,10 +94,11 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized_then_status_is_active(
-        self, ops_test: OpsTest, initialize_leader_vault: Tuple[int | str]
+        self, ops_test: OpsTest, initialize_leader_vault: Tuple[int, str, str]
     ):
+        assert ops_test.model
         leader_unit_index, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
             await wait_for_vault_status_message(
@@ -124,7 +125,7 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
         _, root_token, unseal_key = initialize_leader_vault
@@ -134,7 +135,7 @@ class TestVaultK8s:
         await wait_for_vault_status_message(
             ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
         async with ops_test.fast_forward(fast_interval="10s"):
             await ops_test.model.wait_for_idle(
@@ -149,19 +150,19 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
         _, root_token, unseal_key = initialize_leader_vault
         num_units = NUM_VAULT_UNITS + 1
-        app: Application = ops_test.model.applications[APPLICATION_NAME]
+        app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
         await app.scale(num_units)
 
         await wait_for_vault_status_message(
             ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[-1], root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
@@ -177,11 +178,11 @@ class TestVaultK8s:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
         _, root_token, _ = initialize_leader_vault
-        app: Application = ops_test.model.applications[APPLICATION_NAME]
+        app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
 
         unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
@@ -223,7 +224,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -270,7 +271,7 @@ class TestVaultK8sIntegrationsPart1:
         )
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
@@ -435,7 +436,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -465,7 +466,7 @@ class TestVaultK8sIntegrationsPart1:
         assert initial_ca_cert != final_ca_cert
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
@@ -480,7 +481,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -515,7 +516,7 @@ class TestVaultK8sIntegrationsPart1:
         assert initial_ca_cert != final_ca_cert
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
@@ -542,7 +543,7 @@ class TestVaultK8sIntegrationsPart2:
         self,
         ops_test: OpsTest,
         build_charms_and_deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
         deploy_prometheus = ops_test.model.deploy(
@@ -595,7 +596,7 @@ class TestVaultK8sIntegrationsPart2:
         )
 
         _, root_token, unseal_key = initialize_leader_vault
-        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
@@ -871,7 +872,7 @@ def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
 
 
-async def read_vault_unit_statuses(ops_test: OpsTest) -> Dict[str, str]:
+async def read_vault_unit_statuses(ops_test: OpsTest) -> List[Dict[str, str]]:
     """Read the complete status from vault units.
 
     Reads the statuses that juju emits that aren't captured by ops_test together. Captures a vault
@@ -990,6 +991,7 @@ def unseal_all_vaults(
 
 
 async def authorize_charm(ops_test: OpsTest, root_token: str) -> Any | Dict:
+    assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     authorize_action = await leader_unit.run_action(
         action_name="authorize-charm",
