@@ -110,6 +110,7 @@ class Vault:
         try:
             auth_details.login(self._client)
         except (Forbidden, InternalServerError):
+            logger.error("Failed logging in to Vault")
             return False
         return True
 

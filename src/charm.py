@@ -314,7 +314,7 @@ class VaultCharm(CharmBase):
         vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         vault.authenticate(Token(token))
 
-        if not (token_data := vault.is_authenticated()):
+        if not (token_data := vault.get_token_data()):
             event.fail("The token provided is not valid.")
             return
         if "root" not in token_data["policies"]:
@@ -1001,6 +1001,14 @@ class VaultCharm(CharmBase):
             secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             secret.set_content({"role-id": role_id, "secret-id": secret_id})
 
+    def _remove_approle_auth_secret(self) -> None:
+        """Remove the approle secret if it exists."""
+        try:
+            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            juju_secret.remove_all_revisions()
+        except SecretNotFoundError:
+            return
+
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
 
@@ -1097,8 +1105,10 @@ class VaultCharm(CharmBase):
             logger.error("Failed to restore snapshotes: %s", response.json())
             return False
 
-        # Check if the approle can still login
-        # If not, remove secret
+        if self._approle_secret_set():
+            role_id, secret_id = self._get_approle_auth_secret()
+            if not vault.authenticate(AppRole(role_id, secret_id)):
+                self._remove_approle_auth_secret()
         return True
 
     def _get_active_vault_client(self) -> Optional[Vault]:
