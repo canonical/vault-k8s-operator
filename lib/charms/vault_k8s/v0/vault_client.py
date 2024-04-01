@@ -131,33 +131,9 @@ class Vault:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
-    def initialize(
-        self, secret_shares: int = 1, secret_threshold: int = 1
-    ) -> Tuple[str, List[str]]:
-        """Initialize Vault.
-
-        Returns:
-            A tuple containing the root token and the unseal keys.
-        """
-        initialize_response = self._client.sys.initialize(
-            secret_shares=secret_shares, secret_threshold=secret_threshold
-        )
-        logger.info("Vault is initialized")
-        return initialize_response["root_token"], initialize_response["keys"]
-
     def is_initialized(self) -> bool:
         """Return whether Vault is initialized."""
         return self._client.sys.is_initialized()
-
-    def unseal(self, unseal_keys: List[str]) -> None:
-        """Unseal Vault."""
-        try:
-            for unseal_key in unseal_keys:
-                self._client.sys.submit_unseal_key(unseal_key)
-            logger.info("Vault is unsealed")
-        except InvalidRequest as e:
-            if self._client.sys.is_sealed():
-                raise VaultClientError(e) from e
 
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
