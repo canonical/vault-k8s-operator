@@ -700,9 +700,8 @@ class TestVaultK8sIntegrationsPart2:
         restore_backup_action_output = await run_restore_backup_action(
             ops_test, backup_id=backup_id
         )
-        assert restore_backup_action_output
-        assert restore_backup_action_output.get("message", None)
         assert restore_backup_action_output.get("return-code") == 0
+        assert not restore_backup_action_output.get("stderr", None)
         assert restore_backup_action_output.get("restored", None) == backup_id
 
     @pytest.mark.abort_on_fail
