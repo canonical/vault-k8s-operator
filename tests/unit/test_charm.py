@@ -440,7 +440,6 @@ class TestCharm(unittest.TestCase):
             **{
                 "is_api_available.return_value": True,
                 "is_initialized.return_value": False,
-                "initialize.return_value": ("root token", ["unseal key 1"]),
             },
         )
         mock_vault_class.return_value = mock_vault
@@ -462,8 +461,6 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.unit.status,
             BlockedStatus("Please initialize Vault"),
         )
-
-    # TODO: add tests for each new status
 
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Model.get_binding")
@@ -495,7 +492,6 @@ class TestCharm(unittest.TestCase):
 
         self.harness.run_action("authorize-charm", {"token": "test-token"})
 
-        # Assertions
         mock_vault.authenticate.assert_called_once_with(Token("test-token"))
         mock_vault.enable_audit_device.assert_called_once_with(
             device_type=AuditDeviceType.FILE, path="stdout"
