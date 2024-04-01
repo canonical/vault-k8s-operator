@@ -30,11 +30,6 @@ path "sys/mounts/charm-*" {
   capabilities = ["create", "read", "update", "delete", "sudo"]
 }
 
-# Allow charm- prefixes pki backends to be used
-path "charm-pki-*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
-}
-
 # Allow discovery of secrets backends
 path "sys/mounts" {
   capabilities = ["read"]
