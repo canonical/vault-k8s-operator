@@ -34,7 +34,7 @@ from charms.vault_k8s.v0.vault_client import (
 )
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, VaultTLSManager
 from ops import testing
-from ops.model import BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
@@ -357,13 +357,11 @@ class TestCharm(unittest.TestCase):
         expected_content_hcl = hcl.loads(read_file("tests/unit/config.hcl"))
         self.assertEqual(pushed_content_hcl, expected_content_hcl)
 
-    @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
     def test_given_peer_relation_created_when_configure_then_pebble_plan_is_set(
         self,
         patch_get_binding,
-        mock_vault_class,
     ):
         self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -395,6 +393,37 @@ class TestCharm(unittest.TestCase):
             expected_plan,
         )
 
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    def test_given_all_prerequisites_when_configure_then_secrets_engines_configured(
+        self, patch_get_binding, mock_vault_class
+    ):
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self._set_peer_relation()
+        self._set_approle_secret(
+            role_id="whatever role id",
+            secret_id="whatever secret id",
+        )
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+            },
+        )
+        mock_vault_class.return_value = mock_vault
+
+        self.harness.charm.on.config_changed.emit()
+
+    # Test collect status
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
@@ -462,6 +491,43 @@ class TestCharm(unittest.TestCase):
             BlockedStatus("Please initialize Vault"),
         )
 
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_all_prerequisites_when_evaluate_status_then_status_is_active(
+        self,
+        patch_get_binding,
+        mock_vault_class,
+    ):
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_sealed.return_value": False,
+                "is_initialized.return_value": True,
+            },
+        )
+        mock_vault_class.return_value = mock_vault
+
+        self._set_peer_relation()
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("some ca")
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.set_leader(is_leader=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+        self._set_approle_secret(role_id="role id", secret_id="secret id")
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            ActiveStatus(),
+        )
+
+    # Test Authorize Charm
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Model.get_binding")
     def test_given_unit_is_leader_when_authorize_charm_then_approle_configured_and_secrets_stored(
@@ -1368,8 +1434,6 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_restore_backup_action(event)
         event.set_results.assert_called_with({"restored": "whatever backup id"})
-
-    # TODO: write tests for backup and restore
 
     # Test Vault KV
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_unit_credentials")
