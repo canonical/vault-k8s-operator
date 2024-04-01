@@ -225,7 +225,7 @@ class VaultCharm(CharmBase):
             )
             return
         if not self._get_active_vault_client():
-            event.add_status(WaitingStatus("Waiting for a leader unit to be chosen"))
+            event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901

@@ -11,7 +11,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol
 
 import hvac
 import requests
