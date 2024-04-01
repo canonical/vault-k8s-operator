@@ -396,7 +396,7 @@ class TestCharm(unittest.TestCase):
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     @patch("ops.model.Model.get_binding")
-    def test_given_all_prerequisites_when_configure_then_secrets_engines_configured(
+    def test_given_all_prerequisites_when_configure_then_configure_completes(
         self, patch_get_binding, mock_vault_class
     ):
         self.harness.set_leader(is_leader=True)
@@ -423,7 +423,40 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm.on.config_changed.emit()
 
+        mock_vault.is_raft_cluster_healthy.assert_called_once()
+
     # Test collect status
+    @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    def test_given_storage_not_available_when_evaluate_status_then_status_is_waiting(
+        self,
+        patch_get_binding,
+        mock_vault_class,
+    ):
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": False,
+            },
+        )
+        mock_vault_class.return_value = mock_vault
+
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self._set_peer_relation()
+        self.harness.set_leader(is_leader=True)
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Storage for certificates not mounted"),
+        )
+
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)

@@ -198,7 +198,7 @@ class VaultCharm(CharmBase):
         try:
             self.tls.get_tls_file_path_in_charm(File.CA)
         except VaultCertsError:
-            event.add_status(BlockedStatus("Storage for certificates not mounted"))
+            event.add_status(WaitingStatus("Storage for certificates not mounted"))
             return
         if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
             event.add_status(WaitingStatus("Waiting for CA certificate secret"))
