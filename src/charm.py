@@ -726,6 +726,17 @@ class VaultCharm(CharmBase):
             logger.error("Failed to restore vault: %s", e)
             event.fail(message="Failed to restore vault.")
             return
+
+        try:
+            if self._approle_secret_set():
+                role_id, secret_id = self._get_approle_auth_secret()
+                vault = Vault()
+                if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
+                    self._remove_approle_auth_secret()
+        except Exception as e:
+            logger.error("Failed to remove old approle secret: %s", e)
+            event.fail(message="Failed to remove old approle secret.")
+
         event.set_results({"restored": event.params.get("backup-id")})
 
     def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
@@ -1129,10 +1140,6 @@ class VaultCharm(CharmBase):
             logger.error("Failed to restore snapshot: %s", response.json())
             return False
 
-        if self._approle_secret_set():
-            role_id, secret_id = self._get_approle_auth_secret()
-            if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
-                self._remove_approle_auth_secret()
         return True
 
     def _get_active_vault_client(self) -> Optional[Vault]:
