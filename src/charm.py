@@ -667,7 +667,7 @@ class VaultCharm(CharmBase):
             return
         event.set_results({"backup-ids": json.dumps(backup_ids)})
 
-    def _on_restore_backup_action(self, event: ActionEvent) -> None:
+    def _on_restore_backup_action(self, event: ActionEvent) -> None:  # noqa: C901
         """Handle the restore-backup action.
 
         Restores the snapshot with the provided ID.
@@ -730,7 +730,10 @@ class VaultCharm(CharmBase):
         try:
             if self._approle_secret_set():
                 role_id, secret_id = self._get_approle_auth_secret()
-                vault = Vault()
+                vault = Vault(
+                    url=self._api_address,
+                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+                )
                 if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
                     self._remove_approle_auth_secret()
         except Exception as e:
