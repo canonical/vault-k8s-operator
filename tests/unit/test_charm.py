@@ -209,124 +209,6 @@ class TestCharm(unittest.TestCase):
             ]
         )
 
-    # Test collect status
-    def test_given_cant_connect_when_evaluate_status_then_status_is_waiting(self):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=False)
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting to be able to connect to vault unit"),
-        )
-
-    def test_given_peer_relation_not_created_when_evaluate_status_then_status_is_waiting(self):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for peer relation"),
-        )
-
-    def test_given_bind_address_not_available_when_evaluate_status_then_status_is_waiting(self):
-        self.harness.add_storage(storage_name="certs", attach=True)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self._set_peer_relation()
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            WaitingStatus("Waiting for bind and ingress addresses to be available"),
-        )
-
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Model.get_binding")
-    def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
-        self, mock_get_binding: MagicMock, mock_vault_class: MagicMock
-    ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
-        mock_vault = mock_vault_class.return_value
-        mock_vault.configure_mock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": False,
-            },
-        )
-        mock_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="2.3.2.3"
-        )
-        self._set_peer_relation()
-        self.harness.set_can_connect(container=self.container_name, val=True)
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            BlockedStatus("Please initialize Vault"),
-        )
-
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Model.get_binding")
-    def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
-        self, mock_get_binding, mock_vault_class
-    ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
-        mock_vault = mock_vault_class.return_value
-        mock_vault.configure_mock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": True,
-                "is_sealed.return_value": True,
-            },
-        )
-        mock_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="2.3.2.3"
-        )
-        self._set_peer_relation()
-        self.harness.set_can_connect(container=self.container_name, val=True)
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            BlockedStatus("Please unseal Vault"),
-        )
-
-    @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Model.get_binding")
-    def test_given_no_approle_auth_secret_when_evaluate_status_then_status_is_blocked(
-        self, mock_get_binding, mock_vault_class
-    ):
-        mock_vault = mock_vault_class.return_value
-        mock_vault.configure_mock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": True,
-                "is_sealed.return_value": False,
-            },
-        )
-        mock_get_binding.return_value = MockBinding(
-            bind_address="1.2.1.2", ingress_address="2.3.2.3"
-        )
-        self._set_peer_relation()
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
-
-        self.harness.evaluate_status()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            BlockedStatus("Please authorize charm (see `authorize-charm` action)"),
-        )
-
     # Test configure
     @patch("ops.model.Container.restart", new=Mock)
     @patch("socket.getfqdn")
@@ -426,6 +308,40 @@ class TestCharm(unittest.TestCase):
         mock_vault.is_raft_cluster_healthy.assert_called_once()
 
     # Test collect status
+    def test_given_cant_connect_when_evaluate_status_then_status_is_waiting(self):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=False)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting to be able to connect to vault unit"),
+        )
+
+    def test_given_peer_relation_not_created_when_evaluate_status_then_status_is_waiting(self):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for peer relation"),
+        )
+
+    def test_given_bind_address_not_available_when_evaluate_status_then_status_is_waiting(self):
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self._set_peer_relation()
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for bind and ingress addresses to be available"),
+        )
+
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
     @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
@@ -455,6 +371,151 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(
             self.harness.charm.unit.status,
             WaitingStatus("Storage for certificates not mounted"),
+        )
+
+    @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    def test_given_ca_certificate_secret_not_set_when_evaluate_status_then_status_is_waiting(
+        self,
+        patch_get_binding,
+        mock_vault_class,
+    ):
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": False,
+            },
+        )
+        mock_vault_class.return_value = mock_vault
+
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self._set_peer_relation()
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for CA certificate secret"),
+        )
+
+    @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("ops.model.Model.get_binding")
+    def test_given_ca_certificate_not_pushed_to_workload_when_evaluate_status_then_status_is_waiting(
+        self,
+        patch_get_binding,
+        mock_vault_class,
+    ):
+        mock_vault = MagicMock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": False,
+            },
+        )
+        mock_vault_class.return_value = mock_vault
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.add_storage(storage_name="certs", attach=True)
+        self._set_peer_relation()
+        patch_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4", ingress_address="1.1.1.1"
+        )
+        self._set_ca_certificate_secret("private key", "certificate")
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            WaitingStatus("Waiting for CA certificate to be shared"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding: MagicMock, mock_vault_class: MagicMock
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Please initialize Vault"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": True,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Please unseal Vault"),
+        )
+
+    @patch("charm.Vault", autospec=True)
+    @patch("ops.model.Model.get_binding")
+    def test_given_no_approle_auth_secret_when_evaluate_status_then_status_is_blocked(
+        self, mock_get_binding, mock_vault_class
+    ):
+        mock_vault = mock_vault_class.return_value
+        mock_vault.configure_mock(
+            spec=Vault,
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+            },
+        )
+        mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.1.2", ingress_address="2.3.2.3"
+        )
+        self._set_peer_relation()
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
+
+        self.harness.evaluate_status()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("Please authorize charm (see `authorize-charm` action)"),
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
