@@ -863,7 +863,7 @@ async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
         **{"backup-id": backup_id},
     )
     restore_backup_action_output = await ops_test.model.get_action_output(
-        action_uuid=restore_backup_action.entity_id, wait=120
+        action_uuid=restore_backup_action.entity_id
     )
     return restore_backup_action_output
 
