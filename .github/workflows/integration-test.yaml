@@ -35,6 +35,9 @@ jobs:
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
       - name: Run integration tests
         run: tox -e integration
+      - name: Setup upterm session
+        if: ${{ always() }} # This ensures that the upterm session is set up regardless of previous step success or failure
+        uses: lhotari/action-upterm@v1
       - name: Archive Tested Charm
         uses: actions/upload-artifact@v4
         if: ${{ github.ref_name == 'main' }}
