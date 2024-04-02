@@ -862,10 +862,8 @@ async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
         action_name="restore-backup",
         **{"backup-id": backup_id},
     )
-    restore_backup_action_output = await ops_test.model.get_action_output(
-        action_uuid=restore_backup_action.entity_id
-    )
-    return restore_backup_action_output
+    await restore_backup_action.wait()
+    return restore_backup_action.results
 
 
 def copy_lib_content() -> None:
