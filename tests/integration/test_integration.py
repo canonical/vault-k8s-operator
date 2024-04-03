@@ -80,7 +80,7 @@ async def initialize_leader_vault(
     ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
 ) -> Tuple[int, str, str]:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
-    leader_unit_index = int(leader_unit.name[-1])
+    leader_unit_index = int(leader_unit.name.split("/")[-1])
     unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
 
     client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)

@@ -1144,7 +1144,7 @@ class VaultCharm(CharmBase):
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context
             response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
-        except Exception as e:
+        except VaultClientError as e:
             logger.error("Failed to restore snapshot: %s", e)
             return False
         if not 200 <= response.status_code < 300:
