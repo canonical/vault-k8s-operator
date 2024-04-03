@@ -1136,6 +1136,9 @@ class VaultCharm(CharmBase):
             return False
         try:
             role_id, secret_id = self._get_approle_auth_secret()
+            if not role_id or not secret_id:
+                logger.error("Failed to log in to Vault")
+                return False
             vault.authenticate(AppRole(role_id, secret_id))
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
