@@ -140,6 +140,19 @@ class Vault:
         return self._client.sys.is_sealed()
 
     def is_active(self) -> bool:
+        """Return whether the Vault node is active or not.
+
+        Returns:
+            True if initialized, unsealed and active, False otherwise.
+        """
+        try:
+            health_status = self._client.sys.read_health_status()
+            return health_status.status_code == 200
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
+
+    def is_active_or_standby(self) -> bool:
         """Return the health status of Vault.
 
         Returns:

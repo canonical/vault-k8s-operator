@@ -274,7 +274,7 @@ class VaultCharm(CharmBase):
         self._sync_vault_kv()
         self._sync_vault_pki()
         self.tls.send_ca_cert()
-        if vault.is_active() and not vault.is_raft_cluster_healthy():
+        if vault.is_active_or_standby() and not vault.is_raft_cluster_healthy():
             # Log if a raft node starts reporting unhealthy
             logger.error(
                 "Raft cluster is not healthy. %s",
@@ -1127,11 +1127,16 @@ class VaultCharm(CharmBase):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        if not (vault := self._get_active_vault_client()):
-            logger.error("Failed to get Vault client, cannot restore snapshot.")
+        for address in self._get_peer_node_api_addresses():
+            vault = Vault(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
+            if vault.is_active():
+                break
+        else:
+            logger.error("Failed to find active Vault client, cannot restore snapshot.")
             return False
-
         try:
+            role_id, secret_id = self._get_approle_auth_secret()
+            vault.authenticate(AppRole(role_id, secret_id))
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context
@@ -1165,7 +1170,7 @@ class VaultCharm(CharmBase):
             return None
         if not vault.authenticate(AppRole(role_id, secret_id)):
             return None
-        if not vault.is_active():
+        if not vault.is_active_or_standby():
             return None
         return vault
 
