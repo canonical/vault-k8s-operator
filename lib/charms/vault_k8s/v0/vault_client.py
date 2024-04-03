@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Protocol
 
 import hvac
 import requests
-from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
