@@ -109,7 +109,7 @@ class Vault:
         """Find and use the token related with the given auth method."""
         try:
             auth_details.login(self._client)
-        except VaultError as e:
+        except (VaultError, ConnectionRefusedError) as e:
             logger.error("Failed logging in to Vault: %s", e)
             return False
         return True
