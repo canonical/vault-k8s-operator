@@ -11,11 +11,11 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol
 
 import hvac
 import requests
-from hvac.exceptions import InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 
 logger = logging.getLogger(__name__)
@@ -102,12 +102,25 @@ class VaultClientError(Exception):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, ca_cert_path: str):
-        self._client = hvac.Client(url=url, verify=ca_cert_path)
+    def __init__(self, url: str, ca_cert_path: Optional[str]):
+        self._client = hvac.Client(url=url, verify=ca_cert_path if ca_cert_path else False)
 
-    def authenticate(self, auth_details: AuthMethod) -> None:
+    def authenticate(self, auth_details: AuthMethod) -> bool:
         """Find and use the token related with the given auth method."""
-        auth_details.login(self._client)
+        try:
+            auth_details.login(self._client)
+        except (VaultError, ConnectionRefusedError) as e:
+            logger.error("Failed logging in to Vault: %s", e)
+            return False
+        return True
+
+    def get_token_data(self) -> Optional[Dict]:
+        """Check if given token is accepted by vault, and returns the token data if so."""
+        try:
+            token_data = self._client.auth.token.lookup_self()["data"]
+        except Forbidden:
+            return None
+        return token_data
 
     def is_api_available(self) -> bool:
         """Return whether Vault is available."""
@@ -118,48 +131,36 @@ class Vault:
             logger.error("Error while checking Vault health status: %s", e)
             return False
 
-    def initialize(
-        self, secret_shares: int = 1, secret_threshold: int = 1
-    ) -> Tuple[str, List[str]]:
-        """Initialize Vault.
-
-        Returns:
-            A tuple containing the root token and the unseal keys.
-        """
-        initialize_response = self._client.sys.initialize(
-            secret_shares=secret_shares, secret_threshold=secret_threshold
-        )
-        logger.info("Vault is initialized")
-        return initialize_response["root_token"], initialize_response["keys"]
-
     def is_initialized(self) -> bool:
         """Return whether Vault is initialized."""
         return self._client.sys.is_initialized()
-
-    def unseal(self, unseal_keys: List[str]) -> None:
-        """Unseal Vault."""
-        try:
-            for unseal_key in unseal_keys:
-                self._client.sys.submit_unseal_key(unseal_key)
-            logger.info("Vault is unsealed")
-        except InvalidRequest as e:
-            if self._client.sys.is_sealed():
-                raise VaultClientError(e) from e
 
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
         return self._client.sys.is_sealed()
 
     def is_active(self) -> bool:
-        """Return the health status of Vault.
+        """Return whether the Vault node is active or not.
 
         Returns:
             True if initialized, unsealed and active, False otherwise.
-                Will return True if Vault is in standby mode too (standby_ok=True).
         """
         try:
-            health_status = self._client.sys.read_health_status(standby_ok=True)
+            health_status = self._client.sys.read_health_status()
             return health_status.status_code == 200
+        except (VaultError, RequestException) as e:
+            logger.error("Error while checking Vault health status: %s", e)
+            return False
+
+    def is_active_or_standby(self) -> bool:
+        """Return the health status of Vault.
+
+        Returns:
+            True if initialized, unsealed and active or standby, False otherwise.
+        """
+        try:
+            health_status = self._client.sys.read_health_status()
+            return health_status.status_code == 200 or health_status.status_code == 429
         except (VaultError, RequestException) as e:
             logger.error("Error while checking Vault health status: %s", e)
             return False

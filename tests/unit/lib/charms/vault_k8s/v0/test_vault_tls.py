@@ -4,10 +4,9 @@
 
 import json
 import unittest
-from typing import List
 from unittest.mock import Mock, patch
 
-from charm import VAULT_INITIALIZATION_SECRET_LABEL, VaultCharm
+from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, File
 from ops import testing
 from ops.model import WaitingStatus
@@ -29,7 +28,7 @@ class MockBinding:
         self.network = MockNetwork(bind_address=bind_address, ingress_address=ingress_address)
 
 
-class TestCharm(unittest.TestCase):
+class TestCharmTLS(unittest.TestCase):
     @patch(
         "charm.KubernetesServicePatch",
         lambda charm, ports: None,
@@ -57,22 +56,19 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
-    def _set_initialization_secret(
+    def _set_approle_secret(
         self,
-        root_token: str,
-        unseal_keys: List[str],
+        role_id: str,
+        secret_id: str,
     ) -> None:
-        """Set the initialization secret in the peer relation."""
-        content = {
-            "roottoken": root_token,
-            "unsealkeys": json.dumps(unseal_keys),
-        }
+        """Set the approle secret."""
+        content = {"role-id": role_id, "secret-id": secret_id}
         original_leader_state = self.harness.charm.unit.is_leader()
         with self.harness.hooks_disabled():
             self.harness.set_leader(is_leader=True)
             secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
             secret = self.harness.model.get_secret(id=secret_id)
-            secret.set_info(label=VAULT_INITIALIZATION_SECRET_LABEL)
+            secret.set_info(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
 
     def _set_ca_certificate_secret(
@@ -135,12 +131,12 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate"),
+            WaitingStatus("Waiting for CA certificate secret"),
         )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
@@ -154,9 +150,9 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         self._set_peer_relation()
-        self._set_initialization_secret(
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+        self._set_approle_secret(
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
         self.harness.set_leader(is_leader=True)
         patch_get_binding.return_value = MockBinding(
@@ -173,7 +169,7 @@ class TestCharm(unittest.TestCase):
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
@@ -194,9 +190,9 @@ class TestCharm(unittest.TestCase):
             certificate=EXAMPLE_CA,
             private_key=EXAMPLE_CA_PK,
         )
-        self._set_initialization_secret(
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+        self._set_approle_secret(
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
         patch_get_binding.return_value = MockBinding(
             bind_address="1.2.1.2", ingress_address="10.1.0.1"
@@ -209,7 +205,7 @@ class TestCharm(unittest.TestCase):
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
-    @patch("charms.vault_k8s.v0.vault_client.Vault.unseal", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
@@ -237,9 +233,9 @@ class TestCharm(unittest.TestCase):
             certificate=EXAMPLE_CA,
             private_key=EXAMPLE_CA_PK,
         )
-        self._set_initialization_secret(
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+        self._set_approle_secret(
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
         self.harness.set_can_connect(container=self.container_name, val=True)
         patch_get_binding.return_value = MockBinding(
@@ -362,9 +358,9 @@ class TestCharm(unittest.TestCase):
             certificate=EXAMPLE_CA,
             private_key=EXAMPLE_CA_PK,
         )
-        self._set_initialization_secret(
-            root_token="whatever root token",
-            unseal_keys=["whatever unseal key"],
+        self._set_approle_secret(
+            role_id="whatever role id",
+            secret_id="whatever secret id",
         )
 
         self.harness.charm._container.restart = Mock()  # type: ignore [method-assign]

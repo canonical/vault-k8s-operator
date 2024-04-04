@@ -9,7 +9,7 @@ import shutil
 import time
 from os.path import abspath
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import hvac
 import pytest
@@ -67,7 +67,7 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
     )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
-        status="active",
+        status="blocked",
         timeout=1000,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
@@ -75,57 +75,134 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
     return {"vault-kv-requirer": vault_kv_requirer_charm}
 
 
+@pytest.fixture(scope="module")
+async def initialize_leader_vault(
+    ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
+) -> Tuple[int, str, str]:
+    leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
+    leader_unit_index = int(leader_unit.name.split("/")[-1])
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+
+    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
+    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
+    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+    return leader_unit_index, root_token, unseal_key
+
+
 class TestVaultK8s:
     """This test class tests vault's deployment and activation."""
 
     @pytest.mark.abort_on_fail
-    async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+    async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized_then_status_is_active(
+        self, ops_test: OpsTest, initialize_leader_vault: Tuple[int, str, str]
     ):
         assert ops_test.model
-        unit = ops_test.model.units[f"{APPLICATION_NAME}/1"]
-        assert isinstance(unit, Unit)
+        leader_unit_index, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        async with ops_test.fast_forward(fast_interval="10s"):
+            unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
+            await wait_for_vault_status_message(
+                ops_test=ops_test,
+                count=1,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+            )
+            unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+            await wait_for_vault_status_message(
+                ops_test=ops_test,
+                count=NUM_VAULT_UNITS,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+            )
+            await authorize_charm(ops_test, root_token)
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault: Tuple[int, str, str],
+    ):
+        assert ops_test.model
+        _, root_token, unseal_key = initialize_leader_vault
+        crashing_pod_index = 1
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=NUM_VAULT_UNITS,
+        await wait_for_vault_status_message(
+            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
-        num_units = NUM_VAULT_UNITS + 2
+        _, root_token, unseal_key = initialize_leader_vault
+        num_units = NUM_VAULT_UNITS + 1
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
         await app.scale(num_units)
 
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=num_units,
+        await wait_for_vault_status_message(
+            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
         )
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_vault(unit_addresses[-1], root_token, unseal_key)
+
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=num_units,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
+        _, root_token, _ = initialize_leader_vault
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
-        await app.scale(NUM_VAULT_UNITS)
 
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
+        client = hvac.Client(url=f"https://{unit_addresses[-1]}:8200", verify=False)
+        client.token = root_token
+        response = client.sys.read_raft_config()
+        assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS + 1
+
+        await app.scale(NUM_VAULT_UNITS)
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
+
+        client = hvac.Client(url=f"https://{unit_addresses[0]}:8200", verify=False)
+        client.token = root_token
+        response = client.sys.read_raft_config()
+        assert len(response["data"]["config"]["servers"]) == NUM_VAULT_UNITS
 
 
 class TestVaultK8sIntegrationsPart1:
@@ -144,7 +221,10 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -189,9 +269,16 @@ class TestVaultK8sIntegrationsPart1:
             timeout=1000,
             wait_for_exact_units=1,
         )
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
-            ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
+            ops_test.model.remove_application(app_name=app_name)
+            for app_name in deployed_apps
+            # TODO: traefik crashes on remove. Avoid removing it for now
+            if app_name != TRAEFIK_APPLICATION_NAME
         ]
         await asyncio.gather(*remove_coroutines)
 
@@ -324,7 +411,7 @@ class TestVaultK8sIntegrationsPart1:
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
         """This proves that vault is reachable behind ingress."""
-        vault_endpoint = await _get_vault_endpoint(ops_test)
+        vault_endpoint = await _get_vault_traefik_endpoint(ops_test)
         action_output = await run_get_ca_certificate_action(ops_test)
         ca_certificate = action_output["ca-certificate"]
         with open("ca_file.txt", mode="w+") as ca_file:
@@ -346,7 +433,10 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -362,19 +452,36 @@ class TestVaultK8sIntegrationsPart1:
         )
 
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            timeout=1000,
+        )
 
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        await action.wait()
-        final_ca_cert = action.results["stdout"]
+        final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self_signed_cert_created(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -390,14 +497,34 @@ class TestVaultK8sIntegrationsPart1:
             "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
         )
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
+        await ops_test.model.wait_for_idle(
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            timeout=1000,
+        )
 
-        action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-        final_ca_cert = action.results
+        final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+
+        async with ops_test.fast_forward(fast_interval="10s"):
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+            )
 
 
 class TestVaultK8sIntegrationsPart2:
@@ -413,7 +540,10 @@ class TestVaultK8sIntegrationsPart2:
 
     @pytest.fixture(scope="class")
     async def deploy_requiring_charms(
-        self, ops_test: OpsTest, build_charms_and_deploy_vault: dict[str, Path | str]
+        self,
+        ops_test: OpsTest,
+        build_charms_and_deploy_vault: dict[str, Path | str],
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
         deploy_prometheus = ops_test.model.deploy(
@@ -464,6 +594,10 @@ class TestVaultK8sIntegrationsPart2:
             timeout=1000,
             wait_for_exact_units=1,
         )
+
+        _, root_token, unseal_key = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
@@ -564,12 +698,11 @@ class TestVaultK8sIntegrationsPart2:
         backup_id = json.loads(list_backups_action_output["backup-ids"])[0]
         # In this test we are not using the correct unsealed keys and root token.
         restore_backup_action_output = await run_restore_backup_action(
-            ops_test,
-            backup_id=backup_id,
-            root_token="RandomRootToken",
-            unseal_keys=["RandomUnsealKey"],
+            ops_test, backup_id=backup_id
         )
-        assert restore_backup_action_output["restored"] == backup_id
+        assert restore_backup_action_output.get("return-code") == 0
+        assert not restore_backup_action_output.get("stderr", None)
+        assert restore_backup_action_output.get("restored", None) == backup_id
 
     @pytest.mark.abort_on_fail
     async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
@@ -619,43 +752,6 @@ async def run_get_certificate_action(ops_test) -> dict:
     return action_output
 
 
-async def _get_vault_endpoint(ops_test: OpsTest, timeout: int = 60) -> str:
-    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
-
-    Args:
-        ops_test: Ops test Framework.
-        timeout: Wait time in seconds to get proxied endpoints.
-
-    Returns:
-        vault_endpoint: Vault proxied endpoint by Traefik.
-
-    Raises:
-        TimeoutError: If proxied endpoints are not retrieved.
-
-    """
-    assert ops_test.model
-    traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
-    assert isinstance(traefik, Application)
-    traefik_unit = traefik.units[0]
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        proxied_endpoint_action = await traefik_unit.run_action(
-            action_name="show-proxied-endpoints"
-        )
-        action_output = await ops_test.model.get_action_output(
-            action_uuid=proxied_endpoint_action.entity_id, wait=30
-        )
-
-        if "proxied-endpoints" in action_output:
-            proxied_endpoints = json.loads(action_output["proxied-endpoints"])
-            return proxied_endpoints[APPLICATION_NAME]["url"]
-        else:
-            logger.info("Traefik did not return proxied endpoints yet")
-        time.sleep(2)
-
-    raise TimeoutError("Traefik did not return proxied endpoints")
-
-
 async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
     """Run the `get-certificate` on the `vault-k8s` unit.
 
@@ -675,6 +771,12 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
         action_name="get-ca-certificate",
     )
     return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
+
+
+async def get_vault_ca_certificate(vault_unit: Unit) -> str:
+    action = await vault_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
+    await action.wait()
+    return action.results["stdout"]
 
 
 async def run_s3_integrator_sync_credentials_action(
@@ -742,9 +844,7 @@ async def run_list_backups_action(ops_test: OpsTest) -> dict:
     )
 
 
-async def run_restore_backup_action(
-    ops_test: OpsTest, backup_id: str, root_token: str, unseal_keys: List[str]
-) -> dict:
+async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
     """Run the `restore-backup` action on the `vault-k8s` leader unit.
 
     Args:
@@ -760,17 +860,144 @@ async def run_restore_backup_action(
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     restore_backup_action = await leader_unit.run_action(
         action_name="restore-backup",
-        **{
-            "backup-id": backup_id,
-            "unseal-keys": unseal_keys,
-            "root-token": root_token,
-        },
+        **{"backup-id": backup_id},
     )
-    restore_backup_action_output = await ops_test.model.get_action_output(
-        action_uuid=restore_backup_action.entity_id, wait=120
-    )
-    return restore_backup_action_output
+    await restore_backup_action.wait()
+    return restore_backup_action.results
 
 
 def copy_lib_content() -> None:
     shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
+
+
+async def read_vault_unit_statuses(ops_test: OpsTest) -> List[Dict[str, str]]:
+    """Read the complete status from vault units.
+
+    Reads the statuses that juju emits that aren't captured by ops_test together. Captures a vault
+    units: name, status (active, blocked etc.), agent (idle, executing), address and message.
+
+    Args:
+        ops_test: Ops test Framework
+    """
+    status_tuple = await ops_test.juju("status")
+    if status_tuple[0] != 0:
+        raise Exception
+    output = []
+    for row in status_tuple[1].split("\n"):
+        if not row.startswith(f"{APPLICATION_NAME}/"):
+            continue
+        cells = row.split(maxsplit=4)
+        if len(cells) < 5:
+            cells.append("")
+        output.append(
+            {
+                "unit": cells[0],
+                "status": cells[1],
+                "agent": cells[2],
+                "address": cells[3],
+                "message": cells[4],
+            }
+        )
+    return output
+
+
+async def wait_for_vault_status_message(
+    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
+) -> None:
+    """Wait for the correct vault status messages to appear.
+
+    This function is necessary because ops_test doesn't provide the facilities to discriminate
+    depending on the status message of the units, just the statuses themselves.
+
+    Args:
+        ops_test: Ops test Framework.
+        count: How many units that are expected to be emitting the expected message
+        expected_message: The message that vault units should be setting as a status message
+        timeout: Wait time in seconds to get proxied endpoints.
+        cadence: How long to wait before running the command again
+
+    Raises:
+        TimeoutError: If the expected amount of statuses weren't found in the given timeout.
+    """
+    while timeout > 0:
+        vault_status = await read_vault_unit_statuses(ops_test)
+        seen = 0
+        for row in vault_status:
+            if row.get("message") == expected_message:
+                seen += 1
+
+        if seen == count:
+            return
+        time.sleep(cadence)
+        timeout -= cadence
+    raise TimeoutError("Vault didn't show the expected status")
+
+
+async def _get_vault_traefik_endpoint(
+    ops_test: OpsTest, timeout: int = 60, cadence: int = 2
+) -> str:
+    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
+
+    Args:
+        ops_test: Ops test Framework.
+        timeout: Wait time in seconds to get proxied endpoints.
+        cadence: How long to wait before running the command again
+
+    Returns:
+        vault_endpoint: Vault proxied endpoint by Traefik.
+
+    Raises:
+        TimeoutError: If proxied endpoints are not retrieved.
+
+    """
+    assert ops_test.model
+    traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
+    assert isinstance(traefik, Application)
+    traefik_unit = traefik.units[0]
+    while timeout > 0:
+        proxied_endpoint_action = await traefik_unit.run_action(
+            action_name="show-proxied-endpoints"
+        )
+        action_output = await ops_test.model.get_action_output(
+            action_uuid=proxied_endpoint_action.entity_id, wait=30
+        )
+
+        if "proxied-endpoints" in action_output:
+            proxied_endpoints = json.loads(action_output["proxied-endpoints"])
+            return proxied_endpoints[APPLICATION_NAME]["url"]
+        else:
+            logger.info("Traefik did not return proxied endpoints yet")
+        time.sleep(cadence)
+        timeout -= cadence
+
+    raise TimeoutError("Traefik did not return proxied endpoints")
+
+
+def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    if not client.sys.is_sealed():
+        return
+    client.sys.submit_unseal_key(unseal_key)
+
+
+def unseal_all_vaults(
+    ops_test: OpsTest, unit_addresses: List[str], root_token: str, unseal_key: str
+):
+    for endpoint in unit_addresses:
+        unseal_vault(endpoint, root_token, unseal_key)
+
+
+async def authorize_charm(ops_test: OpsTest, root_token: str) -> Any | Dict:
+    assert ops_test.model
+    leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
+    authorize_action = await leader_unit.run_action(
+        action_name="authorize-charm",
+        **{
+            "token": root_token,
+        },
+    )
+    result = await ops_test.model.get_action_output(
+        action_uuid=authorize_action.entity_id, wait=120
+    )
+    return result

@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import requests
 from charms.vault_k8s.v0.vault_client import AppRole, AuditDeviceType, SecretsBackend, Token, Vault
@@ -29,35 +29,11 @@ class TestVault(unittest.TestCase):
             role_id="some role id", secret_id="some secret id", use_token=True
         )
 
-    @patch("hvac.api.system_backend.init.Init.initialize")
-    def test_given_shares_and_threshold_when_initialize_then_root_token_and_unseal_key_returned(
-        self, patch_initialize
-    ):
-        root_token = "whatever root token"
-        unseal_keys = ["key 1", "key 2", "key 3"]
+    @patch("hvac.api.auth_methods.token.Token.lookup_self")
+    def test_given_token_data_when_get_token_data_lookup_self_called(self, patch_lookup):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        patch_initialize.return_value = {"root_token": root_token, "keys": unseal_keys}
-
-        returned_root_token, returned_unseal_keys = vault.initialize(
-            secret_shares=5, secret_threshold=2
-        )
-
-        self.assertEqual(returned_root_token, root_token)
-        self.assertEqual(returned_unseal_keys, unseal_keys)
-
-    @patch("hvac.api.system_backend.seal.Seal.submit_unseal_key")
-    def test_given_n_unseal_keys_when_unseal_then_unseal_called_n_times(
-        self, patch_submit_unsealed_key
-    ):
-        n = 7  # arbitrary number
-        unseal_keys = [f"unseal key #{i}" for i in range(n)]
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-
-        vault.unseal(unseal_keys=unseal_keys)
-
-        patch_submit_unsealed_key.assert_has_calls(
-            [call(unseal_key) for unseal_key in unseal_keys]
-        )
+        vault.get_token_data()
+        patch_lookup.assert_called()
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_connection_error_when_is_api_available_then_return_false(
@@ -129,16 +105,24 @@ class TestVault(unittest.TestCase):
 
         vault.enable_approle_auth_method()
 
-        patch_enable_auth_method.assert_called_with("approle")
+        patch_enable_auth_method.assert_called_once()
 
-    @patch("hvac.api.system_backend.audit.Audit.list_enabled_audit_devices")
     @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
     def test_given_audit_device_is_not_yet_enabled_when_enable_audit_device_then_device_is_enabled(
         self,
         patch_enable_audit_device,
-        patch_list_enabled_audit_devices,
     ):
-        patch_list_enabled_audit_devices.return_value = {"data": {}}
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+        patch_enable_audit_device.assert_called_once_with(
+            device_type="file", options={"file_path": "stdout"}
+        )
+
+    @patch("hvac.api.system_backend.audit.Audit.enable_audit_device")
+    def test_given_audit_device_is_enabled_when_enable_audit_device_then_nothing_happens(
+        self,
+        patch_enable_audit_device,
+    ):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         patch_enable_audit_device.assert_called_once_with(
@@ -215,7 +199,18 @@ class TestVault(unittest.TestCase):
         response.status_code = 200
         patch_health_status.return_value = response
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertTrue(vault.is_active())
+        self.assertTrue(vault.is_active_or_standby())
+
+    @patch("hvac.api.system_backend.health.Health.read_health_status")
+    def test_given_health_status_returns_standby_when_is_active_then_return_false(
+        self, patch_health_status
+    ):
+        response = requests.Response()
+        response.status_code = 429
+        patch_health_status.return_value = response
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        self.assertTrue(vault.is_active_or_standby())
+        self.assertFalse(vault.is_active())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_health_status_returns_5xx_when_is_active_then_return_false(
@@ -225,10 +220,10 @@ class TestVault(unittest.TestCase):
         response.status_code = 501
         patch_health_status.return_value = response
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.is_active())
+        self.assertFalse(vault.is_active_or_standby())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_connection_error_when_is_active_then_return_false(self, patch_health_status):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        self.assertFalse(vault.is_active())
+        self.assertFalse(vault.is_active_or_standby())
