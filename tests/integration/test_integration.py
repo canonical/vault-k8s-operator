@@ -264,7 +264,11 @@ class TestVaultK8sIntegrationsPart1:
             deploy_vault_kv_requirer,
         )
         await ops_test.model.wait_for_idle(
-            apps=deployed_apps,
+            apps=[
+                SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+                VAULT_KV_REQUIRER_APPLICATION_NAME,
+                VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            ],
             status="active",
             timeout=1000,
             wait_for_exact_units=1,
