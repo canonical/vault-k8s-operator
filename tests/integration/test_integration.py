@@ -374,11 +374,6 @@ class TestVaultK8sIntegrationsPart1:
             relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
             relation2=f"{TRAEFIK_APPLICATION_NAME}",
         )
-        await ops_test.model.wait_for_idle(
-            apps=[TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
 
     @pytest.mark.abort_on_fail
     async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
@@ -390,7 +385,7 @@ class TestVaultK8sIntegrationsPart1:
             relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
         )
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
+            apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
@@ -405,7 +400,7 @@ class TestVaultK8sIntegrationsPart1:
             relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
         )
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
+            apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
         )
