@@ -33,6 +33,6 @@ def pytest_configure(config: pytest.Config) -> None:
     if not kv_requirer_charm_path:
         pytest.exit("The --kv_requirer_charm_path option is required. Tests aborted.")
     if not os.path.exists(charm_path):
-        pytest.exit(f"The path specified does not exist: {charm_path}")
+        pytest.exit(f"The path specified for the charm under test does not exist: {charm_path}")
     if not os.path.exists(kv_requirer_charm_path):
-        pytest.exit(f"The path specified does not exist: {kv_requirer_charm_path}")
+        pytest.exit(f"The path specified for KV Requirer does not exist: {kv_requirer_charm_path}")

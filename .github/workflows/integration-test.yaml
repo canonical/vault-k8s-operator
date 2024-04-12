@@ -42,9 +42,10 @@ jobs:
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"
 
       - name: Run integration tests
-        run: tox -e integration -- \
-          --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
-          --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"
+        run: |
+          tox -e integration -- \
+            --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
+            --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"
   
       - name: Archive charmcraft logs
         if: failure()
