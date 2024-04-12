@@ -5,7 +5,7 @@ on:
 
 jobs:
   integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +33,11 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           juju-channel: 3.4/stable
-          provider: lxd
+          provider: microk8s
+          channel: 1.29-strict/stable
+          lxd-channel: 5.20/stable
+      - name: Enable Metallb
+        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"
 
       - name: Install tox
         run: pip install tox
@@ -43,3 +47,17 @@ jobs:
           tox -e integration -- \
             --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
             --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"
+
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charmcraft-logs
+          path: /home/runner/.local/state/charmcraft/log/*.log
+
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-crashdump
+          path: juju-crashdump-*.tar.xz

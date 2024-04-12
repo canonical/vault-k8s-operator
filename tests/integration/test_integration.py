@@ -7,7 +7,7 @@ import logging
 import time
 from os.path import abspath
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Tuple
 
 import hvac
 import pytest
@@ -16,7 +16,7 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import get_leader_unit
+from tests.integration.helpers import crash_pod, get_leader_unit
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,19 @@ async def deploy_vault(ops_test: OpsTest, request) -> None:
         config={"common_name": "example.com"},
     )
 
+@pytest.fixture(scope="module")
+async def initialize_leader_vault(
+    ops_test: OpsTest, deploy_vault: None
+) -> Tuple[int, str, str]:
+    """Initialize the leader vault unit and return the root token and unseal key."""
+    leader_unit = await get_leader_unit(ops_test.model, APP_NAME)
+    leader_unit_index = int(leader_unit.name.split("/")[-1])
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+
+    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
+    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
+    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+    return leader_unit_index, root_token, unseal_key
 
 @pytest.fixture(scope="module")
 async def deploy_requiring_charms(ops_test: OpsTest, deploy_vault: None, request):
@@ -196,7 +209,13 @@ async def deploy_requiring_charms(ops_test: OpsTest, deploy_vault: None, request
     ]
     await asyncio.gather(*remove_coroutines)
 
-
+def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
+    """Unseal the vault unit."""
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    if not client.sys.is_sealed():
+        return
+    client.sys.submit_unseal_key(unseal_key)
 
 async def unseal_all_vault_units(ops_test: OpsTest, ca_file_name: str, keys: str) -> None:
     """Unseal all the vault units."""
@@ -303,6 +322,67 @@ async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
         action_uuid=restore_backup_action.entity_id, wait=120
     )
 
+async def read_vault_unit_statuses(ops_test: OpsTest) -> List[Dict[str, str]]:
+    """Read the complete status from vault units.
+
+    Reads the statuses that juju emits that aren't captured by ops_test together. Captures a vault
+    units: name, status (active, blocked etc.), agent (idle, executing), address and message.
+
+    Args:
+        ops_test: Ops test Framework
+    """
+    status_tuple = await ops_test.juju("status")
+    if status_tuple[0] != 0:
+        raise Exception
+    output = []
+    for row in status_tuple[1].split("\n"):
+        if not row.startswith(f"{APP_NAME}/"):
+            continue
+        cells = row.split(maxsplit=4)
+        if len(cells) < 5:
+            cells.append("")
+        output.append(
+            {
+                "unit": cells[0],
+                "status": cells[1],
+                "agent": cells[2],
+                "address": cells[3],
+                "message": cells[4],
+            }
+        )
+    return output
+
+async def wait_for_vault_status_message(
+    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
+) -> None:
+    """Wait for the correct vault status messages to appear.
+
+    This function is necessary because ops_test doesn't provide the facilities to discriminate
+    depending on the status message of the units, just the statuses themselves.
+
+    Args:
+        ops_test: Ops test Framework.
+        count: How many units that are expected to be emitting the expected message
+        expected_message: The message that vault units should be setting as a status message
+        timeout: Wait time in seconds to get proxied endpoints.
+        cadence: How long to wait before running the command again
+
+    Raises:
+        TimeoutError: If the expected amount of statuses weren't found in the given timeout.
+    """
+    while timeout > 0:
+        vault_status = await read_vault_unit_statuses(ops_test)
+        seen = 0
+        for row in vault_status:
+            if row.get("message") == expected_message:
+                seen += 1
+
+        if seen == count:
+            return
+        time.sleep(cadence)
+        timeout -= cadence
+    raise TimeoutError("Vault didn't show the expected status")
+
 
 @pytest.mark.abort_on_fail
 async def test_given_charm_build_when_deploy_then_status_blocked(
@@ -395,6 +475,31 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
             apps=[APP_NAME],
             status="active",
             timeout=1000,
+        )
+
+
+@pytest.mark.abort_on_fail
+async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
+    ops_test: OpsTest,
+    deploy_vault: None,
+    initialize_leader_vault: Tuple[int, str, str],
+):
+    assert ops_test.model
+    _, root_token, unseal_key = initialize_leader_vault
+    crashing_pod_index = 1
+    k8s_namespace = ops_test.model.name
+    crash_pod(name=f"{APP_NAME}-1", namespace=k8s_namespace)
+    await wait_for_vault_status_message(
+        ops_test, count=1, expected_message="Please unseal Vault", timeout=300
+    )
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+    unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
+    async with ops_test.fast_forward(fast_interval="10s"):
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
 @pytest.mark.abort_on_fail
