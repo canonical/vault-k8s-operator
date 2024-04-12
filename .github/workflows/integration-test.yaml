@@ -23,13 +23,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
           channel: 1.29-strict/stable
           juju-channel: 3.4/stable
+          lxd-channel: 5.20/stable
       - name: Enable Metallb
         if: ${{ inputs.enable-metallb == true }}
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
