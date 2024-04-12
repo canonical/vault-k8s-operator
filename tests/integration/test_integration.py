@@ -4,7 +4,6 @@
 import asyncio
 import json
 import logging
-import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -44,17 +43,13 @@ NUM_VAULT_UNITS = 3
 
 
 @pytest.fixture(scope="module")
-async def build_charms_and_deploy_vault(ops_test: OpsTest):
-    """Build the charms that are required in this test module and deploy Vault."""
+async def deploy_vault(ops_test: OpsTest, request):
+    """Deploy Vault."""
     assert ops_test.model
-    copy_lib_content()
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
-    built_charms = await ops_test.build_charms(".", f"{VAULT_KV_REQUIRER_CHARM_DIR}/")
-    vault_charm = built_charms.get("vault-k8s", "")
-    vault_kv_requirer_charm = built_charms.get("vault-kv-requirer", "")
-
+    charm_path = Path(request.config.getoption("--charm_path")).resolve()
     await ops_test.model.deploy(
-        vault_charm,
+        charm_path,
         resources=resources,
         application_name=APPLICATION_NAME,
         trust=True,
@@ -69,12 +64,9 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
-    return {"vault-kv-requirer": vault_kv_requirer_charm}
-
-
 @pytest.fixture(scope="module")
 async def initialize_leader_vault(
-    ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
+    ops_test: OpsTest, deploy_vault: Dict[str, Path | str]
 ) -> Tuple[int, str, str]:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_index = int(leader_unit.name.split("/")[-1])
@@ -121,7 +113,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -146,7 +138,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -174,7 +166,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -220,11 +212,12 @@ class TestVaultK8sIntegrationsPart1:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
+        request,
     ):
         assert ops_test.model
-
+        kv_requirer_charm_path = Path(request.config.getoption("--kv_requirer_charm_path")).resolve()
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -232,7 +225,7 @@ class TestVaultK8sIntegrationsPart1:
             channel="stable",
         )
         deploy_vault_kv_requirer = ops_test.model.deploy(
-            build_charms_and_deploy_vault.get("vault-kv-requirer", ""),
+            kv_requirer_charm_path,
             application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
             num_units=1,
         )
@@ -459,7 +452,7 @@ class TestVaultK8sIntegrationsPart2:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -781,10 +774,6 @@ async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
     )
     await restore_backup_action.wait()
     return restore_backup_action.results
-
-
-def copy_lib_content() -> None:
-    shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
 
 
 async def read_vault_unit_statuses(ops_test: OpsTest) -> List[Dict[str, str]]:

@@ -25,12 +25,19 @@ jobs:
 
   unit-tests-with-coverage:
     uses: ./.github/workflows/unit-test.yaml
+  
+  build:
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
 
   integration-test:
+    needs: 
+      - build
     uses: ./.github/workflows/integration-test.yaml
-    with:
-      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
-      enable-metallb: true
 
   publish-charm:
     needs:
@@ -41,7 +48,4 @@ jobs:
       - integration-test
     if: ${{ github.ref_name == 'main' }}
     uses: ./.github/workflows/publish-charm.yaml
-    with:
-      charm-file-name: "vault-k8s_ubuntu-22.04-amd64.charm"
     secrets: inherit
-
