@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import json
 import logging
 import time
 from os.path import abspath
@@ -27,8 +28,8 @@ PEER_RELATION_NAME = "vault-peers"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
-NUM_VAULT_UNITS = 3
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
+MINIO_APPLICATION_NAME = "minio"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
@@ -40,6 +41,43 @@ VAULT_STATUS_UNSEALED_AND_STANDBY = 429
 VAULT_STATUS_NOT_INITIALIZED = 501
 VAULT_STATUS_SEALED = 503
 
+MINIO_S3_ACCESS_KEY = "minio_access_key"
+MINIO_S3_SECRET_KEY = "minio_secret_key"
+MINIO_CONFIG = {
+    "access-key": MINIO_S3_ACCESS_KEY,
+    "secret-key": MINIO_S3_SECRET_KEY,
+}
+
+NUM_VAULT_UNITS = 3
+
+
+@pytest.fixture(scope="module")
+async def deploy_vault(ops_test: OpsTest, request) -> None:
+    """Build the charm-under-test and deploy it."""
+    assert ops_test.model
+    charm_path = Path(request.config.getoption("--charm_path")).resolve()
+    resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
+    await ops_test.model.deploy(
+        charm_path,
+        resources=resources,
+        application_name=APP_NAME,
+        num_units=NUM_VAULT_UNITS,
+        config={"common_name": "example.com"},
+    )
+
+@pytest.fixture(scope="module")
+async def initialize_leader_vault(
+    ops_test: OpsTest, deploy_vault: None
+) -> Tuple[int, str, str]:
+    """Initialize the leader vault unit and return the root token and unseal key."""
+    leader_unit = await get_leader_unit(ops_test.model, APP_NAME)
+    leader_unit_index = int(leader_unit.name.split("/")[-1])
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+
+    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
+    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
+    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+    return leader_unit_index, root_token, unseal_key
 
 async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
     """Run the `get-certificate` on the `self-signed-certificates` unit.
@@ -115,32 +153,6 @@ async def wait_for_certificate_to_be_provided(ops_test: OpsTest) -> None:
     raise TimeoutError("Timed out waiting for certificate to be provided.")
 
 @pytest.fixture(scope="module")
-async def deploy_vault(ops_test: OpsTest, request) -> None:
-    """Build the charm-under-test and deploy it."""
-    assert ops_test.model
-    charm_path = Path(request.config.getoption("--charm_path")).resolve()
-    await ops_test.model.deploy(
-        charm_path,
-        application_name=APP_NAME,
-        num_units=NUM_VAULT_UNITS,
-        config={"common_name": "example.com"},
-    )
-
-@pytest.fixture(scope="module")
-async def initialize_leader_vault(
-    ops_test: OpsTest, deploy_vault: None
-) -> Tuple[int, str, str]:
-    """Initialize the leader vault unit and return the root token and unseal key."""
-    leader_unit = await get_leader_unit(ops_test.model, APP_NAME)
-    leader_unit_index = int(leader_unit.name.split("/")[-1])
-    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-
-    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
-    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
-    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
-    return leader_unit_index, root_token, unseal_key
-
-@pytest.fixture(scope="module")
 async def deploy_requiring_charms(ops_test: OpsTest, deploy_vault: None, request):
     assert ops_test.model
     kv_requirer_charm_path = Path(request.config.getoption("--kv_requirer_charm_path")).resolve()
@@ -174,12 +186,20 @@ async def deploy_requiring_charms(ops_test: OpsTest, deploy_vault: None, request
             trust=True,
             channel="stable",
         )
+    deploy_minio = ops_test.model.deploy(
+            "minio",
+            application_name=MINIO_APPLICATION_NAME,
+            trust=True,
+            config=MINIO_CONFIG,
+            channel="stable",
+        )
     deployed_apps = [
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         VAULT_KV_REQUIRER_APPLICATION_NAME,
         VAULT_PKI_REQUIRER_APPLICATION_NAME,
         GRAFANA_AGENT_APPLICATION_NAME,
         S3_INTEGRATOR_APPLICATION_NAME,
+        MINIO_APPLICATION_NAME,
     ]
     await asyncio.gather(
         deploy_self_signed_certificates,
@@ -187,11 +207,13 @@ async def deploy_requiring_charms(ops_test: OpsTest, deploy_vault: None, request
         deploy_vault_pki_requirer,
         deploy_grafana_agent,
         deploy_s3_integrator,
+        deploy_minio,
     )
     await ops_test.model.wait_for_idle(
         apps=[
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-            VAULT_PKI_REQUIRER_APPLICATION_NAME
+            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            MINIO_APPLICATION_NAME,
             ],
         status="active",
         timeout=1000,
@@ -440,45 +462,6 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
 
 
 @pytest.mark.abort_on_fail
-async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_authorized_then_status_is_active(
-    ops_test: OpsTest, deploy_requiring_charms: None
-):
-    """Test that Vault is active and running correctly after Vault is initialized, unsealed and authorized."""
-    assert ops_test.model
-    app = ops_test.model.applications[APP_NAME]
-    assert isinstance(app, Application)
-    leader = await get_leader(app)
-    assert leader
-
-    leader_ip = leader.public_address
-    vault_endpoint = f"https://{leader_ip}:8200"
-
-    action_output = await run_get_ca_certificate_action(ops_test)
-    ca_certificate = action_output["ca-certificate"]
-    ca_file_location = str(ops_test.tmp_path / "ca_file.txt")
-    with open(ca_file_location, mode="w+") as ca_file:
-        ca_file.write(ca_certificate)
-    client = hvac.Client(url=vault_endpoint, verify=ca_file_location)
-    await validate_vault_status(VAULT_STATUS_NOT_INITIALIZED, ops_test, client)
-
-    init_output = client.sys.initialize(secret_shares=1, secret_threshold=1)
-    keys = init_output["keys"]
-    root_token = init_output["root_token"]
-    await validate_vault_status(VAULT_STATUS_SEALED, ops_test, client)
-    client.sys.submit_unseal_keys(keys)
-    await validate_vault_status(VAULT_STATUS_ACTIVE, ops_test, client)
-
-    await unseal_all_vault_units(ops_test, ca_file.name, keys)
-    await leader.run_action("authorize-charm", token=root_token)
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-
-@pytest.mark.abort_on_fail
 async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
     ops_test: OpsTest,
     deploy_vault: None,
@@ -599,19 +582,32 @@ async def test_given_vault_pki_relation_when_integrate_then_cert_is_provided(
     assert action_output.get("csr", None) is not None
 
 @pytest.mark.abort_on_fail
-async def test_given_vault_integrated_with_s3_when_create_backup_then_action_fails(
+async def test_given_application_is_deployed_and_related_to_s3_integrator_when_create_backup_action_then_backup_is_created(
     ops_test: OpsTest, deploy_requiring_charms: None
 ):
     assert ops_test.model
+    await ops_test.model.wait_for_idle(
+        apps=[MINIO_APPLICATION_NAME],
+        status="active",
+        timeout=1000,
+        wait_for_exact_units=1,
+    )
+    status = await ops_test.model.get_status()
+    minio_ip = (
+        status.applications[MINIO_APPLICATION_NAME]
+        .units[f"{MINIO_APPLICATION_NAME}/0"]
+        .address
+    )
+    endpoint = f"http://{minio_ip}:9000"
     s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
     assert s3_integrator
     await run_s3_integrator_sync_credentials_action(
         ops_test,
-        secret_key="Dummy secret key",
-        access_key="Dummy access key",
+        secret_key=MINIO_S3_SECRET_KEY,
+        access_key=MINIO_S3_ACCESS_KEY,
     )
     s3_config = {
-        "endpoint": "http://minio-dummy:9000",
+        "endpoint": endpoint,
         "bucket": "test-bucket",
         "region": "local",
     }
@@ -634,10 +630,10 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_fai
     vault = ops_test.model.applications[APP_NAME]
     assert isinstance(vault, Application)
     create_backup_action_output = await run_create_backup_action(ops_test)
-    assert create_backup_action_output.get("return-code") == 0
+    assert create_backup_action_output["backup-id"]
 
 @pytest.mark.abort_on_fail
-async def test_given_vault_integrated_with_s3_when_list_backups_then_action_fails(
+async def test_given_application_is_deployed_and_backup_created_when_list_backups_action_then_backups_are_listed(
     ops_test: OpsTest, deploy_requiring_charms: None
 ):
     assert ops_test.model
@@ -655,16 +651,32 @@ async def test_given_vault_integrated_with_s3_when_list_backups_then_action_fail
     vault = ops_test.model.applications[APP_NAME]
     assert isinstance(vault, Application)
     list_backups_action_output = await run_list_backups_action(ops_test)
-    assert list_backups_action_output.get("return-code") == 0
+    assert list_backups_action_output["backup-ids"]
 
 @pytest.mark.abort_on_fail
-async def test_given_vault_integrated_with_s3_when_restore_backup_then_action_fails(
+async def test_given_application_is_deployed_and_backup_created_when_restore_backup_action_then_backup_is_restored(
     ops_test: OpsTest, deploy_requiring_charms: None
 ):
     assert ops_test.model
+    await ops_test.model.wait_for_idle(
+        apps=[S3_INTEGRATOR_APPLICATION_NAME],
+        status="active",
+        timeout=1000,
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        timeout=1000,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
     vault = ops_test.model.applications[APP_NAME]
     assert isinstance(vault, Application)
-    backup_id = "dummy-backup-id"
-
-    backup_action_output = await run_restore_backup_action(ops_test, backup_id)
-    assert backup_action_output.get("return-code") == 0
+    list_backups_action_output = await run_list_backups_action(ops_test)
+    backup_id = json.loads(list_backups_action_output["backup-ids"])[0]
+    # In this test we are not using the correct unsealed keys and root token.
+    restore_backup_action_output = await run_restore_backup_action(
+        ops_test, backup_id=backup_id
+    )
+    assert restore_backup_action_output.get("return-code") == 0
+    assert not restore_backup_action_output.get("stderr", None)
+    assert restore_backup_action_output.get("restored", None) == backup_id
