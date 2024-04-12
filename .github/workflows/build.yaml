@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  workflow_call:
+
+jobs:
+  build-charm-under-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+    
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+        with:
+            channel: latest/stable
+    
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+
+      - name: Build charm under test
+        run: charmcraft pack --verbose
+
+      - name: Archive Charm Under Test
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-charm
+          path: "*.charm"
+          retention-days: 5
+
+  build-kv-requirer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+        with:
+          channel: latest/stable
+      
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+
+      - name: Build KV Requirer charm
+        run: |
+          cp lib/charms/vault_k8s/v0/vault_kv.py tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
+          cd tests/integration/vault_kv_requirer_operator
+          charmcraft pack --verbose
+
+      - name: Archive KV Requirer Charm
+        uses: actions/upload-artifact@v4
+        with:
+          name: kv-requirer-charm
+          path: tests/integration/vault_kv_requirer_operator/*.charm
+          retention-days: 5
