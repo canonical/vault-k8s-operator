@@ -2,28 +2,34 @@ name: Integration tests
 
 on:
   workflow_call:
-    inputs:
-      charm-file-name:
-        description: Tested charm file name
-        required: true
-        type: string
-      enable-metallb:
-        description: Enable MetalLB
-        required: false
-        type: boolean
-        default: false
-      metallb-range:
-        description: MetalLB range
-        required: false
-        type: string
-        default: "10.0.0.2-10.0.0.10"
 
 jobs:
   integration-test:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4
+      
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: built-charm
+          path: built/
+      
+      - name: Get Charm Under Test Path
+        id: charm-path
+        run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+      
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v4
+        with:
+          name: kv-requirer-charm
+          path: kv-requirer/
+      
+      - name: Get KV Requirer Charm Path
+        id: kv-requirer-charm-path
+        run: echo "charm_path=$(find kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -31,24 +37,23 @@ jobs:
           channel: 1.29-strict/stable
           juju-channel: 3.4/stable
           lxd-channel: 5.20/stable
+  
       - name: Enable Metallb
-        if: ${{ inputs.enable-metallb == true }}
-        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:${{ inputs.metallb-range }}"
+        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"
+
       - name: Run integration tests
-        run: tox -e integration
-      - name: Archive Tested Charm
-        uses: actions/upload-artifact@v4
-        if: ${{ github.ref_name == 'main' }}
-        with:
-          name: tested-charm
-          path: .tox/**/${{ inputs.charm-file-name }}
-          retention-days: 5
+        run: |
+          tox -e integration -- \
+            --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
+            --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"
+  
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: charmcraft-logs
           path: /home/runner/.local/state/charmcraft/log/*.log
+  
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v4
