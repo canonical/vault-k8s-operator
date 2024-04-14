@@ -1138,17 +1138,13 @@ class VaultCharm(CharmBase):
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
         )
         if not vault.is_api_available():
-            print(11)
             return None
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
-            print(22)
             return None
         if not vault.authenticate(AppRole(role_id, secret_id)):
-            print(33)
             return None
         if not vault.is_active_or_standby():
-            print(44)
             return None
         return vault
 
