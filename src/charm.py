@@ -40,6 +40,7 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
+from charms.vault_k8s.v0.vault_s3 import S3
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
 from cryptography import x509
@@ -65,7 +66,6 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
-from s3_session import S3
 
 logger = logging.getLogger(__name__)
 
