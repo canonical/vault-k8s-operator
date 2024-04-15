@@ -12,7 +12,7 @@ boto3-stubs==1.34.84
     # via
     #   -c requirements.txt
     #   types-boto3
-botocore-stubs==1.34.69
+botocore-stubs==1.34.84
     # via
     #   -c requirements.txt
     #   boto3-stubs
@@ -192,7 +192,7 @@ traitlets==5.14.2
     # via
     #   ipython
     #   matplotlib-inline
-types-awscrt==0.20.5
+types-awscrt==0.20.7
     # via
     #   -c requirements.txt
     #   botocore-stubs
