@@ -685,6 +685,7 @@ class TestCharm(unittest.TestCase):
                 "is_api_available.return_value": True,
                 "is_node_in_raft_peers.return_value": True,
                 "get_num_raft_peers.return_value": 2,
+                "is_sealed.return_value": False,
             },
         )
         mock_vault_class.return_value = mock_vault
