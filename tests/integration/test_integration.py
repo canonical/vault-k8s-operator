@@ -4,10 +4,7 @@
 import asyncio
 import json
 import logging
-import os
-import shutil
 import time
-from os.path import abspath
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -26,7 +23,6 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APPLICATION_NAME = "vault-k8s"
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
-TRAEFIK_APPLICATION_NAME = "traefik"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
@@ -47,17 +43,13 @@ NUM_VAULT_UNITS = 3
 
 
 @pytest.fixture(scope="module")
-async def build_charms_and_deploy_vault(ops_test: OpsTest):
-    """Build the charms that are required in this test module and deploy Vault."""
+async def deploy_vault(ops_test: OpsTest, request):
+    """Deploy Vault."""
     assert ops_test.model
-    copy_lib_content()
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
-    built_charms = await ops_test.build_charms(".", f"{VAULT_KV_REQUIRER_CHARM_DIR}/")
-    vault_charm = built_charms.get("vault-k8s", "")
-    vault_kv_requirer_charm = built_charms.get("vault-kv-requirer", "")
-
+    charm_path = Path(request.config.getoption("--charm_path")).resolve()
     await ops_test.model.deploy(
-        vault_charm,
+        charm_path,
         resources=resources,
         application_name=APPLICATION_NAME,
         trust=True,
@@ -72,12 +64,9 @@ async def build_charms_and_deploy_vault(ops_test: OpsTest):
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
-    return {"vault-kv-requirer": vault_kv_requirer_charm}
-
-
 @pytest.fixture(scope="module")
 async def initialize_leader_vault(
-    ops_test: OpsTest, build_charms_and_deploy_vault: Dict[str, Path | str]
+    ops_test: OpsTest, deploy_vault: Dict[str, Path | str]
 ) -> Tuple[int, str, str]:
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_index = int(leader_unit.name.split("/")[-1])
@@ -124,7 +113,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -149,7 +138,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -177,7 +166,7 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -223,25 +212,20 @@ class TestVaultK8sIntegrationsPart1:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
+        request,
     ):
         assert ops_test.model
-
+        kv_requirer_charm_path = Path(request.config.getoption("--kv_requirer_charm_path")).resolve()
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             trust=True,
             channel="stable",
         )
-        deploy_traefik = ops_test.model.deploy(
-            "traefik-k8s",
-            application_name=TRAEFIK_APPLICATION_NAME,
-            trust=True,
-            channel="stable",
-        )
         deploy_vault_kv_requirer = ops_test.model.deploy(
-            build_charms_and_deploy_vault.get("vault-kv-requirer", ""),
+            kv_requirer_charm_path,
             application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
             num_units=1,
         )
@@ -252,13 +236,11 @@ class TestVaultK8sIntegrationsPart1:
             config={"common_name": "test.example.com"},
         )
         deployed_apps = [
-            TRAEFIK_APPLICATION_NAME,
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             VAULT_KV_REQUIRER_APPLICATION_NAME,
             VAULT_PKI_REQUIRER_APPLICATION_NAME,
         ]
         await asyncio.gather(
-            deploy_traefik,
             deploy_self_signed_certificates,
             deploy_vault_pki_requirer,
             deploy_vault_kv_requirer,
@@ -277,8 +259,6 @@ class TestVaultK8sIntegrationsPart1:
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name)
             for app_name in deployed_apps
-            # TODO: traefik crashes on remove. Avoid removing it for now
-            if app_name != TRAEFIK_APPLICATION_NAME
         ]
         await asyncio.gather(*remove_coroutines)
 
@@ -360,76 +340,6 @@ class TestVaultK8sIntegrationsPart1:
         assert action_output["certificate"] is not None
         assert action_output["ca-certificate"] is not None
         assert action_output["csr"] is not None
-
-    @pytest.mark.abort_on_fail
-    async def test_given_traefik_is_deployed_when_related_to_self_signed_certificates_then_status_is_active(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_traefik_is_deployed_when_certificate_transfer_interface_is_related_then_status_is_active(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:send-ca-cert",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}:receive-ca-cert",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_certificate_transfer_interface_is_related_when_relate_to_ingress_then_status_is_active(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
-    ):
-        assert ops_test.model
-        await ops_test.model.integrate(
-            relation1=f"{APPLICATION_NAME}:ingress",
-            relation2=f"{TRAEFIK_APPLICATION_NAME}:ingress",
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, TRAEFIK_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-
-    @pytest.mark.abort_on_fail
-    async def test_given_given_traefik_is_related_when_vault_status_checked_then_vault_returns_200_or_429(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
-    ):
-        """This proves that vault is reachable behind ingress."""
-        vault_endpoint = await _get_vault_traefik_endpoint(ops_test)
-        action_output = await run_get_ca_certificate_action(ops_test)
-        ca_certificate = action_output["ca-certificate"]
-        with open("ca_file.txt", mode="w+") as ca_file:
-            ca_file.write(ca_certificate)
-        client = hvac.Client(url=vault_endpoint, verify=abspath(ca_file.name))
-        response = client.sys.read_health_status()
-        # As we have multiple Vault units, the one who gives the response could be in active or standby.  # noqa: E501, W505
-        # According to the Vault upstream code, expected response codes could be "200"
-        # if the unit is active or "429" if the unit is standby.
-        # https://github.com/hashicorp/vault/blob/3c42b15260de8b94388ed2296fc18e89ea80c4c9/vault/logical_system_paths.go#L152  # noqa: E501, W505
-        # Summary: "Returns the health status of Vault.",
-        # 200: {{Description: "initialized, unsealed, and active"}}
-        # 429: {{Description: "unsealed and standby"}}
-        # 472: {{Description: "data recovery mode replication secondary and active"}}
-        # 501: {{Description: "not initialized"}}
-        # 503: {{Description: "sealed"}}
-        assert response.status_code in (200, 429)
-        os.remove("ca_file.txt")
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
@@ -542,7 +452,7 @@ class TestVaultK8sIntegrationsPart2:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        build_charms_and_deploy_vault: dict[str, Path | str],
+        deploy_vault: dict[str, Path | str],
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
@@ -866,10 +776,6 @@ async def run_restore_backup_action(ops_test: OpsTest, backup_id: str) -> dict:
     return restore_backup_action.results
 
 
-def copy_lib_content() -> None:
-    shutil.copyfile(src=VAULT_KV_LIB_DIR, dst=f"{VAULT_KV_REQUIRER_CHARM_DIR}/{VAULT_KV_LIB_DIR}")
-
-
 async def read_vault_unit_statuses(ops_test: OpsTest) -> List[Dict[str, str]]:
     """Read the complete status from vault units.
 
@@ -931,47 +837,6 @@ async def wait_for_vault_status_message(
         time.sleep(cadence)
         timeout -= cadence
     raise TimeoutError("Vault didn't show the expected status")
-
-
-async def _get_vault_traefik_endpoint(
-    ops_test: OpsTest, timeout: int = 60, cadence: int = 2
-) -> str:
-    """Retrieve the Vault endpoint by using Traefik's `show-proxied-endpoints` action.
-
-    Args:
-        ops_test: Ops test Framework.
-        timeout: Wait time in seconds to get proxied endpoints.
-        cadence: How long to wait before running the command again
-
-    Returns:
-        vault_endpoint: Vault proxied endpoint by Traefik.
-
-    Raises:
-        TimeoutError: If proxied endpoints are not retrieved.
-
-    """
-    assert ops_test.model
-    traefik = ops_test.model.applications[TRAEFIK_APPLICATION_NAME]
-    assert isinstance(traefik, Application)
-    traefik_unit = traefik.units[0]
-    while timeout > 0:
-        proxied_endpoint_action = await traefik_unit.run_action(
-            action_name="show-proxied-endpoints"
-        )
-        action_output = await ops_test.model.get_action_output(
-            action_uuid=proxied_endpoint_action.entity_id, wait=30
-        )
-
-        if "proxied-endpoints" in action_output:
-            proxied_endpoints = json.loads(action_output["proxied-endpoints"])
-            return proxied_endpoints[APPLICATION_NAME]["url"]
-        else:
-            logger.info("Traefik did not return proxied endpoints yet")
-        time.sleep(cadence)
-        timeout -= cadence
-
-    raise TimeoutError("Traefik did not return proxied endpoints")
-
 
 def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)

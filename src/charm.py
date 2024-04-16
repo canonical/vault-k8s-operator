@@ -11,7 +11,7 @@ import datetime
 import json
 import logging
 import socket
-from typing import IO, Dict, List, Optional, Tuple
+from typing import IO, Dict, List, Optional, Tuple, cast
 
 import hcl
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
@@ -962,8 +962,8 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_node_api_addresses()
         ]
         content = render_vault_config_file(
-            default_lease_ttl=self.model.config["default_lease_ttl"],
-            max_lease_ttl=self.model.config["max_lease_ttl"],
+            default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
+            max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),
             cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
@@ -1240,7 +1240,7 @@ class VaultCharm(CharmBase):
 
     def _get_config_common_name(self) -> str:
         """Return the common name to use for the PKI backend."""
-        return self.config.get("common_name", "")
+        return cast(str, self.config.get("common_name", ""))
 
     def _common_name_config_is_valid(self) -> bool:
         """Return whether the config value for the common name is valid."""
