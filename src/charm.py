@@ -250,10 +250,6 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             return
 
-        for relation in self.model.relations[KV_RELATION_NAME]:
-            ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
-            self.vault_kv.set_ca_certificate(relation, ca_certificate)
-
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(
@@ -326,6 +322,9 @@ class VaultCharm(CharmBase):
         )
         if not relation:
             logger.error("Relation not found for relation id %s", event.relation_id)
+            return
+        if not relation.active:
+            logger.error("Relation is not active for relation id %s", event.relation_id)
             return
         self._generate_kv_for_requirer(
             relation=relation,
@@ -423,6 +422,9 @@ class VaultCharm(CharmBase):
             )
             if not relation:
                 logger.warning("Relation not found for relation id %s", kv_request.relation_id)
+                continue
+            if not relation.active:
+                logger.warning("Relation is not active for relation id %s", kv_request.relation_id)
                 continue
             self._generate_kv_for_requirer(
                 relation=relation,
