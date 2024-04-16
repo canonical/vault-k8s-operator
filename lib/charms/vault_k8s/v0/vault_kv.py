@@ -135,7 +135,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -327,7 +327,12 @@ class VaultKvProvides(ops.Object):
         """Set the ca_certificate on the relation."""
         if not self.charm.unit.is_leader():
             return
-
+        if not relation:
+            logger.warning("Relation is None")
+            return
+        if not relation.active:
+            logger.warning("Relation is not active")
+            return
         relation.data[self.charm.app]["ca_certificate"] = ca_certificate
 
     def set_mount(self, relation: ops.Relation, mount: str):
@@ -398,6 +403,8 @@ class VaultKvProvides(ops.Object):
         )
         for relation in relations:
             assert isinstance(relation.app, ops.Application)
+            if not relation.active:
+                continue
             app_data = relation.data[relation.app]
             for unit in relation.units:
                 unit_data = relation.data[unit]
