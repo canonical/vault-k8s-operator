@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Protocol
 import hvac
 import requests
 from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
-from requests.exceptions import RequestException
+from requests.exceptions import ConnectionError, RequestException
 
 # The unique Charmhub library identifier, never change it
 LIBID = "674754a3268d4507b749ec34214706fd"
@@ -109,7 +109,7 @@ class Vault:
         """Find and use the token related with the given auth method."""
         try:
             auth_details.login(self._client)
-        except (VaultError, ConnectionRefusedError) as e:
+        except (VaultError, ConnectionError) as e:
             logger.error("Failed logging in to Vault: %s", e)
             return False
         return True
