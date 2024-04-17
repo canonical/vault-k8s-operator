@@ -686,24 +686,16 @@ class VaultCharm(CharmBase):
             logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
             event.fail(message="Backup not found in S3 bucket.")
             return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.error("Failed to restore vault. Vault API is not available.")
-            event.fail(message="Failed to restore vault. Vault API is not available.")
-            return
         try:
-            response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
-        except VaultClientError as e:
+            if not (self._restore_vault(snapshot=snapshot)):
+                logger.error("Failed to restore vault.")
+                event.fail(message="Failed to restore vault.")
+                return
+        except RuntimeError as e:
             logger.error("Failed to restore vault: %s", e)
             event.fail(message="Failed to restore vault.")
             return
-        if not 200 <= response.status_code < 300:
-            logger.error("Failed to restore snapshot: %s", response.json())
-            event.fail(message="Failed to restore snapshot. Vault API returned an error.")
-            return
-
         self._remove_vault_approle_secret()
-
         event.set_results({"restored": event.params.get("backup-id")})
 
     def _get_s3_parameters(self) -> Dict[str, str]:

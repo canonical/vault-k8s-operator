@@ -1216,7 +1216,7 @@ class TestCharm(unittest.TestCase):
             "unseal-keys": ["whatever unseal keys"],
         }
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to restore vault. Vault API is not available.")
+        event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
@@ -1250,7 +1250,7 @@ class TestCharm(unittest.TestCase):
             "unseal-keys": ["whatever unseal keys"],
         }
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to restore vault. Vault API is not available.")
+        event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
@@ -1284,7 +1284,7 @@ class TestCharm(unittest.TestCase):
             "unseal-keys": ["whatever unseal keys"],
         }
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to restore vault. Vault API is not available.")
+        event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
@@ -1326,7 +1326,7 @@ class TestCharm(unittest.TestCase):
             "unseal-keys": ["whatever unseal keys"],
         }
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to restore snapshot. Vault API returned an error.")
+        event.fail.assert_called_with(message="Failed to restore vault.")
 
     @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
