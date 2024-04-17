@@ -695,7 +695,19 @@ class VaultCharm(CharmBase):
             logger.error("Failed to restore vault: %s", e)
             event.fail(message="Failed to restore vault.")
             return
-        self._remove_vault_approle_secret()
+        try:
+            if self._approle_secret_set():
+                role_id, secret_id = self._get_approle_auth_secret()
+                vault = Vault(
+                    url=self._api_address,
+                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+                )
+                if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
+                    self._remove_approle_auth_secret()
+        except Exception as e:
+            logger.error("Failed to remove old approle secret: %s", e)
+            event.fail(message="Failed to remove old approle secret.")
+
         event.set_results({"restored": event.params.get("backup-id")})
 
     def _get_s3_parameters(self) -> Dict[str, str]:
@@ -721,14 +733,6 @@ class VaultCharm(CharmBase):
         if missing_parameters:= self._get_missing_s3_parameters():
             return "S3 parameters missing ({}):".format(", ".join(missing_parameters))
         return None
-
-    def _remove_vault_approle_secret(self) -> None:
-        """Remove the approle secret if it exists."""
-        try:
-            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-            juju_secret.remove_all_revisions()
-        except SecretNotFoundError:
-            return
 
     def _get_backup_key(self) -> str:
         """Return the backup key.
