@@ -131,7 +131,7 @@ class TestCharmTLS(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate secret"),
+            WaitingStatus("Waiting for CA certificate to be accessible in the charm"),
         )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
