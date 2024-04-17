@@ -34,7 +34,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 
 logger = logging.getLogger(__name__)
@@ -344,7 +344,7 @@ class VaultTLSManager(Object):
             Tuple[Optional[str], Optional[str]]: The CA private key and certificate
         """
         juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-        content = juju_secret.get_content()
+        content = juju_secret.get_content(refresh=True)
         return content["privatekey"], content["certificate"]
 
     def _set_ca_certificate_secret(

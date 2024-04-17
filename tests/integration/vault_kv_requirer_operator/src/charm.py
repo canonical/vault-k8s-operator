@@ -72,7 +72,7 @@ class VaultKVRequirerCharm(CharmBase):
             return
         unit_credentials = self.vault_kv.get_unit_credentials(relation)
         secret = self.model.get_secret(id=unit_credentials)
-        secret_content = secret.get_content()
+        secret_content = secret.get_content(refresh=True)
         juju_secret_content = {
             "vault-url": vault_url,
             "mount": mount,
@@ -101,7 +101,7 @@ class VaultKVRequirerCharm(CharmBase):
         except SecretNotFoundError:
             event.fail("Vault KV secret not found")
             return
-        secret_content = secret.get_content()
+        secret_content = secret.get_content(refresh=True)
         mount = secret_content["mount"]
         ca_certificate_path = self._get_ca_cert_location_in_charm()
         if ca_certificate_path is None:
@@ -128,7 +128,7 @@ class VaultKVRequirerCharm(CharmBase):
         except SecretNotFoundError:
             event.fail("Vault KV secret not found")
             return
-        secret_content = secret.get_content()
+        secret_content = secret.get_content(refresh=True)
         mount = secret_content["mount"]
         ca_certificate_path = self._get_ca_cert_location_in_charm()
         if ca_certificate_path is None:
@@ -153,7 +153,7 @@ class VaultKVRequirerCharm(CharmBase):
     def get_nonce(self) -> str:
         """Get the nonce from the secret."""
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
-        return secret.get_content()["nonce"]
+        return secret.get_content(refresh=True)["nonce"]
 
     def _get_ca_cert_location_in_charm(self) -> Optional[Path]:
         """Return the CA certificate location in the charm (not in the workload).
