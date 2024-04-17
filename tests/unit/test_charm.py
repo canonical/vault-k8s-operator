@@ -360,7 +360,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Storage for certificates not mounted"),
+            WaitingStatus("Waiting for CA certificate to be accessible in the charm"),
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
@@ -386,7 +386,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate secret"),
+            WaitingStatus("Waiting for CA certificate to be accessible in the charm"),
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
@@ -412,7 +412,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            WaitingStatus("Waiting for CA certificate to be shared"),
+            WaitingStatus("Waiting for CA certificate to be accessible in the charm"),
         )
 
     @patch("charm.Vault", autospec=True)
@@ -503,6 +503,8 @@ class TestCharm(unittest.TestCase):
 
         self.harness.add_storage(storage_name="certs", attach=True)
         self.harness.add_storage(storage_name="config", attach=True)
+        root = self.harness.get_filesystem_root(self.container_name)
+        (root / "vault/certs/ca.pem").write_text("some ca")
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.set_leader(is_leader=True)
         self._set_peer_relation()

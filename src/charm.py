@@ -195,10 +195,10 @@ class VaultCharm(CharmBase):
                 WaitingStatus("Waiting for bind and ingress addresses to be available")
             )
             return
-        try:
-            self.tls.get_tls_file_path_in_charm(File.CA)
-        except VaultCertsError:
-            event.add_status(WaitingStatus("Storage for certificates not mounted"))
+        if not self.tls.tls_file_available_in_charm(File.CA):
+            event.add_status(
+                WaitingStatus("Waiting for CA certificate to be accessible in the charm")
+            )
             return
         if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
             event.add_status(WaitingStatus("Waiting for CA certificate secret"))
@@ -306,10 +306,7 @@ class VaultCharm(CharmBase):
         if vault.is_sealed():
             return
         vault.authenticate(AppRole(role_id, secret_id))
-        if (
-            vault.is_node_in_raft_peers(node_id=self._node_id)
-            and vault.get_num_raft_peers() > 1
-        ):
+        if vault.is_node_in_raft_peers(node_id=self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(node_id=self._node_id)
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
