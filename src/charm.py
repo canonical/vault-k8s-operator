@@ -869,7 +869,7 @@ class VaultCharm(CharmBase):
         """Update a vault kv secret if the unit subnet is not in the cidr list."""
         secret = self.model.get_secret(id=secret_id, label=label)
         secret.grant(relation)
-        credentials = secret.get_content()
+        credentials = secret.get_content(refresh=True)
         role_secret_id_data = vault.read_role_secret(role_name, credentials["role-secret-id"])
         # if unit subnet is already in cidr_list, skip
         if egress_subnet in role_secret_id_data["cidr_list"]:
@@ -1006,7 +1006,7 @@ class VaultCharm(CharmBase):
         if not self._pki_csr_secret_set():
             raise RuntimeError("PKI CSR secret not set.")
         secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
-        return secret.get_content()["csr"]
+        return secret.get_content(refresh=True)["csr"]
 
     def _pki_csr_secret_set(self) -> bool:
         """Return whether PKI CSR secret is stored."""
@@ -1024,7 +1024,7 @@ class VaultCharm(CharmBase):
         """
         try:
             juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-            content = juju_secret.get_content()
+            content = juju_secret.get_content(refresh=True)
         except SecretNotFoundError:
             return None, None
         return content["role-id"], content["secret-id"]
