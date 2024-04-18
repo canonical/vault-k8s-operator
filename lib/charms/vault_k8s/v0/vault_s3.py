@@ -99,9 +99,7 @@ class S3:
         """Return whether the bucket exists."""
         try:
             bucket.meta.client.head_bucket(Bucket=bucket.name)
-        except ClientError:
-            return False
-        except BotoCoreError:
+        except (ClientError, BotoCoreError):
             return False
         return True
 
