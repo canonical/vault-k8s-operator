@@ -1030,21 +1030,6 @@ class VaultCharm(CharmBase):
         s3_parameters = self.s3_requirer.get_s3_connection_info()
         return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
 
-    def _retrieve_s3_parameters(self) -> Dict[str, str]:
-        """Retrieve S3 parameters from the S3 integrator relation.
-
-        Removes leading and trailing whitespaces from the parameters.
-
-        Returns:
-            Dict[str, str]: Dictionary of the S3 parameters.
-        """
-        s3_parameters = self.s3_requirer.get_s3_connection_info()
-        for key, value in s3_parameters.items():
-            if isinstance(value, str):
-                s3_parameters[key] = value.strip()
-
-        return s3_parameters
-
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
         return bool(self.model.get_relation(PEER_RELATION_NAME))
