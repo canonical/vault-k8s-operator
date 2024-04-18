@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import boto3
 from botocore.exceptions import ClientError
+from botocore.response import StreamingBody
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 
 
@@ -210,3 +211,120 @@ class TestS3(unittest.TestCase):
         object_list = s3.get_object_key_list(bucket_name="whatever-bucket", prefix="whatever-prefix")
 
         self.assertEqual(object_list, ["object-key"])
+
+    @patch("boto3.session.Session")
+    def test_given_client_error_with_no_such_key_when_get_content_then_none_is_returned(self, patch_session):
+        mock_resource = Mock()
+        mock_bucket = Mock()
+        mock_object = Mock()
+        mock_object.get.side_effect = ClientError(
+            operation_name="GetObject",
+            error_response={"Error": {"Code": "NoSuchKey"}},
+        )
+        mock_bucket.Object.return_value = mock_object
+        patch_session.return_value.resource.return_value = mock_resource
+        patch_session.return_value.resource.return_value.Bucket.return_value = mock_bucket
+
+        s3 = S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+        )
+
+        streaming_body = s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
+
+        self.assertIsNone(streaming_body)
+
+    @patch("boto3.session.Session")
+    def test_given_client_error_with_no_suck_bucket_when_get_content_then_none_is_returned(self, patch_session):
+        mock_resource = Mock()
+        mock_bucket = Mock()
+        mock_object = Mock()
+        mock_object.get.side_effect = ClientError(
+            operation_name="GetObject",
+            error_response={"Error": {"Code": "NoSuchBucket"}},
+        )
+        mock_bucket.Object.return_value = mock_object
+        patch_session.return_value.resource.return_value = mock_resource
+        patch_session.return_value.resource.return_value.Bucket.return_value = mock_bucket
+
+        s3 = S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+        )
+
+        streaming_body = s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
+
+        self.assertIsNone(streaming_body)
+
+    @patch("boto3.session.Session")
+    def test_given_other_client_error_when_get_content_then_s3_error_is_raised(self, patch_session):
+        mock_resource = Mock()
+        mock_bucket = Mock()
+        mock_object = Mock()
+        mock_object.get.side_effect = ClientError(
+            operation_name="GetObject",
+            error_response={"Error": {"Code": "RandomCode"}},
+        )
+        mock_bucket.Object.return_value = mock_object
+        patch_session.return_value.resource.return_value = mock_resource
+        patch_session.return_value.resource.return_value.Bucket.return_value = mock_bucket
+
+        s3 = S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+        )
+
+        with self.assertRaises(S3Error):
+            s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
+
+    @patch("boto3.session.Session")
+    def test_given_boto_core_error_when_get_content_then_s3_error_is_raised(self, patch_session):
+        mock_resource = Mock()
+        mock_bucket = Mock()
+        mock_object = Mock()
+        mock_object.get.side_effect = ClientError(
+            operation_name="GetObject",
+            error_response={"Error": {"Code": "RandomCode"}},
+        )
+        mock_bucket.Object.return_value = mock_object
+        patch_session.return_value.resource.return_value = mock_resource
+        patch_session.return_value.resource.return_value.Bucket.return_value = mock_bucket
+
+        s3 = S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+        )
+
+        with self.assertRaises(S3Error):
+            s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
+
+    @patch("boto3.session.Session")
+    def test_given_no_error_when_get_content_then_streaming_body_is_returned(self, patch_session):
+        streaming_body_content = b"whatever content"
+        streaming_body = StreamingBody(raw_stream=io.BytesIO(streaming_body_content), content_length=len(streaming_body_content))
+        mock_resource = Mock()
+        mock_bucket = Mock()
+        mock_object = Mock()
+        mock_object.get.return_value = {"Body": streaming_body}
+        mock_bucket.Object.return_value = mock_object
+        patch_session.return_value.resource.return_value = mock_resource
+        patch_session.return_value.resource.return_value.Bucket.return_value = mock_bucket
+
+        s3 = S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+        )
+
+        streaming_body = s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
+        assert streaming_body
+        self.assertEqual(streaming_body.read(), streaming_body_content)
