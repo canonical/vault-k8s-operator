@@ -1,21 +1,52 @@
+
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""S3 helper functions."""
+"""S3 helper functions for Vault charms.
+
+## Usage
+Add the following dependencies to the charm's requirements.txt file:
+
+    ```
+    boto3
+    boto3-stubs[s3]
+    ```
+
+"""
+
 
 import logging
-from typing import IO, List, Optional
+from typing import IO, List, Optional, cast
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from botocore.response import StreamingBody
+from mypy_boto3_s3.literals import BucketLocationConstraintType
+from mypy_boto3_s3.service_resource import Bucket
+from mypy_boto3_s3.type_defs import CreateBucketConfigurationTypeDef
+
+# The unique Charmhub library identifier, never change it
+LIBID = "6a14cfe8d3134db4a6c47c4cf7b7d5d6"
+
+# Increment this major API version when introducing breaking changes
+LIBAPI = 0
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
+
 
 logger = logging.getLogger(__name__)
 
 AWS_DEFAULT_REGION = "us-east-1"
 
+
+class S3Error(Exception):
+    """Base class for S3 errors."""
+
+    pass
 
 class S3:
     """A class representing an S3 session allowing S3 operations."""
@@ -29,13 +60,13 @@ class S3:
     ):
         self.access_key = access_key
         self.secret_key = secret_key
-        self.region = region
         self.endpoint = endpoint
+        self.region = region
         try:
-            self.session = boto3.session.Session(  # type: ignore[reportAttributeAccessIssue]
+            self.session = boto3.session.Session(
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
-                region_name=self.region,
+                region_name=region,
             )
             custom_config = Config(
                 retries={
@@ -44,8 +75,7 @@ class S3:
             )
             self.s3 = self.session.resource("s3", endpoint_url=self.endpoint, config=custom_config)
         except (ClientError, BotoCoreError, ValueError) as e:
-            logger.error("Error creating session: %s", e)
-            raise e
+            raise S3Error(f"Error creating session: {e}")
 
     def create_bucket(self, bucket_name: str) -> bool:
         """Create S3 bucket.
@@ -57,41 +87,45 @@ class S3:
 
         Returns:
             bool: True if the bucket was created, False otherwise.
-
-        Raises:
-            ConnectTimeoutError
         """
-        bucket = self.s3.Bucket(bucket_name)
-        try:
-            # Checking if bucket already exists
-            bucket.meta.client.head_bucket(Bucket=bucket_name)
-            logger.info("Bucket %s exists.", bucket_name)
+        bucket = self.s3.Bucket(name=bucket_name)
+        if self._bucket_exists(bucket=bucket):
+            logger.info("Bucket %s already exists.", bucket_name)
             return True
-        except ClientError:
-            logger.info("Bucket %s doesn't exist, creating it.", bucket_name)
-            pass
-        except BotoCoreError as e:
-            logger.error("Failed to check whether bucket exists. %s", e)
-            return False
+        return self._create_bucket(bucket=bucket)
 
+
+    def _bucket_exists(self, bucket: Bucket) -> bool:
+        """Return whether the bucket exists."""
         try:
-            # AWS client doesn't allow LocationConstraint to be set to us-east-1
-            # If that's the regions used, we don't set LocationConstraint
-            # us-east-1 is the default region for AWS
-            if self.region == AWS_DEFAULT_REGION:
-                bucket = bucket.create()
+            bucket.meta.client.head_bucket(Bucket=bucket.name)
+        except (ClientError, BotoCoreError):
+            return False
+        return True
+
+    def _create_bucket(self, bucket: Bucket) -> bool:
+        """Create the S3 bucket."""
+        try:
+            if self.region == AWS_DEFAULT_REGION or self.region is None:
+                bucket.create()
             else:
-                bucket.create(CreateBucketConfiguration={"LocationConstraint": self.region})
+                region_literal = cast(BucketLocationConstraintType, self.region)
+                create_bucket_configuration: CreateBucketConfigurationTypeDef = {
+                    "LocationConstraint": region_literal
+                }
+                bucket.create(CreateBucketConfiguration=create_bucket_configuration)
+
             bucket.wait_until_exists()
             return True
         except (BotoCoreError, ClientError) as error:
             logger.error(
                 "Couldn't create bucket named '%s' in region=%s. %s",
-                bucket_name,
+                bucket.name,
                 self.region,
                 error,
             )
             return False
+
 
     def upload_content(
         self,
@@ -108,12 +142,9 @@ class S3:
 
         Returns:
             bool: True if the upload was successful, False otherwise.
-
-        Raises:
-            ConnectTimeoutError
         """
         try:
-            bucket = self.s3.Bucket(bucket_name)
+            bucket = self.s3.Bucket(name=bucket_name)
             bucket.upload_fileobj(Key=key, Fileobj=content)
             return True
         except (BotoCoreError, ClientError) as e:
@@ -129,11 +160,6 @@ class S3:
 
         Returns:
             List[str]: List of object keys.
-
-        Raises:
-            ClientError
-            BotoCoreError
-            ConnectTimeoutError
         """
         keys = []
         try:
@@ -147,10 +173,10 @@ class S3:
                 return []
             else:
                 logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
-                raise e
+                raise S3Error(f"Error getting objects list from bucket {bucket_name}: {e}")
         except BotoCoreError as e:
             logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
-            raise e
+            raise S3Error(f"Error getting objects list from bucket {bucket_name}: {e}")
 
     def get_content(self, bucket_name: str, object_key: str) -> Optional[StreamingBody]:
         """Get object content from S3 bucket by key.
@@ -161,11 +187,6 @@ class S3:
 
         Returns:
             Optional[StreamingBody]: File like object with the content of the S3 object.
-
-        Raises:
-            ClientError
-            BotoCoreError
-            ConnectTimeoutError
         """
         bucket = self.s3.Bucket(bucket_name)
         try:
@@ -181,9 +202,9 @@ class S3:
                 logger.error(
                     "Error getting object %s from bucket %s: %s", object_key, bucket_name, e
                 )
-                raise e
+                raise S3Error(f"Error getting object {object_key} from bucket {bucket_name}: {e}")
         except BotoCoreError as e:
             logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
-            raise e
+            raise S3Error(f"Error getting object {object_key} from bucket {bucket_name}: {e}")
 
         return obj["Body"]

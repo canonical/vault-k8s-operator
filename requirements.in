@@ -5,10 +5,11 @@ jinja2
 jsonschema
 lightkube
 lightkube-models
-pydantic
+pydantic==2.6.4
 pytest-interface-tester
 pyhcl
 requests
 jsonschema
 cryptography
 boto3
+boto3-stubs[s3]

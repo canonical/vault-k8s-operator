@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
 
 import hcl  # type: ignore[import-untyped]
 import requests
-from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charm import (
     CHARM_POLICY_NAME,
@@ -32,11 +31,13 @@ from charms.vault_k8s.v0.vault_client import (
     Token,
     Vault,
 )
+from charms.vault_k8s.v0.vault_s3 import S3Error
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, VaultTLSManager
 from ops import testing
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
-S3_LIB_PATH = "charms.data_platform_libs.v0.s3"
+S3_RELATION_LIB_PATH = "charms.data_platform_libs.v0.s3"
+S3_LIB_PATH = "charms.vault_k8s.v0.vault_s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
 TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v3.tls_certificates"
 VAULT_KV_RELATION_NAME = "vault-kv"
@@ -764,15 +765,15 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="S3 relation not created. Failed to perform backup.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. S3 relation not created.")
 
     def test_given_unit_not_leader_when_create_backup_action_then_action_fails(self):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Only leader unit can perform backup operations.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. Only leader unit can perform backup operations.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_create_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -784,9 +785,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_once()
         call_args = event.fail.call_args[1]["message"]
-        self.assertIn("S3 parameters missing.", call_args)
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+        self.assertIn("S3 parameters missing", call_args)
+
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_s3_session_not_created_when_create_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -803,8 +805,8 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create S3 session.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
     def test_given_bucket_creation_raises_an_exception_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
@@ -818,23 +820,23 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to create S3 bucket.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    def test_given_bucket_creation_raises_connect_timeout_error_when_create_backup_action_then_action_fails(
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
+    def test_given_bucket_creation_fails_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
         patch_get_s3_connection_info,
     ):
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        patch_create_bucket.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
+        patch_create_bucket.return_value = False
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
+        event.fail.assert_called_with(message="Failed to create S3 bucket.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
     @patch("charm.Vault", autospec=True)
     def test_given_vault_is_not_initialized_when_create_backup_action_then_action_fails(
         self,
@@ -864,10 +866,10 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+        event.fail.assert_called_with(message="Failed to initialize Vault client.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
     @patch("charm.Vault", autospec=True)
     def test_given_vault_api_not_available_when_create_backup_action_then_action_fails(
         self,
@@ -897,10 +899,10 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+        event.fail.assert_called_with(message="Failed to initialize Vault client.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
     @patch("charm.Vault", autospec=True)
     def test_given_vault_initialization_secret_not_available_create_backup_action_then_action_fails(
         self,
@@ -925,12 +927,12 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+        event.fail.assert_called_with(message="Failed to initialize Vault client.")
 
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    def test_given_snapshot_creation_fails_when_create_backup_action_then_action_fails(
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
+    def test_given_approle_secret_not_set_when_create_backup_action_then_action_fails(
         self,
         patch_create_bucket,
         patch_get_s3_connection_info,
@@ -958,12 +960,12 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Failed to create raft snapshot.")
+        event.fail.assert_called_with(message="Failed to initialize Vault client.")
 
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    @patch("s3_session.S3.upload_content")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
+    @patch(f"{S3_LIB_PATH}.S3.upload_content")
     def test_given_s3_content_upload_fails_when_create_backup_action_then_action_fails(
         self,
         patch_upload_content,
@@ -1000,49 +1002,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_create_backup_action(event)
         event.fail.assert_called_with(message="Failed to upload backup to S3 bucket.")
 
+    @patch(f"{S3_LIB_PATH}.S3.create_bucket")
+    @patch(f"{S3_LIB_PATH}.S3.upload_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.create_bucket")
-    @patch("s3_session.S3.upload_content")
-    def test_given_s3_content_upload_raises_connect_timeout_error_when_create_backup_action_then_action_fails(
-        self,
-        patch_upload_content,
-        patch_create_bucket,
-        patch_get_s3_connection_info,
-        mock_vault_class,
-    ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": True,
-                "is_initialized.return_value": True,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        patch_create_bucket.return_value = True
-        patch_upload_content.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
-        self._set_peer_relation()
-        self._set_ca_certificate_secret(
-            certificate="whatever certificate",
-            private_key="whatever private key",
-        )
-        self._set_approle_secret(
-            role_id="root token content",
-            secret_id="whatever secret id",
-        )
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        event = Mock()
-        self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
-
-    @patch("s3_session.S3.create_bucket")
-    @patch("s3_session.S3.upload_content")
-    @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_content_uploaded_to_s3_when_create_backup_action_then_action_succeeds(
         self,
         patch_get_s3_connection_info,
@@ -1083,9 +1046,9 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         event = Mock()
         self.harness.charm._on_list_backups_action(event)
-        event.fail.assert_called_with(message="S3 relation not created. Failed to list backups.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. S3 relation not created.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_unit_not_leader_when_list_backups_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1094,9 +1057,9 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_list_backups_action(event)
-        event.fail.assert_called_with(message="Only leader unit can list backups.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. Only leader unit can perform backup operations.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_list_backups_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1108,9 +1071,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_list_backups_action(event)
         event.fail.assert_called_once()
         call_args = event.fail.call_args[1]["message"]
-        self.assertIn("S3 parameters missing.", call_args)
+        self.assertIn("S3 parameters missing", call_args)
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_s3_session_not_created_when_list_backups_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1127,45 +1090,24 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_list_backups_action(event)
         event.fail.assert_called_with(message="Failed to create S3 session.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_object_key_list")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.get_object_key_list")
     def test_given_get_object_list_raises_an_exception_when_list_backups_action_then_action_fails(
         self,
         patch_get_object_key_list,
         patch_get_s3_connection_info,
     ):
-        patch_get_object_key_list.side_effect = ClientError(
-            operation_name="Error",
-            error_response={"Error": {"Message": "Random bucket related error message"}},
-        )
+        patch_get_object_key_list.side_effect = S3Error("Error listing objects")
 
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
         self.harness.set_leader(is_leader=True)
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_list_backups_action(event)
-        event.fail.assert_called_with(message="Failed to list backups.")
+        event.fail.assert_called_with(message="Failed to run list-backups action - Failed to list backups.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_object_key_list")
-    def test_given_get_object_list_raises_connect_timeout_error_when_list_backups_action_then_action_fails(
-        self,
-        patch_get_object_key_list,
-        patch_get_s3_connection_info,
-    ):
-        patch_get_object_key_list.side_effect = ConnectTimeoutError(
-            endpoint_url="http://example.com"
-        )
-
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        event = Mock()
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.charm._on_list_backups_action(event)
-        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
-
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_object_key_list")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.get_object_key_list")
     def test_given_backups_in_s3_when_list_backups_action_then_action_succeeds_with_backup_list(
         self,
         patch_get_object_key_list,
@@ -1184,9 +1126,9 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         event = Mock()
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="S3 relation not created. Failed to restore backup.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. S3 relation not created.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_unit_not_leader_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1195,9 +1137,9 @@ class TestCharm(unittest.TestCase):
         event = Mock()
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Only leader unit can restore backups.")
+        event.fail.assert_called_with(message="S3 pre-requisites not met. Only leader unit can perform backup operations.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1209,9 +1151,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_once()
         call_args = event.fail.call_args[1]["message"]
-        self.assertIn("S3 parameters missing.", call_args)
+        self.assertIn("S3 parameters missing", call_args)
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_s3_session_not_created_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1228,17 +1170,14 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to create S3 session.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_content")
-    def test_given_get_content_raises_clienterror_when_restore_backup_action_then_action_fails(
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
+    def test_given_get_content_raises_s3error_when_restore_backup_action_then_action_fails(
         self,
         patch_get_content,
         patch_get_s3_connection_info,
     ):
-        patch_get_content.side_effect = ClientError(
-            operation_name="Error",
-            error_response={"Error": {"Message": "Random bucket related error message"}},
-        )
+        patch_get_content.side_effect = S3Error("Random bucket related error message")
 
         patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
         event = Mock()
@@ -1247,40 +1186,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to retrieve snapshot from S3 storage.")
 
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_content")
-    def test_given_get_content_raises_botocoreerror_when_restore_backup_action_then_action_fails(
-        self,
-        patch_get_content,
-        patch_get_s3_connection_info,
-    ):
-        patch_get_content.side_effect = BotoCoreError()
-
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        event = Mock()
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Failed to retrieve snapshot from S3 storage.")
-
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
-    @patch("s3_session.S3.get_content")
-    def test_given_get_content_raises_connect_timeout_error_when_restore_backup_action_then_action_fails(
-        self,
-        patch_get_content,
-        patch_get_s3_connection_info,
-    ):
-        patch_get_content.side_effect = ConnectTimeoutError(endpoint_url="http://example.com")
-        patch_get_s3_connection_info.return_value = self.get_valid_s3_params()
-        event = Mock()
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
-        self.harness.charm._on_restore_backup_action(event)
-        event.fail.assert_called_with(message="Timeout trying to connect to S3 endpoint.")
-
-    @patch("s3_session.S3.get_content")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_not_initialized_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1310,9 +1218,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("s3_session.S3.get_content")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_api_not_available_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1344,9 +1252,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("s3_session.S3.get_content")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_initialization_secret_not_available_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1378,9 +1286,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("s3_session.S3.get_content")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_restoring_snapshot_fails_when_restore_backup_action_then_action_fails(
         self,
         patch_get_s3_connection_info,
@@ -1420,9 +1328,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._on_restore_backup_action(event)
         event.fail.assert_called_with(message="Failed to restore vault.")
 
-    @patch("s3_session.S3.get_content")
+    @patch(f"{S3_LIB_PATH}.S3.get_content")
     @patch("charm.Vault", autospec=True)
-    @patch(f"{S3_LIB_PATH}.S3Requirer.get_s3_connection_info")
+    @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_vault_snapshot_is_restored_when_restore_backup_action_then_action_succeeds(
         self,
         patch_get_s3_connection_info,

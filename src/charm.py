@@ -14,7 +14,6 @@ import socket
 from typing import IO, Dict, List, Optional, Tuple, cast
 
 import hcl
-from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -40,6 +39,7 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
+from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from container import Container
 from cryptography import x509
@@ -65,7 +65,6 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
-from s3_session import S3
 
 logger = logging.getLogger(__name__)
 
@@ -568,18 +567,12 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        if not self.unit.is_leader():
-            logger.error("Only leader unit can perform backup operations.")
-            event.fail(message="Only leader unit can perform backup operations.")
+        s3_pre_requisites_err = self._check_s3_pre_requisites()
+        if s3_pre_requisites_err:
+            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
             return
 
-        s3_requirements, error_message = self._check_s3_requirements()
-        if not s3_requirements:
-            logger.error(error_message)
-            event.fail(message=f"{error_message} Failed to perform backup.")
-            return
-
-        s3_parameters = self._retrieve_s3_parameters()
+        s3_parameters = self._get_s3_parameters()
 
         try:
             s3 = S3(
@@ -588,41 +581,31 @@ class VaultCharm(CharmBase):
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
             )
-        except (BotoCoreError, ClientError, ValueError) as e:
-            logger.error("Failed to create S3 session: %s", e)
+        except S3Error:
             event.fail(message="Failed to create S3 session.")
+            logger.error("Failed to run create-backup action - Failed to create S3 session.")
             return
 
-        try:
-            if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-                logger.error("Failed to create S3 bucket")
-                event.fail(message="Failed to create S3 bucket.")
-                return
-        except ConnectTimeoutError as e:
-            logger.error("Failed to create S3 bucket: %s", e)
-            event.fail(message="Timeout trying to connect to S3 endpoint.")
-            return
-
-        snapshot = self._create_raft_snapshot()
-        if not snapshot:
-            logger.error("Failed to create raft snapshot")
-            event.fail(message="Failed to create raft snapshot.")
+        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+            event.fail(message="Failed to create S3 bucket.")
+            logger.error("Failed to run create-backup action - Failed to create S3 bucket.")
             return
         backup_key = self._get_backup_key()
-        try:
-            content_uploaded = s3.upload_content(
-                content=snapshot,
-                bucket_name=s3_parameters["bucket"],
-                key=backup_key,
-            )
-        except ConnectTimeoutError as e:
-            logger.error("Failed to upload backup to S3 bucket: %s", e)
-            event.fail(message="Timeout trying to connect to S3 endpoint.")
+        vault = self._get_active_vault_client()
+        if not vault:
+            event.fail(message="Failed to initialize Vault client.")
+            logger.error("Failed to run create-backup action - Failed to initialize Vault client.")
             return
 
+        response = vault.create_snapshot()
+        content_uploaded = s3.upload_content(
+            content=response.raw,
+            bucket_name=s3_parameters["bucket"],
+            key=backup_key,
+        )
         if not content_uploaded:
-            logger.error("Failed to upload backup to S3 bucket")
             event.fail(message="Failed to upload backup to S3 bucket.")
+            logger.error("Failed to run create-backup action - Failed to upload backup to S3 bucket.")
             return
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
@@ -635,18 +618,12 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        if not self.unit.is_leader():
-            logger.error("Only leader unit can list backups.")
-            event.fail(message="Only leader unit can list backups.")
+        s3_pre_requisites_err = self._check_s3_pre_requisites()
+        if s3_pre_requisites_err:
+            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
             return
 
-        s3_requirements, error_message = self._check_s3_requirements()
-        if not s3_requirements:
-            logger.error(error_message)
-            event.fail(message=f"{error_message} Failed to list backups.")
-            return
-
-        s3_parameters = self._retrieve_s3_parameters()
+        s3_parameters = self._get_s3_parameters()
 
         try:
             s3 = S3(
@@ -655,26 +632,23 @@ class VaultCharm(CharmBase):
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
             )
-        except (BotoCoreError, ClientError, ValueError) as e:
-            logger.error("Failed to create S3 session: %s", e)
+        except S3Error as e:
             event.fail(message="Failed to create S3 session.")
+            logger.error("Failed to run list-backups action - %s", e)
             return
 
         try:
             backup_ids = s3.get_object_key_list(
                 bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
             )
-        except ConnectTimeoutError as e:
+        except S3Error as e:
             logger.error("Failed to list backups: %s", e)
-            event.fail(message="Timeout trying to connect to S3 endpoint.")
+            event.fail(message="Failed to run list-backups action - Failed to list backups.")
             return
-        except (BotoCoreError, ClientError) as e:
-            logger.error("Failed to list backups: %s", e)
-            event.fail(message="Failed to list backups.")
-            return
+
         event.set_results({"backup-ids": json.dumps(backup_ids)})
 
-    def _on_restore_backup_action(self, event: ActionEvent) -> None:  # noqa: C901
+    def _on_restore_backup_action(self, event: ActionEvent) -> None:
         """Handle the restore-backup action.
 
         Restores the snapshot with the provided ID.
@@ -682,19 +656,12 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        if not self.unit.is_leader():
-            logger.error("Only leader unit can restore backups.")
-            event.fail(message="Only leader unit can restore backups.")
+        s3_pre_requisites_err = self._check_s3_pre_requisites()
+        if s3_pre_requisites_err:
+            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
             return
 
-        s3_requirements, error_message = self._check_s3_requirements()
-        if not s3_requirements:
-            logger.error(error_message)
-            event.fail(message=f"{error_message} Failed to restore backup.")
-            return
-
-        s3_parameters = self._retrieve_s3_parameters()
-
+        s3_parameters = self._get_s3_parameters()
         try:
             s3 = S3(
                 access_key=s3_parameters["access-key"],
@@ -702,21 +669,16 @@ class VaultCharm(CharmBase):
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
             )
-        except (BotoCoreError, ClientError, ValueError) as e:
+        except S3Error as e:
             logger.error("Failed to create S3 session: %s", e)
             event.fail(message="Failed to create S3 session.")
             return
-
         try:
             snapshot = s3.get_content(
                 bucket_name=s3_parameters["bucket"],
-                object_key=event.params.get("backup-id"),  # type: ignore[arg-type]
+                object_key=event.params.get("backup-id"),  # type: ignore[reportArgumentType]
             )
-        except ConnectTimeoutError as e:
-            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
-            event.fail(message="Timeout trying to connect to S3 endpoint.")
-            return
-        except (BotoCoreError, ClientError) as e:
+        except S3Error as e:
             logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
             event.fail(message="Failed to retrieve snapshot from S3 storage.")
             return
@@ -733,7 +695,6 @@ class VaultCharm(CharmBase):
             logger.error("Failed to restore vault: %s", e)
             event.fail(message="Failed to restore vault.")
             return
-
         try:
             if self._approle_secret_set():
                 role_id, secret_id = self._get_approle_auth_secret()
@@ -749,23 +710,29 @@ class VaultCharm(CharmBase):
 
         event.set_results({"restored": event.params.get("backup-id")})
 
-    def _check_s3_requirements(self) -> Tuple[bool, Optional[str]]:
-        """Validate the requirements for creating S3.
+    def _get_s3_parameters(self) -> Dict[str, str]:
+        """Retrieve S3 parameters from the S3 integrator relation.
 
-        It will check if the S3 relation is created
-            and if the required S3 parameters are set.
+        Removes leading and trailing whitespaces from the parameters.
 
         Returns:
-            bool: True if the requirements are met, False otherwise.
+            Dict[str, str]: Dictionary of the S3 parameters.
         """
+        s3_parameters = self.s3_requirer.get_s3_connection_info()
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+        return s3_parameters
+
+    def _check_s3_pre_requisites(self) -> Optional[str]:
+        """Check if the S3 pre-requisites are met."""
+        if not self.unit.is_leader():
+            return "Only leader unit can perform backup operations"
         if not self._is_relation_created(S3_RELATION_NAME):
-            return False, "S3 relation not created."
-
-        missing_parameters = self._get_missing_s3_parameters()
-        if missing_parameters:
-            return False, f"S3 parameters missing. {missing_parameters}"
-
-        return True, None
+            return "S3 relation not created"
+        if missing_parameters:= self._get_missing_s3_parameters():
+            return "S3 parameters missing ({}):".format(", ".join(missing_parameters))
+        return None
 
     def _get_backup_key(self) -> str:
         """Return the backup key.
@@ -1062,21 +1029,6 @@ class VaultCharm(CharmBase):
         """
         s3_parameters = self.s3_requirer.get_s3_connection_info()
         return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
-
-    def _retrieve_s3_parameters(self) -> Dict[str, str]:
-        """Retrieve S3 parameters from the S3 integrator relation.
-
-        Removes leading and trailing whitespaces from the parameters.
-
-        Returns:
-            Dict[str, str]: Dictionary of the S3 parameters.
-        """
-        s3_parameters = self.s3_requirer.get_s3_connection_info()
-        for key, value in s3_parameters.items():
-            if isinstance(value, str):
-                s3_parameters[key] = value.strip()
-
-        return s3_parameters
 
     def _is_peer_relation_created(self) -> bool:
         """Check if the peer relation is created."""
