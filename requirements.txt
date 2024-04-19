@@ -12,11 +12,11 @@ attrs==23.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.34.86
+boto3==1.34.87
     # via -r requirements.in
 boto3-stubs[s3]==1.34.85
     # via -r requirements.in
-botocore==1.34.86
+botocore==1.34.87
     # via
     #   boto3
     #   s3transfer
