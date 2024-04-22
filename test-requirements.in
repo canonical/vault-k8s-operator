@@ -5,6 +5,4 @@ pyright
 pytest
 pytest-operator
 ruff
-types-boto3
-boto3-stubs[s3]
 types-hvac

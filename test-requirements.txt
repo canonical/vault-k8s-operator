@@ -8,12 +8,6 @@ asttokens==2.4.1
     # via stack-data
 bcrypt==4.1.2
     # via paramiko
-boto3-stubs[s3]==1.34.88
-    # via
-    #   -r test-requirements.in
-    #   types-boto3
-botocore-stubs==1.34.88
-    # via boto3-stubs
 cachetools==5.3.3
     # via google-auth
 certifi==2024.2.2
@@ -82,8 +76,6 @@ markupsafe==2.1.5
     #   jinja2
 matplotlib-inline==0.1.7
     # via ipython
-mypy-boto3-s3==1.34.65
-    # via boto3-stubs
 mypy-extensions==1.0.0
     # via typing-inspect
 nodeenv==1.8.0
@@ -192,22 +184,14 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
-types-awscrt==0.20.9
-    # via botocore-stubs
-types-boto3==1.0.2
-    # via -r test-requirements.in
 types-hvac==2.1.0.20240329
     # via -r test-requirements.in
 types-requests==2.31.0.20240406
     # via types-hvac
-types-s3transfer==0.10.1
-    # via boto3-stubs
 typing-extensions==4.11.0
     # via
     #   -c requirements.txt
-    #   boto3-stubs
     #   ipython
-    #   mypy-boto3-s3
     #   typing-inspect
 typing-inspect==0.9.0
     # via juju
