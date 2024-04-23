@@ -34,22 +34,20 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 
-logger = logging.getLogger(__name__)
+class LogAdapter(logging.LoggerAdapter):
+    """Adapter for the logger to prepend a prefix to all log lines."""
 
-
-class TLSAdapter(logging.LoggerAdapter):
-    """Adapter for the logger to prepend TLS to all log lines."""
+    prefix = "vault_tls"
 
     def process(self, msg, kwargs):
         """Decides the format for the prepended text."""
-        return f"[TLS] {msg}", kwargs
+        return f"[{self.prefix}] {msg}", kwargs
 
 
-tls_logger = TLSAdapter(logger, {})
-
+logger = LogAdapter(logging.getLogger(__name__), {})
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
@@ -185,12 +183,12 @@ class VaultTLSManager(Object):
             if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 self._set_ca_certificate_secret(ca_private_key, ca_certificate)
-                tls_logger.info("Saved the Vault generated CA cert in juju secrets.")
+                logger.info("Saved the Vault generated CA cert in juju secrets.")
             if (not self.tls_file_pushed_to_workload(File.CA)) or (
                 not self.tls_file_pushed_to_workload(File.CERT)
             ):
                 self._generate_self_signed_certs(subject_ip)
-                tls_logger.info(
+                logger.info(
                     "Saved Vault generated CA and self signed certificate to %s.",
                     self.charm.unit.name,
                 )
@@ -201,12 +199,12 @@ class VaultTLSManager(Object):
             self._send_new_certificate_request_to_provider(
                 self.pull_tls_file_from_workload(File.CSR), subject_ip
             )
-            tls_logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
+            logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
         existing_csr = self.pull_tls_file_from_workload(File.CSR)
         signed_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
         if signed_cert and signed_cert.certificate != self.pull_tls_file_from_workload(File.CERT):
             self._push_tls_file_to_workload(File.CERT, signed_cert.certificate)
-            tls_logger.info(
+            logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
@@ -223,11 +221,11 @@ class VaultTLSManager(Object):
                 self.certificate_transfer.set_certificate(
                     certificate="", ca=ca, chain=[], relation_id=relation.id
                 )
-            tls_logger.info("Sent CA certificate to other relations")
+            logger.info("Sent CA certificate to other relations")
         else:
             for relation in self.charm.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
                 self.certificate_transfer.remove_certificate(relation.id)
-            tls_logger.info("Removed CA cert from relations")
+            logger.info("Removed CA cert from relations")
 
     def _generate_self_signed_certs(self, subject_ip: str) -> None:
         """Recreate a unit certificate from the Vault CA certificate, then saves it.
@@ -364,7 +362,7 @@ class VaultTLSManager(Object):
         }
         if not self.ca_certificate_secret_exists():
             self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            tls_logger.debug("Vault CA certificate secret set")
+            logger.debug("Vault CA certificate secret set")
             return
         secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
         secret.set_content(juju_secret_content)
@@ -388,7 +386,7 @@ class VaultTLSManager(Object):
         self._remove_tls_file_from_workload(File.CA)
         self._remove_tls_file_from_workload(File.CERT)
         self._remove_tls_file_from_workload(File.CSR)
-        tls_logger.debug("Removed existing certificate files from workload.")
+        logger.debug("Removed existing certificate files from workload.")
 
     def _reload_vault(self) -> None:
         """Send a SIGHUP signal to the process running Vault.
@@ -397,17 +395,17 @@ class VaultTLSManager(Object):
         """
         try:
             self.workload.send_signal(signal=SIGHUP, process=self._service_name)
-            tls_logger.debug("Vault reload requested")
+            logger.debug("Vault reload requested")
         except Exception:
-            tls_logger.debug("Couldn't send signal to process. Proceeding normally.")
+            logger.debug("Couldn't send signal to process. Proceeding normally.")
 
     def _restart_vault(self) -> None:
         """Attempt to restart the Vault server."""
         try:
             self.workload.restart(self._service_name)
-            tls_logger.debug("Vault restarted")
+            logger.debug("Vault restarted")
         except Exception:
-            tls_logger.debug("Couldn't restart Vault. Proceeding normally.")
+            logger.debug("Couldn't restart Vault. Proceeding normally.")
 
     def pull_tls_file_from_workload(self, file: File) -> str:
         """Get a file related to certs from the workload.
@@ -435,7 +433,7 @@ class VaultTLSManager(Object):
             data: the data to write into that file.
         """
         self.workload.push(path=f"{self.tls_directory_path}/{file.name.lower()}.pem", source=data)
-        tls_logger.debug("Pushed %s file to workload", file.name)
+        logger.debug("Pushed %s file to workload", file.name)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
         """Remove the certificate files that are used for authentication.
@@ -447,7 +445,7 @@ class VaultTLSManager(Object):
             self.workload.remove_path(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
         except PathError:
             pass
-        tls_logger.debug("Removed %s file from workload.", file.name)
+        logger.debug("Removed %s file from workload.", file.name)
 
     def tls_file_pushed_to_workload(self, file: File) -> bool:
         """Return whether tls file is pushed to the workload.

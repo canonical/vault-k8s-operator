@@ -26,11 +26,23 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 
-logger = logging.getLogger(__name__)
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
+
+
+class LogAdapter(logging.LoggerAdapter):
+    """Adapter for the logger to prepend a prefix to all log lines."""
+
+    prefix = "vault_client"
+
+    def process(self, msg, kwargs):
+        """Decides the format for the prepended text."""
+        return f"[{self.prefix}] {msg}", kwargs
+
+
+logger = LogAdapter(logging.getLogger(__name__), {})
 
 
 @dataclass
