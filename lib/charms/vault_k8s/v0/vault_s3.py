@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
@@ -14,7 +13,6 @@ Add the following dependencies to the charm's requirements.txt file:
     ```
 
 """
-
 
 import logging
 from typing import IO, List, Optional, cast
@@ -35,10 +33,20 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
-logger = logging.getLogger(__name__)
+class LogAdapter(logging.LoggerAdapter):
+    """Adapter for the logger to prepend a prefix to all log lines."""
+
+    prefix = "vault_s3"
+
+    def process(self, msg, kwargs):
+        """Decides the format for the prepended text."""
+        return f"[{self.prefix}] {msg}", kwargs
+
+
+logger = LogAdapter(logging.getLogger(__name__), {})
 
 AWS_DEFAULT_REGION = "us-east-1"
 
@@ -47,6 +55,7 @@ class S3Error(Exception):
     """Base class for S3 errors."""
 
     pass
+
 
 class S3:
     """A class representing an S3 session allowing S3 operations."""
@@ -94,7 +103,6 @@ class S3:
             return True
         return self._create_bucket(bucket=bucket)
 
-
     def _bucket_exists(self, bucket: Bucket) -> bool:
         """Return whether the bucket exists."""
         try:
@@ -125,7 +133,6 @@ class S3:
                 error,
             )
             return False
-
 
     def upload_content(
         self,
