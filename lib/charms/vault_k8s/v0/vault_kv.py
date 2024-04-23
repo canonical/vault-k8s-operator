@@ -124,9 +124,6 @@ import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, Json, ValidationError
 
-logger = logging.getLogger(__name__)
-
-
 # The unique Charmhub library identifier, never change it
 LIBID = "591d6d2fb6a54853b4bb53ef16ef603a"
 
@@ -135,9 +132,22 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
+
+
+class LogAdapter(logging.LoggerAdapter):
+    """Adapter for the logger to prepend a prefix to all log lines."""
+
+    prefix = "vault_kv"
+
+    def process(self, msg, kwargs):
+        """Decides the format for the prepended text."""
+        return f"[{self.prefix}] {msg}", kwargs
+
+
+logger = LogAdapter(logging.getLogger(__name__), {})
 
 
 class VaultKvProviderSchema(BaseModel):
