@@ -33,7 +33,7 @@ from charms.vault_k8s.v0.vault_client import (
 )
 from charms.vault_k8s.v0.vault_s3 import S3Error
 from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, VaultTLSManager
-from ops import testing
+from ops import pebble, testing
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 S3_RELATION_LIB_PATH = "charms.data_platform_libs.v0.s3"
@@ -733,11 +733,15 @@ class TestCharm(unittest.TestCase):
         mock_vault.remove_raft_node.assert_not_called()
 
     @patch("charm.Vault", autospec=True)
-    @patch("ops.model.Container.get_service", new=Mock)
+    @patch(
+        "ops.model.Container.get_service",
+        return_value=Mock(spec=pebble.ServiceInfo, **{"is_running.return_value": True}),
+    )
     @patch("ops.model.Container.stop")
     def test_given_service_is_running_when_on_remove_then_service_is_stopped(
         self,
         patch_stop_service,
+        patch_get_service,
         mock_vault_class,
     ):
         mock_vault = MagicMock(
@@ -767,13 +771,17 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("create-backup")
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 relation not created.")
+        self.assertEqual(
+            context.exception.message, "S3 pre-requisites not met. S3 relation not created."
+        )
 
     def test_given_unit_not_leader_when_create_backup_action_then_action_fails(self):
         self.harness.add_relation(relation_name=S3_RELATION_NAME, remote_app="s3-integrator")
         event = Mock()
         self.harness.charm._on_create_backup_action(event)
-        event.fail.assert_called_with(message="S3 pre-requisites not met. Only leader unit can perform backup operations.")
+        event.fail.assert_called_with(
+            message="S3 pre-requisites not met. Only leader unit can perform backup operations."
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_create_backup_action_then_action_fails(
@@ -787,7 +795,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("create-backup")
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.")
+        self.assertEqual(
+            context.exception.message,
+            "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_s3_session_not_created_when_create_backup_action_then_action_fails(
@@ -1068,7 +1079,9 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("list-backups")
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 relation not created.")
+        self.assertEqual(
+            context.exception.message, "S3 pre-requisites not met. S3 relation not created."
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_unit_not_leader_when_list_backups_action_then_action_fails(
@@ -1081,7 +1094,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("list-backups")
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. Only leader unit can perform backup operations.")
+        self.assertEqual(
+            context.exception.message,
+            "S3 pre-requisites not met. Only leader unit can perform backup operations.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_list_backups_action_then_action_fails(
@@ -1095,7 +1111,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("list-backups")
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.")
+        self.assertEqual(
+            context.exception.message,
+            "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_s3_session_not_created_when_list_backups_action_then_action_fails(
@@ -1132,7 +1151,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("list-backups")
 
-        self.assertEqual(context.exception.message, "Failed to run list-backups action - Failed to list backups.")
+        self.assertEqual(
+            context.exception.message,
+            "Failed to run list-backups action - Failed to list backups.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     @patch(f"{S3_LIB_PATH}.S3.get_object_key_list")
@@ -1157,7 +1179,9 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("restore-backup", params={"backup-id": "12345"})
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 relation not created.")
+        self.assertEqual(
+            context.exception.message, "S3 pre-requisites not met. S3 relation not created."
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_unit_not_leader_when_restore_backup_action_then_action_fails(
@@ -1170,7 +1194,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("restore-backup", params={"backup-id": "12345"})
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. Only leader unit can perform backup operations.")
+        self.assertEqual(
+            context.exception.message,
+            "S3 pre-requisites not met. Only leader unit can perform backup operations.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_missing_s3_parameters_when_restore_backup_action_then_action_fails(
@@ -1184,7 +1211,10 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as context:
             self.harness.run_action("restore-backup", params={"backup-id": "12345"})
 
-        self.assertEqual(context.exception.message, "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.")
+        self.assertEqual(
+            context.exception.message,
+            "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):.",
+        )
 
     @patch(f"{S3_RELATION_LIB_PATH}.S3Requirer.get_s3_connection_info")
     def test_given_s3_session_not_created_when_restore_backup_action_then_action_fails(

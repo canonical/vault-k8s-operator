@@ -605,7 +605,9 @@ class VaultCharm(CharmBase):
         )
         if not content_uploaded:
             event.fail(message="Failed to upload backup to S3 bucket.")
-            logger.error("Failed to run create-backup action - Failed to upload backup to S3 bucket.")
+            logger.error(
+                "Failed to run create-backup action - Failed to upload backup to S3 bucket."
+            )
             return
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
@@ -730,7 +732,7 @@ class VaultCharm(CharmBase):
             return "Only leader unit can perform backup operations"
         if not self._is_relation_created(S3_RELATION_NAME):
             return "S3 relation not created"
-        if missing_parameters:= self._get_missing_s3_parameters():
+        if missing_parameters := self._get_missing_s3_parameters():
             return "S3 parameters missing ({}):".format(", ".join(missing_parameters))
         return None
 
@@ -895,10 +897,9 @@ class VaultCharm(CharmBase):
     def _vault_service_is_running(self) -> bool:
         """Check if the vault service is running."""
         try:
-            self._container.get_service(service_name=self._service_name)
+            return self._container.get_service(service_name=self._service_name).is_running()
         except ModelError:
             return False
-        return True
 
     def _get_relation_api_address(self, relation: Relation) -> Optional[str]:
         """Fetch the api address from relation and returns it.
