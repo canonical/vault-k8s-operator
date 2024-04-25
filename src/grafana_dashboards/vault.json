@@ -20,7 +20,6 @@
     "fiscalYearStartMonth": 0,
     "gnetId": 12904,
     "graphTooltip": 1,
-    "id": 12,
     "links": [],
     "liveNow": false,
     "panels": [
@@ -105,7 +104,7 @@
                         "uid": "${prometheusds}"
                     },
                     "editorMode": "builder",
-                    "expr": "max(vault_autopilot_healthy{juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"})",
+                    "expr": "max(vault_autopilot_healthy{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "hide": false,
                     "legendFormat": "__auto",
                     "range": true,
@@ -258,7 +257,7 @@
                         "uid": "${prometheusds}"
                     },
                     "editorMode": "builder",
-                    "expr": "max(vault_raft_peers{juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"})",
+                    "expr": "max(vault_raft_peers{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "range": true,
                     "refId": "A"
                 }
@@ -332,7 +331,7 @@
                         "uid": "${prometheusds}"
                     },
                     "editorMode": "builder",
-                    "expr": "max(vault_autopilot_failure_tolerance{juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"})",
+                    "expr": "max(vault_autopilot_failure_tolerance{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "range": true,
                     "refId": "A"
                 }
@@ -565,7 +564,7 @@
                         "uid": "${prometheusds}"
                     },
                     "editorMode": "builder",
-                    "expr": "max(vault_charm_pki_sign_count{juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"})",
+                    "expr": "max(vault_charm_pki_sign_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "legendFormat": "__auto",
                     "range": true,
                     "refId": "A"
@@ -642,7 +641,7 @@
                         "uid": "${prometheusds}"
                     },
                     "editorMode": "builder",
-                    "expr": "max(vault_token_count{juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"})",
+                    "expr": "max(vault_token_count{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
                     "legendFormat": "__auto",
                     "range": true,
                     "refId": "A"
@@ -858,6 +857,95 @@
             ],
             "title": "Allocated Bytes",
             "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 28
+            },
+            "id": 96,
+            "panels": [],
+            "title": "Audit Logs",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "PCFE195BA03E127CE"
+            },
+            "description": "",
+            "gridPos": {
+                "h": 8,
+                "w": 11,
+                "x": 0,
+                "y": 29
+            },
+            "id": 93,
+            "links": [],
+            "options": {
+                "dedupStrategy": "none",
+                "enableLogDetails": true,
+                "prettifyLogMessage": false,
+                "showCommonLabels": false,
+                "showLabels": false,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": false
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "loki",
+                        "uid": "PCFE195BA03E127CE"
+                    },
+                    "editorMode": "code",
+                    "expr": "{charm=\"vault-k8s\"} | json | type = `response` or type = `request`",
+                    "queryType": "range",
+                    "refId": "A"
+                }
+            ],
+            "title": "All Vault Logs",
+            "type": "logs"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "PCFE195BA03E127CE"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 13,
+                "x": 11,
+                "y": 29
+            },
+            "id": 95,
+            "options": {
+                "dedupStrategy": "none",
+                "enableLogDetails": true,
+                "prettifyLogMessage": false,
+                "showCommonLabels": false,
+                "showLabels": false,
+                "showTime": false,
+                "sortOrder": "Descending",
+                "wrapLogMessage": false
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "loki",
+                        "uid": "PCFE195BA03E127CE"
+                    },
+                    "editorMode": "code",
+                    "expr": "{charm=\"vault-k8s\"} | json | __error__=`` | request_path != `auth/approle/login`\n",
+                    "queryType": "range",
+                    "refId": "A"
+                }
+            ],
+            "title": "Logs excluding login requests",
+            "type": "logs"
         }
     ],
     "refresh": "",
@@ -1079,6 +1167,6 @@
     "timezone": "",
     "title": "Vault",
     "uid": "vaults",
-    "version": 4,
+    "version": 1,
     "weekStart": ""
 }
