@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 """Library for the vault-autounseal relation.
 
 This library contains the Requires and Provides classes for handling the
@@ -229,13 +233,6 @@ class VaultAutounsealProvides(ops.Object):
         if relation.app is None:
             raise ValueError("The `relation.app` is not set")
         relation.data[self.charm.app].update({"credentials_secret_id": token_secret_id})
-
-    def create_token_secret(self, token: str) -> str:
-        """Create a Juju secret with the token."""
-        secret = self.model.app.add_secret({"token": token})
-        if secret.id is None:
-            raise ValueError("The `secret.id` is not set")
-        return secret.id
 
     def set_ca_certificate(self, relation: ops.Relation, ca_certificate: str):
         """Set the ca_certificate on the relation."""
