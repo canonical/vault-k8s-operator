@@ -434,9 +434,6 @@ class Vault:
     def configure_transit_policy(self, mount: str, relation_id: int):
         """Create/update a policy within vault to use the transit key."""
         mount_policy = textwrap.dedent(f"""
-        path "auth/token/create" {{
-            capabilities = ["create", "update"]
-        }}
         path "{mount}/encrypt/{relation_id}" {{
             capabilities = ["update"]
         }}
@@ -476,8 +473,6 @@ class Vault:
         """
         self._client.auth.approle.create_or_update_approle(
             role_name=f"charm-autounseal-{relation_id}",
-            # token_ttl="60s",
-            # token_max_ttl="60s",
             token_policies=[f"charm-autounseal-{relation_id}"],
             token_period="60s",  # TODO: Should this be increased?
             bind_secret_id="true",

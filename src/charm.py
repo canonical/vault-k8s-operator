@@ -42,13 +42,14 @@ from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvP
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
 from charms.vault_k8s.v0.vault_transit import (
-    VaultTransitDetailsReadyEvent,
     VaultTransitEnableAutounseal,
     VaultTransitProvides,
     VaultTransitRequires,
+    is_provider_data_valid,
 )
 from container import Container
 from cryptography import x509
+from debug_da import RemoteDebuggerCharmBase
 from exceptions import VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
@@ -102,7 +103,7 @@ VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
 
 
-class VaultCharm(CharmBase):
+class VaultCharm(RemoteDebuggerCharmBase):
     """Main class to handle Juju events for the vault-k8s charm."""
 
     VAULT_PORT = 8200
@@ -181,18 +182,36 @@ class VaultCharm(CharmBase):
             self._configure,
         )
         self.framework.observe(
-            self.vault_transit_provides.on.vault_transit_enable_autounseal,
-            self._on_vault_transit_enable_autounseal,
+            self.vault_transit_provides.on.vault_transit_initialize_autounseal_autounseal,
+            self._on_vault_transit_initialize_autounseal,
+        )
+        self.framework.observe(
+            self.vault_transit_provides.on.vault_transit_destroy_autounseal,
+            self._on_vault_transit_destroy_autounseal,
         )
 
-    def _on_vault_transit_enable_autounseal(self, event: VaultTransitEnableAutounseal):
+    def _on_vault_transit_destroy_autounseal(self, event: VaultTransitEnableAutounseal):
         if not self.unit.is_leader():
             return
-        logger.info("Vault transit: get your engine started!: %s", event)
+
+        vault = self._get_active_vault_client()
+        if vault is None:
+            logger.warning("Vault is not active, cannot disable vault autounseal")
+            # TODO: Should this be deferred in case it is an intermittent issue?
+            return
+        # TODO: Delete the key from the transit backend
+        # TODO: Delete the policy and role associated with the autounsealed vault
+
+        # TODO: If this is the last autounseal relation, disable the transit backend
+
+    def _on_vault_transit_initialize_autounseal(self, event: VaultTransitEnableAutounseal):
+        if not self.unit.is_leader():
+            return
 
         vault = self._get_active_vault_client()
         if vault is None:
             logger.warning("Vault is not active, cannot enable vault transit engine")
+            # TODO: Should this be deferred in case it is an intermittent issue?
             return
 
         vault.enable_secrets_engine(SecretsBackend.TRANSIT, TRANSIT_MOUNT_PATH)
@@ -1046,6 +1065,10 @@ class VaultCharm(CharmBase):
         if not relation:
             logger.info("Transit relation not created, skipping transit stanza")
             return config_content
+        if not is_provider_data_valid(relation.data[relation.app]):
+            logger.warning("Transit relation data is not valid, skipping transit stanza")
+            return config_content
+
         transit_address = self.vault_transit_requires.get_vault_url(relation)
         if not transit_address:
             logger.info("Transit address not available, skipping transit stanza")

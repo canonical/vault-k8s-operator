@@ -3,6 +3,12 @@
 This library contains the Requires and Provides classes for handling the
 vault-transit interface.
 
+As of the current implementation, the provider side of the interface is
+responsible for enabling the vault transit engine and creating the necessary
+keys and policies for an external vault to be able to autounseal. The requirer
+side of the interface is responsible for retrieving the necessary details to
+autounseal the vault instance, and configuring the vault instance to use them.
+
 ## Getting Started
 
 From a charm directory, fetch the library using `charmcraft`:
@@ -26,8 +32,11 @@ the Vault transit backend.
 You can integrate both charms by running:
 
 ```bash
-juju integrate <vault provider charm> <vault requirer charm>
+juju integrate <vault a>:transit-provides <vault b>:transit-requires
 ```
+
+Where `vault a` is the Vault app which will provide the autounseal service, and
+`vault b` is the Vault app which will be configured for autounseal.
 """
 
 import logging
@@ -49,17 +58,30 @@ LIBAPI = 0
 LIBPATCH = 1
 
 
-logger = logging.getLogger(__name__)
+class LogAdapter(logging.LoggerAdapter):
+    """Adapter for the logger to prepend a prefix to all log lines."""
+
+    prefix = "vault_transit"
+
+    def process(self, msg, kwargs):
+        """Decides the format for the prepended text."""
+        return f"[{self.prefix}] {msg}", kwargs
+
+
+logger = LogAdapter(logging.getLogger(__name__), {})
 
 
 class VaultTransitProviderSchema(BaseModel):
     """Provider side of the vault-transit relation interface."""
 
     address: str = Field(description="The address of the Vault server to connect to.")
-    token_secret_id: str = Field(
+    credentials_secret_id: str = Field(
         description=(
-            "The secret id of the Juju secret which stores is token for authenticating with the Vault server."
+            "The secret id of the Juju secret which stores the credentials for authenticating with the Vault server."
         )
+    )
+    ca_certificate: str = Field(
+        description="The CA certificate to use when validating the Vault server's certificate."
     )
 
 
@@ -99,8 +121,8 @@ class VaultTransitDetailsReadyEvent(ops.EventBase):
         self.relation = relation
 
 
-class VaultTransitEnableAutounseal(ops.EventBase):
-    """Event emitted when the vault transit engine should be started."""
+class VaultTransitInitializeAutounseal(ops.EventBase):
+    """Event emitted when Vault autounseal should be initialized for a new application."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
         super().__init__(handle)
@@ -122,9 +144,35 @@ class VaultTransitEnableAutounseal(ops.EventBase):
         )
         if relation is None:
             raise ValueError(
-                "Unable to restore {}: relation {} (id={}) not found.".format(
-                    self, snapshot["relation_name"], snapshot["relation_id"]
-                )
+                f"Unable to restore {self}: relation {snapshot['relation_name']} (id={snapshot['relation_id']}) not found."
+            )
+        self.relation = relation
+
+
+class VaultTransitDestroyAutounseal(ops.EventBase):
+    """Event emitted when Vault autounseal configuration for a relation should be destroyed."""
+
+    def __init__(self, handle: ops.Handle, relation: model.Relation):
+        super().__init__(handle)
+        self.relation = relation
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Return snapshot data that should be persisted."""
+        return dict(
+            super().snapshot(),
+            relation_id=self.relation.id,
+            relation_name=self.relation.name,
+        )
+
+    def restore(self, snapshot: Dict[str, Any]) -> None:
+        """Restore the event from a snapshot."""
+        super().restore(snapshot)
+        relation = self.framework.model.get_relation(
+            snapshot["relation_name"], snapshot["relation_id"]
+        )
+        if relation is None:
+            raise ValueError(
+                f"Unable to restore {self}: relation {snapshot['relation_name']} (id={snapshot['relation_id']}) not found."
             )
         self.relation = relation
 
@@ -132,7 +180,8 @@ class VaultTransitEnableAutounseal(ops.EventBase):
 class VaultTransitProvidesEvents(ops.ObjectEvents):
     """Events raised by the vault-transit relation on the provider side."""
 
-    vault_transit_enable_autounseal = ops.EventSource(VaultTransitEnableAutounseal)
+    vault_transit_initialize_autounseal = ops.EventSource(VaultTransitInitializeAutounseal)
+    vault_transit_destroy_autounseal = ops.EventSource(VaultTransitDestroyAutounseal)
 
 
 class VaultTransitRequireEvents(ops.ObjectEvents):
@@ -162,14 +211,14 @@ class VaultTransitProvides(ops.Object):
         self.on.vault_transit_enable_autounseal.emit(relation=event.relation)
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
-        # TODO Delete the key from the transit backend
-
-        # TODO: Delete the policy from the transit backend
-        return
+        self.on.vault_transit_destroy_autounseal.emit(relation=event.relation)
 
     def set_vault_url(self, relation: ops.Relation, address: str) -> None:
         """Set the vault_url in the relation."""
         if not self.charm.unit.is_leader():
+            logger.warning(
+                "Attempting to set the vault url without being the leader. Ignoring the request."
+            )
             return
         relation.data[self.charm.app].update({"address": address})
 
@@ -205,7 +254,7 @@ def is_provider_data_valid(data: RelationDataContent) -> bool:
         ProviderSchema(app=VaultTransitProviderSchema(**data))
         return True
     except ValidationError as e:
-        logger.debug("Invalid data: %s", e)
+        logger.warning("Invalid data: %s", e)
         return False
 
 
@@ -219,17 +268,12 @@ class VaultTransitRequires(ops.Object):
         self.relation = relation_name
 
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
-        self.framework.observe(charm.on[relation_name].relation_broken, self._on_relation_broken)
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         if event.app is None:
             logger.debug("No remote application yet")
         if is_provider_data_valid(event.relation.data[event.app]):
             self.on.vault_transit_details_ready.emit(event.relation)
-
-    def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
-        # TODO: Seal the vault
-        return
 
     def get_vault_url(self, relation: ops.Relation) -> Optional[str]:
         """Return the vault_url from the relation."""
