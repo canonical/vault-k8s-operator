@@ -902,7 +902,7 @@
                         "uid": "${lokids}"
                     },
                     "editorMode": "code",
-                    "expr": "{charm=\"vault-k8s\"} | json | type = `response` or type = `request`",
+                    "expr": "{juju_application=~\"$juju_application\"} | json | __error__=`` | type = `request` or type = `response`",
                     "queryType": "range",
                     "refId": "A"
                 }
@@ -939,7 +939,7 @@
                         "uid": "${lokids}"
                     },
                     "editorMode": "code",
-                    "expr": "{charm=\"vault-k8s\"} | json | __error__=`` | request_path != `auth/approle/login`\n",
+                    "expr": "{juju_application=~\"$juju_application\"} | json | __error__=`` | request_path != `auth/approle/login`",
                     "queryType": "range",
                     "refId": "A"
                 }
@@ -993,29 +993,15 @@
                 "type": "datasource"
             },
             {
+                "allValue": "",
                 "current": {
-                    "selected": false,
-                    "text": "All",
-                    "value": "$__all"
-                },
-                "hide": 0,
-                "includeAll": true,
-                "label": "Loki data source",
-                "multi": true,
-                "name": "loki_datasource",
-                "options": [],
-                "query": "loki",
-                "refresh": 1,
-                "regex": "",
-                "skipUrlSync": false,
-                "type": "datasource"
-            },
-            {
-                "allValue": ".*",
-                "current": {
-                    "selected": false,
-                    "text": "All",
-                    "value": "$__all"
+                    "selected": true,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
                 },
                 "datasource": {
                     "uid": "${prometheusds}"
@@ -1029,7 +1015,7 @@
                 "options": [],
                 "query": {
                     "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
-                    "refId": "StandardVariableQuery"
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 2,
                 "regex": "",
@@ -1042,11 +1028,15 @@
                 "useTags": false
             },
             {
-                "allValue": ".*",
+                "allValue": "",
                 "current": {
-                    "selected": false,
-                    "text": "All",
-                    "value": "$__all"
+                    "selected": true,
+                    "text": [
+                        "All"
+                    ],
+                    "value": [
+                        "$__all"
+                    ]
                 },
                 "datasource": {
                     "uid": "${prometheusds}"
@@ -1060,7 +1050,7 @@
                 "options": [],
                 "query": {
                     "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
-                    "refId": "StandardVariableQuery"
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 2,
                 "regex": "",
@@ -1073,7 +1063,7 @@
                 "useTags": false
             },
             {
-                "allValue": ".*",
+                "allValue": "",
                 "current": {
                     "selected": false,
                     "text": "All",
@@ -1104,7 +1094,7 @@
                 "useTags": false
             },
             {
-                "allValue": ".*",
+                "allValue": "",
                 "current": {
                     "selected": false,
                     "text": "All",
