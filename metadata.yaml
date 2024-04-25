@@ -57,10 +57,10 @@ peers:
     interface: vault-peer
 
 provides:
+  vault-autounseal-provides:
+    interface: vault-autounseal
   vault-kv:
     interface: vault-kv
-  transit-provides:
-    interface: vault-transit
   vault-pki:
     interface: tls-certificates
   metrics-endpoint:
@@ -77,8 +77,8 @@ assumes:
   - k8s-api
 
 requires:
-  transit-requires:
-    interface: vault-transit
+  vault-autounseal-requires:
+    interface: vault-autounseal
   ingress:
     interface: ingress
     limit: 1

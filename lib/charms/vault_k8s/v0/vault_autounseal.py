@@ -1,20 +1,22 @@
-"""Library for the vault-transit relation.
+"""Library for the vault-autounseal relation.
 
 This library contains the Requires and Provides classes for handling the
-vault-transit interface.
+vault-autounseal interface.
 
-As of the current implementation, the provider side of the interface is
-responsible for enabling the vault transit engine and creating the necessary
-keys and policies for an external vault to be able to autounseal. The requirer
-side of the interface is responsible for retrieving the necessary details to
-autounseal the vault instance, and configuring the vault instance to use them.
+The provider side of the interface is responsible for enabling the vault
+transit engine and creating the necessary keys and policies for an external
+vault to be able to autounseal itself.
+
+The requirer side of the interface is responsible for retrieving the necessary
+details to autounseal the vault instance, and configuring the vault instance to
+use them.
 
 ## Getting Started
 
 From a charm directory, fetch the library using `charmcraft`:
 
 ```shell
-charmcraft fetch-lib charms.vault_k8s.v0.vault_transit
+charmcraft fetch-lib charms.vault_k8s.v0.vault_autounseal
 ```
 
 ### Provider charm
@@ -32,11 +34,11 @@ the Vault transit backend.
 You can integrate both charms by running:
 
 ```bash
-juju integrate <vault a>:transit-provides <vault b>:transit-requires
+juju integrate <vault a>:vault-autounseal-provides <vault b>:vault-autounseal-requires
 ```
 
-Where `vault a` is the Vault app which will provide the autounseal service, and
-`vault b` is the Vault app which will be configured for autounseal.
+where `vault a` is the Vault app which will provide the autounseal service, and
+`vault b` is the Vault app which will be configured for autounseal via `vault a`.
 """
 
 import logging
@@ -48,7 +50,7 @@ from ops import RelationDataContent, model  # type: ignore
 from pydantic import BaseModel, Field, ValidationError
 
 # The unique Charmhub library identifier, never change it
-LIBID = "1cf22afd77974266af15dec760fe956f"
+LIBID = "c33e0a12506444e2b644ac2893ac9394"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -61,7 +63,7 @@ LIBPATCH = 1
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
 
-    prefix = "vault_transit"
+    prefix = "vault_autounseal"
 
     def process(self, msg, kwargs):
         """Decides the format for the prepended text."""
@@ -71,8 +73,8 @@ class LogAdapter(logging.LoggerAdapter):
 logger = LogAdapter(logging.getLogger(__name__), {})
 
 
-class VaultTransitProviderSchema(BaseModel):
-    """Provider side of the vault-transit relation interface."""
+class VaultAutounsealProviderSchema(BaseModel):
+    """Provider side of the vault-autounseal relation interface."""
 
     address: str = Field(description="The address of the Vault server to connect to.")
     credentials_secret_id: str = Field(
@@ -88,11 +90,11 @@ class VaultTransitProviderSchema(BaseModel):
 class ProviderSchema(DataBagSchema):
     """The schema for the provider side of this interface."""
 
-    app: VaultTransitProviderSchema  # type: ignore
+    app: VaultAutounsealProviderSchema  # type: ignore
 
 
-class VaultTransitDetailsReadyEvent(ops.EventBase):
-    """Event emitted when the vault transit details are ready in the databag."""
+class VaultAutounsealDetailsReadyEvent(ops.EventBase):
+    """Event emitted when the vault autounseal details are ready in the databag."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
         super().__init__(handle)
@@ -121,7 +123,7 @@ class VaultTransitDetailsReadyEvent(ops.EventBase):
         self.relation = relation
 
 
-class VaultTransitInitializeAutounseal(ops.EventBase):
+class VaultAutounsealInitialize(ops.EventBase):
     """Event emitted when Vault autounseal should be initialized for a new application."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
@@ -149,7 +151,7 @@ class VaultTransitInitializeAutounseal(ops.EventBase):
         self.relation = relation
 
 
-class VaultTransitDestroyAutounseal(ops.EventBase):
+class VaultAutounsealDestroy(ops.EventBase):
     """Event emitted when Vault autounseal configuration for a relation should be destroyed."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
@@ -177,23 +179,23 @@ class VaultTransitDestroyAutounseal(ops.EventBase):
         self.relation = relation
 
 
-class VaultTransitProvidesEvents(ops.ObjectEvents):
-    """Events raised by the vault-transit relation on the provider side."""
+class VaultAutounsealProvidesEvents(ops.ObjectEvents):
+    """Events raised by the vault-autounseal relation on the provider side."""
 
-    vault_transit_initialize_autounseal = ops.EventSource(VaultTransitInitializeAutounseal)
-    vault_transit_destroy_autounseal = ops.EventSource(VaultTransitDestroyAutounseal)
-
-
-class VaultTransitRequireEvents(ops.ObjectEvents):
-    """Events raised by the vault-transit relation on the requirer side."""
-
-    vault_transit_details_ready = ops.EventSource(VaultTransitDetailsReadyEvent)
+    vault_autounseal_initialize = ops.EventSource(VaultAutounsealInitialize)
+    vault_autounseal_destroy = ops.EventSource(VaultAutounsealDestroy)
 
 
-class VaultTransitProvides(ops.Object):
-    """Manages the vault-transit relation from the provider side."""
+class VaultAutounsealRequireEvents(ops.ObjectEvents):
+    """Events raised by the vault-autounseal relation on the requirer side."""
 
-    on: VaultTransitProvidesEvents = VaultTransitProvidesEvents()  # type: ignore
+    vault_autounseal_details_ready = ops.EventSource(VaultAutounsealDetailsReadyEvent)
+
+
+class VaultAutounsealProvides(ops.Object):
+    """Manages the vault-autounseal relation from the provider side."""
+
+    on: VaultAutounsealProvidesEvents = VaultAutounsealProvidesEvents()  # type: ignore
 
     def __init__(self, charm: ops.CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
@@ -208,10 +210,10 @@ class VaultTransitProvides(ops.Object):
         )
 
     def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
-        self.on.vault_transit_enable_autounseal.emit(relation=event.relation)
+        self.on.vault_autounseal_initialize.emit(relation=event.relation)
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
-        self.on.vault_transit_destroy_autounseal.emit(relation=event.relation)
+        self.on.vault_autounseal_destroy.emit(relation=event.relation)
 
     def set_vault_url(self, relation: ops.Relation, address: str) -> None:
         """Set the vault_url in the relation."""
@@ -251,17 +253,17 @@ class VaultTransitProvides(ops.Object):
 def is_provider_data_valid(data: RelationDataContent) -> bool:
     """Return whether the provider data is valid."""
     try:
-        ProviderSchema(app=VaultTransitProviderSchema(**data))
+        ProviderSchema(app=VaultAutounsealProviderSchema(**data))
         return True
     except ValidationError as e:
         logger.warning("Invalid data: %s", e)
         return False
 
 
-class VaultTransitRequires(ops.Object):
-    """Manages the vault-transit relation from the requirer side."""
+class VaultAutounsealRequires(ops.Object):
+    """Manages the vault-autounseal relation from the requirer side."""
 
-    on: VaultTransitRequireEvents = VaultTransitRequireEvents()  # type: ignore
+    on: VaultAutounsealRequireEvents = VaultAutounsealRequireEvents()  # type: ignore
 
     def __init__(self, charm: ops.CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
@@ -273,7 +275,7 @@ class VaultTransitRequires(ops.Object):
         if event.app is None:
             logger.debug("No remote application yet")
         if is_provider_data_valid(event.relation.data[event.app]):
-            self.on.vault_transit_details_ready.emit(event.relation)
+            self.on.vault_autounseal_details_ready.emit(event.relation)
 
     def get_vault_url(self, relation: ops.Relation) -> Optional[str]:
         """Return the vault_url from the relation."""
@@ -297,7 +299,7 @@ class VaultTransitRequires(ops.Object):
         self, relation: ops.Relation
     ) -> tuple[str | None, str | None] | None:
         """Return the credentials from the relation."""
-        token_secret_id = VaultTransitRequires.get_credentials_secret_id(relation)
+        token_secret_id = VaultAutounsealRequires.get_credentials_secret_id(relation)
         return self.get_credentials(token_secret_id) if token_secret_id else None
 
     def get_ca_certificate(self, relation: ops.Relation) -> Optional[str]:

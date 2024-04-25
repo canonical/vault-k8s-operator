@@ -431,7 +431,7 @@ class Vault:
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
 
-    def configure_transit_policy(self, mount: str, relation_id: int):
+    def configure_autounseal_policy(self, mount: str, relation_id: int):
         """Create/update a policy within vault to use the transit key."""
         mount_policy = textwrap.dedent(f"""
         path "{mount}/encrypt/{relation_id}" {{
@@ -455,15 +455,8 @@ class Vault:
         )
         logging.debug(f"Created a new autounseal key: {response}")
 
-    def create_token(self):
-        """Create a token for the transit policy."""
-        response = self._client.auth.token.create(
-            ttl="15m",
-        )
-        return response["auth"]["client_token"]
-
-    def create_transit_autounseal_approle(self, relation_id: int) -> str:
-        """Create an approle for the transit policy.
+    def create_autounseal_approle(self, relation_id: int) -> str:
+        """Create an approle for the autounseal policy.
 
         Args:
             relation_id: The Juju relation id to use for the approle.

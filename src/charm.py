@@ -30,6 +30,13 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesRequiresV3,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from charms.vault_k8s.v0.vault_autounseal import (
+    VaultAutounsealDestroy,
+    VaultAutounsealInitialize,
+    VaultAutounsealProvides,
+    VaultAutounsealRequires,
+    is_provider_data_valid,
+)
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -41,12 +48,6 @@ from charms.vault_k8s.v0.vault_client import (
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
-from charms.vault_k8s.v0.vault_transit import (
-    VaultTransitEnableAutounseal,
-    VaultTransitProvides,
-    VaultTransitRequires,
-    is_provider_data_valid,
-)
 from container import Container
 from cryptography import x509
 from debug_da import RemoteDebuggerCharmBase
@@ -54,7 +55,6 @@ from exceptions import VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
-    CharmBase,
     CollectStatusEvent,
     ConfigChangedEvent,
     InstallEvent,
@@ -94,9 +94,9 @@ PKI_ROLE = "charm"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
-TRANSIT_MOUNT_PATH = "charm-transit"
-TRANSIT_PROVIDES_RELATION_NAME = "transit-provides"
-TRANSIT_REQUIRES_RELATION_NAME = "transit-requires"
+AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
+AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
+AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
@@ -122,8 +122,12 @@ class VaultCharm(RemoteDebuggerCharmBase):
         self.tls_certificates_pki = TLSCertificatesRequiresV3(
             self, TLS_CERTIFICATES_PKI_RELATION_NAME
         )
-        self.vault_transit_provides = VaultTransitProvides(self, TRANSIT_PROVIDES_RELATION_NAME)
-        self.vault_transit_requires = VaultTransitRequires(self, TRANSIT_REQUIRES_RELATION_NAME)
+        self.vault_autounseal_provides = VaultAutounsealProvides(
+            self, AUTOUNSEAL_PROVIDES_RELATION_NAME
+        )
+        self.vault_autounseal_requires = VaultAutounsealRequires(
+            self, AUTOUNSEAL_REQUIRES_RELATION_NAME
+        )
         self.grafana_dashboards = GrafanaDashboardProvider(self)
         self._metrics_endpoint = MetricsEndpointProvider(
             self,
@@ -178,19 +182,19 @@ class VaultCharm(RemoteDebuggerCharmBase):
             self._on_vault_pki_certificate_creation_request,
         )
         self.framework.observe(
-            self.vault_transit_requires.on.vault_transit_details_ready,
+            self.vault_autounseal_requires.on.vault_autounseal_details_ready,
             self._configure,
         )
         self.framework.observe(
-            self.vault_transit_provides.on.vault_transit_initialize_autounseal_autounseal,
-            self._on_vault_transit_initialize_autounseal,
+            self.vault_autounseal_provides.on.vault_autounseal_initialize,
+            self._on_vault_autounseal_initialize,
         )
         self.framework.observe(
-            self.vault_transit_provides.on.vault_transit_destroy_autounseal,
-            self._on_vault_transit_destroy_autounseal,
+            self.vault_autounseal_provides.on.vault_autounseal_destroy,
+            self._on_vault_autounseal_destroy,
         )
 
-    def _on_vault_transit_destroy_autounseal(self, event: VaultTransitEnableAutounseal):
+    def _on_vault_autounseal_destroy(self, event: VaultAutounsealDestroy):
         if not self.unit.is_leader():
             return
 
@@ -204,7 +208,7 @@ class VaultCharm(RemoteDebuggerCharmBase):
 
         # TODO: If this is the last autounseal relation, disable the transit backend
 
-    def _on_vault_transit_initialize_autounseal(self, event: VaultTransitEnableAutounseal):
+    def _on_vault_autounseal_initialize(self, event: VaultAutounsealInitialize):
         if not self.unit.is_leader():
             return
 
@@ -214,28 +218,30 @@ class VaultCharm(RemoteDebuggerCharmBase):
             # TODO: Should this be deferred in case it is an intermittent issue?
             return
 
-        vault.enable_secrets_engine(SecretsBackend.TRANSIT, TRANSIT_MOUNT_PATH)
+        vault.enable_secrets_engine(SecretsBackend.TRANSIT, AUTOUNSEAL_MOUNT_PATH)
 
-        vault.create_autounseal_key(TRANSIT_MOUNT_PATH, event.relation.id)
-        vault.configure_transit_policy(TRANSIT_MOUNT_PATH, event.relation.id)
+        vault.create_autounseal_key(AUTOUNSEAL_MOUNT_PATH, event.relation.id)
+        vault.configure_autounseal_policy(AUTOUNSEAL_MOUNT_PATH, event.relation.id)
 
-        approle = vault.create_transit_autounseal_approle(event.relation.id)
+        approle = vault.create_autounseal_approle(event.relation.id)
         secret_id = vault.generate_role_secret_id(f"charm-autounseal-{event.relation.id}")
-        secret = self._create_transit_token_secret(event.relation, approle, secret_id)
+        secret = self._create_autounseal_credentials_secret(event.relation, approle, secret_id)
 
-        self._set_transit_relation_data(event.relation, secret.id)
+        self._set_autounseal_relation_data(event.relation, secret.id)
 
-    def _set_transit_relation_data(self, relation, token_secret_id):
+    def _set_autounseal_relation_data(self, relation, credentials_secret_id):
         vault_address = self._get_relation_api_address(relation)
         if vault_address is not None:
-            self.vault_transit_provides.set_vault_url(relation, vault_address)
+            self.vault_autounseal_provides.set_vault_url(relation, vault_address)
         if self.tls.ca_certificate_is_saved():
-            self.vault_transit_provides.set_ca_certificate(
+            self.vault_autounseal_provides.set_ca_certificate(
                 relation, self.tls.pull_tls_file_from_workload(File.CA)
             )
-        self.vault_transit_provides.set_credentials_secret_id(relation, token_secret_id)
+        self.vault_autounseal_provides.set_credentials_secret_id(relation, credentials_secret_id)
 
-    def _create_transit_token_secret(self, relation: Relation, role_id: str, secret_id: str):
+    def _create_autounseal_credentials_secret(
+        self, relation: Relation, role_id: str, secret_id: str
+    ):
         """Create a new secret with the token."""
         juju_secret_content = {
             "role-id": role_id,
@@ -1069,12 +1075,12 @@ class VaultCharm(RemoteDebuggerCharmBase):
             logger.warning("Transit relation data is not valid, skipping transit stanza")
             return config_content
 
-        transit_address = self.vault_transit_requires.get_vault_url(relation)
+        transit_address = self.vault_autounseal_requires.get_vault_url(relation)
         if not transit_address:
             logger.info("Transit address not available, skipping transit stanza")
             return config_content
 
-        tls_ca_cert = self.vault_transit_requires.get_ca_certificate(relation)
+        tls_ca_cert = self.vault_autounseal_requires.get_ca_certificate(relation)
         tls_ca_cert_path = None
         if not tls_ca_cert:
             return config_content
@@ -1088,7 +1094,7 @@ class VaultCharm(RemoteDebuggerCharmBase):
             return config_content
         charm_tls_path = certs[0].location / "transit-ca.pem"
         vault = Vault(url=transit_address, ca_cert_path=charm_tls_path.as_posix())
-        credentials = self.vault_transit_requires.get_credentials_from_relation(relation)
+        credentials = self.vault_autounseal_requires.get_credentials_from_relation(relation)
         # FIXME: `not all()` doesn't work here with the type checker... why?
         if not credentials or not credentials[0] or not credentials[1]:
             logger.info("Transit credentials not available, skipping transit stanza")
@@ -1103,7 +1109,7 @@ class VaultCharm(RemoteDebuggerCharmBase):
         config_content += "\n" + template.render(
             vault_addr=transit_address,
             key_name=key_name,
-            mount_path=TRANSIT_MOUNT_PATH,
+            mount_path=AUTOUNSEAL_MOUNT_PATH,
             vault_token=token,
             tls_ca_cert=tls_ca_cert_path,
         )
@@ -1111,7 +1117,7 @@ class VaultCharm(RemoteDebuggerCharmBase):
 
     def _get_transit_requirer_relation(self):
         """Return the transit relation if it exists."""
-        return self.model.get_relation(TRANSIT_REQUIRES_RELATION_NAME)
+        return self.model.get_relation(AUTOUNSEAL_REQUIRES_RELATION_NAME)
 
     def _push_config_file_to_workload(self, content: str):
         """Push the config file to the workload."""
