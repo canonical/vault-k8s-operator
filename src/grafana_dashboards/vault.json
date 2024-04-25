@@ -874,7 +874,7 @@
         {
             "datasource": {
                 "type": "loki",
-                "uid": "PCFE195BA03E127CE"
+                "uid": "${lokids}"
             },
             "description": "",
             "gridPos": {
@@ -899,7 +899,7 @@
                 {
                     "datasource": {
                         "type": "loki",
-                        "uid": "PCFE195BA03E127CE"
+                        "uid": "${lokids}"
                     },
                     "editorMode": "code",
                     "expr": "{charm=\"vault-k8s\"} | json | type = `response` or type = `request`",
@@ -913,7 +913,7 @@
         {
             "datasource": {
                 "type": "loki",
-                "uid": "PCFE195BA03E127CE"
+                "uid": "${lokids}"
             },
             "gridPos": {
                 "h": 8,
@@ -936,7 +936,7 @@
                 {
                     "datasource": {
                         "type": "loki",
-                        "uid": "PCFE195BA03E127CE"
+                        "uid": "${lokids}"
                     },
                     "editorMode": "code",
                     "expr": "{charm=\"vault-k8s\"} | json | __error__=`` | request_path != `auth/approle/login`\n",
