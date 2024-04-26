@@ -100,31 +100,34 @@ class ProviderSchema(DataBagSchema):
 class VaultAutounsealDetailsReadyEvent(ops.EventBase):
     """Event emitted when the vault autounseal details are ready in the databag."""
 
-    def __init__(self, handle: ops.Handle, relation: model.Relation):
+    def __init__(self, handle: ops.Handle, address, role_id, secret_id, ca_certificate):
         super().__init__(handle)
-        self.relation = relation
+        self.address = address
+        self.role_id = role_id
+        self.secret_id = secret_id
+        self.ca_certificate = ca_certificate
 
     def snapshot(self) -> Dict[str, Any]:
         """Return snapshot data that should be persisted."""
         return dict(
             super().snapshot(),
-            relation_id=self.relation.id,
-            relation_name=self.relation.name,
+            address=self.address,
+            role_id=self.role_id,
+            secret_id=self.secret_id,
+            ca_certificate=self.ca_certificate,
         )
 
     def restore(self, snapshot: Dict[str, Any]) -> None:
         """Restore the event from a snapshot."""
         super().restore(snapshot)
-        relation = self.framework.model.get_relation(
-            snapshot["relation_name"], snapshot["relation_id"]
-        )
-        if relation is None:
-            raise ValueError(
-                "Unable to restore {}: relation {} (id={}) not found.".format(
-                    self, snapshot["relation_name"], snapshot["relation_id"]
-                )
-            )
-        self.relation = relation
+        self.address = snapshot["address"]
+        self.role_id = snapshot["role_id"]
+        self.secret_id = snapshot["secret_id"]
+        self.ca_certificate = snapshot["ca_certificate"]
+
+
+class VaultAutounsealProviderRemoved(ops.EventBase):
+    """Event emitted when the vault that provided autounseal capabilities is removed."""
 
 
 class VaultAutounsealInitialize(ops.EventBase):
@@ -194,6 +197,7 @@ class VaultAutounsealRequireEvents(ops.ObjectEvents):
     """Events raised by the vault-autounseal relation on the requirer side."""
 
     vault_autounseal_details_ready = ops.EventSource(VaultAutounsealDetailsReadyEvent)
+    vault_autounseal_provider_removed = ops.EventSource(VaultAutounsealProviderRemoved)
 
 
 class VaultAutounsealProvides(ops.Object):
@@ -386,13 +390,18 @@ class VaultAutounsealRequires(ops.Object):
         self.relation_name = relation_name
 
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
+        self.framework.observe(charm.on[relation_name].relation_broken, self._on_relation_broken)
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
-        if event.app is None:
-            logger.warning("No remote application yet")
-            return
-        if is_provider_data_valid(event.relation.data[event.app]):
-            self.on.vault_autounseal_details_ready.emit(event.relation)
+        data = event.relation.data[event.app]
+        if is_provider_data_valid(data):
+            role_id, secret_id = self.get_credentials()
+            self.on.vault_autounseal_details_ready.emit(
+                data["address"], role_id, secret_id, data["ca_certificate"]
+            )
+
+    def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
+        self.on.vault_autounseal_provider_removed.emit()
 
     def get_vault_url(self) -> Optional[str]:
         """Return the vault url from the relation databag.
@@ -416,7 +425,10 @@ class VaultAutounsealRequires(ops.Object):
         return relation.data[relation.app].get("address")
 
     def get_credentials(self) -> tuple[str | None, str | None]:
-        """Return the credentials from the Juju secret.
+        """Return the token from the Juju secret.
+
+        Args:
+            credentials_secret_id: The secret id of the Juju secret which stores the credentials for authenticating with the Vault server.
 
         Returns:
             A tuple containing the role id and secret id
@@ -424,13 +436,13 @@ class VaultAutounsealRequires(ops.Object):
         relation = self.framework.model.get_relation(self.relation_name)
         if not relation:
             logger.warning("Relation is not set")
-            return None
+            return None, None
         if not relation.active:
             logger.warning("Relation is not active")
-            return None
+            return None, None
         if relation.app is None:
             logger.warning("No remote application yet")
-            return None
+            return None, None
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
         return (secret_content.get("role-id"), secret_content.get("secret-id"))
