@@ -314,9 +314,6 @@ class VaultAutounsealRequires(ops.Object):
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
-        if event.app is None:
-            logger.warning("No remote application yet")
-            return
         if is_provider_data_valid(event.relation.data[event.app]):
             self.on.vault_autounseal_details_ready.emit(event.relation)
 
