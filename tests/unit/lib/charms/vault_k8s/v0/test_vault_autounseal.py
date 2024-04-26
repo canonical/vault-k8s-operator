@@ -4,7 +4,7 @@
 
 import textwrap
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealDestroy,
@@ -13,7 +13,7 @@ from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from ops import testing
+from ops import Relation, testing
 from ops.charm import CharmBase
 
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
@@ -82,10 +82,10 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-    def setup_relation(self, leader: bool = True) -> tuple:
+    def setup_relation(self, leader: bool = True) -> tuple[str, str, Relation]:
         """Set up a relation between the charm and a remote app with 1 unit."""
         remote_app = "vault-autounseal-requires"
-        remote_unit = remote_app + "/0"
+        remote_unit = f"{remote_app}/0"
         rel_name = AUTOUNSEAL_PROVIDES_RELATION_NAME
         self.harness.set_leader(leader)
         rel_id = self.harness.add_relation(rel_name, remote_app)
@@ -94,48 +94,43 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, remote_unit)
         return remote_app, remote_unit, relation
 
-    def test_given_unit_is_leader_when_set_vault_url_then_relation_data_is_updated(self):
-        _, _, relation = self.setup_relation()
-        vault_url = "https://vault.example.com"
-        self.harness.charm.interface.set_vault_url(relation, vault_url)
+    @patch(
+        "ops.model.Application.add_secret",
+    )
+    def test_given_unit_is_leader_when_set_autounseal_data_then_relation_data_is_updated(
+        self, mock_add_secret: MagicMock
+    ):
+        remote_app, remote_unit, relation = self.setup_relation()
+        vault_address = "https://vault.example.com"
+        approle_id = "some approle id"
+        approle_secret_id = "some approle secret id"
+        ca_certificate = "my ca certificate"
 
-        assert (
-            self.harness.get_relation_data(relation.id, self.harness.charm.app.name)["address"]
-            == vault_url
+        mock_add_secret.return_value = MagicMock(**{"id": "some secret id"})
+
+        self.harness.charm.interface.set_autounseal_data(
+            relation, vault_address, approle_id, approle_secret_id, ca_certificate
         )
+        mock_add_secret.assert_called_once()
+        assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {
+            "address": vault_address,
+            "credentials_secret_id": "some secret id",
+            "ca_certificate": ca_certificate,
+        }
 
-    def test_given_unit_is_not_leader_when_set_vault_url_then_relation_data_is_not_updated(self):
-        _, _, relation = self.setup_relation(leader=False)
-        vault_url = "https://vault.example.com"
-        self.harness.charm.interface.set_vault_url(relation, vault_url)
+    def test_given_unit_is_not_leader_when_set_autounseal_data_then_relation_data_not_updated(
+        self,
+    ):
+        remote_app, remote_unit, relation = self.setup_relation(leader=False)
+        vault_address = "https://vault.example.com"
+        approle_id = "some approle id"
+        approle_secret_id = "some approle secret id"
+        ca_certificate = "my ca certificate"
 
-        assert "address" not in self.harness.get_relation_data(
-            relation.id, self.harness.charm.app.name
+        self.harness.charm.interface.set_autounseal_data(
+            relation, vault_address, approle_id, approle_secret_id, ca_certificate
         )
-
-    def test_when_set_credentials_secret_id_then_relation_data_is_updated(self):
-        _, _, relation = self.setup_relation()
-
-        self.harness.charm.interface.set_credentials_secret_id(relation, "some secret id")
-
-        assert (
-            self.harness.get_relation_data(relation.id, self.harness.charm.app.name)[
-                "credentials_secret_id"
-            ]
-            == "some secret id"
-        )
-
-    def test_when_set_ca_certificate_then_relation_data_is_updated(self):
-        _, _, relation = self.setup_relation()
-
-        self.harness.charm.interface.set_ca_certificate(relation, "some ca certificate")
-
-        assert (
-            self.harness.get_relation_data(relation.id, self.harness.charm.app.name)[
-                "ca_certificate"
-            ]
-            == "some ca certificate"
-        )
+        assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {}
 
 
 class TestVaultAutounsealRequires(unittest.TestCase):
@@ -149,7 +144,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
     def setup_relation(self, leader: bool = True) -> tuple:
         """Set up a relation between the charm and a remote app with 1 unit."""
         remote_app = "vault-autounseal-provider"
-        remote_unit = remote_app + "/0"
+        remote_unit = f"{remote_app}/0"
         rel_name = AUTOUNSEAL_REQUIRES_RELATION_NAME
         self.harness.set_leader(leader)
         rel_id = self.harness.add_relation(rel_name, remote_app)
@@ -202,28 +197,36 @@ class TestVaultAutounsealRequires(unittest.TestCase):
 
         _on_details_ready.assert_not_called()
 
-    def test_when_get_credentials_secret_id_then_returns_secret_id(self):
+    def test_given_address_in_relation_data_when_get_vault_url_then_returns_address(self):
         remote_app, remote_unit, relation = self.setup_relation()
         self.harness.update_relation_data(
-            relation.id, remote_app, {"credentials_secret_id": "some secret id"}
+            relation.id, remote_app, {"address": "https://vault.example.com"}
         )
 
-        secret_id = self.harness.charm.interface.get_credentials_secret_id(relation)
-        assert secret_id == "some secret id"
+        address = self.harness.charm.interface.get_vault_url()
+        assert address == "https://vault.example.com"
 
-    def test_when_get_credentials_then_returns_credentials(self):
+    def test_given_secret_exists_and_stored_in_relation_when_get_credentials_then_returns_credentials(
+        self,
+    ):
+        remote_app, remote_unit, relation = self.setup_relation()
         secret_id = self.harness.add_model_secret(
             self.harness.charm.app, {"role-id": "some role id", "secret-id": "some secret id"}
         )
+        self.harness.update_relation_data(
+            relation.id, remote_app, {"credentials_secret_id": secret_id}
+        )
 
-        credentials = self.harness.charm.interface.get_credentials(secret_id)
+        credentials = self.harness.charm.interface.get_credentials()
         assert credentials == ("some role id", "some secret id")
 
-    def test_when_get_ca_certificate_then_returns_ca_certificate(self):
+    def test_given_ca_certificate_in_relation_data_when_get_ca_certificate_then_returns_ca_certificate(
+        self,
+    ):
         remote_app, remote_unit, relation = self.setup_relation()
         self.harness.update_relation_data(
             relation.id, remote_app, {"ca_certificate": "some ca certificate"}
         )
 
-        ca_certificate = self.harness.charm.interface.get_ca_certificate(relation)
+        ca_certificate = self.harness.charm.interface.get_ca_certificate()
         assert ca_certificate == "some ca certificate"

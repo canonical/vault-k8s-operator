@@ -219,48 +219,68 @@ class VaultAutounsealProvides(ops.Object):
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         self.on.vault_autounseal_destroy.emit(relation=event.relation)
 
-    def set_vault_url(self, relation: ops.Relation, address: str) -> None:
-        """Set the vault url address in the relation databag.
+    def _create_autounseal_credentials_secret(
+        self, relation: ops.Relation, role_id: str, secret_id: str
+    ) -> str:
+        """Create a Juju secret with the autounseal credentials.
 
         Args:
-            relation: The relation for which to set the vault url.
-            address: The address of the vault server.
+            relation: The relation to grant access to the secret.
+            role_id: The role id to store in the secret.
+            secret_id: The secret id to store in the secret.
 
+        Returns:
+            The secret id of the created secret.
         """
-        if not self.charm.unit.is_leader():
-            logger.warning(
-                "Attempting to set the vault url without being the leader. Ignoring the request."
-            )
-            return
-        relation.data[self.charm.app].update({"address": address})
+        secret = self.charm.app.add_secret(
+            {
+                "role-id": role_id,
+                "secret-id": secret_id,
+            },
+        )
+        secret.grant(relation)
+        if secret.id is None:
+            raise ValueError("Secret id is None")
+        return secret.id
 
-    def set_credentials_secret_id(self, relation: ops.Relation, secret_id: str) -> None:
-        """Set the credentials secret id in the relation databag.
+    def set_autounseal_data(
+        self,
+        relation: ops.Relation,
+        vault_address: str,
+        approle_id: str,
+        approle_secret_id: str,
+        ca_certificate: str,
+    ) -> None:
+        """Set the autounseal data in the relation databag.
 
         Args:
-            relation: The relation for which to set the credentials secret id.
-            secret_id: The secret id of the Juju secret which stores the credentials for authenticating with the Vault server.
-        """
-        if relation.app is None:
-            raise ValueError("The `relation.app` is not set")
-        relation.data[self.charm.app].update({"credentials_secret_id": secret_id})
-
-    def set_ca_certificate(self, relation: ops.Relation, ca_certificate: str) -> None:
-        """Set the ca_certificate on the relation.
-
-        Args:
-            relation: The relation for which to set the ca_certificate.
+            relation: The Juju relation to set the autounseal data in.
+            vault_address: The address of the Vault server.
+            approle_id: The approle id to use when authenticating with the Vault server.
+            approle_secret_id: The approle secret id to use when authenticating with the Vault server.
             ca_certificate: The CA certificate to use when validating the Vault server's certificate.
         """
         if not self.charm.unit.is_leader():
+            logger.warning(
+                "Attempting to set the autounseal data without being the leader. Ignoring the request."
+            )
             return
-        if not relation:
-            logger.warning("Relation is None")
+        if relation is None:
+            logger.warning("No relation found")
             return
         if not relation.active:
             logger.warning("Relation is not active")
             return
-        relation.data[self.charm.app]["ca_certificate"] = ca_certificate
+        credentials_secret_id = self._create_autounseal_credentials_secret(
+            relation, approle_id, approle_secret_id
+        )
+        relation.data[self.charm.app].update(
+            {
+                "address": vault_address,
+                "credentials_secret_id": credentials_secret_id,
+                "ca_certificate": ca_certificate,
+            }
+        )
 
 
 def is_provider_data_valid(data: RelationDataContent) -> bool:
@@ -289,7 +309,7 @@ class VaultAutounsealRequires(ops.Object):
 
     def __init__(self, charm: ops.CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
-        self.relation = relation_name
+        self.relation_name = relation_name
 
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
 
@@ -300,7 +320,7 @@ class VaultAutounsealRequires(ops.Object):
         if is_provider_data_valid(event.relation.data[event.app]):
             self.on.vault_autounseal_details_ready.emit(event.relation)
 
-    def get_vault_url(self, relation: ops.Relation) -> Optional[str]:
+    def get_vault_url(self) -> Optional[str]:
         """Return the vault url from the relation databag.
 
         Args:
@@ -309,25 +329,19 @@ class VaultAutounsealRequires(ops.Object):
         Returns:
             The vault url if it exists, None otherwise.
         """
+        relation = self.framework.model.get_relation(self.relation_name)
+        if not relation:
+            logger.warning("Relation is not set")
+            return None
+        if not relation.active:
+            logger.warning("Relation is not active")
+            return None
         if relation.app is None:
+            logger.warning("No remote application yet")
             return None
         return relation.data[relation.app].get("address")
 
-    @staticmethod
-    def get_credentials_secret_id(relation: ops.Relation) -> Optional[str]:
-        """Return the credentials secret id from the relation.
-
-        Args:
-            relation: The relation from which to get the credentials secret id.
-
-        Returns:
-            The credentials secret id if it exists, None otherwise.
-        """
-        if relation.app is None:
-            return None
-        return relation.data[relation.app].get("credentials_secret_id")
-
-    def get_credentials(self, credentials_secret_id: str) -> tuple[str | None, str | None]:
+    def get_credentials(self) -> tuple[str | None, str | None] | None:
         """Return the token from the Juju secret.
 
         Args:
@@ -336,24 +350,21 @@ class VaultAutounsealRequires(ops.Object):
         Returns:
             A tuple containing the role id and secret id
         """
+        relation = self.framework.model.get_relation(self.relation_name)
+        if not relation:
+            logger.warning("Relation is not set")
+            return None
+        if not relation.active:
+            logger.warning("Relation is not active")
+            return None
+        if relation.app is None:
+            logger.warning("No remote application yet")
+            return None
+        credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
         return (secret_content.get("role-id"), secret_content.get("secret-id"))
 
-    def get_credentials_from_relation(
-        self, relation: ops.Relation
-    ) -> tuple[str | None, str | None] | None:
-        """Return the credentials from the relation.
-
-        Args:
-            relation: The relation from which to get the credentials.
-
-        Returns:
-            A tuple containing the role id and secret id if they exist, None otherwise.
-        """
-        token_secret_id = VaultAutounsealRequires.get_credentials_secret_id(relation)
-        return self.get_credentials(token_secret_id) if token_secret_id else None
-
-    def get_ca_certificate(self, relation: ops.Relation) -> Optional[str]:
+    def get_ca_certificate(self) -> Optional[str]:
         """Return the ca_certificate from the relation.
 
         Args:
@@ -362,10 +373,14 @@ class VaultAutounsealRequires(ops.Object):
         Returns:
             The ca certificate if it exists, None otherwise.
         """
+        relation = self.framework.model.get_relation(self.relation_name)
         if not relation:
             logger.warning("Relation is not set")
             return None
         if not relation.active:
             logger.warning("Relation is not active")
+            return None
+        if relation.app is None:
+            logger.warning("No remote application yet")
             return None
         return relation.data[relation.app].get("ca_certificate")
