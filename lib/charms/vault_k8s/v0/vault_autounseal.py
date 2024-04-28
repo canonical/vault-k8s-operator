@@ -287,6 +287,18 @@ class VaultAutounsealProvides(ops.Object):
         )
 
 
+def get_transit_key_name(relation: ops.Relation) -> str:
+    """Return the transit key name for the given relation.
+
+    Args:
+        relation: The relation to get the transit key name for.
+
+    Returns:
+        The transit key name.
+    """
+    return f"{relation.id}"
+
+
 def is_provider_data_valid(data: RelationDataContent) -> bool:
     """Return whether the provider data is valid.
 
@@ -393,3 +405,15 @@ class VaultAutounsealRequires(ops.Object):
             logger.warning("No remote application yet")
             return None
         return relation.data[relation.app].get("ca_certificate")
+
+    def get_transit_key_name(self) -> str:
+        """Return the transit key name for the current relation.
+
+        Returns:
+            The transit key name.
+        """
+        relation = self.framework.model.get_relation(self.relation_name)
+        if not relation:
+            logger.warning("Relation is not set")
+            return ""
+        return get_transit_key_name(relation)
