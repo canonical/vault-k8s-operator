@@ -28,10 +28,27 @@ charmcraft fetch-lib charms.vault_k8s.v0.vault_autounseal
 The provider charm is the charm that provides a Vault instance that can be
 used to autounseal other Vault instances via the Vault transit backend.
 
+Add the following to `metadata.yaml`:
+
+```yaml
+provides:
+    vault-autounseal-requires:
+    interface: vault-autounseal
+```
+
 ### Requirer charm
 
 The requirer charm is the charm that wishes to autounseal a Vault instance via
 the Vault transit backend.
+
+Add the following to `metadata.yaml`:
+
+```yaml
+requires:
+    vault-autounseal-requires:
+    interface: vault-autounseal
+    limit: 1
+```
 
 ### Integration
 
