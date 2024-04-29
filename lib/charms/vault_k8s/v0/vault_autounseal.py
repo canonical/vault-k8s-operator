@@ -32,7 +32,7 @@ Add the following to `metadata.yaml`:
 
 ```yaml
 provides:
-    vault-autounseal-requires:
+  vault-autounseal-requires:
     interface: vault-autounseal
 ```
 
@@ -45,7 +45,7 @@ Add the following to `metadata.yaml`:
 
 ```yaml
 requires:
-    vault-autounseal-requires:
+  vault-autounseal-requires:
     interface: vault-autounseal
     limit: 1
 ```
