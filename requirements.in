@@ -5,7 +5,7 @@ jinja2
 jsonschema
 lightkube
 lightkube-models
-pydantic==2.6.4
+pydantic==2.7.1
 pytest-interface-tester
 pyhcl
 requests
