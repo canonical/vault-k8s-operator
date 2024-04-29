@@ -414,48 +414,40 @@ class VaultAutounsealRequires(ops.Object):
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         data = event.relation.data[event.app]
         if is_provider_data_valid(data):
-            role_id, secret_id = self.get_credentials()
-            self.on.vault_autounseal_details_ready.emit(
-                data["address"], role_id, secret_id, data["ca_certificate"]
-            )
+            self.on.vault_autounseal_details_ready.emit(*self.get_details())
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         self.on.vault_autounseal_provider_removed.emit()
 
-    def get_vault_url(self) -> Optional[str]:
-        """Return the vault url from the relation databag.
-
-        Args:
-            relation: The relation from which to get the vault url.
+    def get_details(self) -> tuple[str | None, str | None, str | None, str | None]:
+        """Return the vault address, role id, secret id and ca certificate from the relation databag.
 
         Returns:
-            The vault url if it exists, None otherwise.
+            A tuple containing the vault address, role id, secret id and ca certificate.
         """
         relation = self.framework.model.get_relation(self.relation_name)
         if not relation:
             logger.warning("Relation is not set")
-            return None
+            return None, None, None, None
         if not relation.active:
             logger.warning("Relation is not active")
-            return None
+            return None, None, None, None
         if relation.app is None:
             logger.warning("No remote application yet")
-            return None
-        return relation.data[relation.app].get("address")
+            return None, None, None, None
+        data = relation.data[relation.app]
+        return (
+            data.get("address"),
+            *self._get_credentials(relation),
+            data.get("ca_certificate"),
+        )
 
-    def get_credentials(self) -> tuple[str | None, str | None]:
+    def _get_credentials(self, relation: ops.Relation) -> tuple[str | None, str | None]:
         """Return the token from the Juju secret.
-
-        Args:
-            credentials_secret_id: The secret id of the Juju secret which stores the credentials for authenticating with the Vault server.
 
         Returns:
             A tuple containing the role id and secret id
         """
-        relation = self.framework.model.get_relation(self.relation_name)
-        if not relation:
-            logger.warning("Relation is not set")
-            return None, None
         if not relation.active:
             logger.warning("Relation is not active")
             return None, None
@@ -465,24 +457,3 @@ class VaultAutounsealRequires(ops.Object):
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
         return (secret_content.get("role-id"), secret_content.get("secret-id"))
-
-    def get_ca_certificate(self) -> Optional[str]:
-        """Return the ca_certificate from the relation.
-
-        Args:
-            relation: The relation from which to get the ca_certificate.
-
-        Returns:
-            The ca certificate if it exists, None otherwise.
-        """
-        relation = self.framework.model.get_relation(self.relation_name)
-        if not relation:
-            logger.warning("Relation is not set")
-            return None
-        if not relation.active:
-            logger.warning("Relation is not active")
-            return None
-        if relation.app is None:
-            logger.warning("No remote application yet")
-            return None
-        return relation.data[relation.app].get("ca_certificate")
