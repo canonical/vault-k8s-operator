@@ -159,9 +159,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
     ):
         remote_app, remote_unit, relation = self.setup_relation()
         vault_url = "https://vault.example.com"
-        credentials_secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": "some role id", "secret-id": "some secret"}
-        )
+        credentials_secret_id = "some secret id"
         ca_certificate = "some ca certificate"
         self.harness.update_relation_data(
             relation.id,
@@ -177,10 +175,8 @@ class TestVaultAutounsealRequires(unittest.TestCase):
         event = args[0]
 
         assert isinstance(event, VaultAutounsealDetailsReadyEvent)
-        assert event.address == vault_url
-        assert event.role_id == "some role id"
-        assert event.secret_id == "some secret"
-        assert event.ca_certificate == ca_certificate
+        assert event.relation.id == relation.id
+        assert event.relation.name == relation.name
 
     @patch("test_vault_autounseal.VaultAutounsealRequirerCharm._on_details_ready")
     def test_given_unit_joined_when_data_missing_then_vault_auto_unseal_details_ready_event_not_fired(
