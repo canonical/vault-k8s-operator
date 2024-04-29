@@ -322,7 +322,7 @@ class VaultAutounsealProvides(ops.Object):
         credentials = self.get_credentials(relation)
         return all(credentials)
 
-    def get_credentials(self, relation) -> tuple[str | None, str | None]:
+    def get_credentials(self, relation: ops.Relation) -> tuple[str | None, str | None]:
         """Return the credentials from the Juju secret.
 
         Args:
@@ -331,10 +331,6 @@ class VaultAutounsealProvides(ops.Object):
         Returns:
             A tuple containing the role id and secret id
         """
-        relation = self.framework.model.get_relation(self.relation_name, relation_id=relation.id)
-        if not relation:
-            logger.warning("Relation is not set")
-            return None, None
         if not relation.active:
             logger.warning("Relation is not active")
             return None, None
@@ -355,16 +351,16 @@ class VaultAutounsealProvides(ops.Object):
         return (secret_content.get("role-id"), secret_content.get("secret-id"))
 
 
-def get_transit_key_name(relation: ops.Relation) -> str:
-    """Return the transit key name for the given relation.
+def get_transit_key_name(relation_id: int) -> str:
+    """Return the transit key name for the given relation id.
 
     Args:
-        relation: The relation to get the transit key name for.
+        relation_id: The id of the relation for which to get the transit key name.
 
     Returns:
         The transit key name.
     """
-    return f"{relation.id}"
+    return f"{relation_id}"
 
 
 def is_provider_data_valid(data: RelationDataContent) -> bool:
