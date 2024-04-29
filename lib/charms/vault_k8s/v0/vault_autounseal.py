@@ -32,7 +32,7 @@ Add the following to `metadata.yaml`:
 
 ```yaml
 provides:
-  vault-autounseal-requires:
+  vault-autounseal-provides:
     interface: vault-autounseal
 ```
 
