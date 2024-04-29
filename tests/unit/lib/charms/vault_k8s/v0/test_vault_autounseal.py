@@ -30,6 +30,7 @@ class VaultAutounsealProviderCharm(CharmBase):
         provides:
           vault-autounseal-provides:
             interface: vault-autounseal
+            limit: 2
         """
     )
 
@@ -82,9 +83,10 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-    def setup_relation(self, leader: bool = True) -> tuple[str, str, Relation]:
+    def setup_relation(
+        self, leader: bool = True, remote_app: str = "vault-autounseal-requires"
+    ) -> tuple[str, str, Relation]:
         """Set up a relation between the charm and a remote app with 1 unit."""
-        remote_app = "vault-autounseal-requires"
         remote_unit = f"{remote_app}/0"
         rel_name = AUTOUNSEAL_PROVIDES_RELATION_NAME
         self.harness.set_leader(leader)
@@ -131,6 +133,120 @@ class TestVaultAutounsealProvides(unittest.TestCase):
             relation, vault_address, approle_id, approle_secret_id, ca_certificate
         )
         assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {}
+
+    def test_given_no_request_when_get_outstanding_requests_then_empty_list_is_returned(self):
+        kv_requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(kv_requests) == 0
+
+    def test_given_1_outstanding_request_when_get_outstanding_requests_then_request_is_returned(
+        self,
+    ):
+        remote_app, remote_unit, relation = self.setup_relation()
+
+        self.harness.update_relation_data(
+            relation.id,
+            remote_app,
+            key_values={
+                # "credentials_secret_id": secret_id,  # Missing!
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+
+        outstanding_requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(outstanding_requests) == 1
+        assert [relation.id for relation in outstanding_requests] == [relation.id]
+
+    def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_requests_then_outstanding_request_is_returned(
+        self,
+    ):
+        remote_app_1, _, relation_1 = self.setup_relation(remote_app="vault-autounseal-requires-1")
+        remote_app_2, _, relation_2 = self.setup_relation(remote_app="vault-autounseal-requires-2")
+
+        secret_id = self.harness.add_model_secret(
+            self.harness.charm.app, {"role-id": "some role", "secret-id": "some secret"}
+        )
+
+        self.harness.update_relation_data(
+            relation_1.id,
+            remote_app_1,
+            key_values={
+                "credentials_secret_id": secret_id,
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+        self.harness.update_relation_data(
+            relation_2.id,
+            remote_app_2,
+            key_values={
+                # "credentials_secret_id": secret_id,  # Missing!
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+
+        kv_requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(kv_requests) == 1
+        assert kv_requests[0].id == relation_2.id
+
+    def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(
+        self,
+    ):
+        remote_app, remote_unit, relation = self.setup_relation()
+
+        secret_id = self.harness.add_model_secret(
+            self.harness.charm.app, {"role-id": "some role", "secret-id": "some secret"}
+        )
+        self.harness.update_relation_data(
+            relation.id,
+            remote_app,
+            key_values={
+                "credentials_secret_id": secret_id,
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+
+        outstanding_requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(outstanding_requests) == 0
+
+    def test_given_no_request_when_get_requests_then_empty_list_is_returned(self):
+        kv_requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(kv_requests) == 0
+
+    def test_given_2_requests_when_get_requests_then_requests_are_returned(self):
+        remote_app_1, _, relation_1 = self.setup_relation(remote_app="vault-autounseal-requires-1")
+        remote_app_2, _, relation_2 = self.setup_relation(remote_app="vault-autounseal-requires-2")
+
+        self.harness.update_relation_data(
+            relation_1.id,
+            remote_app_1,
+            key_values={
+                # "credentials_secret_id": secret_id,  # Missing!
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+        self.harness.update_relation_data(
+            relation_2.id,
+            remote_app_2,
+            key_values={
+                # "credentials_secret_id": secret_id,  # Missing!
+                "address": "https://vault.example.com",
+                "ca_certificate": "some ca certificate",
+            },
+        )
+
+        requests = self.harness.charm.interface.get_outstanding_requests()
+
+        assert len(requests) == 2
+        assert {relation.id for relation in requests} == {relation_1.id, relation_2.id}
 
 
 class TestVaultAutounsealRequires(unittest.TestCase):

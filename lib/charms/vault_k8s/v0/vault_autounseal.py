@@ -50,7 +50,7 @@ from typing import Any, Dict, List, Optional
 
 import ops
 from interface_tester import DataBagSchema
-from ops import Relation, RelationDataContent, model  # type: ignore
+from ops import Relation, RelationDataContent, SecretNotFoundError, model  # type: ignore
 from pydantic import BaseModel, Field, ValidationError
 
 # The unique Charmhub library identifier, never change it
@@ -290,9 +290,9 @@ class VaultAutounsealProvides(ops.Object):
         """Get the outstanding requests for the relation."""
         outstanding_requests: List[Relation] = []
         requirer_requests = self.get_requirer_requests(relation_id=relation_id)
-        for request in requirer_requests:
-            if not self._credentials_issued_for_request(relation_id=relation_id):
-                outstanding_requests.append(request)
+        for relation in requirer_requests:
+            if not self._credentials_issued_for_request(relation_id=relation.id):
+                outstanding_requests.append(relation)
         return outstanding_requests
 
     def get_requirer_requests(self, relation_id: Optional[int] = None) -> List[Relation]:
@@ -310,9 +310,6 @@ class VaultAutounsealProvides(ops.Object):
         for relation in relations:
             assert isinstance(relation.app, ops.Application)
             if not relation.active:
-                continue
-            app_data = relation.data[relation.app]
-            if not is_provider_data_valid(app_data):
                 continue
             pending.append(relation)
         return pending
@@ -334,7 +331,7 @@ class VaultAutounsealProvides(ops.Object):
         Returns:
             A tuple containing the role id and secret id
         """
-        relation = self.framework.model.get_relation(self.relation_name)
+        relation = self.framework.model.get_relation(self.relation_name, relation_id=relation.id)
         if not relation:
             logger.warning("Relation is not set")
             return None, None
@@ -345,7 +342,16 @@ class VaultAutounsealProvides(ops.Object):
             logger.warning("No remote application yet")
             return None, None
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
-        secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
+        if credentials_secret_id is None:
+            return None, None
+        try:
+            secret_content = self.model.get_secret(id=credentials_secret_id).get_content(
+                refresh=True
+            )
+        except SecretNotFoundError:
+            logger.warning("Secret not found")
+            return None, None
+
         return (secret_content.get("role-id"), secret_content.get("secret-id"))
 
 
