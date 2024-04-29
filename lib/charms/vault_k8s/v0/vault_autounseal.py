@@ -314,7 +314,6 @@ class VaultAutounsealProvides(ops.Object):
 
     def get_requirer_requests(self, relation_id: Optional[int] = None) -> List[Relation]:
         """Get all requests for the relation."""
-        pending: List[Relation] = []
         relations = (
             [
                 relation
@@ -324,12 +323,7 @@ class VaultAutounsealProvides(ops.Object):
             if relation_id is not None
             else self.model.relations.get(self.relation_name, [])
         )
-        for relation in relations:
-            assert isinstance(relation.app, ops.Application)
-            if not relation.active:
-                continue
-            pending.append(relation)
-        return pending
+        return [relation for relation in relations if relation.active]
 
     def _credentials_issued_for_request(self, relation_id: Optional[int]) -> bool:
         """Return whether credentials have been issued for the request."""
