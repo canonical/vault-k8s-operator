@@ -5,6 +5,7 @@
 import io
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
 
 import hcl  # type: ignore[import-untyped]
@@ -1737,6 +1738,7 @@ class TestCharm(unittest.TestCase):
                 ca=ca,
                 chain=chain,
                 revoked=False,
+                expiry_time=datetime.now(timezone.utc),
             )
         ]
 
