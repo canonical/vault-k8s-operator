@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from charms.vault_k8s.v0.vault_autounseal import (
+    AutounsealDetails,
     VaultAutounsealDestroy,
     VaultAutounsealDetailsReadyEvent,
     VaultAutounsealInitialize,
@@ -336,8 +337,10 @@ class TestVaultAutounsealRequires(unittest.TestCase):
 
         details = self.harness.charm.interface.get_details()
 
-        assert details == (vault_url, "some role id", "some secret", ca_certificate)
+        assert details == AutounsealDetails(
+            vault_url, "some role id", "some secret", ca_certificate
+        )
 
     def test_given_no_details_when_get_details_then_empty_tuple_is_returned(self):
         details = self.harness.charm.interface.get_details()
-        assert details == (None, None, None, None)
+        assert details == AutounsealDetails(None, None, None, None)
