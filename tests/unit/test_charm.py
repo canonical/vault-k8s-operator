@@ -601,7 +601,7 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        self.harness.run_action("authorize-charm", {"token": "test-token"})
+        action_result = self.harness.run_action("authorize-charm", {"token": "test-token"}).results
 
         mock_vault.authenticate.assert_called_once_with(Token("test-token"))
         mock_vault.enable_audit_device.assert_called_once_with(
@@ -624,6 +624,7 @@ class TestCharm(unittest.TestCase):
 
         assert secret_content["role-id"] == "approle_id"
         assert secret_content["secret-id"] == "secret_id"
+        assert action_result["result"] == "Charm authorized successfully."
 
     def test_given_unit_is_not_leader_when_authorize_charm_then_action_fails(
         self,
