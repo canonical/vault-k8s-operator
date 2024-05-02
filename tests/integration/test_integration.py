@@ -18,7 +18,7 @@ from pytest_operator.plugin import OpsTest
 from tests.integration.helpers import crash_pod, get_leader_unit
 
 logger = logging.getLogger(__name__)
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 APPLICATION_NAME = "vault-k8s"
 LOKI_APPLICATION_NAME = "loki-k8s"
