@@ -8,6 +8,7 @@ intended to be used by charms that need to manage a Vault cluster.
 """
 
 import logging
+import textwrap
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -105,6 +106,7 @@ class SecretsBackend(Enum):
 
     KV_V2 = "kv-v2"
     PKI = "pki"
+    TRANSIT = "transit"
 
 
 class VaultClientError(Exception):
@@ -134,6 +136,11 @@ class Vault:
             return None
         return token_data
 
+    @property
+    def token(self):
+        """Return the token used to authenticate with Vault."""
+        return self._client.token
+
     def is_api_available(self) -> bool:
         """Return whether Vault is available."""
         try:
@@ -150,6 +157,18 @@ class Vault:
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
         return self._client.sys.is_sealed()
+
+    def needs_migration(self) -> bool:
+        """Return true if the vault needs to be migrated, false otherwise."""
+        return self._client.seal_status["migration"]
+
+    def get_seal_type(self) -> str:
+        """Return the seal type of the Vault."""
+        return self._client.seal_status["type"]
+
+    def is_seal_type_transit(self) -> bool:
+        """Return whether Vault is sealed by the transit backend."""
+        return "transit" == self.get_seal_type()
 
     def is_active(self) -> bool:
         """Return whether the Vault node is active or not.
@@ -189,7 +208,7 @@ class Vault:
                 device_type=device_type.value,
                 options={"file_path": path},
             )
-            logger.info("Enabled audit device %s for path %s", device_type.value, path)
+            logger.info("Enabled audit device `%s` for path `%s`", device_type.value, path)
         except InvalidRequest as e:
             if not e.json or not isinstance(e.json, dict):
                 raise VaultClientError(e) from e
@@ -287,6 +306,18 @@ class Vault:
                 logger.info("%s backend already enabled", backend_type.value)
             else:
                 raise VaultClientError(e) from e
+
+    def disable_secrets_engine(self, path: str) -> None:
+        """Disable the secret engine at the given path."""
+        try:
+            self._client.sys.disable_secrets_engine(path)
+            logger.info("Disabled secret engine at %s", path)
+        except InvalidPath as e:
+            logger.info("Secret engine at %s is already disabled", path)
+
+    def is_secret_engine_enabled(self, path: str) -> bool:
+        """Check if a mount is enabled."""
+        return path + "/" in self._client.sys.list_mounted_secrets_engines()
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
@@ -416,3 +447,97 @@ class Vault:
         """Return the number of raft peers."""
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
+
+    def _get_autounseal_policy_name(self, relation_id: int) -> str:
+        """Return the policy name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _get_autounseal_approle_name(self, relation_id: int) -> str:
+        """Return the approle name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _configure_autounseal_policy(self, mount: str, relation_id: int, key_name: str):
+        """Create/update a policy within vault to use the transit key."""
+        mount_policy = textwrap.dedent(f"""
+        path "{mount}/encrypt/{key_name}" {{
+            capabilities = ["update"]
+        }}
+
+        path "{mount}/decrypt/{key_name}" {{
+            capabilities = ["update"]
+        }}
+        """)
+        policy_name = self._get_autounseal_policy_name(relation_id)
+        self._client.sys.create_or_update_policy(
+            policy_name,
+            mount_policy,
+        )
+        return policy_name
+
+    def get_autounseal_key_name(self, relation_id: int) -> str:
+        """Return the key name for the given relation id."""
+        # FIXME: This wouldn't be necessary as a public function if we passed
+        # the key name along with the relation data.
+        return str(relation_id)
+
+    def _create_autounseal_key(self, mount_point, relation_id) -> str:
+        """Create a new autounseal key."""
+        key_name = self.get_autounseal_key_name(relation_id)
+        response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
+        logging.debug(f"Created a new autounseal key: {response}")
+        return key_name
+
+    def _destroy_autounseal_key(self, mount_point, key_name):
+        """Destroy the autounseal key."""
+        self._client.secrets.transit.delete_key(mount_point=mount_point, name=key_name)
+
+    def destroy_autounseal_credentials(self, relation_id: int, mount: str) -> None:
+        """Destroy the approle and transit key for the given relation id."""
+        # Remove the approle
+        role_name = self._get_autounseal_approle_name(relation_id)
+        self._client.auth.approle.delete_role(role_name)
+        # Remove the policy
+        policy_name = self._get_autounseal_policy_name(relation_id)
+        self._client.sys.delete_policy(policy_name)
+        # Remove the transit key
+        # key_name = self.get_autounseal_key_name(relation_id)
+        # self._destroy_autounseal_key(mount, key_name)
+
+    def _create_autounseal_approle(self, relation_id: int, policy_name: str) -> tuple[str, str]:
+        """Create an approle for the autounseal policy.
+
+        Args:
+            relation_id: The Juju relation id to use for the approle.
+            policy_name: The name of the policy to associate with the approle.
+
+        Returns:
+            A tuple containing the name and role_id of the created approle.
+        """
+        role_name = f"charm-autounseal-{relation_id}"
+        self._client.auth.approle.create_or_update_approle(
+            role_name=role_name,
+            token_policies=[policy_name],
+            token_period="60s",  # TODO: Should this be increased?
+            bind_secret_id="true",
+        )
+        response = self._client.auth.approle.read_role_id(f"charm-autounseal-{relation_id}")
+        role_id = response["data"]["role_id"]
+        logger.info("Created approle for autounseal policy %s", role_id)
+        return role_name, role_id
+
+    def create_autounseal_credentials(self, relation_id: int, mount: str) -> tuple[str, str, str]:
+        """Create auto-unseal credentials for the given relation id.
+
+        Args:
+            relation_id: The Juju relation id to use for the approle.
+            mount: The mount point for the transit backend.
+
+        Returns:
+            A tuple containing the Role Id, Secret Id and Key Name.
+
+        """
+        key_name = self._create_autounseal_key(mount, relation_id)
+        policy_name = self._configure_autounseal_policy(mount, relation_id, key_name)
+        role_name, role_id = self._create_autounseal_approle(relation_id, policy_name)
+        secret_id = self.generate_role_secret_id(role_name)
+        return role_id, secret_id, key_name

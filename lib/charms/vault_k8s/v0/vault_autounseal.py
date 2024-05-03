@@ -469,5 +469,7 @@ class VaultAutounsealRequires(ops.Object):
             logger.warning("No remote application yet")
             return ApproleDetails(None, None)
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
+        if not credentials_secret_id:
+            return ApproleDetails(None, None)
         secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
         return ApproleDetails(secret_content.get("role-id"), secret_content.get("secret-id"))
