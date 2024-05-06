@@ -59,7 +59,12 @@ class VaultKvRequirerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.interface = VaultKvRequires(self, "vault-kv", "dummy")
+        self.interface = VaultKvRequires(
+            self,
+            relation_name="vault-kv",
+            mount_suffix="dummy",
+            refresh_events=[self.on.config_changed],
+        )
         self.framework.observe(self.interface.on.connected, self._on_connected)
         self.framework.observe(self.interface.on.ready, self._on_ready)
         self.framework.observe(self.interface.on.gone_away, self._on_gone_away)
@@ -389,6 +394,15 @@ class TestVaultKvRequires(unittest.TestCase):
         app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
         assert isinstance(event, VaultKvConnectedEvent)
         assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
+
+    @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
+    def test_given_unit_leader_when_refresh_event_then_connected_event_fired(
+        self, _on_connected
+    ):
+        self.setup_relation()[-1]
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(_on_connected.call_count, 2)
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
