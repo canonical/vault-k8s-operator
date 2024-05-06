@@ -40,10 +40,9 @@ from charms.vault_k8s.v0.vault_client import (
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
-from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
+from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from container import Container
 from cryptography import x509
-from exceptions import VaultCertsError
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import (
     ActionEvent,
