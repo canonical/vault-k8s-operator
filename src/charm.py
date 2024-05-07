@@ -267,20 +267,6 @@ class VaultCharm(RemoteDebuggerCharmBase):
             ca_cert,
         )
 
-    # def _create_autounseal_credentials_secret(
-    #     self, relation: Relation, role_id: str, secret_id: str
-    # ):
-    #     """Create a new secret with the token."""
-    #     juju_secret_content = {
-    #         "role-id": role_id,
-    #         "secret-id": secret_id,
-    #     }
-    #     secret = self.app.add_secret(juju_secret_content)
-
-    #     secret.grant(relation)
-
-    #     return secret
-
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
         if not self._container.can_connect():
