@@ -21,7 +21,6 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from exceptions import VaultCertsError
 from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.pebble import PathError
@@ -98,6 +97,14 @@ class WorkloadBase(ABC):
     def stop(self, process: str) -> None:
         """Stop a service in the workload."""
         pass
+
+
+class VaultCertsError(Exception):
+    """Exception raised when a vault certificate is not found."""
+
+    def __init__(self, message: str = "Could not retrieve vault certificates from local storage"):
+        self.message = message
+        super().__init__(self.message)
 
 
 class File(Enum):
