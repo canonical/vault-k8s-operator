@@ -245,7 +245,9 @@ class VaultCharm(RemoteDebuggerCharmBase):
                 return
             vault.disable_secrets_engine(AUTOUNSEAL_MOUNT_PATH)
 
-    def _set_autounseal_relation_data(self, relation, approle_id, approle_secret_id):
+    def _set_autounseal_relation_data(
+        self, relation: Relation, approle_id: str, approle_secret_id: str
+    ):
         vault_address = self._get_relation_api_address(relation)
         if not vault_address:
             logger.warning("Vault address not available, ignoring request to set autounseal data")
@@ -266,20 +268,6 @@ class VaultCharm(RemoteDebuggerCharmBase):
             approle_secret_id,
             ca_cert,
         )
-
-    # def _create_autounseal_credentials_secret(
-    #     self, relation: Relation, role_id: str, secret_id: str
-    # ):
-    #     """Create a new secret with the token."""
-    #     juju_secret_content = {
-    #         "role-id": role_id,
-    #         "secret-id": secret_id,
-    #     }
-    #     secret = self.app.add_secret(juju_secret_content)
-
-    #     secret.grant(relation)
-
-    #     return secret
 
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
