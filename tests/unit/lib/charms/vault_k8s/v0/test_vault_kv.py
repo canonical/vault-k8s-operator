@@ -438,6 +438,7 @@ class TestVaultKvRequires(unittest.TestCase):
                 "vault_url": "https://vault.example.com",
                 "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
+                "egress_subnet": "1.1.1.1",
                 "credentials": json.dumps({"abcd": "dummy"}),
             },
         )

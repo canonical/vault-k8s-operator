@@ -163,6 +163,9 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
+    egress_subnet: str = Field(
+        description="The CIDR allowed by the role."
+    )
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."
@@ -352,7 +355,18 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["mount"] = mount
 
-    def set_unit_credentials(self, relation: ops.Relation, nonce: str, secret: ops.Secret):
+    def set_egress_subnet(self, relation: ops.Relation, egress_subnet: str):
+        """Set the egress_subnet on the relation."""
+        if not self.charm.unit.is_leader():
+            return
+        relation.data[self.charm.app]["egress_subnet"] = egress_subnet
+
+    def set_unit_credentials(
+        self,
+        relation: ops.Relation,
+        nonce: str,
+        secret: ops.Secret,
+    ):
         """Set the unit credentials on the relation."""
         if not self.charm.unit.is_leader():
             return
