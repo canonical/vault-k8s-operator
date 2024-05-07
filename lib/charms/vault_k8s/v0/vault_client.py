@@ -312,12 +312,12 @@ class Vault:
         try:
             self._client.sys.disable_secrets_engine(path)
             logger.info("Disabled secret engine at %s", path)
-        except InvalidPath as e:
-            logger.info("Secret engine at %s is already disabled", path)
+        except InvalidPath:
+            logger.info("Secret engine at `%s` is already disabled", path)
 
     def is_secret_engine_enabled(self, path: str) -> bool:
         """Check if a mount is enabled."""
-        return path + "/" in self._client.sys.list_mounted_secrets_engines()
+        return f"{path}/" in self._client.sys.list_mounted_secrets_engines()
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
@@ -500,6 +500,9 @@ class Vault:
         policy_name = self._get_autounseal_policy_name(relation_id)
         self._client.sys.delete_policy(policy_name)
         # Remove the transit key
+        # FIXME: This is currently disabled because we haven't figured out how
+        # to properly handle destroying the relation, yet. Destroying the key
+        # without migrating would make it impossible to recover the vault.
         # key_name = self.get_autounseal_key_name(relation_id)
         # self._destroy_autounseal_key(mount, key_name)
 
@@ -517,8 +520,10 @@ class Vault:
         self._client.auth.approle.create_or_update_approle(
             role_name=role_name,
             token_policies=[policy_name],
+            # token_period is crititcal for the approle to be able to renew its token
+            # and keep the vault unsealed. Without this, the token would expire and
+            # Vault would go into an error state.
             token_period="60s",  # TODO: Should this be increased?
-            bind_secret_id="true",
         )
         response = self._client.auth.approle.read_role_id(f"charm-autounseal-{relation_id}")
         role_id = response["data"]["role_id"]
