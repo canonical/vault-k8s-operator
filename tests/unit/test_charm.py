@@ -33,7 +33,11 @@ from charms.vault_k8s.v0.vault_client import (
     Vault,
 )
 from charms.vault_k8s.v0.vault_s3 import S3Error
-from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL, VaultTLSManager
+from charms.vault_k8s.v0.vault_tls import (
+    CA_CERTIFICATE_JUJU_SECRET_LABEL,
+    VaultCertsError,
+    VaultTLSManager,
+)
 from ops import pebble, testing
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
@@ -104,11 +108,15 @@ class TestConfigFileContentMatches(unittest.TestCase):
 
 
 class TestCharm(unittest.TestCase):
+    patcher_vault_tls_manager = patch("charm.VaultTLSManager", spec=VaultTLSManager)
+
     @patch(
         "charm.KubernetesServicePatch",
         lambda charm, ports: None,
     )
     def setUp(self):
+        self.mock_vault_tls_manager = TestCharm.patcher_vault_tls_manager.start().return_value
+
         self.model_name = "whatever"
         self.harness = testing.Harness(VaultCharm)
         self.addCleanup(self.harness.cleanup)
@@ -116,6 +124,9 @@ class TestCharm(unittest.TestCase):
         self.harness.begin()
         self.container_name = "vault"
         self.app_name = "vault-k8s"
+
+    def tearDown(self):
+        TestCharm.patcher_vault_tls_manager.stop()
 
     def get_valid_s3_params(self):
         """Return a valid S3 parameters for mocking."""
@@ -335,28 +346,16 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
-    @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
-    @patch("ops.model.Model.get_binding")
     def test_given_storage_not_available_when_evaluate_status_then_status_is_waiting(
         self,
-        patch_get_binding,
-        mock_vault_class,
     ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": False,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
+        self.mock_vault_tls_manager.tls_file_available_in_charm.return_value = False
+        self.mock_vault_tls_manager.get_tls_file_path_in_charm.side_effect = VaultCertsError()
 
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self._set_peer_relation()
         self.harness.set_leader(is_leader=True)
-        patch_get_binding.return_value = MockBinding(
-            bind_address="1.2.3.4", ingress_address="1.1.1.1"
-        )
+        self._set_peer_relation()
 
         self.harness.evaluate_status()
 
@@ -366,19 +365,11 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
-    @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     def test_given_ca_certificate_secret_not_set_when_evaluate_status_then_status_is_waiting(
         self,
-        mock_vault_class,
     ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": False,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
+        self.mock_vault_tls_manager.tls_file_available_in_charm.return_value = False
 
         self.harness.set_can_connect(container=self.container_name, val=True)
         self.harness.add_storage(storage_name="certs", attach=True)
@@ -392,23 +383,13 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
-    @patch("charm.Vault", autospec=True)
     @patch("ops.model.Container.restart", new=Mock)
     def test_given_ca_certificate_not_pushed_to_workload_when_evaluate_status_then_status_is_waiting(
         self,
-        mock_vault_class,
     ):
-        mock_vault = MagicMock(
-            spec=Vault,
-            **{
-                "is_api_available.return_value": False,
-            },
-        )
-        mock_vault_class.return_value = mock_vault
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
         self._set_peer_relation()
-        self._set_ca_certificate_secret("private key", "certificate")
+        self.mock_vault_tls_manager.tls_file_available_in_charm.return_value = False
 
         self.harness.evaluate_status()
 
@@ -421,7 +402,6 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_uninitialized_when_evaluate_status_then_status_is_blocked(
         self, mock_vault_class: MagicMock
     ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         mock_vault = mock_vault_class.return_value
         mock_vault.configure_mock(
             spec=Vault,
@@ -444,7 +424,6 @@ class TestCharm(unittest.TestCase):
     def test_given_vault_is_sealed_when_evaluate_status_then_status_is_blocked(
         self, mock_vault_class
     ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         mock_vault = mock_vault_class.return_value
         mock_vault.configure_mock(
             spec=Vault,
@@ -479,7 +458,6 @@ class TestCharm(unittest.TestCase):
         )
         self._set_peer_relation()
         self.harness.set_can_connect(container=self.container_name, val=True)
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
 
         self.harness.evaluate_status()
 
@@ -584,7 +562,6 @@ class TestCharm(unittest.TestCase):
         self,
         mock_vault_class: MagicMock,
     ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         self.harness.set_leader()
         mock_vault = mock_vault_class.return_value
         peer_relation_id = self._set_peer_relation()
@@ -641,7 +618,6 @@ class TestCharm(unittest.TestCase):
         self,
         mock_vault_class: MagicMock,
     ):
-        self.harness.charm.tls = MagicMock(spec=VaultTLSManager)
         self.harness.set_leader()
         mock_vault = mock_vault_class.return_value
         peer_relation_id = self._set_peer_relation()
@@ -1496,11 +1472,9 @@ class TestCharm(unittest.TestCase):
             },
         )
         mock_vault_class.return_value = mock_vault
-        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "test cert"
         self.harness.set_leader(is_leader=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        root = self.harness.get_filesystem_root(self.container_name)
-        (root / "vault/certs/ca.pem").write_text("some ca")
+        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
         self.harness.set_can_connect(container=self.container_name, val=True)
         self._set_approle_secret(
             role_id="role id",
@@ -1516,6 +1490,9 @@ class TestCharm(unittest.TestCase):
         event.egress_subnet = "2.2.2.0/24"
         event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
+        mock_vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.KV_V2, "charm-vault-kv-requirer-suffix"
+        )
 
     @patch("charm.Vault", autospec=True)
     @patch(f"{VAULT_KV_LIB_PATH}.VaultKvProvides.set_ca_certificate")
@@ -1575,6 +1552,8 @@ class TestCharm(unittest.TestCase):
         )
         mock_vault_class.return_value = mock_vault
 
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "test cert"
+
         self.harness.add_storage(storage_name="certs", attach=True)
         root = self.harness.get_filesystem_root(self.container_name)
         (root / "vault/certs/ca.pem").write_text("some ca")
@@ -1612,6 +1591,7 @@ class TestCharm(unittest.TestCase):
             },
         )
         mock_vault_class.return_value = mock_vault
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "test cert"
 
         self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
         self.harness.set_leader(is_leader=True)
