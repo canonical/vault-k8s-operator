@@ -12,7 +12,8 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvReadyEvent,
     VaultKvRequires,
 )
-from ops.charm import ActionEvent, CharmBase, InstallEvent
+from ops.charm import ActionEvent, CharmBase
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus, SecretNotFoundError
 from vault_client import Vault  # type: ignore[import-not-found]
@@ -30,15 +31,20 @@ class VaultKVRequirerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.vault_kv = VaultKvRequires(self, "vault-kv", mount_suffix="kv")
-        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.install, self._configure)
+        self.framework.observe(self.on.update_status, self._configure)
+        self.framework.observe(self.on.config_changed, self._configure)
         self.framework.observe(self.vault_kv.on.connected, self._on_kv_connected)
         self.framework.observe(self.vault_kv.on.ready, self._on_kv_ready)
         self.framework.observe(self.on.create_secret_action, self._on_create_secret_action)
         self.framework.observe(self.on.get_secret_action, self._on_get_secret_action)
 
-    def _on_install(self, event: InstallEvent):
+    def _configure(self, event: EventBase):
         """Create a secret to store the nonce."""
-        self.unit.add_secret(
+        try:
+            self.model.get_secret(label=NONCE_SECRET_LABEL)
+        except SecretNotFoundError:
+            self.unit.add_secret(
             {"nonce": secrets.token_hex(16)},
             label=NONCE_SECRET_LABEL,
             description="Nonce for vault-kv relation",
