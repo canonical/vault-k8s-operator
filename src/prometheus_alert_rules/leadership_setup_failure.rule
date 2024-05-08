@@ -4,4 +4,4 @@ labels:
     severity: critical
 annotations:
     summary: "Spike in delay during Vault leadership setup"
-    description: "Leadership setup took longer thatn 500ms"
+    description: "Leadership setup took longer than 500ms"

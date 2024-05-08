@@ -5,4 +5,4 @@ labels:
     severity: critical
 annotations:
     summary: "High delays in leader contacting followers"
-    description: "The leader has frequently failed to contact follwers within 200 ms in the last one minute"
+    description: "The leader has frequently failed to contact followers within 200 ms in the last one minute"
