@@ -1,0 +1,8 @@
+alert: VaultSealedRule
+expr: vault_core_unsealed == 0
+for: 0m
+labels:
+    severity: critical
+annotations:
+    summary: Vault has gone sealed again (instance {{ $labels.instance }})
+    description: "Vault instance is sealed on {{ $labels.instance }}\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
