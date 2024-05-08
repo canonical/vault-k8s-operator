@@ -1677,8 +1677,40 @@ class TestCharm(unittest.TestCase):
         self.mock_vault.authenticate.assert_called_with(AppRole(role_id, secret_id))
         self.mock_vault_tls_manager.push_autounseal_ca_cert.assert_called_with(ca_cert)
 
-    def test_when_autounseal_initialize_then_credentials_are_set(self):
-        pass
+    @patch(f"{VAULT_AUTOUNSEAL_LIB_PATH}.VaultAutounsealProvides.set_autounseal_data")
+    def test_when_autounseal_initialize_then_credentials_are_set(self, mock_set_autounseal_data):
+        # Given
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+                "create_autounseal_credentials.return_value": (
+                    "autounseal role id",
+                    "autounseal secret id",
+                    "key name",
+                ),
+            },
+        )
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(self.container_name, True)
+        relation_id = self.harness.add_relation(
+            relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
+        )
+        relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
+        self._set_approle_secret("role id", "secret id")
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "ca cert"
+
+        # When
+        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_initialize.emit(relation)
+
+        # Then
+        mock_set_autounseal_data.assert_called_once_with(
+            relation,
+            "https://10.0.0.10:8200",
+            "autounseal role id",
+            "autounseal secret id",
+            "ca cert",
+        )
 
     def test_when_autounseal_destroy_then_credentials_are_removed(self):
         pass

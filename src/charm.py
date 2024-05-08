@@ -245,7 +245,9 @@ class VaultCharm(RemoteDebuggerCharmBase):
                 return
             vault.disable_secrets_engine(AUTOUNSEAL_MOUNT_PATH)
 
-    def _set_autounseal_relation_data(self, relation, approle_id, approle_secret_id):
+    def _set_autounseal_relation_data(
+        self, relation: Relation, approle_id: str, approle_secret_id: str
+    ):
         vault_address = self._get_relation_api_address(relation)
         if not vault_address:
             logger.warning("Vault address not available, ignoring request to set autounseal data")
