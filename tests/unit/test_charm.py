@@ -1737,6 +1737,3 @@ class TestCharm(unittest.TestCase):
         self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
             relation_id, AUTOUNSEAL_MOUNT_PATH
         )
-
-    def test_when_autounseal_provider_removed_then_transit_stanza_removed(self):
-        pass
