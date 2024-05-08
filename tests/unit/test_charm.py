@@ -12,6 +12,7 @@ import hcl  # type: ignore[import-untyped]
 import requests
 from botocore.response import StreamingBody
 from charm import (
+    AUTOUNSEAL_MOUNT_PATH,
     CHARM_POLICY_NAME,
     CHARM_POLICY_PATH,
     PKI_CSR_SECRET_LABEL,
@@ -1691,7 +1692,7 @@ class TestCharm(unittest.TestCase):
                 ),
             },
         )
-        self.harness.set_leader(is_leader=True)
+        self.harness.set_leader()
         self.harness.set_can_connect(self.container_name, True)
         relation_id = self.harness.add_relation(
             relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
@@ -1713,7 +1714,29 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_when_autounseal_destroy_then_credentials_are_removed(self):
-        pass
+        # Given
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+            },
+        )
+        self._set_approle_secret("role id", "secret id")
+        self.harness.set_leader()
+        self.harness.set_can_connect(self.container_name, True)
+        with self.harness.hooks_disabled():
+            relation_id = self.harness.add_relation(
+                relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
+            )
+            relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
+
+        # When
+        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_destroy.emit(relation)
+
+        # Then
+        self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
+            relation_id, AUTOUNSEAL_MOUNT_PATH
+        )
 
     def test_when_autounseal_provider_removed_then_transit_stanza_removed(self):
         pass
