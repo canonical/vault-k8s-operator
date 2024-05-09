@@ -50,8 +50,8 @@ from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from container import Container
 from cryptography import x509
-from debug_da import RemoteDebuggerCharmBase
 from jinja2 import Environment, FileSystemLoader
+from ops import CharmBase
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
@@ -102,7 +102,7 @@ VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
 
 
-class VaultCharm(RemoteDebuggerCharmBase):
+class VaultCharm(CharmBase):
     """Main class to handle Juju events for the vault-k8s charm."""
 
     VAULT_PORT = 8200
@@ -492,9 +492,6 @@ class VaultCharm(RemoteDebuggerCharmBase):
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
-        # if not self._tls_certificates_pki_relation_created():
-        #     logger.debug("TLS Certificates PKI relation not created")
-        #     return
         common_name = self._get_config_common_name()
         if not common_name:
             logger.error("Common name is not set in the charm config")
@@ -1076,7 +1073,8 @@ class VaultCharm(RemoteDebuggerCharmBase):
         if not config_file_content_matches(existing_content=existing_content, new_content=content):
             self._push_config_file_to_workload(content=content)
             if _contains_transit_stanza(existing_content) != _contains_transit_stanza(content):
-                self._container.restart(self._service_name)
+                if self._vault_service_is_running():
+                    self._container.restart(self._service_name)
 
     def _add_transit_stanza_if_needed(self, config_content: str) -> str:
         """Add the transit stanza to the Vault configuration file if autounseal is enabled."""
