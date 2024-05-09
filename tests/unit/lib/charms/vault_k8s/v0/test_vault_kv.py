@@ -399,7 +399,7 @@ class TestVaultKvRequires(unittest.TestCase):
     def test_given_unit_leader_when_refresh_event_then_connected_event_fired(
         self, _on_connected
     ):
-        self.setup_relation()[-1]
+        self.setup_relation()
         self.harness.charm.on.config_changed.emit()
 
         self.assertEqual(_on_connected.call_count, 2)
