@@ -924,6 +924,7 @@ async def read_vault_unit_statuses(
 
     Args:
         ops_test: Ops test Framework
+        app_name: Application name of the Vault, defaults to "vault-k8s"
     """
     status_tuple = await ops_test.juju("status")
     if status_tuple[0] != 0:
@@ -966,6 +967,7 @@ async def wait_for_vault_status_message(
         expected_message: The message that vault units should be setting as a status message
         timeout: Wait time in seconds to get proxied endpoints.
         cadence: How long to wait before running the command again
+        app_name: Application name of the Vault, defaults to "vault-k8s"
 
     Raises:
         TimeoutError: If the expected amount of statuses weren't found in the given timeout.
