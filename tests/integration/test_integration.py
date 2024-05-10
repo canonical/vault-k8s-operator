@@ -665,10 +665,10 @@ class TestVaultK8sIntegrationsPart3:
 
     The relations under test are:
         providing:
-            metrics-endpoint
+            vault-autounseal
         requiring:
             logging,
-            s3-parameters
+            vault-autounseal
     """
 
     @pytest.fixture(scope="class")
@@ -700,26 +700,7 @@ class TestVaultK8sIntegrationsPart3:
 
         leader_unit_index, root_token, unseal_key = initialize_leader_vault
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        async with ops_test.fast_forward(fast_interval="10s"):
-            unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
-            await wait_for_vault_status_message(
-                ops_test=ops_test,
-                count=1,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
-            )
-            unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
-            await wait_for_vault_status_message(
-                ops_test=ops_test,
-                count=NUM_VAULT_UNITS,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
-            )
-            await authorize_charm(ops_test, root_token)
-            await ops_test.model.wait_for_idle(
-                apps=[APPLICATION_NAME],
-                status="active",
-                timeout=1000,
-                wait_for_exact_units=NUM_VAULT_UNITS,
-            )
+        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
         await ops_test.model.remove_application(app_name="vault-b")
 
@@ -983,7 +964,7 @@ async def wait_for_vault_status_message(
             return
         time.sleep(cadence)
         timeout -= cadence
-    raise TimeoutError("Vault didn't show the expected status")
+    raise TimeoutError(f"Vault didn't show the expected status: `{expected_message}`")
 
 
 def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
