@@ -100,6 +100,7 @@ class VaultAutounsealProviderSchema(BaseModel):
     """Provider side of the vault-autounseal relation interface."""
 
     address: str = Field(description="The address of the Vault server to connect to.")
+    key_name: str = Field(description="The name of the transit key to use for autounseal.")
     credentials_secret_id: str = Field(
         description=(
             "The secret id of the Juju secret which stores the credentials for authenticating with the Vault server."
@@ -119,9 +120,10 @@ class ProviderSchema(DataBagSchema):
 class VaultAutounsealDetailsReadyEvent(ops.EventBase):
     """Event emitted when the vault autounseal details are ready in the databag."""
 
-    def __init__(self, handle: ops.Handle, address, role_id, secret_id, ca_certificate):
+    def __init__(self, handle: ops.Handle, address, key_name, role_id, secret_id, ca_certificate):
         super().__init__(handle)
         self.address = address
+        self.key_name = key_name
         self.role_id = role_id
         self.secret_id = secret_id
         self.ca_certificate = ca_certificate
@@ -131,6 +133,7 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
         return dict(
             super().snapshot(),
             address=self.address,
+            key_name=self.key_name,
             role_id=self.role_id,
             secret_id=self.secret_id,
             ca_certificate=self.ca_certificate,
@@ -140,6 +143,7 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
         """Restore the event from a snapshot."""
         super().restore(snapshot)
         self.address = snapshot["address"]
+        self.key_name = snapshot["key_name"]
         self.role_id = snapshot["role_id"]
         self.secret_id = snapshot["secret_id"]
         self.ca_certificate = snapshot["ca_certificate"]
@@ -273,6 +277,7 @@ class VaultAutounsealProvides(ops.Object):
         self,
         relation: ops.Relation,
         vault_address: str,
+        key_name: str,
         approle_id: str,
         approle_secret_id: str,
         ca_certificate: str,
@@ -282,6 +287,7 @@ class VaultAutounsealProvides(ops.Object):
         Args:
             relation: The Juju relation to set the autounseal data in.
             vault_address: The address of the Vault server.
+            key_name: The name of the transit key to use for autounseal.
             approle_id: The approle id to use when authenticating with the Vault server.
             approle_secret_id: The approle secret id to use when authenticating with the Vault server.
             ca_certificate: The CA certificate to use when validating the Vault server's certificate.
@@ -303,6 +309,7 @@ class VaultAutounsealProvides(ops.Object):
         relation.data[self.charm.app].update(
             {
                 "address": vault_address,
+                "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
             }
@@ -367,18 +374,6 @@ class VaultAutounsealProvides(ops.Object):
         return ApproleDetails(secret_content.get("role-id"), secret_content.get("secret-id"))
 
 
-def get_transit_key_name(relation_id: int) -> str:
-    """Return the transit key name for the given relation id.
-
-    Args:
-        relation_id: The id of the relation for which to get the transit key name.
-
-    Returns:
-        The transit key name.
-    """
-    return f"{relation_id}"
-
-
 def is_provider_data_valid(data: RelationDataContent) -> bool:
     """Return whether the provider data is valid.
 
@@ -403,6 +398,7 @@ class AutounsealDetails:
     """The details required to autounseal a vault instance."""
 
     address: str | None
+    key_name: str | None
     role_id: str | None
     secret_id: str | None
     ca_certificate: str | None
@@ -425,7 +421,11 @@ class VaultAutounsealRequires(ops.Object):
         if is_provider_data_valid(data):
             details = self.get_details()
             self.on.vault_autounseal_details_ready.emit(
-                details.address, details.role_id, details.secret_id, details.ca_certificate
+                details.address,
+                details.key_name,
+                details.role_id,
+                details.secret_id,
+                details.ca_certificate,
             )
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
@@ -440,17 +440,18 @@ class VaultAutounsealRequires(ops.Object):
         relation = self.framework.model.get_relation(self.relation_name)
         if not relation:
             logger.warning("Relation is not set")
-            return AutounsealDetails(None, None, None, None)
+            return AutounsealDetails(None, None, None, None, None)
         if not relation.active:
             logger.warning("Relation is not active")
-            return AutounsealDetails(None, None, None, None)
+            return AutounsealDetails(None, None, None, None, None)
         if relation.app is None:
             logger.warning("No remote application yet")
-            return AutounsealDetails(None, None, None, None)
+            return AutounsealDetails(None, None, None, None, None)
         data = relation.data[relation.app]
         credentials = self._get_credentials(relation)
         return AutounsealDetails(
             data.get("address"),
+            data.get("key_name"),
             credentials.role_id,
             credentials.secret_id,
             data.get("ca_certificate"),

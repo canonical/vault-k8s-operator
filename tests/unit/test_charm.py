@@ -1648,10 +1648,13 @@ class TestCharm(unittest.TestCase):
     ):
         # Given
         address = "some address"
+        key_name = "some key"
         role_id = "role_id"
         secret_id = "secret_id"
         ca_cert = "ca_cert"
-        mock_get_details.return_value = AutounsealDetails(address, role_id, secret_id, ca_cert)
+        mock_get_details.return_value = AutounsealDetails(
+            address, key_name, role_id, secret_id, ca_cert
+        )
         relation_id = self.harness.add_relation(
             relation_name="vault-autounseal-requires", remote_app="autounseal-provider"
         )
@@ -1667,7 +1670,7 @@ class TestCharm(unittest.TestCase):
 
         # When
         self.harness.charm.vault_autounseal_requires.on.vault_autounseal_details_ready.emit(
-            address, role_id, secret_id, ca_cert
+            address, key_name, role_id, secret_id, ca_cert
         )
 
         # Then
@@ -1675,6 +1678,7 @@ class TestCharm(unittest.TestCase):
         pushed_content_hcl = hcl.loads((root / "vault/config/vault.hcl").read_text())
         assert pushed_content_hcl["seal"]["transit"]["address"] == address
         assert pushed_content_hcl["seal"]["transit"]["token"] == "some token"
+        assert pushed_content_hcl["seal"]["transit"]["key_name"] == "some key"
         self.mock_vault.authenticate.assert_called_with(AppRole(role_id, secret_id))
         self.mock_vault_tls_manager.push_autounseal_ca_cert.assert_called_with(ca_cert)
 
@@ -1686,9 +1690,9 @@ class TestCharm(unittest.TestCase):
                 "is_initialized.return_value": True,
                 "is_api_available.return_value": True,
                 "create_autounseal_credentials.return_value": (
+                    "key name",
                     "autounseal role id",
                     "autounseal secret id",
-                    "key name",
                 ),
             },
         )
@@ -1708,6 +1712,7 @@ class TestCharm(unittest.TestCase):
         mock_set_autounseal_data.assert_called_once_with(
             relation,
             "https://10.0.0.10:8200",
+            "key name",
             "autounseal role id",
             "autounseal secret id",
             "ca cert",

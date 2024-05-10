@@ -223,11 +223,11 @@ class VaultCharm(CharmBase):
         # FIXME: We should probably forward the key name in the relation data,
         # but for now we just infer it on the requirer side, so we ignore it
         # here.
-        approle_id, secret_id, _ = vault.create_autounseal_credentials(
+        key_name, approle_id, secret_id = vault.create_autounseal_credentials(
             relation.id, AUTOUNSEAL_MOUNT_PATH
         )
 
-        self._set_autounseal_relation_data(relation, approle_id, secret_id)
+        self._set_autounseal_relation_data(relation, key_name, approle_id, secret_id)
 
     def _sync_vault_autounseal(self) -> None:
         """Goes through all the vault-autounseal relations and sends necessary credentials."""
@@ -246,7 +246,7 @@ class VaultCharm(CharmBase):
             vault.disable_secrets_engine(AUTOUNSEAL_MOUNT_PATH)
 
     def _set_autounseal_relation_data(
-        self, relation: Relation, approle_id: str, approle_secret_id: str
+        self, relation: Relation, key_name: str, approle_id: str, approle_secret_id: str
     ):
         vault_address = self._get_relation_api_address(relation)
         if not vault_address:
@@ -264,6 +264,7 @@ class VaultCharm(CharmBase):
         self.vault_autounseal_provides.set_autounseal_data(
             relation,
             vault_address,
+            key_name,
             approle_id,
             approle_secret_id,
             ca_cert,
@@ -1102,13 +1103,12 @@ class VaultCharm(CharmBase):
         )
         vault.authenticate(AppRole(autounseal_details.role_id, autounseal_details.secret_id))
 
-        key_name = vault.get_autounseal_key_name(relation.id)
         jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
         template = jinja2_environment.get_template(CONFIG_TRANSIT_STANZA_TEMPLATE_NAME)
 
         config_content += "\n" + template.render(
             vault_addr=autounseal_details.address,
-            key_name=key_name,
+            key_name=autounseal_details.key_name,
             mount_path=AUTOUNSEAL_MOUNT_PATH,
             vault_token=vault.token,
             tls_ca_cert=self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),

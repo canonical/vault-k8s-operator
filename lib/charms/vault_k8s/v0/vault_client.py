@@ -474,15 +474,13 @@ class Vault:
         )
         return policy_name
 
-    def get_autounseal_key_name(self, relation_id: int) -> str:
+    def _get_autounseal_key_name(self, relation_id: int) -> str:
         """Return the key name for the given relation id."""
-        # FIXME: This wouldn't be necessary as a public function if we passed
-        # the key name along with the relation data.
         return str(relation_id)
 
     def _create_autounseal_key(self, mount_point, relation_id) -> str:
         """Create a new autounseal key."""
-        key_name = self.get_autounseal_key_name(relation_id)
+        key_name = self._get_autounseal_key_name(relation_id)
         response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
         logging.debug(f"Created a new autounseal key: {response}")
         return key_name
@@ -545,4 +543,4 @@ class Vault:
         policy_name = self._configure_autounseal_policy(mount, relation_id, key_name)
         role_name, role_id = self._create_autounseal_approle(relation_id, policy_name)
         secret_id = self.generate_role_secret_id(role_name)
-        return role_id, secret_id, key_name
+        return key_name, role_id, secret_id
