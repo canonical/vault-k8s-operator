@@ -43,7 +43,7 @@ NUM_VAULT_UNITS = 3
 
 
 @pytest.fixture(scope="module")
-async def deploy_vault(ops_test: OpsTest, request):
+async def deployed_vault(ops_test: OpsTest, request):
     """Deploy Vault."""
     assert ops_test.model
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
@@ -66,30 +66,28 @@ async def deploy_vault(ops_test: OpsTest, request):
 
 
 @pytest.fixture(scope="module")
-async def initialize_leader_vault(
-    ops_test: OpsTest, deploy_vault: Dict[str, Path | str]
+async def deployed_vault_initialized_leader(
+    ops_test: OpsTest, deployed_vault: Dict[str, Path | str]
 ) -> Tuple[int, str, str]:
-    leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
-    leader_unit_index = int(leader_unit.name.split("/")[-1])
-    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-
-    client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
-    initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
-    root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
-    return leader_unit_index, root_token, unseal_key
+    return await initialize_vault_leader(ops_test, APPLICATION_NAME)
 
 
-async def initialize_autounseal_vault(ops_test: OpsTest, app_name) -> Tuple[str, str]:
+async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[int, str, str]:
     leader_unit = await get_leader_unit(ops_test.model, app_name)
     leader_unit_index = int(leader_unit.name.split("/")[-1])
     unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test, app_name)]
     client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
+    seal_type = client.seal_status["type"]
+    if seal_type == "shamir":
+        initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
+        root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+        return leader_unit_index, root_token, unseal_key
     initialize_response = client.sys.initialize(recovery_shares=1, recovery_threshold=1)
     root_token, recovery_key = (
         initialize_response["root_token"],
         initialize_response["recovery_keys"][0],
     )
-    return root_token, recovery_key
+    return leader_unit_index, root_token, recovery_key
 
 
 class TestVaultK8s:
@@ -97,10 +95,10 @@ class TestVaultK8s:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized_then_status_is_active(
-        self, ops_test: OpsTest, initialize_leader_vault: Tuple[int, str, str]
+        self, ops_test: OpsTest, deployed_vault_initialized_leader: Tuple[int, str, str]
     ):
         assert ops_test.model
-        leader_unit_index, root_token, unseal_key = initialize_leader_vault
+        leader_unit_index, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
@@ -127,11 +125,10 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         crashing_pod_index = 1
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
@@ -152,11 +149,10 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_up_then_status_is_active(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         num_units = NUM_VAULT_UNITS + 1
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
@@ -180,11 +176,10 @@ class TestVaultK8s:
     async def test_given_application_is_deployed_when_scale_down_then_status_is_active(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
-        _, root_token, _ = initialize_leader_vault
+        _, root_token, _ = deployed_vault_initialized_leader
         app = ops_test.model.applications[APPLICATION_NAME]
         assert isinstance(app, Application)
 
@@ -226,8 +221,7 @@ class TestVaultK8sIntegrationsPart1:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
         request,
     ):
         assert ops_test.model
@@ -268,7 +262,7 @@ class TestVaultK8sIntegrationsPart1:
             wait_for_exact_units=1,
         )
 
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
@@ -361,7 +355,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -390,7 +384,7 @@ class TestVaultK8sIntegrationsPart1:
         final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
 
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
@@ -406,7 +400,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -440,7 +434,7 @@ class TestVaultK8sIntegrationsPart1:
         final_ca_cert = await get_vault_ca_certificate(vault_leader_unit)
         assert initial_ca_cert != final_ca_cert
 
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
 
@@ -467,8 +461,7 @@ class TestVaultK8sIntegrationsPart2:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
         deploy_prometheus = ops_test.model.deploy(
@@ -520,7 +513,7 @@ class TestVaultK8sIntegrationsPart2:
             wait_for_exact_units=1,
         )
 
-        _, root_token, unseal_key = initialize_leader_vault
+        _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
@@ -675,8 +668,7 @@ class TestVaultK8sIntegrationsPart3:
     async def deploy_requiring_charms(
         self,
         ops_test: OpsTest,
-        deploy_vault: dict[str, Path | str],
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
         request,
     ):
         assert ops_test.model
@@ -698,7 +690,7 @@ class TestVaultK8sIntegrationsPart3:
             wait_for_exact_units=1,
         )
 
-        leader_unit_index, root_token, unseal_key = initialize_leader_vault
+        leader_unit_index, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
         yield
@@ -725,7 +717,9 @@ class TestVaultK8sIntegrationsPart3:
                 app_name="vault-b",
             )
 
-            root_token, recovery_key = await initialize_autounseal_vault(ops_test, "vault-b")
+            leader_unit_index, root_token, recovery_key = await initialize_vault_leader(
+                ops_test, "vault-b"
+            )
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=1,
