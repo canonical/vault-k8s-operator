@@ -564,7 +564,7 @@ class VaultKvRequires(ops.Object):
         relation.data[self.charm.unit]["egress_subnet"] = egress_subnet
 
     def _handle_relation(self, event: ops.EventBase):
-        """Handle relation joined and config changed events.
+        """Run when a new unit joins the relation or when the address of the unit changes.
 
         Set the secret backend in the application databag if we are the leader.
         Emit the connected event.
