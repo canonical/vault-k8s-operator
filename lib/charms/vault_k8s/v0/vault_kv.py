@@ -533,19 +533,19 @@ class VaultKvRequires(ops.Object):
         charm: ops.CharmBase,
         relation_name: str,
         mount_suffix: str,
-        refresh_events: Optional[List] = None,
     ) -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation_name = relation_name
         self.mount_suffix = mount_suffix
-        self._refresh_events = refresh_events or [self.charm.on.config_changed]
         self.framework.observe(
             self.charm.on[relation_name].relation_joined,
             self._handle_relation,
         )
-        for event in self._refresh_events:
-            self.framework.observe(event, self._handle_relation)  # pyright: ignore
+        self.framework.observe(
+            self.charm.on.config_changed,
+            self._handle_relation,
+        )
         self.framework.observe(
             self.charm.on[relation_name].relation_changed,
             self._on_vault_kv_relation_changed,
@@ -564,7 +564,7 @@ class VaultKvRequires(ops.Object):
         relation.data[self.charm.unit]["egress_subnet"] = egress_subnet
 
     def _handle_relation(self, event: ops.EventBase):
-        """Handle relation joined and refresh events.
+        """Handle relation joined and config changed events.
 
         Set the secret backend in the application databag if we are the leader.
         Emit the connected event.

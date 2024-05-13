@@ -63,7 +63,6 @@ class VaultKvRequirerCharm(CharmBase):
             self,
             relation_name="vault-kv",
             mount_suffix="dummy",
-            refresh_events=[self.on.config_changed],
         )
         self.framework.observe(self.interface.on.connected, self._on_connected)
         self.framework.observe(self.interface.on.ready, self._on_ready)
@@ -396,7 +395,7 @@ class TestVaultKvRequires(unittest.TestCase):
         assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
-    def test_given_unit_leader_when_refresh_event_then_connected_event_fired(
+    def test_given_unit_leader_when_config_changed_then_connected_event_fired(
         self, _on_connected
     ):
         self.setup_relation()
