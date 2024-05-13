@@ -27,7 +27,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -137,7 +137,7 @@ class Vault:
         return token_data
 
     @property
-    def token(self):
+    def token(self) -> str:
         """Return the token used to authenticate with Vault."""
         return self._client.token
 
@@ -456,7 +456,7 @@ class Vault:
         """Return the approle name for the given relation id."""
         return f"charm-autounseal-{relation_id}"
 
-    def _configure_autounseal_policy(self, mount: str, relation_id: int, key_name: str):
+    def _configure_autounseal_policy(self, mount: str, relation_id: int, key_name: str) -> str:
         """Create/update a policy within vault to use the transit key."""
         mount_policy = textwrap.dedent(f"""
         path "{mount}/encrypt/{key_name}" {{
@@ -478,7 +478,7 @@ class Vault:
         """Return the key name for the given relation id."""
         return str(relation_id)
 
-    def _create_autounseal_key(self, mount_point, relation_id) -> str:
+    def _create_autounseal_key(self, mount_point: str, relation_id: int) -> str:
         """Create a new autounseal key."""
         key_name = self._get_autounseal_key_name(relation_id)
         response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
@@ -514,7 +514,7 @@ class Vault:
         Returns:
             A tuple containing the name and role_id of the created approle.
         """
-        role_name = f"charm-autounseal-{relation_id}"
+        role_name = self._get_autounseal_approle_name(relation_id)
         self._client.auth.approle.create_or_update_approle(
             role_name=role_name,
             token_policies=[policy_name],
