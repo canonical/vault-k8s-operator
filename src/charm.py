@@ -198,6 +198,7 @@ class VaultCharm(CharmBase):
         )
 
     def _on_vault_autounseal_destroy(self, event: VaultAutounsealDestroy):
+        """Handle the vault-autounseal-destroy event."""
         if not self.unit.is_leader():
             return
 
@@ -208,9 +209,16 @@ class VaultCharm(CharmBase):
         vault.destroy_autounseal_credentials(event.relation.id, AUTOUNSEAL_MOUNT_PATH)
 
     def _on_vault_autounseal_initialize(self, event: VaultAutounsealInitialize):
+        """Handle the vault-autounseal-initialize event."""
         self._generate_and_set_autounseal_credentials(event.relation)
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
+        """If leader, generate new credentials for the auto-unseal requirer.
+
+        These credentials are generated and then set in the relation databag so
+        that the requiring app can retrieve them, and use them to create tokens
+        that have the appropriate permissions to use the autounseal key.
+        """
         if not self.unit.is_leader():
             return
         vault = self._get_active_vault_client()
@@ -220,9 +228,6 @@ class VaultCharm(CharmBase):
 
         vault.enable_secrets_engine(SecretsBackend.TRANSIT, AUTOUNSEAL_MOUNT_PATH)
 
-        # FIXME: We should probably forward the key name in the relation data,
-        # but for now we just infer it on the requirer side, so we ignore it
-        # here.
         key_name, approle_id, secret_id = vault.create_autounseal_credentials(
             relation.id, AUTOUNSEAL_MOUNT_PATH
         )
@@ -250,6 +255,14 @@ class VaultCharm(CharmBase):
     def _set_autounseal_relation_data(
         self, relation: Relation, key_name: str, approle_id: str, approle_secret_id: str
     ):
+        """Set the required autounseal data in the relation databag.
+
+        Args:
+            relation: Relation for which the auto-unseal data is being set
+            key_name: The vault transit key name used for auto-unseal
+            approle_id: The AppRole ID which has permission to use this key
+            approle_secret_id: The AppRole secret ID
+        """
         vault_address = self._get_relation_api_address(relation)
         if not vault_address:
             logger.warning("Vault address not available, ignoring request to set autounseal data")
