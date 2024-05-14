@@ -132,7 +132,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -162,6 +162,9 @@ class VaultKvProviderSchema(BaseModel):
     )
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
+    )
+    egress_subnet: str = Field(
+        description="The CIDR allowed by the role."
     )
     credentials: Json[Mapping[str, str]] = Field(
         description=(
@@ -352,7 +355,18 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["mount"] = mount
 
-    def set_unit_credentials(self, relation: ops.Relation, nonce: str, secret: ops.Secret):
+    def set_egress_subnet(self, relation: ops.Relation, egress_subnet: str):
+        """Set the egress_subnet on the relation."""
+        if not self.charm.unit.is_leader():
+            return
+        relation.data[self.charm.app]["egress_subnet"] = egress_subnet
+
+    def set_unit_credentials(
+        self,
+        relation: ops.Relation,
+        nonce: str,
+        secret: ops.Secret,
+    ):
         """Set the unit credentials on the relation."""
         if not self.charm.unit.is_leader():
             return
@@ -526,7 +540,11 @@ class VaultKvRequires(ops.Object):
         self.mount_suffix = mount_suffix
         self.framework.observe(
             self.charm.on[relation_name].relation_joined,
-            self._on_vault_kv_relation_joined,
+            self._handle_relation,
+        )
+        self.framework.observe(
+            self.charm.on.config_changed,
+            self._handle_relation,
         )
         self.framework.observe(
             self.charm.on[relation_name].relation_changed,
@@ -545,17 +563,20 @@ class VaultKvRequires(ops.Object):
         """Set the egress_subnet on the relation."""
         relation.data[self.charm.unit]["egress_subnet"] = egress_subnet
 
-    def _on_vault_kv_relation_joined(self, event: ops.RelationJoinedEvent):
-        """Handle relation joined.
+    def _handle_relation(self, event: ops.EventBase):
+        """Run when a new unit joins the relation or when the address of the unit changes.
 
         Set the secret backend in the application databag if we are the leader.
-        Always update the egress_subnet in the unit databag.
+        Emit the connected event.
         """
+        relation = self.model.get_relation(relation_name=self.relation_name)
+        if not relation:
+            return
         if self.charm.unit.is_leader():
-            event.relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
+            relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
         self.on.connected.emit(
-            event.relation.id,
-            event.relation.name,
+            relation.id,
+            relation.name,
         )
 
     def _on_vault_kv_relation_changed(self, event: ops.RelationChangedEvent):

@@ -451,9 +451,9 @@ class VaultCharm(CharmBase):
             logger.debug("Failed to get initialized Vault")
             return
         mount = f"charm-{app_name}-{mount_suffix}"
-        self._set_kv_relation_data(relation, mount, ca_certificate)
         vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         self._ensure_unit_credentials(vault, relation, unit_name, mount, nonce, egress_subnet)
+        self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnet)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
     def _get_pki_ca_certificate(self) -> Optional[str]:
@@ -745,17 +745,25 @@ class VaultCharm(CharmBase):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
-    def _set_kv_relation_data(self, relation: Relation, mount: str, ca_certificate: str) -> None:
+    def _set_kv_relation_data(
+        self,
+        relation: Relation,
+        mount: str,
+        ca_certificate: str,
+        egress_subnet: str,
+    ) -> None:
         """Set relation data for vault-kv.
 
         Args:
             relation: Relation
             mount: mount name
             ca_certificate: CA certificate
+            egress_subnet: egress subnet
         """
         self.vault_kv.set_mount(relation, mount)
         vault_url = self._get_relation_api_address(relation)
         self.vault_kv.set_ca_certificate(relation, ca_certificate)
+        self.vault_kv.set_egress_subnet(relation, egress_subnet)
         if vault_url is not None:
             self.vault_kv.set_vault_url(relation, vault_url)
 

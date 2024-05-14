@@ -307,6 +307,49 @@ class TestVaultK8sIntegrationsPart1:
         assert action_output["value"] == secret_value
 
     @pytest.mark.abort_on_fail
+    async def test_given_vault_kv_requirer_related_and_requirer_pod_crashes_when_create_secret_then_secret_is_created(  # noqa: E501
+        self, ops_test, deploy_requiring_charms: None
+    ):
+        secret_key = "test-key"
+        secret_value = "test-value"
+        vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_APPLICATION_NAME]
+        vault_kv_unit = vault_kv_application.units[0]
+        k8s_namespace = ops_test.model.name
+
+        crash_pod(
+            name=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}-0",
+            namespace=k8s_namespace,
+        )
+
+        await ops_test.model.wait_for_idle(
+            apps=[VAULT_KV_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=1,
+        )
+
+        vault_kv_create_secret_action = await vault_kv_unit.run_action(
+            action_name="create-secret",
+            key=secret_key,
+            value=secret_value,
+        )
+
+        await ops_test.model.get_action_output(
+            action_uuid=vault_kv_create_secret_action.entity_id, wait=30
+        )
+
+        vault_kv_get_secret_action = await vault_kv_unit.run_action(
+            action_name="get-secret",
+            key=secret_key,
+        )
+
+        action_output = await ops_test.model.get_action_output(
+            action_uuid=vault_kv_get_secret_action.entity_id, wait=30
+        )
+
+        assert action_output["value"] == secret_value
+
+    @pytest.mark.abort_on_fail
     async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):

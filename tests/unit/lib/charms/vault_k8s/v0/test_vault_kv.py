@@ -59,7 +59,11 @@ class VaultKvRequirerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.interface = VaultKvRequires(self, "vault-kv", "dummy")
+        self.interface = VaultKvRequires(
+            self,
+            relation_name="vault-kv",
+            mount_suffix="dummy",
+        )
         self.framework.observe(self.interface.on.connected, self._on_connected)
         self.framework.observe(self.interface.on.ready, self._on_ready)
         self.framework.observe(self.interface.on.gone_away, self._on_gone_away)
@@ -391,6 +395,15 @@ class TestVaultKvRequires(unittest.TestCase):
         assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
+    def test_given_unit_leader_when_config_changed_then_connected_event_fired(
+        self, _on_connected
+    ):
+        self.setup_relation()
+        self.harness.charm.on.config_changed.emit()
+
+        self.assertEqual(_on_connected.call_count, 2)
+
+    @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
         self, _on_connected
     ):
@@ -424,6 +437,7 @@ class TestVaultKvRequires(unittest.TestCase):
                 "vault_url": "https://vault.example.com",
                 "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
+                "egress_subnet": "1.1.1.1",
                 "credentials": json.dumps({"abcd": "dummy"}),
             },
         )
