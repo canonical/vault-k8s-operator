@@ -110,7 +110,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.362
+pyright==1.1.363
     # via -r test-requirements.in
 pytest==8.1.2
     # via
@@ -157,7 +157,7 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
-types-hvac==2.1.0.20240329
+types-hvac==2.1.0.20240514
     # via -r test-requirements.in
 types-requests==2.31.0.20240406
     # via types-hvac
