@@ -1874,6 +1874,7 @@ class TLSCertificatesRequiresV3(Object):
             if certificate.csr in requirer_csrs:
                 if certificate.revoked:
                     with suppress(SecretNotFoundError):
+                        logger.debug("Removoing secret with label %s", f"{LIBID}-{certificate.csr}")
                         secret = self.model.get_secret(label=f"{LIBID}-{certificate.csr}")
                         secret.remove_all_revisions()
                     self.on.certificate_invalidated.emit(
@@ -1885,6 +1886,7 @@ class TLSCertificatesRequiresV3(Object):
                     )
                 else:
                     try:
+                        logger.debug("Getting secret with label %s", f"{LIBID}-{certificate.csr}")
                         secret = self.model.get_secret(label=f"{LIBID}-{certificate.csr}")
                         secret.set_content({"certificate": certificate.certificate})
                         secret.set_info(
