@@ -77,7 +77,6 @@ PKI_RELATION_NAME = "vault-pki"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
-LOKI_ALERT_RULES_PATH = "./src/loki_alert_rules"
 PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 S3_RELATION_NAME = "s3-parameters"
@@ -127,7 +126,6 @@ class VaultCharm(CharmBase):
         self._logging = LogForwarder(
             charm=self,
             relation_name=LOG_FORWARDING_RELATION_NAME,
-            alert_rules_path=LOKI_ALERT_RULES_PATH,
         )
         self.tls = VaultTLSManager(
             charm=self,

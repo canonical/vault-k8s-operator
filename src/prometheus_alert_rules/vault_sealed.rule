@@ -4,5 +4,5 @@ for: 0m
 labels:
     severity: critical
 annotations:
-    summary: Vault has gone sealed again (instance {{ $labels.instance }})
+    summary: "Vault is sealed"
     description: "Vault instance is sealed on {{ $labels.instance }}\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
