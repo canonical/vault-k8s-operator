@@ -1,0 +1,8 @@
+alert: VaultClusterLeaderLastContactRule
+expr: vault_raft_leader_lastContact{quantile="0.9"} > 200
+for: 1m
+labels:
+    severity: critical
+annotations:
+    summary: "High delays in leader contacting followers"
+    description: "The leader has frequently failed to contact followers within 200 ms in the last one minute"
