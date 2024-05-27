@@ -20,9 +20,9 @@ cffi==1.16.0
     #   pynacl
 charset-normalizer==3.3.2
     # via requests
-codespell==2.2.6
+codespell==2.3.0
     # via -r test-requirements.in
-coverage[toml]==7.5.1
+coverage[toml]==7.5.2
     # via -r test-requirements.in
 cryptography==42.0.7
     # via paramiko
@@ -110,7 +110,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.363
+pyright==1.1.364
     # via -r test-requirements.in
 pytest==8.1.2
     # via
@@ -130,7 +130,7 @@ pyyaml==6.0.1
     #   juju
     #   kubernetes
     #   pytest-operator
-requests==2.32.0
+requests==2.32.2
     # via
     #   hvac
     #   kubernetes
@@ -140,7 +140,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.4.4
+ruff==0.4.5
     # via -r test-requirements.in
 six==1.16.0
     # via
@@ -157,7 +157,7 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
-types-hvac==2.1.0.20240514
+types-hvac==2.2.0.20240522
     # via -r test-requirements.in
 types-requests==2.31.0.20240406
     # via types-hvac
