@@ -1509,6 +1509,7 @@ class TestCharm(unittest.TestCase):
             certificate_signing_request=csr.encode(), is_ca=True
         )
 
+    @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
     def test_given_vault_is_available_when_pki_certificate_is_available_then_certificate_added_to_vault_pki(
         self,
@@ -1518,11 +1519,10 @@ class TestCharm(unittest.TestCase):
             **{
                 "is_initialized.return_value": True,
                 "is_api_available.return_value": True,
-                "is_intermediate_ca_set.return_value": False,
                 "is_pki_role_created.return_value": False,
+                "get_intermediate_ca.return_value": "vault",
             },
         )
-
         csr = "some csr content"
         certificate = "some certificate"
         ca = "some ca"
@@ -1566,7 +1566,7 @@ class TestCharm(unittest.TestCase):
             certificate=certificate,
             mount="charm-pki",
         )
-        self.mock_vault.create_pki_charm_role.assert_called_with(
+        self.mock_vault.create_or_update_pki_charm_role.assert_called_with(
             allowed_domains="vault", mount="charm-pki", role="charm"
         )
 

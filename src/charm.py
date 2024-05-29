@@ -389,10 +389,10 @@ class VaultCharm(CharmBase):
         if not certificate:
             logger.debug("No certificate available")
             return
-        if not vault.is_intermediate_ca_set(mount=PKI_MOUNT, certificate=certificate):
+        if not self._is_intermediate_ca_set(vault, common_name):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
-            vault.create_pki_charm_role(
+        if common_name not in vault.get_allowed_domains_in_pki_role(role=PKI_ROLE, mount=PKI_MOUNT):
+            vault.create_or_update_pki_charm_role(
                 allowed_domains=common_name,
                 mount=PKI_MOUNT,
                 role=PKI_ROLE,
