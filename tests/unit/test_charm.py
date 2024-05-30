@@ -1509,6 +1509,54 @@ class TestCharm(unittest.TestCase):
             certificate_signing_request=csr.encode(), is_ca=True
         )
 
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("charm.get_common_name_from_certificate", new=Mock)
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
+    def test_given_vault_pki_configured_when_common_name_is_changed_then_new_certificate_request_is_made(
+        self,
+        patch_request_certificate_creation,
+    ):
+        csr = "some csr content"
+        self.harness.update_config({"common_name": "vault"})
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+                "get_intermediate_ca.return_value": "vault",
+                "generate_pki_intermediate_ca_csr.return_value": csr,
+                "is_sealed.return_value": False,
+            },
+        )
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        self._set_peer_relation()
+        self._set_approle_secret(
+            role_id="root token content",
+            secret_id="whatever secret id",
+        )
+
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
+        self.harness.add_relation_unit(relation_id, "tls-provider/0")
+
+        self.mock_vault.enable_secrets_engine.assert_called_with(SecretsBackend.PKI, "charm-pki")
+        self.mock_vault.generate_pki_intermediate_ca_csr.assert_called_with(
+            mount="charm-pki", common_name="vault"
+        )
+        patch_request_certificate_creation.assert_called_with(
+            certificate_signing_request=csr.encode(), is_ca=True
+        )
+        self.harness.update_config({"common_name": "new_common_name"})
+        self.mock_vault.generate_pki_intermediate_ca_csr.assert_called_with(
+            mount="charm-pki", common_name="new_common_name"
+        )
+        patch_request_certificate_creation.assert_called_with(
+            certificate_signing_request=csr.encode(), is_ca=True
+        )
+
+
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
     def test_given_vault_is_available_when_pki_certificate_is_available_then_certificate_added_to_vault_pki(
@@ -1568,6 +1616,82 @@ class TestCharm(unittest.TestCase):
         )
         self.mock_vault.create_or_update_pki_charm_role.assert_called_with(
             allowed_domains="vault", mount="charm-pki", role="charm"
+        )
+
+    @patch("ops.model.Container.restart", new=Mock)
+    @patch("charm.get_common_name_from_certificate", new=Mock)
+    @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
+    def test_given_vault_pki_configured_when_common_name_is_changed_then_new_certificate_added_to_vault_pki(
+        self,
+        patch_get_assigned_certificates,
+    ):
+        csr = "some csr content"
+        self.harness.update_config({"common_name": "vault"})
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+                "get_intermediate_ca.return_value": "vault",
+                "generate_pki_intermediate_ca_csr.return_value": csr,
+                "is_sealed.return_value": False,
+            },
+        )
+        self.harness.set_leader(is_leader=True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        peer_relation_id = self._set_peer_relation()
+        self._set_approle_secret(
+            role_id="root token content",
+            secret_id="whatever secret id",
+        )
+        self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr=csr)
+        certificate = "some certificate"
+        ca = "some ca"
+        chain = [ca]
+        event = CertificateAvailableEvent(
+            handle=Mock(),
+            certificate=certificate,
+            certificate_signing_request=csr,
+            ca=ca,
+            chain=chain,
+        )
+        relation_id = self.harness.add_relation(
+            relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
+        )
+
+        patch_get_assigned_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=relation_id,
+                application_name="tls-provider",
+                csr=csr,
+                certificate=certificate,
+                ca=ca,
+                chain=chain,
+                revoked=False,
+                expiry_time=datetime.now(timezone.utc),
+            )
+        ]
+
+        self.harness.charm._on_tls_certificate_pki_certificate_available(event=event)
+
+        self.mock_vault.set_pki_intermediate_ca_certificate.assert_called_with(
+            certificate=certificate,
+            mount="charm-pki",
+        )
+        self.mock_vault.create_or_update_pki_charm_role.assert_called_with(
+            allowed_domains="vault", mount="charm-pki", role="charm"
+        )
+
+        self.harness.update_config({"common_name": "new_common_name"})
+
+        self.harness.charm._on_tls_certificate_pki_certificate_available(event=event)
+
+        self.mock_vault.set_pki_intermediate_ca_certificate.assert_called_with(
+            certificate=certificate,
+            mount="charm-pki",
+        )
+        self.mock_vault.create_or_update_pki_charm_role.assert_called_with(
+            allowed_domains="new_common_name", mount="charm-pki", role="charm"
         )
 
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesProvidesV3.set_relation_certificate")

@@ -358,7 +358,11 @@ class Vault:
         self._client.secrets.pki.create_or_update_role(
             name=role,
             mount_point=mount,
-            extra_params={"allowed_domains": allowed_domains, "allow_subdomains": True,},
+            extra_params={
+                "allowed_domains": allowed_domains,
+                "allow_subdomains": True,
+                "allow_bare_domains": True,
+            },
         )
         logger.info("Created a role for the PKI backend")
 
@@ -409,14 +413,12 @@ class Vault:
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
 
-    def get_role(self, name, mount_point) -> str:
-        """Return the definition of the requested role."""
-        return self._client.secrets.pki.read_role(name=name, mount_point=mount_point)
-
-    def get_allowed_domains_in_pki_role(self, role, mount) -> List[str]:
+    def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
         """Return the list of domains allowed by the specified PKI role."""
         try:
-            return self._client.secrets.pki.read_role(name=role, mount_point=mount)["data"]["allowed_domains"]
+            return common_name in self._client.secrets.pki.read_role(
+                name=role, mount_point=mount
+            ).get("data", {}).get("allowed_domains", [])
         except InvalidPath:
             logger.error("Role does not exist on the specified path.")
-            return []
+            return False
