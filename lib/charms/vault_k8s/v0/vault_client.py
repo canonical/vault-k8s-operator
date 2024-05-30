@@ -348,11 +348,6 @@ class Vault:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
 
-    def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
-        """Check if the CA certificate is set for the PKI backend."""
-        existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        return existing_certificate == certificate
-
     def create_or_update_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
         """Create a role for the PKI backend."""
         self._client.secrets.pki.create_or_update_role(
