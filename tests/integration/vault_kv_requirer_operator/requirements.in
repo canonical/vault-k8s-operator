@@ -2,4 +2,4 @@ ops
 hvac
 pydantic
 pytest-interface-tester
-requests==2.32.0
+requests==2.31.0
