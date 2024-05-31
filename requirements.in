@@ -8,7 +8,7 @@ lightkube-models
 pydantic==2.6.4
 pytest-interface-tester
 pyhcl
-requests
+requests==2.31.0
 jsonschema
 cryptography
 boto3
