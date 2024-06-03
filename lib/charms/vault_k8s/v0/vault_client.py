@@ -356,7 +356,6 @@ class Vault:
             extra_params={
                 "allowed_domains": allowed_domains,
                 "allow_subdomains": True,
-                "allow_bare_domains": True,
             },
         )
         logger.info("Created a role for the PKI backend")
