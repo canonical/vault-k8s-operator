@@ -33,6 +33,7 @@ parts:
   charm:
     build-packages:
       - rustc
+      - cargo
 
 actions:
   create-secret:
