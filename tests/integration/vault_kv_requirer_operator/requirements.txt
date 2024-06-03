@@ -28,11 +28,11 @@ packaging==24.0
     # via pytest
 pluggy==1.5.0
     # via pytest
-pydantic==2.6.4
+pydantic==2.7.2
     # via
     #   -r requirements.in
     #   pytest-interface-tester
-pydantic-core==2.16.3
+pydantic-core==2.18.3
     # via pydantic
 pytest==8.2.1
     # via pytest-interface-tester
