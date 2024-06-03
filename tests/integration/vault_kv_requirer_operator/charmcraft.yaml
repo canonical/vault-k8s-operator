@@ -29,6 +29,11 @@ bases:
     - name: "ubuntu"
       channel: "22.04"
 
+parts:
+  charm:
+    build-packages:
+      - rustc
+
 actions:
   create-secret:
     description: Creates a secret in Vault
