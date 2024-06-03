@@ -160,11 +160,11 @@ class Vault:
 
     def needs_migration(self) -> bool:
         """Return true if the vault needs to be migrated, false otherwise."""
-        return self._client.seal_status["migration"]
+        return self._client.seal_status["migration"]  # type: ignore -- bad type hint in stubs
 
     def get_seal_type(self) -> str:
         """Return the seal type of the Vault."""
-        return self._client.seal_status["type"]
+        return self._client.seal_status["type"]  # type: ignore -- bad type hint in stubs
 
     def is_seal_type_transit(self) -> bool:
         """Return whether Vault is sealed by the transit backend."""

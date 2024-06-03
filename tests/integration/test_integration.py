@@ -77,7 +77,7 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[int
     leader_unit_index = int(leader_unit.name.split("/")[-1])
     unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test, app_name)]
     client = hvac.Client(url=f"https://{unit_addresses[leader_unit_index]}:8200", verify=False)
-    seal_type = client.seal_status["type"]
+    seal_type = client.seal_status["type"]  # type: ignore -- bad type hints in stubs
     if seal_type == "shamir":
         initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
         root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
@@ -294,6 +294,49 @@ class TestVaultK8sIntegrationsPart1:
         secret_value = "test-value"
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_APPLICATION_NAME]
         vault_kv_unit = vault_kv_application.units[0]
+        vault_kv_create_secret_action = await vault_kv_unit.run_action(
+            action_name="create-secret",
+            key=secret_key,
+            value=secret_value,
+        )
+
+        await ops_test.model.get_action_output(
+            action_uuid=vault_kv_create_secret_action.entity_id, wait=30
+        )
+
+        vault_kv_get_secret_action = await vault_kv_unit.run_action(
+            action_name="get-secret",
+            key=secret_key,
+        )
+
+        action_output = await ops_test.model.get_action_output(
+            action_uuid=vault_kv_get_secret_action.entity_id, wait=30
+        )
+
+        assert action_output["value"] == secret_value
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_kv_requirer_related_and_requirer_pod_crashes_when_create_secret_then_secret_is_created(  # noqa: E501
+        self, ops_test, deploy_requiring_charms: None
+    ):
+        secret_key = "test-key"
+        secret_value = "test-value"
+        vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_APPLICATION_NAME]
+        vault_kv_unit = vault_kv_application.units[0]
+        k8s_namespace = ops_test.model.name
+
+        crash_pod(
+            name=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}-0",
+            namespace=k8s_namespace,
+        )
+
+        await ops_test.model.wait_for_idle(
+            apps=[VAULT_KV_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=1,
+        )
+
         vault_kv_create_secret_action = await vault_kv_unit.run_action(
             action_name="create-secret",
             key=secret_key,

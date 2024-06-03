@@ -19,10 +19,6 @@ from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateAvailableEvent,
@@ -86,6 +82,7 @@ KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
 PEER_RELATION_NAME = "vault-peers"
+PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 PKI_MOUNT = "charm-pki"
 PKI_RELATION_NAME = "vault-pki"
@@ -112,10 +109,7 @@ class VaultCharm(CharmBase):
         super().__init__(*args)
         self._service_name = self._container_name = CONTAINER_NAME
         self._container = Container(container=self.unit.get_container(self._container_name))
-        self.service_patcher = KubernetesServicePatch(
-            charm=self,
-            ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
-        )
+        self.unit.set_ports(self.VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
         self.vault_pki = TLSCertificatesProvidesV3(self, PKI_RELATION_NAME)
         self.tls_certificates_pki = TLSCertificatesRequiresV3(
@@ -138,8 +132,12 @@ class VaultCharm(CharmBase):
                     "static_configs": [{"targets": [f"*:{self.VAULT_PORT}"]}],
                 }
             ],
+            alert_rules_path=PROMETHEUS_ALERT_RULES_PATH,
         )
-        self._logging = LogForwarder(charm=self, relation_name=LOG_FORWARDING_RELATION_NAME)
+        self._logging = LogForwarder(
+            charm=self,
+            relation_name=LOG_FORWARDING_RELATION_NAME,
+        )
         self.tls = VaultTLSManager(
             charm=self,
             workload=self._container,
@@ -583,9 +581,9 @@ class VaultCharm(CharmBase):
             logger.debug("Failed to get initialized Vault")
             return
         mount = f"charm-{app_name}-{mount_suffix}"
-        self._set_kv_relation_data(relation, mount, ca_certificate)
         vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         self._ensure_unit_credentials(vault, relation, unit_name, mount, nonce, egress_subnet)
+        self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnet)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
     def _get_pki_ca_certificate(self) -> Optional[str]:
@@ -877,17 +875,25 @@ class VaultCharm(CharmBase):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
-    def _set_kv_relation_data(self, relation: Relation, mount: str, ca_certificate: str) -> None:
+    def _set_kv_relation_data(
+        self,
+        relation: Relation,
+        mount: str,
+        ca_certificate: str,
+        egress_subnet: str,
+    ) -> None:
         """Set relation data for vault-kv.
 
         Args:
             relation: Relation
             mount: mount name
             ca_certificate: CA certificate
+            egress_subnet: egress subnet
         """
         self.vault_kv.set_mount(relation, mount)
         vault_url = self._get_relation_api_address(relation)
         self.vault_kv.set_ca_certificate(relation, ca_certificate)
+        self.vault_kv.set_egress_subnet(relation, egress_subnet)
         if vault_url is not None:
             self.vault_kv.set_vault_url(relation, vault_url)
 
