@@ -29,10 +29,6 @@ class MockBinding:
 
 
 class TestCharmTLS(unittest.TestCase):
-    @patch(
-        "charm.KubernetesServicePatch",
-        lambda charm, ports: None,
-    )
     def setUp(self):
         self.model_name = "whatever"
         self.harness = testing.Harness(VaultCharm)
@@ -200,7 +196,7 @@ class TestCharmTLS(unittest.TestCase):
         self.harness.set_can_connect(container=self.container_name, val=True)
 
         self.harness.charm.on.config_changed.emit()
-        assert patch_restart.called_once()
+        patch_restart.assert_called_once()
         self.assertEqual((root / "vault/certs/ca.pem").read_text(), EXAMPLE_CA)
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
