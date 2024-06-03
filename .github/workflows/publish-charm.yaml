@@ -26,7 +26,7 @@ jobs:
         run: echo "charm_path=$(find . -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
   
       - name: Upload charm to Charmhub
-        uses: canonical/charming-actions/upload-charm@2.5.0-rc
+        uses: canonical/charming-actions/upload-charm@2.6.0
         with:
           built-charm-path: ${{ steps.charm-path.outputs.charm_path }}
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
@@ -34,7 +34,7 @@ jobs:
           channel: 1.15/edge
   
       - name: Publish libs
-        uses: canonical/charming-actions/release-libraries@2.5.0-rc
+        uses: canonical/charming-actions/release-libraries@2.6.0
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
