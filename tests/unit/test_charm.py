@@ -111,10 +111,6 @@ class TestCharm(unittest.TestCase):
     patcher_vault_tls_manager = patch("charm.VaultTLSManager", autospec=VaultTLSManager)
     patcher_vault = patch("charm.Vault", autospec=Vault)
 
-    @patch(
-        "charm.KubernetesServicePatch",
-        lambda charm, ports: None,
-    )
     def setUp(self):
         self.mock_vault_tls_manager = TestCharm.patcher_vault_tls_manager.start().return_value
         self.mock_vault = TestCharm.patcher_vault.start().return_value
