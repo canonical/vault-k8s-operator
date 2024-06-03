@@ -408,7 +408,7 @@ class Vault:
         return len(raft_config["data"]["config"]["servers"])
 
     def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
-        """Return the list of domains allowed by the specified PKI role."""
+        """Return whether the provided common name is in the list of domains allowed by the specified PKI role."""
         try:
             return common_name in self._client.secrets.pki.read_role(
                 name=role, mount_point=mount

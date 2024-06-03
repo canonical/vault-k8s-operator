@@ -397,7 +397,7 @@ class VaultCharm(CharmBase):
         if (not self._is_intermediate_ca_common_name_valid(vault, common_name) or
             not self._is_intermediate_ca_set(vault, certificate)):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-        if vault.is_common_name_allowed_in_pki_role(
+        if not vault.is_common_name_allowed_in_pki_role(
             role=PKI_ROLE, mount=PKI_MOUNT, common_name=common_name
         ):
             vault.create_or_update_pki_charm_role(

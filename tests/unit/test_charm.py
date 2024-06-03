@@ -1569,6 +1569,7 @@ class TestCharm(unittest.TestCase):
                 "is_api_available.return_value": True,
                 "is_pki_role_created.return_value": False,
                 "get_intermediate_ca.return_value": "vault",
+                "is_common_name_allowed_in_pki_role.return_value": False,
             },
         )
         csr = "some csr content"
@@ -1634,6 +1635,7 @@ class TestCharm(unittest.TestCase):
                 "get_intermediate_ca.return_value": "vault",
                 "generate_pki_intermediate_ca_csr.return_value": csr,
                 "is_sealed.return_value": False,
+                "is_common_name_allowed_in_pki_role.return_value": False,
             },
         )
         self.harness.set_leader(is_leader=True)
