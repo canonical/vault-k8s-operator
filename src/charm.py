@@ -241,15 +241,6 @@ class VaultCharm(CharmBase):
         for relation in outstanding_requests:
             self._generate_and_set_autounseal_credentials(relation)
 
-        # FIXME: Don't disable the secrets engine until we have a plan for how
-        # to migrate auto-unseal Vaults back to manual-unseal
-        # if not self.vault_autounseal_provides.get_requirer_requests():
-        #     vault = self._get_active_vault_client()
-        #     if vault is None:
-        #         logger.warning("Vault is not active, cannot disable autounseal transit engine")
-        #         return
-        #     vault.disable_secrets_engine(AUTOUNSEAL_MOUNT_PATH)
-
     def _set_autounseal_relation_data(
         self, relation: Relation, key_name: str, approle_id: str, approle_secret_id: str
     ):
