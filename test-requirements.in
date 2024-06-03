@@ -1,4 +1,4 @@
-codespell==2.2.6
+codespell
 coverage[toml]
 juju
 pyright
@@ -6,4 +6,3 @@ pytest
 pytest-operator
 ruff
 types-hvac
-requests==2.31.0
