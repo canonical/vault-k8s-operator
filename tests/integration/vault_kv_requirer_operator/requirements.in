@@ -2,8 +2,3 @@ ops~=2.8.0
 hvac
 pydantic
 pytest-interface-tester
-
-# Because of requests issue
-certifi==2024.2.2
-requests==2.31.0
-ops-scenario==6.0.3

@@ -21,3 +21,15 @@ updates:
       pip_dependencies:
         patterns:
           - "*"
+
+
+  - package-ecosystem: "pip"
+    directory: "/tests/integration/vault_kv_requirer_operator"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore: "
+    groups:
+      pip_dependencies:
+        patterns:
+          - "*"
