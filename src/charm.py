@@ -1127,7 +1127,7 @@ class VaultCharm(CharmBase):
         )
         return config_content
 
-    def _get_transit_requirer_relation(self):
+    def _get_transit_requirer_relation(self) -> Relation | None:
         """Return the transit relation if it exists."""
         return self.model.get_relation(AUTOUNSEAL_REQUIRES_RELATION_NAME)
 
