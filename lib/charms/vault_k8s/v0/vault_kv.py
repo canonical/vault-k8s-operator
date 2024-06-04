@@ -68,7 +68,7 @@ class ExampleRequirerCharm(CharmBase):
         unit_credentials = self.interface.get_unit_credentials(relation)
         # unit_credentials is a juju secret id
         secret = self.model.get_secret(id=unit_credentials)
-        secret_content = secret.get_content()
+        secret_content = secret.get_content(refresh=True)
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
 
@@ -99,7 +99,7 @@ class ExampleRequirerCharm(CharmBase):
 
     def get_nonce(self):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
-        nonce = secret.get_content()["nonce"]
+        nonce = secret.get_content(refresh=True)["nonce"]
         return nonce
 
 
