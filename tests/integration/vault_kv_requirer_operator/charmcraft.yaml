@@ -31,8 +31,9 @@ bases:
 
 parts:
   charm:
-    charm-binary-python-packages:
-      - pydantic
+    build-packages:
+      - rustc
+      - cargo
 
 actions:
   create-secret:
