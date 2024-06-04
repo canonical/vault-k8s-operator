@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -288,11 +288,6 @@ class Vault:
             else:
                 raise VaultClientError(e) from e
 
-    def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
-        """Check if the intermediate CA is set for the PKI backend."""
-        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        return intermediate_ca == certificate
-
     def get_intermediate_ca(self, mount: str) -> str:
         """Get the intermediate CA for the PKI backend."""
         return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
@@ -353,12 +348,7 @@ class Vault:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
 
-    def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
-        """Check if the CA certificate is set for the PKI backend."""
-        existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        return existing_certificate == certificate
-
-    def create_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+    def create_or_update_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
         """Create a role for the PKI backend."""
         self._client.secrets.pki.create_or_update_role(
             name=role,
@@ -416,3 +406,13 @@ class Vault:
         """Return the number of raft peers."""
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
+
+    def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
+        """Return whether the provided common name is in the list of domains allowed by the specified PKI role."""
+        try:
+            return common_name in self._client.secrets.pki.read_role(
+                name=role, mount_point=mount
+            ).get("data", {}).get("allowed_domains", [])
+        except InvalidPath:
+            logger.error("Role does not exist on the specified path.")
+            return False
