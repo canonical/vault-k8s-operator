@@ -18,10 +18,6 @@ from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateAvailableEvent,
@@ -101,10 +97,7 @@ class VaultCharm(CharmBase):
         super().__init__(*args)
         self._service_name = self._container_name = CONTAINER_NAME
         self._container = Container(container=self.unit.get_container(self._container_name))
-        self.service_patcher = KubernetesServicePatch(
-            charm=self,
-            ports=[ServicePort(name="vault", port=self.VAULT_PORT)],
-        )
+        self.unit.set_ports(self.VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
         self.vault_pki = TLSCertificatesProvidesV3(self, PKI_RELATION_NAME)
         self.tls_certificates_pki = TLSCertificatesRequiresV3(
