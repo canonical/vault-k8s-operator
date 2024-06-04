@@ -1085,7 +1085,10 @@ class VaultCharm(CharmBase):
 
         if not config_file_content_matches(existing_content=existing_content, new_content=content):
             self._push_config_file_to_workload(content=content)
-            if _contains_transit_stanza(existing_content) != _contains_transit_stanza(content):
+            # If the seal type has changed, we need to restart Vault to apply
+            # the changes. SIGHUP is currently only supported as a beta feature
+            # for the enterprise version in Vault 1.16+
+            if _seal_type_has_changed(existing_content, content):
                 if self._vault_service_is_running():
                     self._container.restart(self._service_name)
 
@@ -1429,9 +1432,19 @@ def render_vault_config_file(
     return content
 
 
-def _contains_transit_stanza(config_content: str) -> bool:
-    """Check if the transit stanza is present in the Vault configuration file."""
-    config = hcl.loads(config_content)
+def _seal_type_has_changed(content_a: str, content_b: str) -> bool:
+    """Check if the seal type has changed between two versions of the Vault configuration file.
+
+    Currently only checks if the transit stanza is present or not, since this
+    is all we support. This function will need to be extended to support
+    alternate cases if and when we support them.
+    """
+    config_a = hcl.loads(content_a)
+    config_b = hcl.loads(content_b)
+    return _contains_transit_stanza(config_a) != _contains_transit_stanza(config_b)
+
+
+def _contains_transit_stanza(config: dict) -> bool:
     if "seal" in config and "transit" in config["seal"]:
         return True
     return False
