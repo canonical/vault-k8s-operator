@@ -8,7 +8,6 @@ intended to be used by charms that need to manage a Vault cluster.
 """
 
 import logging
-import textwrap
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -236,44 +235,52 @@ class Vault:
         except VaultError as e:
             raise VaultClientError(e) from e
 
-    def configure_policy(
-        self, policy_name: str, policy_path: str, mount: Optional[str] = None
-    ) -> None:
+    def configure_policy(self, policy_name: str, policy_path: str, **formatting_args: str) -> None:
         """Create/update a policy within vault.
 
         Args:
             policy_name: Name of the policy to create
             policy_path: The path of the file where the policy is defined, ending with .hcl
-            mount: Formats the policy string with the given mount path to create dynamic policies
+            **formatting_args: Additional arguments to format the policy
         """
         with open(policy_path, "r") as f:
             policy = f.read()
         try:
             self._client.sys.create_or_update_policy(
                 name=policy_name,
-                policy=policy if not mount else policy.format(mount=mount),
+                policy=policy if not formatting_args else policy.format(**formatting_args),
             )
         except VaultError as e:
             raise VaultClientError(e) from e
         logger.debug("Created or updated charm policy: %s", policy_name)
 
     def configure_approle(
-        self, role_name: str, policies: List[str], cidrs: List[str] | None = None
+        self,
+        role_name: str,
+        token_ttl=None,
+        token_max_ttl=None,
+        policies: List[str] | None = None,
+        cidrs: List[str] | None = None,
+        token_period=None,
     ) -> str:
         """Create/update a role within vault associating the supplied policies.
 
         Args:
             role_name: Name of the role to be created or updated
             policies: The attached list of policy names this approle will have access to
+            token_ttl: Incremental lifetime for generated tokens, provided as a duration string such as "5m"
+            token_max_ttl: Maximum lifetime for generated tokens, provided as a duration string such as "5m"
+            token_period: The period within which the token must be renewed. See Vault documentation for more information.
             cidrs: The list of IP networks that are allowed to authenticate
         """
         self._client.auth.approle.create_or_update_approle(
             role_name,
-            token_ttl="60s",
-            token_max_ttl="60s",
-            token_policies=policies,
             bind_secret_id="true",
+            token_ttl=token_ttl,
+            token_max_ttl=token_max_ttl,
+            token_policies=policies,
             token_bound_cidrs=cidrs,
+            token_period=token_period,
         )
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
@@ -461,24 +468,6 @@ class Vault:
         """Return the approle name for the given relation id."""
         return f"charm-autounseal-{relation_id}"
 
-    def _configure_autounseal_policy(self, mount: str, relation_id: int, key_name: str) -> str:
-        """Create/update a policy within vault to use the transit key."""
-        mount_policy = textwrap.dedent(f"""
-        path "{mount}/encrypt/{key_name}" {{
-            capabilities = ["update"]
-        }}
-
-        path "{mount}/decrypt/{key_name}" {{
-            capabilities = ["update"]
-        }}
-        """)
-        policy_name = self._get_autounseal_policy_name(relation_id)
-        self._client.sys.create_or_update_policy(
-            policy_name,
-            mount_policy,
-        )
-        return policy_name
-
     def _get_autounseal_key_name(self, relation_id: int) -> str:
         """Return the key name for the given relation id."""
         return str(relation_id)
@@ -509,43 +498,25 @@ class Vault:
         # key_name = self.get_autounseal_key_name(relation_id)
         # self._destroy_autounseal_key(mount, key_name)
 
-    def _create_autounseal_approle(self, relation_id: int, policy_name: str) -> tuple[str, str]:
-        """Create an approle for the autounseal policy.
-
-        Args:
-            relation_id: The Juju relation id to use for the approle.
-            policy_name: The name of the policy to associate with the approle.
-
-        Returns:
-            A tuple containing the name and role_id of the created approle.
-        """
-        role_name = self._get_autounseal_approle_name(relation_id)
-        self._client.auth.approle.create_or_update_approle(
-            role_name=role_name,
-            token_policies=[policy_name],
-            # token_period is crititcal for the approle to be able to renew its token
-            # and keep the vault unsealed. Without this, the token would expire and
-            # Vault would go into an error state.
-            token_period="60s",  # TODO: Should this be increased?
-        )
-        response = self._client.auth.approle.read_role_id(f"charm-autounseal-{relation_id}")
-        role_id = response["data"]["role_id"]
-        logger.info("Created approle for autounseal policy %s", role_id)
-        return role_name, role_id
-
-    def create_autounseal_credentials(self, relation_id: int, mount: str) -> tuple[str, str, str]:
+    def create_autounseal_credentials(
+        self, relation_id: int, mount: str, policy_path: str
+    ) -> tuple[str, str, str]:
         """Create auto-unseal credentials for the given relation id.
 
         Args:
             relation_id: The Juju relation id to use for the approle.
             mount: The mount point for the transit backend.
+            policy_path: Path to a file that contains the autounseal policy.
 
         Returns:
             A tuple containing the Role Id, Secret Id and Key Name.
 
         """
         key_name = self._create_autounseal_key(mount, relation_id)
-        policy_name = self._configure_autounseal_policy(mount, relation_id, key_name)
-        role_name, role_id = self._create_autounseal_approle(relation_id, policy_name)
+        policy_name = self._get_autounseal_policy_name(relation_id)
+        self.configure_policy(policy_name, policy_path, mount=mount, key_name=key_name)
+
+        role_name = self._get_autounseal_approle_name(relation_id)
+        role_id = self.configure_approle(role_name, policies=[policy_name], token_period="60s")
         secret_id = self.generate_role_secret_id(role_name)
         return key_name, role_id, secret_id

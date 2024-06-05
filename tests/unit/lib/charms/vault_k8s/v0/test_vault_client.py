@@ -2,11 +2,11 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import textwrap
 import unittest
 from unittest.mock import MagicMock, patch
 
 import requests
+from charm import AUTOUNSEAL_POLICY_PATH
 from charms.vault_k8s.v0.vault_client import AppRole, AuditDeviceType, SecretsBackend, Token, Vault
 
 TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
@@ -166,16 +166,21 @@ class TestVault(unittest.TestCase):
         patch_read_role_id.return_value = {"data": {"role_id": "1234"}}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         assert "1234" == vault.configure_approle(
-            "test-approle", ["root", "default"], ["192.168.1.0/24"]
+            "test-approle",
+            policies=["root", "default"],
+            cidrs=["192.168.1.0/24"],
+            token_max_ttl="1h",
+            token_ttl="1h",
         )
 
         patch_create_approle.assert_called_with(
             "test-approle",
-            token_ttl="60s",
-            token_max_ttl="60s",
-            token_policies=["root", "default"],
             bind_secret_id="true",
+            token_ttl="1h",
+            token_max_ttl="1h",
+            token_policies=["root", "default"],
             token_bound_cidrs=["192.168.1.0/24"],
+            token_period=None,
         )
         patch_read_role_id.assert_called_once()
 
@@ -229,24 +234,22 @@ class TestVault(unittest.TestCase):
     ):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         relation_id = 1
-        mount = "example"
-        vault.create_autounseal_credentials(relation_id, mount)
+        mount = "example_mount"
+        vault.create_autounseal_credentials(relation_id, mount, AUTOUNSEAL_POLICY_PATH)
 
-        expected_policy = textwrap.dedent(f"""
-        path "{mount}/encrypt/{relation_id}" {{
-            capabilities = ["update"]
-        }}
-
-        path "{mount}/decrypt/{relation_id}" {{
-            capabilities = ["update"]
-        }}
-        """)
-
+        with open(f"{TEST_PATH}/autounseal_policy_formatted.hcl", "r") as f:
+            expected_policy = f.read()
         mock_create_key.assert_called_with(mount_point=mount, name=str(relation_id))
-        mock_create_policy.assert_called_with(f"charm-autounseal-{relation_id}", expected_policy)
+        mock_create_policy.assert_called_with(
+            name=f"charm-autounseal-{relation_id}", policy=expected_policy
+        )
         mock_create_approle.assert_called_with(
-            role_name=f"charm-autounseal-{relation_id}",
+            f"charm-autounseal-{relation_id}",
+            bind_secret_id="true",
+            token_ttl=None,
+            token_max_ttl=None,
             token_policies=[f"charm-autounseal-{relation_id}"],
+            token_bound_cidrs=None,
             token_period="60s",
         )
 

@@ -544,7 +544,11 @@ class TestCharm(unittest.TestCase):
             policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH
         )
         self.mock_vault.configure_approle.assert_called_once_with(
-            role_name="charm", policies=[CHARM_POLICY_NAME, "default"], cidrs=["10.0.0.10/24"]
+            role_name="charm",
+            cidrs=["10.0.0.10/24"],
+            policies=[CHARM_POLICY_NAME, "default"],
+            token_ttl="1h",
+            token_max_ttl="1h",
         )
         self.mock_vault.generate_role_secret_id.assert_called_once_with(
             name="charm", cidrs=["10.0.0.10/24"]
@@ -1559,7 +1563,6 @@ class TestCharm(unittest.TestCase):
         patch_request_certificate_creation.assert_called_with(
             certificate_signing_request=csr.encode(), is_ca=True
         )
-
 
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")

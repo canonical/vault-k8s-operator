@@ -91,6 +91,7 @@ REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
+AUTOUNSEAL_POLICY_PATH = "src/templates/autounseal_policy.hcl"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
@@ -227,7 +228,9 @@ class VaultCharm(CharmBase):
         vault.enable_secrets_engine(SecretsBackend.TRANSIT, AUTOUNSEAL_MOUNT_PATH)
 
         key_name, approle_id, secret_id = vault.create_autounseal_credentials(
-            relation.id, AUTOUNSEAL_MOUNT_PATH
+            relation.id,
+            AUTOUNSEAL_MOUNT_PATH,
+            AUTOUNSEAL_POLICY_PATH,
         )
 
         self._set_autounseal_relation_data(relation, key_name, approle_id, secret_id)
@@ -510,8 +513,9 @@ class VaultCharm(CharmBase):
         if not certificate:
             logger.debug("No certificate available")
             return
-        if (not self._is_intermediate_ca_common_name_valid(vault, common_name) or
-            not self._is_intermediate_ca_set(vault, certificate)):
+        if not self._is_intermediate_ca_common_name_valid(
+            vault, common_name
+        ) or not self._is_intermediate_ca_set(vault, certificate):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
         if not vault.is_common_name_allowed_in_pki_role(
             role=PKI_ROLE, mount=PKI_MOUNT, common_name=common_name
@@ -678,6 +682,8 @@ class VaultCharm(CharmBase):
                 role_name="charm",
                 cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
+                token_ttl="1h",
+                token_max_ttl="1h",
             )
             secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
             self._set_approle_auth_secret(role_id, secret_id)
@@ -907,8 +913,14 @@ class VaultCharm(CharmBase):
     ):
         """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
-        vault.configure_policy(policy_name, "src/templates/kv_mount.hcl", mount)
-        role_id = vault.configure_approle(role_name, [policy_name], [egress_subnet])
+        vault.configure_policy(policy_name, "src/templates/kv_mount.hcl", mount=mount)
+        role_id = vault.configure_approle(
+            role_name,
+            policies=[policy_name],
+            cidrs=[egress_subnet],
+            token_ttl="1h",
+            token_max_ttl="1h",
+        )
         secret = self._create_or_update_kv_secret(
             vault,
             relation,
