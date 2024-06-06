@@ -81,11 +81,11 @@ BACKUP_KEY_PREFIX = "vault-backup"
 CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 CONTAINER_NAME = "vault"
 PKI_MOUNT = "charm-pki"
-PKI_ROLE = "charm"
+PKI_ROLE_NAME = "charm"
 CHARM_POLICY_NAME = "charm-access"
 CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
-
+APPROLE_ROLE_NAME = "charm"
 
 class VaultCharm(CharmBase):
     """Main class for to handle Juju events for the vault-k8s charm."""
@@ -391,13 +391,14 @@ class VaultCharm(CharmBase):
             not self._is_intermediate_ca_set(vault, certificate)):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
         if not vault.is_common_name_allowed_in_pki_role(
-            role=PKI_ROLE, mount=PKI_MOUNT, common_name=common_name
+            role=PKI_ROLE_NAME, mount=PKI_MOUNT, common_name=common_name
         ):
             vault.create_or_update_pki_charm_role(
                 allowed_domains=common_name,
                 mount=PKI_MOUNT,
-                role=PKI_ROLE,
+                role=PKI_ROLE_NAME,
             )
+        # Can run only after the first issuer has been actually created.
         vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
 
     def _sync_vault_pki(self) -> None:
@@ -512,14 +513,14 @@ class VaultCharm(CharmBase):
         if not common_name:
             logger.error("Common name is not set in the charm config")
             return
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+        if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
             return
         requested_csr = csr
         requested_common_name = get_common_name_from_csr(requested_csr)
         certificate = vault.sign_pki_certificate_signing_request(
             mount=PKI_MOUNT,
-            role=PKI_ROLE,
+            role=PKI_ROLE_NAME,
             csr=requested_csr,
             common_name=requested_common_name,
         )
@@ -553,11 +554,11 @@ class VaultCharm(CharmBase):
             vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
             cidrs = [f"{self._bind_address}/24"]
             role_id = vault.configure_approle(
-                role_name="charm",
+                role_name=APPROLE_ROLE_NAME,
                 cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
             )
-            secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
+            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
             self._set_approle_auth_secret(role_id, secret_id)
             event.set_results({"result": "Charm authorized successfully."})
         except VaultClientError as e:

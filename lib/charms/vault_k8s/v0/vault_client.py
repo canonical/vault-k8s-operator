@@ -420,10 +420,12 @@ class Vault:
     def make_latest_pki_issuer_default(self, mount: str) -> None:
         """Update the issuers config to always make the latest issuer created default issuer."""
         first_issuer = self._client.secrets.pki.list_issuers(
-            mount_point="charm-pki"
+            mount_point=mount
         )["data"]["keys"][0]
-        self._client.write(
-            f"{mount}/config/issuers",
-            default_follows_latest_issuer=True,
-            default=first_issuer,
+        self._client.write_data(
+            path=f"{mount}/config/issuers",
+            data={
+                "default_follows_latest_issuer": True,
+                "default": first_issuer,
+            },
         )
