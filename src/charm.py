@@ -398,6 +398,7 @@ class VaultCharm(CharmBase):
                 mount=PKI_MOUNT,
                 role=PKI_ROLE,
             )
+        vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
 
     def _sync_vault_pki(self) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
