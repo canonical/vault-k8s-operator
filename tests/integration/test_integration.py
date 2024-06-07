@@ -379,14 +379,6 @@ class TestVaultK8sIntegrationsPart1:
         initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
-        leader_unit_index, root_token, _ = initialize_leader_vault
-        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
-            root_token=root_token,
-            endpoint=unit_addresses[leader_unit_index],
-            mount="charm-pki",
-        )
-        assert current_issuers_common_name == "unmatching-the-requirer.com"
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:vault-pki",
             relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
@@ -396,6 +388,14 @@ class TestVaultK8sIntegrationsPart1:
             status="active",
             timeout=1000,
         )
+        leader_unit_index, root_token, _ = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
+            root_token=root_token,
+            endpoint=unit_addresses[leader_unit_index],
+            mount="charm-pki",
+        )
+        assert current_issuers_common_name == "unmatching-the-requirer.com"
         action_output = await run_get_certificate_action(ops_test)
         assert action_output.get("certificate") is None
 
@@ -416,6 +416,12 @@ class TestVaultK8sIntegrationsPart1:
         }
         await vault_app.set_config(common_name_config)
         leader_unit_index, root_token, _ = initialize_leader_vault
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        action_output = await run_get_certificate_action(ops_test)
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
             root_token=root_token,
@@ -423,12 +429,6 @@ class TestVaultK8sIntegrationsPart1:
             mount="charm-pki",
         )
         assert current_issuers_common_name == common_name
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
-        )
-        action_output = await run_get_certificate_action(ops_test)
         assert action_output["certificate"] is not None
         assert action_output["ca-certificate"] is not None
         assert action_output["csr"] is not None
