@@ -11,10 +11,10 @@ import datetime
 import json
 import logging
 import socket
+from dataclasses import dataclass
 from typing import IO, Dict, List, Optional, Tuple, cast
 
 import hcl
-from attr import dataclass
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -86,7 +86,7 @@ PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PKI_CSR_SECRET_LABEL = "pki-csr"
 PKI_MOUNT = "charm-pki"
 PKI_RELATION_NAME = "vault-pki"
-PKI_ROLE = "charm"
+PKI_ROLE_NAME = "charm"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
@@ -96,6 +96,7 @@ AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
+APPROLE_ROLE_NAME = "charm"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
@@ -542,13 +543,18 @@ class VaultCharm(CharmBase):
         ) or not self._is_intermediate_ca_set(vault, certificate):
             vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
         if not vault.is_common_name_allowed_in_pki_role(
-            role=PKI_ROLE, mount=PKI_MOUNT, common_name=common_name
+            role=PKI_ROLE_NAME, mount=PKI_MOUNT, common_name=common_name
         ):
             vault.create_or_update_pki_charm_role(
                 allowed_domains=common_name,
                 mount=PKI_MOUNT,
-                role=PKI_ROLE,
+                role=PKI_ROLE_NAME,
             )
+        # Can run only after the first issuer has been actually created.
+        try:
+            vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
+        except VaultClientError as e:
+            logger.error("Failed to make latest issuer default: %s", e)
 
     def _sync_vault_pki(self) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
@@ -662,14 +668,14 @@ class VaultCharm(CharmBase):
         if not common_name:
             logger.error("Common name is not set in the charm config")
             return
-        if not vault.is_pki_role_created(role=PKI_ROLE, mount=PKI_MOUNT):
+        if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
             return
         requested_csr = csr
         requested_common_name = get_common_name_from_csr(requested_csr)
         certificate = vault.sign_pki_certificate_signing_request(
             mount=PKI_MOUNT,
-            role=PKI_ROLE,
+            role=PKI_ROLE_NAME,
             csr=requested_csr,
             common_name=requested_common_name,
         )
@@ -703,13 +709,13 @@ class VaultCharm(CharmBase):
             vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
             cidrs = [f"{self._bind_address}/24"]
             role_id = vault.configure_approle(
-                role_name="charm",
+                role_name=APPROLE_ROLE_NAME,
                 cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
                 token_ttl="1h",
                 token_max_ttl="1h",
             )
-            secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
+            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
             self._set_juju_secret(
                 VAULT_CHARM_APPROLE_SECRET_LABEL,
                 {"role-id": role_id, "secret-id": secret_id},
