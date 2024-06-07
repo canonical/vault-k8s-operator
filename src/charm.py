@@ -399,7 +399,10 @@ class VaultCharm(CharmBase):
                 role=PKI_ROLE_NAME,
             )
         # Can run only after the first issuer has been actually created.
-        vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
+        try:
+            vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
+        except VaultClientError as e:
+            logger.error("Failed to make latest issuer default: %s", e)
 
     def _sync_vault_pki(self) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""

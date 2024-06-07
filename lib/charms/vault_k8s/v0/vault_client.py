@@ -423,8 +423,8 @@ class Vault:
             first_issuer = self._client.secrets.pki.list_issuers(
                 mount_point=mount
             )["data"]["keys"][0]
-        except (InvalidPath, KeyError):
-            logger.error("No issuers found on the specified path.")
+        except (InvalidPath, KeyError) as e:
+            logger.error("No issuers found on the specified path: %s", e)
             raise VaultClientError("No issuers found on the specified path.")
         self._client.write_data(
             path=f"{mount}/config/issuers",
