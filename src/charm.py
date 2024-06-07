@@ -28,9 +28,9 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_autounseal import (
-    VaultAutounsealDestroy,
-    VaultAutounsealInitialize,
     VaultAutounsealProvides,
+    VaultAutounsealRequirerRelationBroken,
+    VaultAutounsealRequirerRelationCreated,
     VaultAutounsealRequires,
 )
 from charms.vault_k8s.v0.vault_client import (
@@ -195,20 +195,26 @@ class VaultCharm(CharmBase):
             self._configure,
         )
         self.framework.observe(
-            self.vault_autounseal_provides.on.vault_autounseal_initialize,
-            self._on_vault_autounseal_initialize,
+            self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
+            self._on_vault_autounseal_requirer_relation_created,
         )
         self.framework.observe(
-            self.vault_autounseal_provides.on.vault_autounseal_destroy,
-            self._on_vault_autounseal_destroy,
+            self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken,
+            self._on_vault_autounseal_requirer_relation_broken,
         )
         self.framework.observe(
-            self.vault_autounseal_requires.on.vault_autounseal_provider_removed,
+            self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
             self._configure,
         )
 
-    def _on_vault_autounseal_destroy(self, event: VaultAutounsealDestroy):
-        """Handle the vault-autounseal-destroy event."""
+    def _on_vault_autounseal_requirer_relation_broken(
+        self, event: VaultAutounsealRequirerRelationBroken
+    ):
+        """Handle the case where the Vault auto-unseal requirer relation is broken.
+
+        Specifically, this means that the Vault auto-unseal provider should
+        remove any configuration that was set for the requirer.
+        """
         if not self.unit.is_leader():
             return
 
@@ -218,7 +224,9 @@ class VaultCharm(CharmBase):
             return
         vault.destroy_autounseal_credentials(event.relation.id, AUTOUNSEAL_MOUNT_PATH)
 
-    def _on_vault_autounseal_initialize(self, event: VaultAutounsealInitialize):
+    def _on_vault_autounseal_requirer_relation_created(
+        self, event: VaultAutounsealRequirerRelationCreated
+    ):
         """Handle the vault-autounseal-initialize event."""
         self._generate_and_set_autounseal_credentials(event.relation)
 

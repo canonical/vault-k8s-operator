@@ -1831,7 +1831,9 @@ class TestCharm(unittest.TestCase):
         self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "ca cert"
 
         # When
-        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_initialize.emit(relation)
+        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created.emit(
+            relation
+        )
 
         # Then
         mock_set_autounseal_data.assert_called_once_with(
@@ -1861,7 +1863,9 @@ class TestCharm(unittest.TestCase):
             relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
 
         # When
-        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_destroy.emit(relation)
+        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken.emit(
+            relation
+        )
 
         # Then
         self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(

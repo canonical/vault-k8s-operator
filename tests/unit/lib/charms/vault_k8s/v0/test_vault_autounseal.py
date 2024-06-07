@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 
 from charms.vault_k8s.v0.vault_autounseal import (
     AutounsealDetails,
-    VaultAutounsealDestroy,
     VaultAutounsealDetailsReadyEvent,
-    VaultAutounsealInitialize,
     VaultAutounsealProvides,
+    VaultAutounsealRequirerRelationBroken,
+    VaultAutounsealRequirerRelationCreated,
     VaultAutounsealRequires,
 )
 from ops import Relation, testing
@@ -39,16 +39,22 @@ class VaultAutounsealProviderCharm(CharmBase):
         super().__init__(*args)
         self.interface = VaultAutounsealProvides(self, AUTOUNSEAL_PROVIDES_RELATION_NAME)
         self.framework.observe(
-            self.interface.on.vault_autounseal_initialize, self._on_vault_autounseal_initialize
+            self.interface.on.vault_autounseal_requirer_relation_created,
+            self._on_vault_autounseal_requirer_relation_created,
         )
         self.framework.observe(
-            self.interface.on.vault_autounseal_destroy, self._on_vault_autounseal_initialize
+            self.interface.on.vault_autounseal_requirer_relation_broken,
+            self._on_vault_autounseal_requirer_relation_created,
         )
 
-    def _on_vault_autounseal_initialize(self, event: VaultAutounsealInitialize):
+    def _on_vault_autounseal_requirer_relation_created(
+        self, event: VaultAutounsealRequirerRelationCreated
+    ):
         pass
 
-    def _on_vault_autounseal_destroy(self, event: VaultAutounsealDestroy):
+    def _on_vault_autounseal_requirer_relation_broken(
+        self, event: VaultAutounsealRequirerRelationBroken
+    ):
         pass
 
 

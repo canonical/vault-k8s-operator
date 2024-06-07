@@ -152,7 +152,7 @@ class VaultAutounsealProviderRemoved(ops.EventBase):
     """Event emitted when the vault that provided autounseal capabilities is removed."""
 
 
-class VaultAutounsealInitialize(ops.EventBase):
+class VaultAutounsealRequirerRelationCreated(ops.EventBase):
     """Event emitted when Vault autounseal should be initialized for a new application."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
@@ -180,8 +180,8 @@ class VaultAutounsealInitialize(ops.EventBase):
         self.relation = relation
 
 
-class VaultAutounsealDestroy(ops.EventBase):
-    """Event emitted when Vault autounseal configuration for a relation should be destroyed."""
+class VaultAutounsealRequirerRelationBroken(ops.EventBase):
+    """Event emitted on the Provider when a relation to a Requirer is broken."""
 
     def __init__(self, handle: ops.Handle, relation: model.Relation):
         super().__init__(handle)
@@ -211,15 +211,19 @@ class VaultAutounsealDestroy(ops.EventBase):
 class VaultAutounsealProvidesEvents(ops.ObjectEvents):
     """Events raised by the vault-autounseal relation on the provider side."""
 
-    vault_autounseal_initialize = ops.EventSource(VaultAutounsealInitialize)
-    vault_autounseal_destroy = ops.EventSource(VaultAutounsealDestroy)
+    vault_autounseal_requirer_relation_created = ops.EventSource(
+        VaultAutounsealRequirerRelationCreated
+    )
+    vault_autounseal_requirer_relation_broken = ops.EventSource(
+        VaultAutounsealRequirerRelationBroken
+    )
 
 
 class VaultAutounsealRequireEvents(ops.ObjectEvents):
     """Events raised by the vault-autounseal relation on the requirer side."""
 
     vault_autounseal_details_ready = ops.EventSource(VaultAutounsealDetailsReadyEvent)
-    vault_autounseal_provider_removed = ops.EventSource(VaultAutounsealProviderRemoved)
+    vault_autounseal_provider_relation_broken = ops.EventSource(VaultAutounsealProviderRemoved)
 
 
 @dataclass
@@ -259,10 +263,10 @@ class VaultAutounsealProvides(ops.Object):
         )
 
     def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
-        self.on.vault_autounseal_initialize.emit(relation=event.relation)
+        self.on.vault_autounseal_requirer_relation_created.emit(relation=event.relation)
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
-        self.on.vault_autounseal_destroy.emit(relation=event.relation)
+        self.on.vault_autounseal_requirer_relation_broken.emit(relation=event.relation)
 
     def _create_autounseal_credentials_secret(
         self, relation: ops.Relation, role_id: str, secret_id: str
@@ -441,7 +445,7 @@ class VaultAutounsealRequires(ops.Object):
             )
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
-        self.on.vault_autounseal_provider_removed.emit()
+        self.on.vault_autounseal_provider_relation_broken.emit()
 
     def get_details(self) -> AutounsealDetails | None:
         """Return the vault address, role id, secret id and ca certificate from the relation databag.
