@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -416,3 +416,20 @@ class Vault:
         except InvalidPath:
             logger.error("Role does not exist on the specified path.")
             return False
+
+    def make_latest_pki_issuer_default(self, mount: str) -> None:
+        """Update the issuers config to always make the latest issuer created default issuer."""
+        try:
+            first_issuer = self._client.secrets.pki.list_issuers(
+                mount_point=mount
+            )["data"]["keys"][0]
+        except (InvalidPath, KeyError) as e:
+            logger.error("No issuers found on the specified path: %s", e)
+            raise VaultClientError("No issuers found on the specified path.")
+        self._client.write_data(
+            path=f"{mount}/config/issuers",
+            data={
+                "default_follows_latest_issuer": True,
+                "default": first_issuer,
+            },
+        )
