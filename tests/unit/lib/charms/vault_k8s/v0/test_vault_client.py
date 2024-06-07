@@ -6,7 +6,15 @@ import unittest
 from unittest.mock import patch
 
 import requests
-from charms.vault_k8s.v0.vault_client import AppRole, AuditDeviceType, SecretsBackend, Token, Vault
+from charms.vault_k8s.v0.vault_client import (
+    AppRole,
+    AuditDeviceType,
+    SecretsBackend,
+    Token,
+    Vault,
+    VaultClientError,
+)
+from hvac.exceptions import InvalidPath
 
 TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
@@ -227,3 +235,34 @@ class TestVault(unittest.TestCase):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active_or_standby())
+
+    @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
+    def test_given_no_pki_issuers_when_make_latest_pki_issuer_default_then_vault_client_error_is_raised(
+        self,
+        patch_read_pki_issuers,
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        patch_read_pki_issuers.side_effect = InvalidPath()
+        with self.assertRaises(VaultClientError):
+            vault.make_latest_pki_issuer_default(mount="test")
+
+    @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
+    @patch("hvac.Client.write_data")
+    def test_given_existing_pki_issuers_when_make_latest_pki_issuer_default_then_config_written_to_path(
+        self,
+        patch_write,
+        patch_read_pki_issuers,
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        patch_read_pki_issuers.return_value = {
+            "data": {"keys": ["issuer"]}
+        }
+        mount = "test"
+        vault.make_latest_pki_issuer_default(mount=mount)
+        patch_write.assert_called_with(
+            path=f"{mount}/config/issuers",
+            data={
+                "default_follows_latest_issuer": True,
+                "default": "issuer",
+            }
+        )
