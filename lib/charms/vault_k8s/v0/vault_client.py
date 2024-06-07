@@ -123,7 +123,7 @@ class Vault:
         try:
             auth_details.login(self._client)
         except (VaultError, ConnectionError) as e:
-            logger.error("Failed logging in to Vault: %s", e)
+            logger.warning("Failed logging in to Vault: %s", e)
             return False
         return True
 

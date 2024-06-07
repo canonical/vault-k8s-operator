@@ -354,6 +354,6 @@ class TestVaultAutounsealRequires(unittest.TestCase):
             vault_url, key_name, role_id, secret_id, ca_certificate
         )
 
-    def test_given_no_details_when_get_details_then_empty_tuple_is_returned(self):
+    def test_given_no_details_when_get_details_then_none_is_returned(self):
         details = self.harness.charm.interface.get_details()
-        assert details == AutounsealDetails(None, None, None, None, None)
+        assert details is None

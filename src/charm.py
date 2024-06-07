@@ -11,10 +11,10 @@ import datetime
 import json
 import logging
 import socket
-from contextlib import suppress
 from typing import IO, Dict, List, Optional, Tuple, cast
 
 import hcl
+from attr import dataclass
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -94,10 +94,21 @@ AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_POLICY_PATH = "src/templates/autounseal_policy.hcl"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
+AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
+
+
+@dataclass
+class AutounsealConfigurationDetails:
+    """Credentials required for configuring auto-unseal on Vault."""
+
+    address: str
+    key_name: str
+    token: str
+    ca_cert_path: str
 
 
 class VaultCharm(CharmBase):
@@ -481,7 +492,7 @@ class VaultCharm(CharmBase):
                 certificate_signing_request=csr.encode(),
                 is_ca=True,
             )
-            self._set_pki_csr_secret(csr)
+            self._set_juju_secret(PKI_CSR_SECRET_LABEL, {"csr": csr})
 
     def _is_intermediate_ca_common_name_valid(self, vault: Vault, common_name: str) -> bool:
         """Check if the intermediate CA is set with the valid common name."""
@@ -686,7 +697,11 @@ class VaultCharm(CharmBase):
                 token_max_ttl="1h",
             )
             secret_id = vault.generate_role_secret_id(name="charm", cidrs=cidrs)
-            self._set_approle_auth_secret(role_id, secret_id)
+            self._set_juju_secret(
+                VAULT_CHARM_APPROLE_SECRET_LABEL,
+                {"role-id": role_id, "secret-id": secret_id},
+                description="The authentication details for the charm's access to vault.",
+            )
             event.set_results({"result": "Charm authorized successfully."})
         except VaultClientError as e:
             logger.exception("Vault returned an error while authorizing the charm")
@@ -1076,6 +1091,71 @@ class VaultCharm(CharmBase):
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
+    def _get_autounseal_configuration(self) -> Optional[AutounsealConfigurationDetails]:
+        """Retrieve the autounseal configuration details, if available.
+
+        Returns the autounseal configuration details if all the required
+        information is available, otherwise `None`.
+        """
+        autounseal_details = self.vault_autounseal_requires.get_details()
+        if not autounseal_details:
+            return None
+
+        self.tls.push_autounseal_ca_cert(autounseal_details.ca_certificate)
+
+        vault = Vault(
+            url=autounseal_details.address,
+            ca_cert_path=self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
+        )
+        existing_token = self._get_juju_secret_field(AUTOUNSEAL_TOKEN_SECRET_LABEL, "token")
+        if not existing_token or not vault.authenticate(Token(existing_token)):
+            vault.authenticate(AppRole(autounseal_details.role_id, autounseal_details.secret_id))
+            self._set_juju_secret(AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": vault.token})
+
+        return AutounsealConfigurationDetails(
+            autounseal_details.address,
+            autounseal_details.key_name,
+            vault.token,
+            self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
+        )
+
+    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
+        """Retrieve the latest revision of the secret content from Juju.
+
+        Args:
+            label: The label of the secret.
+            field: The field to retrieve from the secret.
+
+        Returns:
+            The value of the field is returned, or `None` if the field does not
+            exist.
+
+            If the secret does not exist, `None` is returned.
+        """
+        try:
+            juju_secret = self.model.get_secret(label=label)
+        except SecretNotFoundError:
+            return None
+        content = juju_secret.get_content(refresh=True)
+        return content.get(field)
+
+    def _set_juju_secret(
+        self, label: str, content: Dict[str, str], description: str | None = None
+    ) -> None:
+        """Set the secret content at `label`, overwrite if it already exists.
+
+        Args:
+            label: The label of the secret.
+            content: The content of the secret.
+            description: The description of the secret.
+        """
+        try:
+            secret = self.model.get_secret(label=label)
+        except SecretNotFoundError:
+            self.app.add_secret(content, label=label, description=description)
+            return
+        secret.set_content(content)
+
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""
         retry_joins = [
@@ -1085,6 +1165,7 @@ class VaultCharm(CharmBase):
             }
             for node_api_address in self._get_peer_node_api_addresses()
         ]
+
         content = render_vault_config_file(
             default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
             max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),
@@ -1096,8 +1177,8 @@ class VaultCharm(CharmBase):
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
+            autounseal_details=self._get_autounseal_configuration(),
         )
-        content = self._add_transit_stanza_if_needed(content)
         existing_content = ""
         if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
             existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
@@ -1112,67 +1193,16 @@ class VaultCharm(CharmBase):
                 if self._vault_service_is_running():
                     self._container.restart(self._service_name)
 
-    def _add_transit_stanza_if_needed(self, config_content: str) -> str:
-        """Add the transit stanza to the Vault configuration file if autounseal is enabled."""
-        relation = self._get_transit_requirer_relation()
-        if not relation:
-            logger.debug("Transit relation not created, skipping transit stanza")
-            return config_content
-
-        autounseal_details = self.vault_autounseal_requires.get_details()
-        if not autounseal_details.address:
-            logger.warning("Transit address not available, skipping transit stanza")
-            return config_content
-
-        transit_ca_cert = autounseal_details.ca_certificate
-        if not transit_ca_cert:
-            logger.warning("Transit CA certificate not available, skipping transit stanza")
-            return config_content
-        self.tls.push_autounseal_ca_cert(transit_ca_cert)
-        if not autounseal_details.role_id or not autounseal_details.secret_id:
-            logger.warning("Autounseal role_id or secret_id not available")
-            return config_content
-        vault = Vault(
-            url=autounseal_details.address,
-            ca_cert_path=self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
-        )
-        vault.authenticate(AppRole(autounseal_details.role_id, autounseal_details.secret_id))
-
-        jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
-        template = jinja2_environment.get_template(CONFIG_TRANSIT_STANZA_TEMPLATE_NAME)
-
-        config_content += "\n" + template.render(
-            vault_addr=autounseal_details.address,
-            key_name=autounseal_details.key_name,
-            mount_path=AUTOUNSEAL_MOUNT_PATH,
-            vault_token=vault.token,
-            tls_ca_cert=self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
-        )
-        return config_content
-
-    def _get_transit_requirer_relation(self) -> Relation | None:
-        """Return the transit relation if it exists."""
-        return self.model.get_relation(AUTOUNSEAL_REQUIRES_RELATION_NAME)
-
     def _push_config_file_to_workload(self, content: str):
         """Push the config file to the workload."""
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _set_pki_csr_secret(self, csr: str) -> None:
-        juju_secret_content = {"csr": csr}
-        if not self._pki_csr_secret_set():
-            self.app.add_secret(juju_secret_content, label=PKI_CSR_SECRET_LABEL)
-            return
-        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
-        secret.set_content(content=juju_secret_content)
-
     def _get_pki_csr_secret(self) -> Optional[str]:
         """Return the PKI CSR secret."""
         if not self._pki_csr_secret_set():
             raise RuntimeError("PKI CSR secret not set.")
-        secret = self.model.get_secret(label=PKI_CSR_SECRET_LABEL)
-        return secret.get_content(refresh=True)["csr"]
+        return self._get_juju_secret_field(PKI_CSR_SECRET_LABEL, "csr")
 
     def _pki_csr_secret_set(self) -> bool:
         """Return whether PKI CSR secret is stored."""
@@ -1194,23 +1224,6 @@ class VaultCharm(CharmBase):
         except SecretNotFoundError:
             return None, None
         return content["role-id"], content["secret-id"]
-
-    def _set_approle_auth_secret(self, role_id: str, secret_id: str) -> None:
-        """Set the vault approle auth details secret.
-
-        Args:
-            role_id: The role id of the vault approle
-            secret_id: The secret id of the vault approle
-        """
-        if not all(self._get_approle_auth_secret()):
-            self.app.add_secret(
-                content={"role-id": role_id, "secret-id": secret_id},
-                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-                description="The authentication details for the charm's access to vault.",
-            )
-        else:
-            secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-            secret.set_content({"role-id": role_id, "secret-id": secret_id})
 
     def _remove_approle_auth_secret(self) -> None:
         """Remove the approle secret if it exists."""
@@ -1433,6 +1446,7 @@ def render_vault_config_file(
     raft_storage_path: str,
     node_id: str,
     retry_joins: List[Dict[str, str]],
+    autounseal_details: Optional[AutounsealConfigurationDetails] = None,
 ) -> str:
     """Render the Vault config file."""
     jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
@@ -1448,6 +1462,11 @@ def render_vault_config_file(
         raft_storage_path=raft_storage_path,
         node_id=node_id,
         retry_joins=retry_joins,
+        autounseal_address=autounseal_details.address if autounseal_details else None,
+        autounseal_key_name=autounseal_details.key_name if autounseal_details else None,
+        autounseal_mount_path=AUTOUNSEAL_MOUNT_PATH if autounseal_details else None,
+        autounseal_token=autounseal_details.token if autounseal_details else None,
+        autounseal_tls_ca_cert=autounseal_details.ca_cert_path if autounseal_details else None,
     )
     return content
 
@@ -1502,10 +1521,6 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
         address["leader_api_addr"] for address in existing_retry_joins
     }
 
-    # Ignore the token, since it will change every time
-    with suppress(KeyError):
-        del new_content_hcl["seal"]["transit"]["token"]
-        del existing_config_hcl["seal"]["transit"]["token"]
     return (
         new_retry_join_api_addresses == existing_retry_join_api_addresses
         and new_content_hcl == existing_config_hcl

@@ -63,7 +63,6 @@ where `vault a` is the Vault app which will provide the autounseal service, and
 """
 
 import logging
-from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -223,7 +222,23 @@ class VaultAutounsealRequireEvents(ops.ObjectEvents):
     vault_autounseal_provider_removed = ops.EventSource(VaultAutounsealProviderRemoved)
 
 
-ApproleDetails = namedtuple("ApproleDetails", ["role_id", "secret_id"])
+@dataclass
+class AutounsealDetails:
+    """The details required to autounseal a vault instance."""
+
+    address: str
+    key_name: str
+    role_id: str
+    secret_id: str
+    ca_certificate: str
+
+
+@dataclass
+class ApproleDetails:
+    """The details required to authenticate with Vault using the approle auth method."""
+
+    role_id: str
+    secret_id: str
 
 
 class VaultAutounsealProvides(ops.Object):
@@ -343,9 +358,9 @@ class VaultAutounsealProvides(ops.Object):
         if not relation:
             return False
         credentials = self._get_credentials(relation)
-        return all(credentials)
+        return credentials is not None
 
-    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails:
+    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
         """Return the credentials from the Juju secret.
 
         Args:
@@ -356,22 +371,27 @@ class VaultAutounsealProvides(ops.Object):
         """
         if not relation.active:
             logger.warning("Relation is not active")
-            return ApproleDetails(None, None)
+            return None
         if relation.app is None:
             logger.warning("No remote application yet")
-            return ApproleDetails(None, None)
+            return None
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         if credentials_secret_id is None:
-            return ApproleDetails(None, None)
+            return None
         try:
             secret_content = self.model.get_secret(id=credentials_secret_id).get_content(
                 refresh=True
             )
         except SecretNotFoundError:
             logger.warning("Secret not found")
-            return ApproleDetails(None, None)
+            return None
 
-        return ApproleDetails(secret_content.get("role-id"), secret_content.get("secret-id"))
+        role_id = secret_content.get("role-id")
+        secret_id = secret_content.get("secret-id")
+        if not (role_id and secret_id):
+            return None
+
+        return ApproleDetails(role_id, secret_id)
 
 
 def is_provider_data_valid(data: RelationDataContent) -> bool:
@@ -393,17 +413,6 @@ def is_provider_data_valid(data: RelationDataContent) -> bool:
         return False
 
 
-@dataclass
-class AutounsealDetails:
-    """The details required to autounseal a vault instance."""
-
-    address: str | None
-    key_name: str | None
-    role_id: str | None
-    secret_id: str | None
-    ca_certificate: str | None
-
-
 class VaultAutounsealRequires(ops.Object):
     """Manages the vault-autounseal relation from the requirer side."""
 
@@ -420,6 +429,9 @@ class VaultAutounsealRequires(ops.Object):
         data = event.relation.data[event.app]
         if is_provider_data_valid(data):
             details = self.get_details()
+            if not details:
+                logger.warning("Missing details, but somehow we passed validation")
+                return
             self.on.vault_autounseal_details_ready.emit(
                 details.address,
                 details.key_name,
@@ -431,33 +443,36 @@ class VaultAutounsealRequires(ops.Object):
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         self.on.vault_autounseal_provider_removed.emit()
 
-    def get_details(self) -> AutounsealDetails:
+    def get_details(self) -> AutounsealDetails | None:
         """Return the vault address, role id, secret id and ca certificate from the relation databag.
 
         Returns:
-            A tuple containing the vault address, role id, secret id and ca certificate.
+            An AutounsealDetails object if the data is valid, None otherwise.
         """
         relation = self.framework.model.get_relation(self.relation_name)
         if not relation:
-            logger.warning("Relation is not set")
-            return AutounsealDetails(None, None, None, None, None)
+            return None
         if not relation.active:
-            logger.warning("Relation is not active")
-            return AutounsealDetails(None, None, None, None, None)
+            return None
         if relation.app is None:
             logger.warning("No remote application yet")
-            return AutounsealDetails(None, None, None, None, None)
+            return None
         data = relation.data[relation.app]
+        address = data.get("address")
+        key_name = data.get("key_name")
+        ca_certificate = data.get("ca_certificate")
         credentials = self._get_credentials(relation)
+        if not (address and key_name and ca_certificate and credentials):
+            return None
         return AutounsealDetails(
-            data.get("address"),
-            data.get("key_name"),
+            address,
+            key_name,
             credentials.role_id,
             credentials.secret_id,
-            data.get("ca_certificate"),
+            ca_certificate,
         )
 
-    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails:
+    def _get_credentials(self, relation: ops.Relation) -> Optional[ApproleDetails]:
         """Return the token from the Juju secret.
 
         Returns:
@@ -465,12 +480,14 @@ class VaultAutounsealRequires(ops.Object):
         """
         if not relation.active:
             logger.warning("Relation is not active")
-            return ApproleDetails(None, None)
+            return None
         if relation.app is None:
             logger.warning("No remote application yet")
-            return ApproleDetails(None, None)
+            return None
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         if not credentials_secret_id:
-            return ApproleDetails(None, None)
+            return None
         secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
-        return ApproleDetails(secret_content.get("role-id"), secret_content.get("secret-id"))
+        role_id = secret_content.get("role-id")
+        secret_id = secret_content.get("secret-id")
+        return ApproleDetails(role_id, secret_id) if role_id and secret_id else None
