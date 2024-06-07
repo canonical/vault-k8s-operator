@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Tuple
 import hvac
 import pytest
 import yaml
+from cryptography import x509
 from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
@@ -55,7 +56,6 @@ async def deploy_vault(ops_test: OpsTest, request):
         trust=True,
         series="jammy",
         num_units=NUM_VAULT_UNITS,
-        config={"common_name": "example.com"},
     )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
@@ -354,6 +354,13 @@ class TestVaultK8sIntegrationsPart1:
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
         assert ops_test.model
+        vault_app = ops_test.model.applications[APPLICATION_NAME]
+        assert vault_app
+        common_name = "unmatching-the-requirer.com"
+        common_name_config = {
+            "common_name": common_name,
+        }
+        await vault_app.set_config(common_name_config)
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:tls-certificates-pki",
             relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
@@ -365,15 +372,57 @@ class TestVaultK8sIntegrationsPart1:
         )
 
     @pytest.mark.abort_on_fail
-    async def test_given_vault_pki_relation_when_integrate_then_cert_is_provided(
-        self, ops_test: OpsTest, deploy_requiring_charms: None
+    async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrate_then_cert_not_provided(
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int, str, str],
     ):
         assert ops_test.model
-
+        leader_unit_index, root_token, _ = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
+            root_token=root_token,
+            endpoint=unit_addresses[leader_unit_index],
+            mount="charm-pki",
+        )
+        assert current_issuers_common_name == "unmatching-the-requirer.com"
         await ops_test.model.integrate(
             relation1=f"{APPLICATION_NAME}:vault-pki",
             relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
         )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        action_output = await run_get_certificate_action(ops_test)
+        assert action_output.get("certificate") is None
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_pki_relation_and_matching_common_name_configured_when_integrate_then_cert_is_provided(
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        initialize_leader_vault: Tuple[int, str, str]
+    ):
+        assert ops_test.model
+
+        vault_app = ops_test.model.applications[APPLICATION_NAME]
+        assert vault_app
+        common_name = "example.com"
+        common_name_config = {
+            "common_name": common_name,
+        }
+        await vault_app.set_config(common_name_config)
+        leader_unit_index, root_token, _ = initialize_leader_vault
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
+            root_token=root_token,
+            endpoint=unit_addresses[leader_unit_index],
+            mount="charm-pki",
+        )
+        assert current_issuers_common_name == common_name
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
             status="active",
@@ -909,3 +958,12 @@ async def authorize_charm(ops_test: OpsTest, root_token: str) -> Any | Dict:
         action_uuid=authorize_action.entity_id, wait=120
     )
     return result
+
+def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    ca_cert = client.secrets.pki.read_ca_certificate(mount_point=mount)
+    loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
+    return str(
+        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
+    )
