@@ -385,7 +385,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int, str, str],
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
         await ops_test.model.integrate(
@@ -397,7 +397,7 @@ class TestVaultK8sIntegrationsPart1:
             status="active",
             timeout=1000,
         )
-        leader_unit_index, root_token, _ = initialize_leader_vault
+        leader_unit_index, root_token, _ = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
             root_token=root_token,
@@ -413,7 +413,7 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deploy_requiring_charms: None,
-        initialize_leader_vault: Tuple[int, str, str]
+        deployed_vault_initialized_leader: Tuple[int, str, str],
     ):
         assert ops_test.model
 
@@ -424,7 +424,7 @@ class TestVaultK8sIntegrationsPart1:
             "common_name": common_name,
         }
         await vault_app.set_config(common_name_config)
-        leader_unit_index, root_token, _ = initialize_leader_vault
+        leader_unit_index, root_token, _ = deployed_vault_initialized_leader
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
             status="active",
@@ -1083,6 +1083,7 @@ async def authorize_charm(
         action_uuid=authorize_action.entity_id, wait=120
     )
     return result
+
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
