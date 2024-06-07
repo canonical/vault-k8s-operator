@@ -227,7 +227,7 @@ class VaultCharm(CharmBase):
     def _on_vault_autounseal_requirer_relation_created(
         self, event: VaultAutounsealRequirerRelationCreated
     ):
-        """Handle the vault-autounseal-initialize event."""
+        """Generate and set the auto-unseal credentials for the requirer."""
         self._generate_and_set_autounseal_credentials(event.relation)
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
@@ -255,7 +255,12 @@ class VaultCharm(CharmBase):
         self._set_autounseal_relation_data(relation, key_name, approle_id, secret_id)
 
     def _sync_vault_autounseal(self) -> None:
-        """Goes through all the vault-autounseal relations and sends necessary credentials."""
+        """Go through all the vault-autounseal relations and send necessary credentials.
+
+        This looks for any outstanding requests for auto-unseal that may have
+        been missed. If there are any, it generates the credentials and sets
+        them in the relation databag.
+        """
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-autounseal request")
             return
@@ -265,7 +270,7 @@ class VaultCharm(CharmBase):
 
     def _set_autounseal_relation_data(
         self, relation: Relation, key_name: str, approle_id: str, approle_secret_id: str
-    ):
+    ) -> None:
         """Set the required autounseal data in the relation databag.
 
         Args:
@@ -1174,7 +1179,7 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_node_api_addresses()
         ]
 
-        content = render_vault_config_file(
+        content = _render_vault_config_file(
             default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
             max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),
             cluster_address=self._cluster_address,
@@ -1335,11 +1340,12 @@ class VaultCharm(CharmBase):
     def _get_active_vault_client(self) -> Optional[Vault]:
         """Return an initialized vault client.
 
-        Creates a Vault client and returns it if is active and the charm is authorized.
-        Otherwise, returns None.
-
         Returns:
-            Vault: Vault client
+            Vault: An active Vault client configured with the cluster address
+                   and CA certificate, and authorized with the AppRole
+                   credentials set upon initial authorization of the charm, or
+                   `None` if the client could not be successfully created or
+                   has not been authorized.
         """
         try:
             vault = Vault(
@@ -1443,7 +1449,7 @@ class VaultCharm(CharmBase):
         return f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
 
-def render_vault_config_file(
+def _render_vault_config_file(
     default_lease_ttl: str,
     max_lease_ttl: str,
     cluster_address: str,
@@ -1456,7 +1462,6 @@ def render_vault_config_file(
     retry_joins: List[Dict[str, str]],
     autounseal_details: Optional[AutounsealConfigurationDetails] = None,
 ) -> str:
-    """Render the Vault config file."""
     jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
     template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
     content = template.render(

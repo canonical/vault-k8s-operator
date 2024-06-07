@@ -117,7 +117,7 @@ class ProviderSchema(DataBagSchema):
 
 
 class VaultAutounsealDetailsReadyEvent(ops.EventBase):
-    """Event emitted when the vault autounseal details are ready in the databag."""
+    """Event emitted on the requirer when Vault autounseal details are ready in the databag."""
 
     def __init__(self, handle: ops.Handle, address, key_name, role_id, secret_id, ca_certificate):
         super().__init__(handle)
@@ -275,8 +275,8 @@ class VaultAutounsealProvides(ops.Object):
 
         Args:
             relation: The relation to grant access to the secret.
-            role_id: The role id to store in the secret.
-            secret_id: The secret id to store in the secret.
+            role_id: The AppRole Role ID to store in the secret.
+            secret_id: The AppRole Secret ID to store in the secret.
 
         Returns:
             The secret id of the created secret.
@@ -297,7 +297,7 @@ class VaultAutounsealProvides(ops.Object):
         relation: ops.Relation,
         vault_address: str,
         key_name: str,
-        approle_id: str,
+        approle_role_id: str,
         approle_secret_id: str,
         ca_certificate: str,
     ) -> None:
@@ -305,15 +305,15 @@ class VaultAutounsealProvides(ops.Object):
 
         Args:
             relation: The Juju relation to set the autounseal data in.
-            vault_address: The address of the Vault server.
+            vault_address: The address of the Vault server which will be used for autounseal
             key_name: The name of the transit key to use for autounseal.
-            approle_id: The approle id to use when authenticating with the Vault server.
-            approle_secret_id: The approle secret id to use when authenticating with the Vault server.
-            ca_certificate: The CA certificate to use when validating the Vault server's certificate.
+            approle_role_id: The AppRole Role ID to use when authenticating with the external Vault server.
+            approle_secret_id: The AppRole Secret ID to use when authenticating with the external Vault server.
+            ca_certificate: The CA certificate to use when validating the external Vault server's certificate.
         """
         if not self.charm.unit.is_leader():
             logger.warning(
-                "Attempting to set the autounseal data without being the leader. Ignoring the request."
+                "Attempting to set the auto-unseal data without being the leader. Ignoring the request."
             )
             return
         if relation is None:
@@ -323,7 +323,7 @@ class VaultAutounsealProvides(ops.Object):
             logger.warning("Relation is not active")
             return
         credentials_secret_id = self._create_autounseal_credentials_secret(
-            relation, approle_id, approle_secret_id
+            relation, approle_role_id, approle_secret_id
         )
         relation.data[self.charm.app].update(
             {
@@ -335,16 +335,27 @@ class VaultAutounsealProvides(ops.Object):
         )
 
     def get_outstanding_requests(self, relation_id: Optional[int] = None) -> List[Relation]:
-        """Get the outstanding requests for the relation."""
+        """Get the outstanding requests for the relation.
+
+        This will retrieve any vault-autounseal relations that have not yet had
+        credentials issued for them.
+        """
         outstanding_requests: List[Relation] = []
-        requirer_requests = self.get_requirer_requests(relation_id=relation_id)
+        requirer_requests = self.get_active_relations(relation_id=relation_id)
         for relation in requirer_requests:
             if not self._credentials_issued_for_request(relation_id=relation.id):
                 outstanding_requests.append(relation)
         return outstanding_requests
 
-    def get_requirer_requests(self, relation_id: Optional[int] = None) -> List[Relation]:
-        """Get all requests for the relation."""
+    def get_active_relations(self, relation_id: Optional[int] = None) -> List[Relation]:
+        """Get all active relations on the relation name this class was initialized with.
+
+        Args:
+            relation_id: The relation ID to filter by. If None, all active relations are returned.
+
+        Returns:
+            A list of active relations.
+        """
         relations = (
             [
                 relation
@@ -357,7 +368,6 @@ class VaultAutounsealProvides(ops.Object):
         return [relation for relation in relations if relation.active]
 
     def _credentials_issued_for_request(self, relation_id: Optional[int]) -> bool:
-        """Return whether credentials have been issued for the request."""
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
             return False
@@ -365,13 +375,13 @@ class VaultAutounsealProvides(ops.Object):
         return credentials is not None
 
     def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
-        """Return the credentials from the Juju secret.
+        """Retrieve the credentials from the Juju secret.
 
         Args:
             relation: The relation to get the credentials for.
 
         Returns:
-            A tuple containing the role id and secret id
+            An ApproleDetails object if the credentials are found, None otherwise.
         """
         if not relation.active:
             logger.warning("Relation is not active")
@@ -382,33 +392,12 @@ class VaultAutounsealProvides(ops.Object):
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         if credentials_secret_id is None:
             return None
-        try:
-            secret_content = self.model.get_secret(id=credentials_secret_id).get_content(
-                refresh=True
-            )
-        except SecretNotFoundError:
-            logger.warning("Secret not found")
-            return None
-
-        role_id = secret_content.get("role-id")
-        secret_id = secret_content.get("secret-id")
-        if not (role_id and secret_id):
-            return None
-
-        return ApproleDetails(role_id, secret_id)
+        secret = self.model.get_secret(id=credentials_secret_id)
+        return _get_credentials_from_secret(secret)
 
 
-def is_provider_data_valid(data: RelationDataContent) -> bool:
-    """Return whether the provider data is valid.
-
-    This uses the pydantic schema to validate the data.
-
-    Args:
-        data: The data to validate.
-
-    Returns:
-        True if the data is valid, False otherwise.
-    """
+def _is_provider_data_valid(data: RelationDataContent) -> bool:
+    """Use the pydantic schema to validate the data."""
     try:
         ProviderSchema(app=VaultAutounsealProviderSchema(**data))
         return True
@@ -431,7 +420,7 @@ class VaultAutounsealRequires(ops.Object):
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         data = event.relation.data[event.app]
-        if is_provider_data_valid(data):
+        if _is_provider_data_valid(data):
             details = self.get_details()
             if not details:
                 logger.warning("Missing details, but somehow we passed validation")
@@ -491,7 +480,24 @@ class VaultAutounsealRequires(ops.Object):
         credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         if not credentials_secret_id:
             return None
-        secret_content = self.model.get_secret(id=credentials_secret_id).get_content(refresh=True)
-        role_id = secret_content.get("role-id")
-        secret_id = secret_content.get("secret-id")
-        return ApproleDetails(role_id, secret_id) if role_id and secret_id else None
+        secret = self.model.get_secret(id=credentials_secret_id)
+        return _get_credentials_from_secret(secret)
+
+
+def _get_credentials_from_secret(secret: ops.Secret) -> ApproleDetails | None:
+    """Retrieve the Approle credentials from the Juju secret.
+
+    Args:
+        secret: The secret to get the credentials for.
+
+    Returns:
+        An ApproleDetails object if the credentials are found, None otherwise.
+    """
+    try:
+        secret_content = secret.get_content(refresh=True)
+    except SecretNotFoundError:
+        logger.warning("Secret not found")
+        return None
+    role_id = secret_content.get("role-id")
+    secret_id = secret_content.get("secret-id")
+    return ApproleDetails(role_id, secret_id) if role_id and secret_id else None
