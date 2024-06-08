@@ -417,16 +417,22 @@ class TestVaultK8sIntegrationsPart1:
         await vault_app.set_config(common_name_config)
         leader_unit_index, root_token, _ = initialize_leader_vault
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
         current_issuers_common_name = wait_for_vault_pki_issuer_config_update(
             root_token=root_token,
             endpoint=unit_addresses[leader_unit_index],
             mount="charm-pki",
             expected_common_name=common_name,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
         )
         action_output = await run_get_certificate_action(ops_test)
         assert current_issuers_common_name == common_name
