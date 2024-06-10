@@ -12,6 +12,7 @@ import hcl  # type: ignore[import-untyped]
 import requests
 from botocore.response import StreamingBody
 from charm import (
+    AUTOUNSEAL_MOUNT_PATH,
     CHARM_POLICY_NAME,
     CHARM_POLICY_PATH,
     PKI_CSR_SECRET_LABEL,
@@ -25,7 +26,11 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateCreationRequestEvent,
     ProviderCertificate,
 )
+from charms.vault_k8s.v0.vault_autounseal import (
+    AutounsealDetails,
+)
 from charms.vault_k8s.v0.vault_client import (
+    AppRole,
     AuditDeviceType,
     Certificate,
     SecretsBackend,
@@ -45,6 +50,7 @@ S3_RELATION_LIB_PATH = "charms.data_platform_libs.v0.s3"
 S3_LIB_PATH = "charms.vault_k8s.v0.vault_s3"
 VAULT_KV_LIB_PATH = "charms.vault_k8s.v0.vault_kv"
 TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v3.tls_certificates"
+VAULT_AUTOUNSEAL_LIB_PATH = "charms.vault_k8s.v0.vault_autounseal"
 VAULT_KV_RELATION_NAME = "vault-kv"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
@@ -129,6 +135,7 @@ class TestCharm(unittest.TestCase):
     def tearDown(self):
         TestCharm.patcher_vault_tls_manager.stop()
         TestCharm.patcher_vault.stop()
+        # TestCharm.patcher_vault_autounseal_requires.stop()
 
     def get_valid_s3_params(self):
         """Return a valid S3 parameters for mocking."""
@@ -410,6 +417,7 @@ class TestCharm(unittest.TestCase):
                 "is_api_available.return_value": True,
                 "is_initialized.return_value": True,
                 "is_sealed.return_value": True,
+                "needs_migration.return_value": False,
             },
         )
         self._set_peer_relation()
@@ -539,7 +547,11 @@ class TestCharm(unittest.TestCase):
             policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH
         )
         self.mock_vault.configure_approle.assert_called_once_with(
-            role_name=APPROLE_ROLE_NAME, policies=[CHARM_POLICY_NAME, "default"], cidrs=["10.0.0.10/24"]
+            role_name=APPROLE_ROLE_NAME,
+            cidrs=["10.0.0.10/24"],
+            policies=[CHARM_POLICY_NAME, "default"],
+            token_ttl="1h",
+            token_max_ttl="1h",
         )
         self.mock_vault.generate_role_secret_id.assert_called_once_with(
             name=APPROLE_ROLE_NAME, cidrs=["10.0.0.10/24"]
@@ -1555,7 +1567,6 @@ class TestCharm(unittest.TestCase):
             certificate_signing_request=csr.encode(), is_ca=True
         )
 
-
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_assigned_certificates")
     def test_given_vault_is_available_when_pki_certificate_is_available_then_certificate_added_to_vault_pki(
@@ -1819,3 +1830,111 @@ class TestCharm(unittest.TestCase):
             allowed_domains="vault", mount=PKI_MOUNT, role=PKI_ROLE_NAME
         )
         self.mock_vault.make_latest_pki_issuer_default.assert_called_with(mount=PKI_MOUNT)
+
+    @patch("ops.testing._TestingPebbleClient.restart_services", new=MagicMock)
+    @patch(f"{VAULT_AUTOUNSEAL_LIB_PATH}.VaultAutounsealRequires.get_details")
+    def test_given_autounseal_details_available_when_autounseal_details_ready_then_transit_stanza_generated(
+        self,
+        mock_get_details,
+    ):
+        # Given
+        address = "some address"
+        key_name = "some key"
+        role_id = "role_id"
+        secret_id = "secret_id"
+        ca_cert = "ca_cert"
+        mock_get_details.return_value = AutounsealDetails(
+            address, key_name, role_id, secret_id, ca_cert
+        )
+        relation_id = self.harness.add_relation(
+            relation_name="vault-autounseal-requires", remote_app="autounseal-provider"
+        )
+        self.harness.set_can_connect(self.container_name, True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self._set_peer_relation()
+        self.harness.update_relation_data(
+            app_or_unit=self.app_name,
+            relation_id=relation_id,
+            key_values={},
+        )
+        self.mock_vault.token = "some token"
+
+        # When
+        self.harness.charm.vault_autounseal_requires.on.vault_autounseal_details_ready.emit(
+            address, key_name, role_id, secret_id, ca_cert
+        )
+
+        # Then
+        root = self.harness.get_filesystem_root(self.container_name)
+        pushed_content_hcl = hcl.loads((root / "vault/config/vault.hcl").read_text())
+        assert pushed_content_hcl["seal"]["transit"]["address"] == address
+        assert pushed_content_hcl["seal"]["transit"]["token"] == "some token"
+        assert pushed_content_hcl["seal"]["transit"]["key_name"] == "some key"
+        self.mock_vault.authenticate.assert_called_with(AppRole(role_id, secret_id))
+        self.mock_vault_tls_manager.push_autounseal_ca_cert.assert_called_with(ca_cert)
+
+    @patch(f"{VAULT_AUTOUNSEAL_LIB_PATH}.VaultAutounsealProvides.set_autounseal_data")
+    def test_when_autounseal_initialize_then_credentials_are_set(self, mock_set_autounseal_data):
+        # Given
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+                "is_sealed.return_value": False,
+                "create_autounseal_credentials.return_value": (
+                    "key name",
+                    "autounseal role id",
+                    "autounseal secret id",
+                ),
+            },
+        )
+        self.harness.set_leader()
+        self.harness.set_can_connect(self.container_name, True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self._set_peer_relation()
+        self._set_approle_secret("role id", "secret id")
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "ca cert"
+        # Set the default network
+        self.harness.add_network("10.0.0.10")
+        # # When
+        relation_id = self.harness.add_relation(
+            relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
+        )
+
+        # Then
+        relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
+        mock_set_autounseal_data.assert_called_once_with(
+            relation,
+            "https://10.0.0.10:8200",
+            "key name",
+            "autounseal role id",
+            "autounseal secret id",
+            "ca cert",
+        )
+
+    def test_when_autounseal_destroy_then_credentials_are_removed(self):
+        # Given
+        self.mock_vault.configure_mock(
+            **{
+                "is_initialized.return_value": True,
+                "is_api_available.return_value": True,
+            },
+        )
+        self._set_approle_secret("role id", "secret id")
+        self.harness.set_leader()
+        self.harness.set_can_connect(self.container_name, True)
+        with self.harness.hooks_disabled():
+            relation_id = self.harness.add_relation(
+                relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
+            )
+            relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
+
+        # When
+        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken.emit(
+            relation
+        )
+
+        # Then
+        self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
+            relation_id, AUTOUNSEAL_MOUNT_PATH
+        )
