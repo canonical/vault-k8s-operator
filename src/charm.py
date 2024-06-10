@@ -30,7 +30,6 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequirerRelationBroken,
-    VaultAutounsealRequirerRelationCreated,
     VaultAutounsealRequires,
 )
 from charms.vault_k8s.v0.vault_client import (
@@ -197,7 +196,7 @@ class VaultCharm(CharmBase):
         )
         self.framework.observe(
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
-            self._on_vault_autounseal_requirer_relation_created,
+            self._configure,
         )
         self.framework.observe(
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken,
@@ -224,12 +223,6 @@ class VaultCharm(CharmBase):
             logger.warning("Vault is not active, cannot disable vault autounseal")
             return
         vault.destroy_autounseal_credentials(event.relation.id, AUTOUNSEAL_MOUNT_PATH)
-
-    def _on_vault_autounseal_requirer_relation_created(
-        self, event: VaultAutounsealRequirerRelationCreated
-    ):
-        """Generate and set the auto-unseal credentials for the requirer."""
-        self._generate_and_set_autounseal_credentials(event.relation)
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
         """If leader, generate new credentials for the auto-unseal requirer.

@@ -1880,6 +1880,7 @@ class TestCharm(unittest.TestCase):
             **{
                 "is_initialized.return_value": True,
                 "is_api_available.return_value": True,
+                "is_sealed.return_value": False,
                 "create_autounseal_credentials.return_value": (
                     "key name",
                     "autounseal role id",
@@ -1889,19 +1890,19 @@ class TestCharm(unittest.TestCase):
         )
         self.harness.set_leader()
         self.harness.set_can_connect(self.container_name, True)
+        self.harness.add_storage(storage_name="config", attach=True)
+        self._set_peer_relation()
+        self._set_approle_secret("role id", "secret id")
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "ca cert"
+        # Set the default network
+        self.harness.add_network("10.0.0.10")
+        # # When
         relation_id = self.harness.add_relation(
             relation_name="vault-autounseal-provides", remote_app="autounseal-requirer"
         )
-        relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
-        self._set_approle_secret("role id", "secret id")
-        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "ca cert"
-
-        # When
-        self.harness.charm.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created.emit(
-            relation
-        )
 
         # Then
+        relation = self.harness.model.get_relation("vault-autounseal-provides", relation_id)
         mock_set_autounseal_data.assert_called_once_with(
             relation,
             "https://10.0.0.10:8200",
