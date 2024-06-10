@@ -28,6 +28,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_autounseal import (
+    AutounsealDetails,
     VaultAutounsealProvides,
     VaultAutounsealRequirerRelationBroken,
     VaultAutounsealRequires,
@@ -1115,21 +1116,38 @@ class VaultCharm(CharmBase):
 
         self.tls.push_autounseal_ca_cert(autounseal_details.ca_certificate)
 
+        return AutounsealConfigurationDetails(
+            autounseal_details.address,
+            autounseal_details.key_name,
+            self._get_autounseal_vault_token(autounseal_details),
+            self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
+        )
+
+    def _get_autounseal_vault_token(self, autounseal_details: AutounsealDetails) -> str:
+        """Retrieve the auto-unseal Vault token, or generate a new one if required.
+
+        Retrieves the last used token from Juju secrets, and validates that it
+        is still valid. If the token is not valid, a new token is generated and
+        stored in the Juju secret. A valid token is returned.
+
+        Args:
+            autounseal_details: The autounseal configuration details.
+
+        Returns:
+            A periodic Vault token that can be used for auto-unseal.
+
+        """
         vault = Vault(
             url=autounseal_details.address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
         )
         existing_token = self._get_juju_secret_field(AUTOUNSEAL_TOKEN_SECRET_LABEL, "token")
+        # If we don't already have a token, or if the existing token is invalid,
+        # authenticate with the AppRole details to generate a new token.
         if not existing_token or not vault.authenticate(Token(existing_token)):
             vault.authenticate(AppRole(autounseal_details.role_id, autounseal_details.secret_id))
             self._set_juju_secret(AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": vault.token})
-
-        return AutounsealConfigurationDetails(
-            autounseal_details.address,
-            autounseal_details.key_name,
-            vault.token,
-            self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
-        )
+        return vault.token
 
     def _get_juju_secret_field(self, label: str, field: str) -> Optional[str]:
         """Retrieve the latest revision of the secret content from Juju.
