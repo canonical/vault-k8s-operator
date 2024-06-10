@@ -259,8 +259,8 @@ class Vault:
         role_name: str,
         token_ttl=None,
         token_max_ttl=None,
-        policies: List[str] | None = None,
-        cidrs: List[str] | None = None,
+        policies: Optional[List[str]] = None,
+        cidrs: Optional[List[str]] = None,
         token_period=None,
     ) -> str:
         """Create/update a role within vault associating the supplied policies.
@@ -285,7 +285,7 @@ class Vault:
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
+    def generate_role_secret_id(self, name: str, cidrs: Optional[List[str]] = None) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]

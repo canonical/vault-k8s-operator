@@ -1131,7 +1131,7 @@ class VaultCharm(CharmBase):
             self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
         )
 
-    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
+    def _get_juju_secret_field(self, label: str, field: str) -> Optional[str]:
         """Retrieve the latest revision of the secret content from Juju.
 
         Args:
@@ -1152,7 +1152,7 @@ class VaultCharm(CharmBase):
         return content.get(field)
 
     def _set_juju_secret(
-        self, label: str, content: Dict[str, str], description: str | None = None
+        self, label: str, content: Dict[str, str], description: Optional[str] = None
     ) -> None:
         """Set the secret content at `label`, overwrite if it already exists.
 
