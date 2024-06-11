@@ -3,9 +3,10 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import requests
+from charm import AUTOUNSEAL_POLICY_PATH
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -173,16 +174,21 @@ class TestVault(unittest.TestCase):
         patch_read_role_id.return_value = {"data": {"role_id": "1234"}}
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         assert "1234" == vault.configure_approle(
-            "test-approle", ["root", "default"], ["192.168.1.0/24"]
+            "test-approle",
+            policies=["root", "default"],
+            cidrs=["192.168.1.0/24"],
+            token_max_ttl="1h",
+            token_ttl="1h",
         )
 
         patch_create_approle.assert_called_with(
             "test-approle",
-            token_ttl="60s",
-            token_max_ttl="60s",
-            token_policies=["root", "default"],
             bind_secret_id="true",
+            token_ttl="1h",
+            token_max_ttl="1h",
+            token_policies=["root", "default"],
             token_bound_cidrs=["192.168.1.0/24"],
+            token_period=None,
         )
         patch_read_role_id.assert_called_once()
 
@@ -197,6 +203,62 @@ class TestVault(unittest.TestCase):
             backend_type=SecretsBackend.KV_V2.value,
             description=f"Charm created '{SecretsBackend.KV_V2.value}' backend",
             path="some/path",
+        )
+
+    @patch("hvac.api.system_backend.mount.Mount.disable_secrets_engine")
+    def test_when_disable_secrets_engine_then_secrets_engine_disabled(
+        self, mock_disable_secrets_engine: MagicMock
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.disable_secrets_engine("some/path")
+
+        mock_disable_secrets_engine.assert_called_with("some/path")
+
+    @patch("hvac.api.system_backend.policy.Policy.delete_policy")
+    @patch("hvac.api.auth_methods.approle.AppRole.delete_role")
+    def test_when_destroy_autounseal_credentials_then_approle_and_policy_are_deleted(
+        self, mock_delete_role: MagicMock, mock_delete_policy: MagicMock
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        relation_id = 1
+        mount = "example"
+        vault.destroy_autounseal_credentials(relation_id, mount)
+
+        mock_delete_role.assert_called_with(f"charm-autounseal-{relation_id}")
+        mock_delete_policy.assert_called_with(f"charm-autounseal-{relation_id}")
+
+    @patch("hvac.api.system_backend.policy.Policy.create_or_update_policy")
+    @patch("hvac.api.auth_methods.approle.AppRole.generate_secret_id")
+    @patch("hvac.api.auth_methods.approle.AppRole.read_role_id")
+    @patch("hvac.api.auth_methods.approle.AppRole.create_or_update_approle")
+    @patch("hvac.api.secrets_engines.transit.Transit.create_key")
+    def test_when_create_autounseal_credentials_then_key_and_approle_and_policy_are_created(
+        self,
+        mock_create_key: MagicMock,
+        mock_create_approle: MagicMock,
+        mock_read_role_id: MagicMock,
+        mock_generate_secret_id: MagicMock,
+        mock_create_policy: MagicMock,
+    ):
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        relation_id = 1
+        mount = "example_mount"
+        vault.create_autounseal_credentials(relation_id, mount, AUTOUNSEAL_POLICY_PATH)
+
+        with open(f"{TEST_PATH}/autounseal_policy_formatted.hcl", "r") as f:
+            expected_policy = f.read()
+        mock_create_key.assert_called_with(mount_point=mount, name=str(relation_id))
+        mock_create_policy.assert_called_with(
+            name=f"charm-autounseal-{relation_id}", policy=expected_policy
+        )
+        mock_create_approle.assert_called_with(
+            f"charm-autounseal-{relation_id}",
+            bind_secret_id="true",
+            token_ttl=None,
+            token_max_ttl=None,
+            token_policies=[f"charm-autounseal-{relation_id}"],
+            token_bound_cidrs=None,
+            token_period="60s",
         )
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
@@ -254,9 +316,7 @@ class TestVault(unittest.TestCase):
         patch_read_pki_issuers,
     ):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        patch_read_pki_issuers.return_value = {
-            "data": {"keys": ["issuer"]}
-        }
+        patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
         mount = "test"
         vault.make_latest_pki_issuer_default(mount=mount)
         patch_write.assert_called_with(
@@ -264,5 +324,5 @@ class TestVault(unittest.TestCase):
             data={
                 "default_follows_latest_issuer": True,
                 "default": "issuer",
-            }
+            },
         )

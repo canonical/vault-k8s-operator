@@ -60,6 +60,8 @@ peers:
     interface: vault-peer
 
 provides:
+  vault-autounseal-provides:
+    interface: vault-autounseal
   vault-kv:
     interface: vault-kv
   vault-pki:
@@ -78,6 +80,9 @@ assumes:
   - k8s-api
 
 requires:
+  vault-autounseal-requires:
+    interface: vault-autounseal
+    limit: 1
   ingress:
     interface: ingress
     limit: 1

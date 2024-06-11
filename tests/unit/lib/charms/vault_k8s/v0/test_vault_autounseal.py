@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 
 from charms.vault_k8s.v0.vault_autounseal import (
     AutounsealDetails,
-    VaultAutounsealDestroy,
     VaultAutounsealDetailsReadyEvent,
-    VaultAutounsealInitialize,
     VaultAutounsealProvides,
+    VaultAutounsealRequirerRelationBroken,
+    VaultAutounsealRequirerRelationCreated,
     VaultAutounsealRequires,
 )
 from ops import Relation, testing
@@ -39,16 +39,22 @@ class VaultAutounsealProviderCharm(CharmBase):
         super().__init__(*args)
         self.interface = VaultAutounsealProvides(self, AUTOUNSEAL_PROVIDES_RELATION_NAME)
         self.framework.observe(
-            self.interface.on.vault_autounseal_initialize, self._on_vault_autounseal_initialize
+            self.interface.on.vault_autounseal_requirer_relation_created,
+            self._on_vault_autounseal_requirer_relation_created,
         )
         self.framework.observe(
-            self.interface.on.vault_autounseal_destroy, self._on_vault_autounseal_initialize
+            self.interface.on.vault_autounseal_requirer_relation_broken,
+            self._on_vault_autounseal_requirer_relation_created,
         )
 
-    def _on_vault_autounseal_initialize(self, event: VaultAutounsealInitialize):
+    def _on_vault_autounseal_requirer_relation_created(
+        self, event: VaultAutounsealRequirerRelationCreated
+    ):
         pass
 
-    def _on_vault_autounseal_destroy(self, event: VaultAutounsealDestroy):
+    def _on_vault_autounseal_requirer_relation_broken(
+        self, event: VaultAutounsealRequirerRelationBroken
+    ):
         pass
 
 
@@ -105,6 +111,7 @@ class TestVaultAutounsealProvides(unittest.TestCase):
     ):
         remote_app, remote_unit, relation = self.setup_relation()
         vault_address = "https://vault.example.com"
+        key_name = "some key name"
         approle_id = "some approle id"
         approle_secret_id = "some approle secret id"
         ca_certificate = "my ca certificate"
@@ -112,11 +119,12 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         mock_add_secret.return_value = MagicMock(**{"id": "some secret id"})
 
         self.harness.charm.interface.set_autounseal_data(
-            relation, vault_address, approle_id, approle_secret_id, ca_certificate
+            relation, vault_address, key_name, approle_id, approle_secret_id, ca_certificate
         )
         mock_add_secret.assert_called_once()
         assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {
             "address": vault_address,
+            "key_name": key_name,
             "credentials_secret_id": "some secret id",
             "ca_certificate": ca_certificate,
         }
@@ -126,12 +134,13 @@ class TestVaultAutounsealProvides(unittest.TestCase):
     ):
         remote_app, remote_unit, relation = self.setup_relation(leader=False)
         vault_address = "https://vault.example.com"
+        key_name = "some key name"
         approle_id = "some approle id"
         approle_secret_id = "some approle secret id"
         ca_certificate = "my ca certificate"
 
         self.harness.charm.interface.set_autounseal_data(
-            relation, vault_address, approle_id, approle_secret_id, ca_certificate
+            relation, vault_address, key_name, approle_id, approle_secret_id, ca_certificate
         )
         assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {}
 
@@ -276,8 +285,11 @@ class TestVaultAutounsealRequires(unittest.TestCase):
     ):
         remote_app, remote_unit, relation = self.setup_relation()
         vault_url = "https://vault.example.com"
+        key_name = "some key name"
+        role_id = "some role id"
+        secret_id = "some secret"
         credentials_secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": "some role id", "secret-id": "some secret"}
+            self.harness.charm.app, {"role-id": role_id, "secret-id": secret_id}
         )
         ca_certificate = "some ca certificate"
         self.harness.update_relation_data(
@@ -285,6 +297,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
             remote_app,
             {
                 "address": vault_url,
+                "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
             },
@@ -295,8 +308,9 @@ class TestVaultAutounsealRequires(unittest.TestCase):
 
         assert isinstance(event, VaultAutounsealDetailsReadyEvent)
         assert event.address == vault_url
-        assert event.role_id == "some role id"
-        assert event.secret_id == "some secret"
+        assert event.key_name == key_name
+        assert event.role_id == role_id
+        assert event.secret_id == secret_id
         assert event.ca_certificate == ca_certificate
 
     @patch("test_vault_autounseal.VaultAutounsealRequirerCharm._on_details_ready")
@@ -320,9 +334,13 @@ class TestVaultAutounsealRequires(unittest.TestCase):
 
     def test_given_all_details_present_when_get_details_then_details_are_returned(self):
         remote_app, remote_unit, relation = self.setup_relation()
+
         vault_url = "https://vault.example.com"
+        key_name = "some key name"
+        role_id = "some role id"
+        secret_id = "some secret"
         credentials_secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": "some role id", "secret-id": "some secret"}
+            self.harness.charm.app, {"role-id": role_id, "secret-id": secret_id}
         )
         ca_certificate = "some ca certificate"
         self.harness.update_relation_data(
@@ -330,6 +348,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
             remote_app,
             {
                 "address": vault_url,
+                "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
             },
@@ -338,9 +357,9 @@ class TestVaultAutounsealRequires(unittest.TestCase):
         details = self.harness.charm.interface.get_details()
 
         assert details == AutounsealDetails(
-            vault_url, "some role id", "some secret", ca_certificate
+            vault_url, key_name, role_id, secret_id, ca_certificate
         )
 
-    def test_given_no_details_when_get_details_then_empty_tuple_is_returned(self):
+    def test_given_no_details_when_get_details_then_none_is_returned(self):
         details = self.harness.charm.interface.get_details()
-        assert details == AutounsealDetails(None, None, None, None)
+        assert details is None

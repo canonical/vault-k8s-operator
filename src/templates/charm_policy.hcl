@@ -1,7 +1,3 @@
-# Allow management of policies starting with charm- prefix
-path "sys/policy/charm-*" {
-  capabilities = ["create", "read", "update", "delete"]
-}
 # Allow operations under the charm prefix
 path "charm-*" {
   capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
@@ -10,6 +6,11 @@ path "charm-*" {
 # Allow discovery of all policies
 path "sys/policy/" {
   capabilities = ["list"]
+}
+
+# Allow management of policies starting with charm- prefix
+path "sys/policy/charm-*" {
+  capabilities = ["create", "read", "update", "delete"]
 }
 
 # Allow management of approle's with charm- prefix
@@ -58,4 +59,9 @@ path "sys/storage/raft/snapshot" {
 }
 path "sys/storage/raft/snapshot-force" {
   capabilities = ["update"]
+}
+
+# Vault Transit permissions
+path "charm-transit/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
 }
