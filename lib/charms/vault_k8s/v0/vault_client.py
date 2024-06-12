@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 13
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
