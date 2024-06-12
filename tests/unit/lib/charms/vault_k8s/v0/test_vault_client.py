@@ -310,11 +310,16 @@ class TestVault(unittest.TestCase):
 
     @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
     @patch("hvac.Client.write_data")
+    @patch("hvac.Client.read")
     def test_given_existing_pki_issuers_when_make_latest_pki_issuer_default_then_config_written_to_path(
         self,
+        patch_read,
         patch_write,
         patch_read_pki_issuers,
     ):
+        patch_read.return_value = {
+            "data": {"default_follows_latest_issuer": False, "default": "whatever issuer"}
+        }
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
         mount = "test"
@@ -326,3 +331,21 @@ class TestVault(unittest.TestCase):
                 "default": "issuer",
             },
         )
+
+    @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
+    @patch("hvac.Client.write_data")
+    @patch("hvac.Client.read")
+    def test_given_issuers_config_already_updated_when_make_latest_pki_issuer_default_then_config_not_written(
+        self,
+        patch_read,
+        patch_write,
+        patch_read_pki_issuers,
+    ):
+        patch_read.return_value = {
+            "data": {"default_follows_latest_issuer": True, "default": "whatever issuer"}
+        }
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
+        mount = "test"
+        vault.make_latest_pki_issuer_default(mount=mount)
+        patch_write.assert_not_called()
