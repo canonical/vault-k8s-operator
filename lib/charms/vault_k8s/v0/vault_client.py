@@ -469,8 +469,8 @@ class Vault:
         except (InvalidPath, KeyError) as e:
             logger.error("No issuers found on the specified path: %s", e)
             raise VaultClientError("No issuers found on the specified path.")
-        issuers_config = self._client.read(path=f"{mount}/config/issuers")
         try:
+            issuers_config = self._client.read(path=f"{mount}/config/issuers")
             if issuers_config and not issuers_config["data"]["default_follows_latest_issuer"]:  # type: ignore -- bad type hint in stubs
                 logger.debug("Updating issuers config")
                 self._client.write_data(
