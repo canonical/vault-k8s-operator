@@ -424,19 +424,27 @@ class TestVaultK8sIntegrationsPart1:
             "common_name": common_name,
         }
         await vault_app.set_config(common_name_config)
-        leader_unit_index, root_token, _ = deployed_vault_initialized_leader
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
         )
-        action_output = await run_get_certificate_action(ops_test)
+        await ops_test.model.wait_for_idle(
+            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=1,
+        )
+
+        leader_unit_index, root_token, _ = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
             root_token=root_token,
             endpoint=unit_addresses[leader_unit_index],
             mount="charm-pki",
         )
+        action_output = await run_get_certificate_action(ops_test)
         assert current_issuers_common_name == common_name
         assert action_output["certificate"] is not None
         assert action_output["ca-certificate"] is not None
@@ -1083,7 +1091,6 @@ async def authorize_charm(
         action_uuid=authorize_action.entity_id, wait=120
     )
     return result
-
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
