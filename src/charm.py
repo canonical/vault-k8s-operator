@@ -524,13 +524,13 @@ class VaultCharm(CharmBase):
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
-        common_name = self._get_config_common_name()
-        if not common_name:
-            logger.error("Common name is not set in the charm config")
-            return
         certificate = self._get_pki_ca_certificate()
         if not certificate:
             logger.debug("No certificate available")
+            return
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.error("Common name is not set in the charm config")
             return
         if not self._is_intermediate_ca_common_name_valid(
             vault, common_name
