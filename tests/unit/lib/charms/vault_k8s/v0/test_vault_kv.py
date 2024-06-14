@@ -209,7 +209,9 @@ class TestVaultKvProvides(unittest.TestCase):
 
         assert len(kv_requests) == 0
 
-    def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(self):
+    def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(
+        self,
+    ):
         suffix = "dummy"
         nonce = "abcd"
         egress_subnet = "10.0.0.1/32"
@@ -223,7 +225,7 @@ class TestVaultKvProvides(unittest.TestCase):
             relation_id=rel_id,
             app_or_unit=remote_app,
             key_values={"mount_suffix": suffix},
-            )
+        )
 
         kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
 
@@ -237,7 +239,9 @@ class TestVaultKvProvides(unittest.TestCase):
             nonce=nonce,
         )
 
-    def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(self):
+    def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
+        self,
+    ):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
@@ -262,10 +266,10 @@ class TestVaultKvProvides(unittest.TestCase):
             relation_id=rel_id,
             app_or_unit=remote_app,
             key_values={"mount_suffix": suffix},
-            )
+        )
         self.harness.update_relation_data(
             relation_id=rel_id,
-            app_or_unit= self.harness.charm.app.name,
+            app_or_unit=self.harness.charm.app.name,
             key_values={"credentials": json.dumps({nonce_1: "whatever secret id"})},
         )
 
@@ -281,8 +285,9 @@ class TestVaultKvProvides(unittest.TestCase):
             nonce=nonce_2,
         )
 
-
-    def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(self):
+    def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(
+        self,
+    ):
         nonce = "abcd"
         remote_app, remote_unit, _, rel_id = self.setup_relation()
         self.harness.update_relation_data(
@@ -294,10 +299,10 @@ class TestVaultKvProvides(unittest.TestCase):
             relation_id=rel_id,
             app_or_unit=remote_app,
             key_values={"mount_suffix": "dummy"},
-            )
+        )
         self.harness.update_relation_data(
             relation_id=rel_id,
-            app_or_unit= self.harness.charm.app.name,
+            app_or_unit=self.harness.charm.app.name,
             key_values={"credentials": json.dumps({nonce: "whatever secret id"})},
         )
 
@@ -335,7 +340,7 @@ class TestVaultKvProvides(unittest.TestCase):
             relation_id=rel_id,
             app_or_unit=remote_app,
             key_values={"mount_suffix": suffix},
-            )
+        )
 
         kv_requests = self.harness.charm.interface.get_kv_requests()
 
@@ -358,7 +363,6 @@ class TestVaultKvProvides(unittest.TestCase):
         )
         assert expected_kv_request_1 in kv_requests
         assert expected_kv_request_2 in kv_requests
-
 
 
 class TestVaultKvRequires(unittest.TestCase):
@@ -395,9 +399,7 @@ class TestVaultKvRequires(unittest.TestCase):
         assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
 
     @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
-    def test_given_unit_leader_when_config_changed_then_connected_event_fired(
-        self, _on_connected
-    ):
+    def test_given_unit_leader_when_config_changed_then_connected_event_fired(self, _on_connected):
         self.setup_relation()
         self.harness.charm.on.config_changed.emit()
 
