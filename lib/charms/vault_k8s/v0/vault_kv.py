@@ -163,9 +163,7 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
-    egress_subnet: str = Field(
-        description="The CIDR allowed by the role."
-    )
+    egress_subnet: str = Field(description="The CIDR allowed by the role.")
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."
