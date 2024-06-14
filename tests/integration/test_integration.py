@@ -1092,6 +1092,7 @@ async def authorize_charm(
     )
     return result
 
+
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
     client.token = root_token
