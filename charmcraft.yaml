@@ -76,7 +76,7 @@ provides:
     interface: grafana_dashboard
 
 assumes:
-  - juju >= 3.1
+  - juju >= 3.1.8
   - k8s-api
 
 requires:
