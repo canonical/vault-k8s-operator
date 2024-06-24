@@ -12,7 +12,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via typer
-hvac==2.2.0
+hvac==2.3.0
     # via -r requirements.in
 idna==3.7
     # via requests
