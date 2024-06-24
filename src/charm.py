@@ -47,7 +47,7 @@ from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from container import Container
 from cryptography import x509
 from jinja2 import Environment, FileSystemLoader
-from ops import CharmBase
+from ops import CharmBase, MaintenanceStatus
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
@@ -352,11 +352,15 @@ class VaultCharm(CharmBase):
                 BlockedStatus("Please initialize Vault or integrate with an auto-unseal provider")
             )
             return
-        if vault.is_sealed():
-            if vault.needs_migration():
-                event.add_status(BlockedStatus("Please migrate Vault"))
+        try:
+            if vault.is_sealed():
+                if vault.needs_migration():
+                    event.add_status(BlockedStatus("Please migrate Vault"))
+                    return
+                event.add_status(BlockedStatus("Please unseal Vault"))
                 return
-            event.add_status(BlockedStatus("Please unseal Vault"))
+        except VaultClientError:
+            event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
@@ -399,7 +403,10 @@ class VaultCharm(CharmBase):
             return
         if not vault.is_initialized():
             return
-        if vault.is_sealed():
+        try:
+            if vault.is_sealed():
+                return
+        except VaultClientError:
             return
         if not all(self._get_approle_auth_secret()):
             return
@@ -444,7 +451,10 @@ class VaultCharm(CharmBase):
             return
         if not vault.is_initialized():
             return
-        if vault.is_sealed():
+        try:
+            if vault.is_sealed():
+                return
+        except VaultClientError:
             return
         vault.authenticate(AppRole(role_id, secret_id))
         if vault.is_node_in_raft_peers(node_id=self._node_id) and vault.get_num_raft_peers() > 1:
