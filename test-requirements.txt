@@ -22,7 +22,7 @@ charset-normalizer==3.3.2
     # via requests
 codespell==2.2.6
     # via -r test-requirements.in
-coverage[toml]==7.5.3
+coverage[toml]==7.5.4
     # via -r test-requirements.in
 cryptography==42.0.8
     # via paramiko
@@ -34,7 +34,7 @@ executing==2.0.1
     # via stack-data
 google-auth==2.29.0
     # via kubernetes
-hvac==2.2.0
+hvac==2.3.0
     # via juju
 idna==3.7
     # via requests
@@ -110,7 +110,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.367
+pyright==1.1.368
     # via -r test-requirements.in
 pytest==8.1.2
     # via
@@ -140,7 +140,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.4.9
+ruff==0.4.10
     # via -r test-requirements.in
 six==1.16.0
     # via
@@ -157,7 +157,7 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
-types-hvac==2.2.0.20240522
+types-hvac==2.3.0.20240621
     # via -r test-requirements.in
 types-requests==2.31.0.20240406
     # via types-hvac

@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 13
+LIBPATCH = 14
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -155,7 +155,20 @@ class Vault:
 
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
-        return self._client.sys.is_sealed()
+        try:
+            return self._client.sys.is_sealed()
+        except VaultError as e:
+            # This seems to happen if the seal status is checked immediately
+            # after initializing the vault when autounseal is enabled.
+            # There is a short period of time where the vault is initialized,
+            # but hasn't finished setting up the autounseal configuration yet,
+            # and the server will return an internal server error during this
+            # period.
+            #
+            # hvac.exceptions.InternalServerError:
+            # core: barrier reports initialized but no seal configuration found
+            logging.error("Error while checking Vault seal status: %s", e)
+            raise VaultClientError(e) from e
 
     def needs_migration(self) -> bool:
         """Return true if the vault needs to be migrated, false otherwise."""
