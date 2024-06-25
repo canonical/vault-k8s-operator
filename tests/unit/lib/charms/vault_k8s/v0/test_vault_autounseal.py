@@ -19,6 +19,7 @@ from ops.charm import CharmBase
 
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
+AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 
 
 class VaultAutounsealProviderCharm(CharmBase):
@@ -119,11 +120,18 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         mock_add_secret.return_value = MagicMock(**{"id": "some secret id"})
 
         self.harness.charm.interface.set_autounseal_data(
-            relation, vault_address, key_name, approle_id, approle_secret_id, ca_certificate
+            relation,
+            vault_address,
+            AUTOUNSEAL_MOUNT_PATH,
+            key_name,
+            approle_id,
+            approle_secret_id,
+            ca_certificate,
         )
         mock_add_secret.assert_called_once()
         assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {
             "address": vault_address,
+            "mount_path": AUTOUNSEAL_MOUNT_PATH,
             "key_name": key_name,
             "credentials_secret_id": "some secret id",
             "ca_certificate": ca_certificate,
@@ -140,7 +148,13 @@ class TestVaultAutounsealProvides(unittest.TestCase):
         ca_certificate = "my ca certificate"
 
         self.harness.charm.interface.set_autounseal_data(
-            relation, vault_address, key_name, approle_id, approle_secret_id, ca_certificate
+            relation,
+            vault_address,
+            AUTOUNSEAL_MOUNT_PATH,
+            key_name,
+            approle_id,
+            approle_secret_id,
+            ca_certificate,
         )
         assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {}
 
@@ -297,6 +311,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
             remote_app,
             {
                 "address": vault_url,
+                "mount_path": AUTOUNSEAL_MOUNT_PATH,
                 "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
@@ -308,6 +323,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
 
         assert isinstance(event, VaultAutounsealDetailsReadyEvent)
         assert event.address == vault_url
+        assert event.mount_path == AUTOUNSEAL_MOUNT_PATH
         assert event.key_name == key_name
         assert event.role_id == role_id
         assert event.secret_id == secret_id
@@ -348,6 +364,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
             remote_app,
             {
                 "address": vault_url,
+                "mount_path": AUTOUNSEAL_MOUNT_PATH,
                 "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
@@ -357,7 +374,7 @@ class TestVaultAutounsealRequires(unittest.TestCase):
         details = self.harness.charm.interface.get_details()
 
         assert details == AutounsealDetails(
-            vault_url, key_name, role_id, secret_id, ca_certificate
+            vault_url, AUTOUNSEAL_MOUNT_PATH, key_name, role_id, secret_id, ca_certificate
         )
 
     def test_given_no_details_when_get_details_then_none_is_returned(self):

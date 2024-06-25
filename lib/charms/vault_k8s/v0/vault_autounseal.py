@@ -99,6 +99,9 @@ class VaultAutounsealProviderSchema(BaseModel):
     """Provider side of the vault-autounseal relation interface."""
 
     address: str = Field(description="The address of the Vault server to connect to.")
+    mount_path: str = Field(
+        description="The path to the transit engine mount point where the key is stored."
+    )
     key_name: str = Field(description="The name of the transit key to use for autounseal.")
     credentials_secret_id: str = Field(
         description=(
@@ -119,9 +122,12 @@ class ProviderSchema(DataBagSchema):
 class VaultAutounsealDetailsReadyEvent(ops.EventBase):
     """Event emitted on the requirer when Vault autounseal details are ready in the databag."""
 
-    def __init__(self, handle: ops.Handle, address, key_name, role_id, secret_id, ca_certificate):
+    def __init__(
+        self, handle: ops.Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
+    ):
         super().__init__(handle)
         self.address = address
+        self.mount_path = mount_path
         self.key_name = key_name
         self.role_id = role_id
         self.secret_id = secret_id
@@ -132,6 +138,7 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
         return dict(
             super().snapshot(),
             address=self.address,
+            mount_path=self.mount_path,
             key_name=self.key_name,
             role_id=self.role_id,
             secret_id=self.secret_id,
@@ -142,6 +149,7 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
         """Restore the event from a snapshot."""
         super().restore(snapshot)
         self.address = snapshot["address"]
+        self.mount_path = snapshot["mount_path"]
         self.key_name = snapshot["key_name"]
         self.role_id = snapshot["role_id"]
         self.secret_id = snapshot["secret_id"]
@@ -231,6 +239,7 @@ class AutounsealDetails:
     """The details required to autounseal a vault instance."""
 
     address: str
+    mount_path: str
     key_name: str
     role_id: str
     secret_id: str
@@ -296,6 +305,7 @@ class VaultAutounsealProvides(ops.Object):
         self,
         relation: ops.Relation,
         vault_address: str,
+        mount_path: str,
         key_name: str,
         approle_role_id: str,
         approle_secret_id: str,
@@ -306,6 +316,7 @@ class VaultAutounsealProvides(ops.Object):
         Args:
             relation: The Juju relation to set the autounseal data in.
             vault_address: The address of the Vault server which will be used for autounseal
+            mount_path: The path to the transit engine mount point where the key is stored.
             key_name: The name of the transit key to use for autounseal.
             approle_role_id: The AppRole Role ID to use when authenticating with the external Vault server.
             approle_secret_id: The AppRole Secret ID to use when authenticating with the external Vault server.
@@ -328,6 +339,7 @@ class VaultAutounsealProvides(ops.Object):
         relation.data[self.charm.app].update(
             {
                 "address": vault_address,
+                "mount_path": mount_path,
                 "key_name": key_name,
                 "credentials_secret_id": credentials_secret_id,
                 "ca_certificate": ca_certificate,
@@ -427,6 +439,7 @@ class VaultAutounsealRequires(ops.Object):
                 return
             self.on.vault_autounseal_details_ready.emit(
                 details.address,
+                details.mount_path,
                 details.key_name,
                 details.role_id,
                 details.secret_id,
@@ -452,13 +465,15 @@ class VaultAutounsealRequires(ops.Object):
             return None
         data = relation.data[relation.app]
         address = data.get("address")
+        mount_path = data.get("mount_path")
         key_name = data.get("key_name")
         ca_certificate = data.get("ca_certificate")
         credentials = self._get_credentials(relation)
-        if not (address and key_name and ca_certificate and credentials):
+        if not (address and mount_path and key_name and ca_certificate and credentials):
             return None
         return AutounsealDetails(
             address,
+            mount_path,
             key_name,
             credentials.role_id,
             credentials.secret_id,
