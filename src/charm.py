@@ -107,6 +107,7 @@ class AutounsealConfigurationDetails:
     """Credentials required for configuring auto-unseal on Vault."""
 
     address: str
+    mount_path: str
     key_name: str
     token: str
     ca_cert_path: str
@@ -290,6 +291,7 @@ class VaultCharm(CharmBase):
         self.vault_autounseal_provides.set_autounseal_data(
             relation,
             vault_address,
+            AUTOUNSEAL_MOUNT_PATH,
             key_name,
             approle_id,
             approle_secret_id,
@@ -1128,6 +1130,7 @@ class VaultCharm(CharmBase):
 
         return AutounsealConfigurationDetails(
             autounseal_details.address,
+            autounseal_details.mount_path,
             autounseal_details.key_name,
             self._get_autounseal_vault_token(autounseal_details),
             self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
@@ -1504,7 +1507,7 @@ def _render_vault_config_file(
         retry_joins=retry_joins,
         autounseal_address=autounseal_details.address if autounseal_details else None,
         autounseal_key_name=autounseal_details.key_name if autounseal_details else None,
-        autounseal_mount_path=AUTOUNSEAL_MOUNT_PATH if autounseal_details else None,
+        autounseal_mount_path=autounseal_details.mount_path if autounseal_details else None,
         autounseal_token=autounseal_details.token if autounseal_details else None,
         autounseal_tls_ca_cert=autounseal_details.ca_cert_path if autounseal_details else None,
     )
