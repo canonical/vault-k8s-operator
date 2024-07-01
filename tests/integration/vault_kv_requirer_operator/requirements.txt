@@ -18,7 +18,7 @@ idna==3.7
     # via requests
 iniconfig==2.0.0
     # via pytest
-ops==2.14.0
+ops==2.14.1
     # via
     #   -r requirements.in
     #   ops-scenario
