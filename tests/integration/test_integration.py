@@ -1080,8 +1080,8 @@ async def authorize_charm(
     ops_test: OpsTest, root_token: str, app_name=APPLICATION_NAME
 ) -> Any | Dict:
     assert ops_test.model
-    secret_id = await ops_test.model.add_secret("approle", [f"token={root_token}"])
-    print(secret_id.split(":")[-1])
+    secret = await ops_test.model.add_secret("approle", [f"token={root_token}"])
+    secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret("approle", app_name)
     app = ops_test.model.applications[app_name]
     assert isinstance(app, Application)
