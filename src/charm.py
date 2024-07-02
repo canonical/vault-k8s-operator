@@ -366,9 +366,7 @@ class VaultCharm(CharmBase):
             return
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
-            event.add_status(
-                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
-            )
+            event.add_status(BlockedStatus("Please grant charm a token secret"))
             return
         if not self._get_active_vault_client():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
@@ -395,7 +393,6 @@ class VaultCharm(CharmBase):
         self.tls.configure_certificates(self._ingress_address)
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             return
-
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(
@@ -410,8 +407,12 @@ class VaultCharm(CharmBase):
                 return
         except VaultClientError:
             return
-        if not all(self._get_approle_auth_secret()):
+        if not self._get_approle_token_secret_id():
             return
+        if not all(self._get_approle_auth_secret()) and not self.unit.is_leader():
+            return
+        if self.unit.is_leader():
+            self._on_authorize_charm_action(self._get_approle_token_secret_id())
         if not (vault := self._get_active_vault_client()):
             return
         self._configure_pki_secrets_engine()
@@ -696,18 +697,9 @@ class VaultCharm(CharmBase):
             chain=certificate.chain,
         )
 
-    def _on_authorize_charm_action(self, event: ActionEvent) -> None:
-        if not self.unit.is_leader():
-            event.fail("This action must be run on the leader unit.")
-            return
-
-        token = event.params.get("token", "")
+    def _on_authorize_charm_action(self, token: str) -> None:
         vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         vault.authenticate(Token(token))
-
-        if not vault.get_token_data():
-            event.fail("The token provided is not valid.")
-            return
 
         try:
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
@@ -727,11 +719,8 @@ class VaultCharm(CharmBase):
                 {"role-id": role_id, "secret-id": secret_id},
                 description="The authentication details for the charm's access to vault.",
             )
-            event.set_results({"result": "Charm authorized successfully."})
         except VaultClientError as e:
-            logger.exception("Vault returned an error while authorizing the charm")
-            event.fail(f"Vault returned an error while authorizing the charm: {str(e)}")
-            return
+            logger.exception("Vault returned an error while authorizing the charm: %s", e)
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
@@ -1460,6 +1449,14 @@ class VaultCharm(CharmBase):
     def _get_config_common_name(self) -> str:
         """Return the common name to use for the PKI backend."""
         return cast(str, self.config.get("common_name", ""))
+
+    def _get_approle_token_secret_id(self) -> Optional[str]:
+        secret_id = self.config.get("approle_token_secret_id")
+        if not secret_id:
+            return None
+        juju_secret = self.model.get_secret(id=secret_id)
+        content = juju_secret.get_content(refresh=True)
+        return content.get("token")
 
     def _common_name_config_is_valid(self) -> bool:
         """Return whether the config value for the common name is valid."""
