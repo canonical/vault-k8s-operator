@@ -105,13 +105,13 @@ class TestVaultK8s:
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=1,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
             )
             unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=NUM_VAULT_UNITS,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
             )
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
@@ -1080,7 +1080,7 @@ async def authorize_charm(
     ops_test: OpsTest, root_token: str, app_name=APPLICATION_NAME
 ) -> Any | Dict:
     assert ops_test.model
-    secret_id = await ops_test.model.add_secret("approle", {"token": root_token})
+    secret_id = await ops_test.model.add_secret(f"approle-{app_name}", {"token": root_token})
     logger.warning(secret_id)
     await ops_test.model.grant_secret("approle", app_name)
     app = ops_test.model.applications[app_name]
