@@ -1080,17 +1080,11 @@ async def authorize_charm(
     ops_test: OpsTest, root_token: str, app_name=APPLICATION_NAME
 ) -> Any | Dict:
     assert ops_test.model
-    leader_unit = await get_leader_unit(ops_test.model, app_name)
-    authorize_action = await leader_unit.run_action(
-        action_name="authorize-charm",
-        **{
-            "token": root_token,
-        },
-    )
-    result = await ops_test.model.get_action_output(
-        action_uuid=authorize_action.entity_id, wait=120
-    )
-    return result
+    secret_id = await ops_test.model.add_secret("approle", {"token": root_token})
+    logger.warning(secret_id)
+    await ops_test.model.grant_secret("approle", app_name)
+    app: Application = ops_test.model.applications[app_name]
+    await app.set_config({"approle_token_secret_id": secret_id})
 
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
