@@ -823,7 +823,7 @@ class TestVaultK8sIntegrationsPart3:
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=1,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
                 app_name="vault-b",
             )
             await authorize_charm(ops_test, root_token, "vault-b")
