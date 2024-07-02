@@ -173,7 +173,6 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
-        self.framework.observe(self.on.authorize_charm_action, self._on_authorize_charm_action)
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
@@ -407,12 +406,14 @@ class VaultCharm(CharmBase):
                 return
         except VaultClientError:
             return
-        if not self._get_approle_token_secret_id():
-            return
+
         if not all(self._get_approle_auth_secret()) and not self.unit.is_leader():
             return
-        if self.unit.is_leader():
-            self._on_authorize_charm_action(self._get_approle_token_secret_id())
+        if not all(self._get_approle_auth_secret()) and self.unit.is_leader():
+            token = self._get_approle_temporary_token()
+            if not token:
+                return
+            self._on_authorize_charm_action(token)
         if not (vault := self._get_active_vault_client()):
             return
         self._configure_pki_secrets_engine()
@@ -1450,8 +1451,8 @@ class VaultCharm(CharmBase):
         """Return the common name to use for the PKI backend."""
         return cast(str, self.config.get("common_name", ""))
 
-    def _get_approle_token_secret_id(self) -> Optional[str]:
-        secret_id = self.config.get("approle_token_secret_id")
+    def _get_approle_temporary_token(self) -> Optional[str]:
+        secret_id = cast(str, self.config.get("approle_token_secret_id", ""))
         if not secret_id:
             return None
         juju_secret = self.model.get_secret(id=secret_id)
