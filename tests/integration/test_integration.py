@@ -1084,6 +1084,7 @@ async def authorize_charm(
     logger.warning(secret_id)
     await ops_test.model.grant_secret("approle", app_name)
     app: Application = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
     await app.set_config({"approle_token_secret_id": secret_id})
 
 
