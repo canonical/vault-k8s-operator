@@ -166,6 +166,9 @@ config:
       type: string
       default: "720h"
       description: Specifies the maximum possible lease duration for Vault's tokens and secrets.
+    approle_token_secret_id:
+      type: string
+      description: The token with permissions for the charm to be able to create an AppRole for itself.
     common_name:
       type: string
       description: |

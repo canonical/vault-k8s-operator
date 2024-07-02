@@ -151,6 +151,17 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
+    def _set_token_secret_id_config(self, token: str = "some token") -> None:
+        content = {
+            "token": token,
+        }
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
+            self.harness.set_leader(original_leader_state)
+            self.harness.update_config({"approle_token_secret_id": secret_id})
+
     def _set_approle_secret(self, role_id: str, secret_id: str) -> None:
         """Set the approle secret."""
         content = {
@@ -289,6 +300,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(is_leader=True)
         self.harness.add_storage(storage_name="config", attach=True)
         self._set_peer_relation()
+        self._set_token_secret_id_config()
         self._set_approle_secret(
             role_id="whatever role id",
             secret_id="whatever secret id",
@@ -445,7 +457,7 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("Please authorize charm (see `authorize-charm` action)"),
+            BlockedStatus("Please grant charm a token secret"),
         )
 
     @patch("charm.VaultCharm._ingress_address", new=PropertyMock(return_value="1.1.1.1"))
@@ -536,7 +548,7 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        action_result = self.harness.run_action("authorize-charm", {"token": "test-token"}).results
+        self.harness.charm._on_authorize_charm_action("test-token")
 
         self.mock_vault.authenticate.assert_called_once_with(Token("test-token"))
         self.mock_vault.enable_audit_device.assert_called_once_with(
@@ -563,7 +575,6 @@ class TestCharm(unittest.TestCase):
 
         assert secret_content["role-id"] == "approle_id"
         assert secret_content["secret-id"] == "secret_id"
-        assert action_result["result"] == "Charm authorized successfully."
 
     def test_given_unit_is_not_leader_when_authorize_charm_then_action_fails(
         self,
@@ -1542,6 +1553,7 @@ class TestCharm(unittest.TestCase):
         self.harness.add_storage(storage_name="config", attach=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
         self._set_peer_relation()
+        self._set_token_secret_id_config()
         self._set_approle_secret(
             role_id="root token content",
             secret_id="whatever secret id",

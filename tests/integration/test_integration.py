@@ -105,13 +105,13 @@ class TestVaultK8s:
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=1,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
             )
             unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=NUM_VAULT_UNITS,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
             )
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
@@ -823,7 +823,7 @@ class TestVaultK8sIntegrationsPart3:
             await wait_for_vault_status_message(
                 ops_test=ops_test,
                 count=1,
-                expected_message="Please authorize charm (see `authorize-charm` action)",
+                expected_message="Please grant charm a token secret",
                 app_name="vault-b",
             )
             await authorize_charm(ops_test, root_token, "vault-b")
@@ -1080,17 +1080,12 @@ async def authorize_charm(
     ops_test: OpsTest, root_token: str, app_name=APPLICATION_NAME
 ) -> Any | Dict:
     assert ops_test.model
-    leader_unit = await get_leader_unit(ops_test.model, app_name)
-    authorize_action = await leader_unit.run_action(
-        action_name="authorize-charm",
-        **{
-            "token": root_token,
-        },
-    )
-    result = await ops_test.model.get_action_output(
-        action_uuid=authorize_action.entity_id, wait=120
-    )
-    return result
+    secret = await ops_test.model.add_secret("approle", [f"token={root_token}"])
+    secret_id = secret.split(":")[-1]
+    await ops_test.model.grant_secret("approle", app_name)
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.set_config({"approle_token_secret_id": secret_id})
 
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
