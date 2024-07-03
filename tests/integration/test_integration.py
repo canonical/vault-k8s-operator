@@ -1034,7 +1034,7 @@ async def wait_for_vault_status_message(
     """Wait for the correct vault status messages to appear.
 
     This function is necessary because ops_test doesn't provide the facilities to discriminate
-    depending on the status message of the units, just the statuses themselves.
+    depending on the status message of the units, just the application statuses.
 
     Args:
         ops_test: Ops test Framework.
