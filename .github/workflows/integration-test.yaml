@@ -5,10 +5,7 @@ on:
 
 jobs:
   integration-test:
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        runner: [ubuntu-22.04, [self-hosted, linux, X64, jammy, large]]
+    runs-on: [self-hosted, linux, X64, jammy, large]
 
     steps:
       - name: Checkout
