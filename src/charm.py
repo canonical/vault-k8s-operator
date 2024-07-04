@@ -701,7 +701,14 @@ class VaultCharm(CharmBase):
             event.fail("This action must be run on the leader unit.")
             return
 
-        token = event.params.get("token", "")
+        secret_id = event.params.get("secret-id", "")
+        try:
+            token_secret = self.model.get_secret(id=secret_id)
+            token = token_secret.get_content(refresh=True).get("token", "")
+        except SecretNotFoundError:
+            event.fail("The secret id provided is not available to the charm.")
+            return
+
         vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         vault.authenticate(Token(token))
 
@@ -731,7 +738,6 @@ class VaultCharm(CharmBase):
         except VaultClientError as e:
             logger.exception("Vault returned an error while authorizing the charm")
             event.fail(f"Vault returned an error while authorizing the charm: {str(e)}")
-            return
 
     def _on_create_backup_action(self, event: ActionEvent) -> None:
         """Handle the create-backup action.
