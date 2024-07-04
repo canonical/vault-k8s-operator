@@ -579,7 +579,10 @@ class TestCharm(unittest.TestCase):
 
         assert secret_content["role-id"] == "approle_id"
         assert secret_content["secret-id"] == "secret_id"
-        assert action_result["result"] == "Charm authorized successfully."
+        assert (
+            action_result["result"]
+            == "Charm authorized successfully. You may now remove the secret."
+        )
 
     def test_given_unit_is_not_leader_when_authorize_charm_then_action_fails(
         self,
@@ -610,7 +613,10 @@ class TestCharm(unittest.TestCase):
 
         with self.assertRaises(testing.ActionFailed) as e:
             self.harness.run_action("authorize-charm", {"secret-id": token_secret_id})
-        self.assertEqual(e.exception.message, "The token provided is not valid.")
+        self.assertEqual(
+            e.exception.message,
+            "The token provided is not valid. Please use a Vault token with the appropriate permissions.",
+        )
 
     def test_given_unit_is_leader_and_secret_not_provided_when_authorize_charm_then_action_fails(
         self,
@@ -633,7 +639,8 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(testing.ActionFailed) as e:
             self.harness.run_action("authorize-charm", {"secret-id": "somesecretid"})
         self.assertEqual(
-            e.exception.message, "The secret id provided is not available to the charm."
+            e.exception.message,
+            "The secret id provided could not be found by the charm. Please grant the token secret to the charm.",
         )
 
     # Test remove
