@@ -21,7 +21,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from ops import EventBase, Object, RelationBrokenEvent, SecretNotFoundError
+from ops import EventBase, ModelError, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.pebble import PathError
 
@@ -336,7 +336,12 @@ class VaultTLSManager(Object):
         if not storage["certs"]:
             raise VaultCertsError()
         cert_storage = storage["certs"][0]
-        storage_location = cert_storage.location
+        try:
+            storage_location = cert_storage.location
+        except ModelError as e:
+            # Seems to happen when the storage is still being set up
+            logging.warning("Could not get storage location: %s", e)
+            raise VaultCertsError()
         return f"{storage_location}/{file.name.lower()}.pem"
 
     def tls_file_available_in_charm(self, file: File) -> bool:
