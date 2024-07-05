@@ -1081,10 +1081,13 @@ async def authorize_charm(
 ) -> Any | Dict:
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)
+    secret = await ops_test.model.add_secret(f"approle-token-{app_name}", [f"token={root_token}"])
+    secret_id = secret.split(":")[-1]
+    await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
     authorize_action = await leader_unit.run_action(
         action_name="authorize-charm",
         **{
-            "token": root_token,
+            "secret-id": secret_id,
         },
     )
     result = await ops_test.model.get_action_output(

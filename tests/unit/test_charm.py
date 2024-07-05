@@ -151,6 +151,19 @@ class TestCharm(unittest.TestCase):
         """Set the peer relation and return the relation id."""
         return self.harness.add_relation(relation_name="vault-peers", remote_app=self.app_name)
 
+    def _set_root_token_secret(self, token: str = "some token") -> str:
+        """Set the root token secret."""
+        content = {
+            "token": token,
+        }
+        original_leader_state = self.harness.charm.unit.is_leader()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader=True)
+            secret_id = self.harness.add_user_secret(content=content)
+            self.harness.grant_secret(secret_id, self.app_name)
+            self.harness.set_leader(original_leader_state)
+        return secret_id
+
     def _set_approle_secret(self, role_id: str, secret_id: str) -> None:
         """Set the approle secret."""
         content = {
@@ -524,6 +537,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader()
         peer_relation_id = self._set_peer_relation()
         other_unit_name = f"{self.harness.charm.app.name}/1"
+        token_secret_id = self._set_root_token_secret("test-token")
         self.harness.add_relation_unit(
             relation_id=peer_relation_id, remote_unit_name=other_unit_name
         )
@@ -536,7 +550,9 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        action_result = self.harness.run_action("authorize-charm", {"token": "test-token"}).results
+        action_result = self.harness.run_action(
+            "authorize-charm", {"secret-id": token_secret_id}
+        ).results
 
         self.mock_vault.authenticate.assert_called_once_with(Token("test-token"))
         self.mock_vault.enable_audit_device.assert_called_once_with(
@@ -563,18 +579,46 @@ class TestCharm(unittest.TestCase):
 
         assert secret_content["role-id"] == "approle_id"
         assert secret_content["secret-id"] == "secret_id"
-        assert action_result["result"] == "Charm authorized successfully."
+        assert (
+            action_result["result"]
+            == "Charm authorized successfully. You may now remove the secret."
+        )
 
     def test_given_unit_is_not_leader_when_authorize_charm_then_action_fails(
         self,
     ):
         self.harness.set_leader(False)
-        try:
-            self.harness.run_action("authorize-charm", {"token": "test-token"})
-        except testing.ActionFailed as e:
-            self.assertEqual(e.message, "This action must be run on the leader unit.")
+        with self.assertRaises(testing.ActionFailed) as e:
+            self.harness.run_action("authorize-charm", {"secret-id": "secret"})
+            self.assertEqual(e.exception.message, "This action must be run on the leader unit.")
 
     def test_given_unit_is_leader_and_token_is_invalid_when_authorize_charm_then_action_fails(
+        self,
+    ):
+        self.harness.set_leader()
+        peer_relation_id = self._set_peer_relation()
+        other_unit_name = f"{self.harness.charm.app.name}/1"
+        token_secret_id = self._set_root_token_secret()
+        self.harness.add_relation_unit(
+            relation_id=peer_relation_id, remote_unit_name=other_unit_name
+        )
+
+        self.mock_vault.configure_mock(
+            **{
+                "get_token_data.return_value": None,
+                "configure_approle.return_value": "approle_id",
+                "generate_role_secret_id.return_value": "secret_id",
+            },
+        )
+
+        with self.assertRaises(testing.ActionFailed) as e:
+            self.harness.run_action("authorize-charm", {"secret-id": token_secret_id})
+        self.assertEqual(
+            e.exception.message,
+            "The token provided is not valid. Please use a Vault token with the appropriate permissions.",
+        )
+
+    def test_given_unit_is_leader_and_secret_not_provided_when_authorize_charm_then_action_fails(
         self,
     ):
         self.harness.set_leader()
@@ -592,10 +636,12 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        try:
-            self.harness.run_action("authorize-charm", {"token": "test-token"})
-        except testing.ActionFailed as e:
-            self.assertEqual(e.message, "The token provided is not valid.")
+        with self.assertRaises(testing.ActionFailed) as e:
+            self.harness.run_action("authorize-charm", {"secret-id": "somesecretid"})
+        self.assertEqual(
+            e.exception.message,
+            "The secret id provided could not be found by the charm. Please grant the token secret to the charm.",
+        )
 
     # Test remove
     def test_given_can_connect_when_on_remove_then_raft_storage_path_is_deleted(self):
