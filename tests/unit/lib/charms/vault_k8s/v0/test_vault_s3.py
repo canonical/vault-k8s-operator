@@ -145,16 +145,17 @@ class TestS3(unittest.TestCase):
         )
 
     @patch("boto3.session.Session")
-    def test_given_bucket_doesnt_exist_when_get_object_key_list_then_empty_list_is_returned(self, patch_session):
+    def test_given_bucket_doesnt_exist_when_get_object_key_list_then_empty_list_is_returned(
+        self, patch_session
+    ):
         mock_resource = Mock()
 
         patch_session.return_value.resource.return_value = mock_resource
         mock_resource.Bucket.side_effect = ClientError(
             operation_name="GetBucket",
             error_response={
-                "Error": {"Message": "Random bucket exists error message", "Code" : "NoSuchBucket"},
-
-                },
+                "Error": {"Message": "Random bucket exists error message", "Code": "NoSuchBucket"},
+            },
         )
 
         s3 = S3(
@@ -164,19 +165,23 @@ class TestS3(unittest.TestCase):
             endpoint=self.VALID_S3_PARAMETERS["endpoint"],
         )
 
-        object_list = s3.get_object_key_list(bucket_name="whatever-bucket", prefix="whatever-prefix")
+        object_list = s3.get_object_key_list(
+            bucket_name="whatever-bucket", prefix="whatever-prefix"
+        )
 
         self.assertEqual(object_list, [])
 
     @patch("boto3.session.Session")
-    def test_given_client_error_when_get_object_key_list_then_s3_error_is_raised(self, patch_session):
+    def test_given_client_error_when_get_object_key_list_then_s3_error_is_raised(
+        self, patch_session
+    ):
         mock_resource = Mock()
 
         patch_session.return_value.resource.return_value = mock_resource
         mock_resource.Bucket.side_effect = ClientError(
             operation_name="GetBucket",
             error_response={
-                "Error": {"Message": "Random bucket exists error message", "Code" : "RandomCode"},
+                "Error": {"Message": "Random bucket exists error message", "Code": "RandomCode"},
             },
         )
 
@@ -191,7 +196,9 @@ class TestS3(unittest.TestCase):
             s3.get_object_key_list(bucket_name="whatever-bucket", prefix="whatever-prefix")
 
     @patch("boto3.session.Session")
-    def test_given_bucket_contains_objects_when_get_object_key_list_then_object_list_is_returned(self, patch_session):
+    def test_given_bucket_contains_objects_when_get_object_key_list_then_object_list_is_returned(
+        self, patch_session
+    ):
         mock_resource = Mock()
         mock_bucket = Mock()
         mock_object = Mock()
@@ -208,12 +215,16 @@ class TestS3(unittest.TestCase):
             endpoint=self.VALID_S3_PARAMETERS["endpoint"],
         )
 
-        object_list = s3.get_object_key_list(bucket_name="whatever-bucket", prefix="whatever-prefix")
+        object_list = s3.get_object_key_list(
+            bucket_name="whatever-bucket", prefix="whatever-prefix"
+        )
 
         self.assertEqual(object_list, ["object-key"])
 
     @patch("boto3.session.Session")
-    def test_given_client_error_with_no_such_key_when_get_content_then_none_is_returned(self, patch_session):
+    def test_given_client_error_with_no_such_key_when_get_content_then_none_is_returned(
+        self, patch_session
+    ):
         mock_resource = Mock()
         mock_bucket = Mock()
         mock_object = Mock()
@@ -237,7 +248,9 @@ class TestS3(unittest.TestCase):
         self.assertIsNone(streaming_body)
 
     @patch("boto3.session.Session")
-    def test_given_client_error_with_no_suck_bucket_when_get_content_then_none_is_returned(self, patch_session):
+    def test_given_client_error_with_no_suck_bucket_when_get_content_then_none_is_returned(
+        self, patch_session
+    ):
         mock_resource = Mock()
         mock_bucket = Mock()
         mock_object = Mock()
@@ -261,7 +274,9 @@ class TestS3(unittest.TestCase):
         self.assertIsNone(streaming_body)
 
     @patch("boto3.session.Session")
-    def test_given_other_client_error_when_get_content_then_s3_error_is_raised(self, patch_session):
+    def test_given_other_client_error_when_get_content_then_s3_error_is_raised(
+        self, patch_session
+    ):
         mock_resource = Mock()
         mock_bucket = Mock()
         mock_object = Mock()
@@ -309,7 +324,10 @@ class TestS3(unittest.TestCase):
     @patch("boto3.session.Session")
     def test_given_no_error_when_get_content_then_streaming_body_is_returned(self, patch_session):
         streaming_body_content = b"whatever content"
-        streaming_body = StreamingBody(raw_stream=io.BytesIO(streaming_body_content), content_length=len(streaming_body_content))
+        streaming_body = StreamingBody(
+            raw_stream=io.BytesIO(streaming_body_content),
+            content_length=len(streaming_body_content),
+        )
         mock_resource = Mock()
         mock_bucket = Mock()
         mock_object = Mock()

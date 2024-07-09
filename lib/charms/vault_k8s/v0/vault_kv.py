@@ -68,7 +68,7 @@ class ExampleRequirerCharm(CharmBase):
         unit_credentials = self.interface.get_unit_credentials(relation)
         # unit_credentials is a juju secret id
         secret = self.model.get_secret(id=unit_credentials)
-        secret_content = secret.get_content()
+        secret_content = secret.get_content(refresh=True)
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
 
@@ -99,7 +99,7 @@ class ExampleRequirerCharm(CharmBase):
 
     def get_nonce(self):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
-        nonce = secret.get_content()["nonce"]
+        nonce = secret.get_content(refresh=True)["nonce"]
         return nonce
 
 
@@ -132,7 +132,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -163,9 +163,7 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
-    egress_subnet: str = Field(
-        description="The CIDR allowed by the role."
-    )
+    egress_subnet: str = Field(description="The CIDR allowed by the role.")
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."

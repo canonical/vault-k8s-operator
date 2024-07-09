@@ -60,6 +60,8 @@ peers:
     interface: vault-peer
 
 provides:
+  vault-autounseal-provides:
+    interface: vault-autounseal
   vault-kv:
     interface: vault-kv
   vault-pki:
@@ -74,10 +76,13 @@ provides:
     interface: grafana_dashboard
 
 assumes:
-  - juju >= 3.1
+  - juju >= 3.1.8
   - k8s-api
 
 requires:
+  vault-autounseal-requires:
+    interface: vault-autounseal
+    limit: 1
   ingress:
     interface: ingress
     limit: 1
@@ -121,15 +126,17 @@ actions:
     description: >-
       Authorizes the charm to be able to interact with Vault to manage its
       operations. A token is required for Vault to use to create the app role and
-      the policy the charm will use to interact with Vault.
+      the policy the charm will use to interact with Vault. This token must be
+      placed in juju secret, and this secret should be granted to the charm.
     params:
-      token:
+      secret-id:
         type: string
         description: >-
-          A token for Vault that can create new policies, such as the root token
-          that is provided upon initializing Vault. Used to create the app role
-          and policy for the charm. It is not stored by the charm.
-    required: [token] 
+          A secret id from juju that contains a token for Vault that can create 
+          new policies, such as the root token that is provided upon initializing 
+          Vault. Used to create the app role and policy for the charm. It is not
+          stored by the charm.
+    required: [secret-id] 
 
   create-backup:
     description: >-
@@ -166,3 +173,4 @@ config:
       description: |
         The common name that will be used by Vault as an intermediate CA. This will only be used when the charm is 
         configured to use a Vault PKI backend through the `vault-pki` relation.
+        The charm will only issue certificates for the subdomains under the `common_name` specified.

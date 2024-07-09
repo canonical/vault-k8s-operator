@@ -12,11 +12,11 @@ attrs==23.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.34.108
+boto3==1.34.140
     # via -r requirements.in
-boto3-stubs[s3]==1.34.108
+boto3-stubs[s3]==1.34.140
     # via -r requirements.in
-botocore==1.34.108
+botocore==1.34.140
     # via
     #   boto3
     #   s3transfer
@@ -33,9 +33,9 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via typer
-cosl==0.0.11
+cosl==0.0.12
     # via -r requirements.in
-cryptography==42.0.7
+cryptography==42.0.8
     # via -r requirements.in
 h11==0.14.0
     # via httpcore
@@ -43,7 +43,7 @@ httpcore==1.0.5
     # via httpx
 httpx==0.27.0
     # via lightkube
-hvac==2.2.0
+hvac==2.3.0
     # via -r requirements.in
 idna==3.7
     # via
@@ -62,7 +62,7 @@ jsonschema==4.22.0
     # via -r requirements.in
 jsonschema-specifications==2023.12.1
     # via jsonschema
-lightkube==0.15.2
+lightkube==0.15.3
     # via -r requirements.in
 lightkube-models==1.30.0.8
     # via
@@ -72,7 +72,7 @@ markupsafe==2.1.5
     # via jinja2
 mypy-boto3-s3==1.34.65
     # via boto3-stubs
-ops==2.13.0
+ops==2.14.1
     # via
     #   -r requirements.in
     #   cosl
@@ -85,11 +85,11 @@ pluggy==1.5.0
     # via pytest
 pycparser==2.22
     # via cffi
-pydantic==2.6.4
+pydantic==2.8.2
     # via
     #   -r requirements.in
     #   pytest-interface-tester
-pydantic-core==2.16.3
+pydantic-core==2.20.1
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
@@ -109,7 +109,7 @@ referencing==0.34.0
     # via
     #   jsonschema
     #   jsonschema-specifications
-requests==2.32.0
+requests==2.32.3
     # via
     #   -r requirements.in
     #   hvac
@@ -138,7 +138,7 @@ typing-extensions==4.11.0
     #   mypy-boto3-s3
     #   pydantic
     #   pydantic-core
-urllib3==2.2.1
+urllib3==2.2.2
     # via
     #   botocore
     #   requests

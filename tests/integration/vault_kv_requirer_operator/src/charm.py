@@ -45,10 +45,10 @@ class VaultKVRequirerCharm(CharmBase):
             self.model.get_secret(label=NONCE_SECRET_LABEL)
         except SecretNotFoundError:
             self.unit.add_secret(
-            {"nonce": secrets.token_hex(16)},
-            label=NONCE_SECRET_LABEL,
-            description="Nonce for vault-kv relation",
-        )
+                {"nonce": secrets.token_hex(16)},
+                label=NONCE_SECRET_LABEL,
+                description="Nonce for vault-kv relation",
+            )
         self.unit.status = ActiveStatus()
 
     def _on_kv_connected(self, event: VaultKvConnectedEvent):

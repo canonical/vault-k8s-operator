@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 14
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -105,6 +105,7 @@ class SecretsBackend(Enum):
 
     KV_V2 = "kv-v2"
     PKI = "pki"
+    TRANSIT = "transit"
 
 
 class VaultClientError(Exception):
@@ -122,7 +123,7 @@ class Vault:
         try:
             auth_details.login(self._client)
         except (VaultError, ConnectionError) as e:
-            logger.error("Failed logging in to Vault: %s", e)
+            logger.warning("Failed login to Vault: %s", e)
             return False
         return True
 
@@ -133,6 +134,11 @@ class Vault:
         except Forbidden:
             return None
         return token_data
+
+    @property
+    def token(self) -> str:
+        """Return the token used to authenticate with Vault."""
+        return self._client.token
 
     def is_api_available(self) -> bool:
         """Return whether Vault is available."""
@@ -149,7 +155,32 @@ class Vault:
 
     def is_sealed(self) -> bool:
         """Return whether Vault is sealed."""
-        return self._client.sys.is_sealed()
+        try:
+            return self._client.sys.is_sealed()
+        except VaultError as e:
+            # This seems to happen if the seal status is checked immediately
+            # after initializing the vault when autounseal is enabled.
+            # There is a short period of time where the vault is initialized,
+            # but hasn't finished setting up the autounseal configuration yet,
+            # and the server will return an internal server error during this
+            # period.
+            #
+            # hvac.exceptions.InternalServerError:
+            # core: barrier reports initialized but no seal configuration found
+            logging.error("Error while checking Vault seal status: %s", e)
+            raise VaultClientError(e) from e
+
+    def needs_migration(self) -> bool:
+        """Return true if the vault needs to be migrated, false otherwise."""
+        return self._client.seal_status["migration"]  # type: ignore -- bad type hint in stubs
+
+    def get_seal_type(self) -> str:
+        """Return the seal type of the Vault."""
+        return self._client.seal_status["type"]  # type: ignore -- bad type hint in stubs
+
+    def is_seal_type_transit(self) -> bool:
+        """Return whether Vault is sealed by the transit backend."""
+        return "transit" == self.get_seal_type()
 
     def is_active(self) -> bool:
         """Return whether the Vault node is active or not.
@@ -189,7 +220,7 @@ class Vault:
                 device_type=device_type.value,
                 options={"file_path": path},
             )
-            logger.info("Enabled audit device %s for path %s", device_type.value, path)
+            logger.info("Enabled audit device `%s` for path `%s`", device_type.value, path)
         except InvalidRequest as e:
             if not e.json or not isinstance(e.json, dict):
                 raise VaultClientError(e) from e
@@ -217,49 +248,57 @@ class Vault:
         except VaultError as e:
             raise VaultClientError(e) from e
 
-    def configure_policy(
-        self, policy_name: str, policy_path: str, mount: Optional[str] = None
-    ) -> None:
+    def configure_policy(self, policy_name: str, policy_path: str, **formatting_args: str) -> None:
         """Create/update a policy within vault.
 
         Args:
             policy_name: Name of the policy to create
             policy_path: The path of the file where the policy is defined, ending with .hcl
-            mount: Formats the policy string with the given mount path to create dynamic policies
+            **formatting_args: Additional arguments to format the policy
         """
         with open(policy_path, "r") as f:
             policy = f.read()
         try:
             self._client.sys.create_or_update_policy(
                 name=policy_name,
-                policy=policy if not mount else policy.format(mount=mount),
+                policy=policy if not formatting_args else policy.format(**formatting_args),
             )
         except VaultError as e:
             raise VaultClientError(e) from e
         logger.debug("Created or updated charm policy: %s", policy_name)
 
     def configure_approle(
-        self, role_name: str, policies: List[str], cidrs: List[str] | None = None
+        self,
+        role_name: str,
+        token_ttl=None,
+        token_max_ttl=None,
+        policies: Optional[List[str]] = None,
+        cidrs: Optional[List[str]] = None,
+        token_period=None,
     ) -> str:
         """Create/update a role within vault associating the supplied policies.
 
         Args:
             role_name: Name of the role to be created or updated
             policies: The attached list of policy names this approle will have access to
+            token_ttl: Incremental lifetime for generated tokens, provided as a duration string such as "5m"
+            token_max_ttl: Maximum lifetime for generated tokens, provided as a duration string such as "5m"
+            token_period: The period within which the token must be renewed. See Vault documentation for more information.
             cidrs: The list of IP networks that are allowed to authenticate
         """
         self._client.auth.approle.create_or_update_approle(
             role_name,
-            token_ttl="60s",
-            token_max_ttl="60s",
-            token_policies=policies,
             bind_secret_id="true",
+            token_ttl=token_ttl,
+            token_max_ttl=token_max_ttl,
+            token_policies=policies,
             token_bound_cidrs=cidrs,
+            token_period=token_period,
         )
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
+    def generate_role_secret_id(self, name: str, cidrs: Optional[List[str]] = None) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]
@@ -287,6 +326,18 @@ class Vault:
                 logger.info("%s backend already enabled", backend_type.value)
             else:
                 raise VaultClientError(e) from e
+
+    def disable_secrets_engine(self, path: str) -> None:
+        """Disable the secret engine at the given path."""
+        try:
+            self._client.sys.disable_secrets_engine(path)
+            logger.info("Disabled secret engine at %s", path)
+        except InvalidPath:
+            logger.info("Secret engine at `%s` is already disabled", path)
+
+    def is_secret_engine_enabled(self, path: str) -> bool:
+        """Check if a mount is enabled."""
+        return f"{path}/" in self._client.sys.list_mounted_secrets_engines()
 
     def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
         """Check if the intermediate CA is set for the PKI backend."""
@@ -353,12 +404,7 @@ class Vault:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
 
-    def is_pki_ca_certificate_set(self, mount: str, certificate: str) -> bool:
-        """Check if the CA certificate is set for the PKI backend."""
-        existing_certificate = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        return existing_certificate == certificate
-
-    def create_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
+    def create_or_update_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
         """Create a role for the PKI backend."""
         self._client.secrets.pki.create_or_update_role(
             name=role,
@@ -416,3 +462,97 @@ class Vault:
         """Return the number of raft peers."""
         raft_config = self._client.sys.read_raft_config()
         return len(raft_config["data"]["config"]["servers"])
+
+    def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
+        """Return whether the provided common name is in the list of domains allowed by the specified PKI role."""
+        try:
+            return common_name in self._client.secrets.pki.read_role(
+                name=role, mount_point=mount
+            ).get("data", {}).get("allowed_domains", [])
+        except InvalidPath:
+            logger.error("Role does not exist on the specified path.")
+            return False
+
+    def make_latest_pki_issuer_default(self, mount: str) -> None:
+        """Update the issuers config to always make the latest issuer created default issuer."""
+        try:
+            first_issuer = self._client.secrets.pki.list_issuers(mount_point=mount)["data"][
+                "keys"
+            ][0]
+        except (InvalidPath, KeyError) as e:
+            logger.error("No issuers found on the specified path: %s", e)
+            raise VaultClientError("No issuers found on the specified path.")
+        try:
+            issuers_config = self._client.read(path=f"{mount}/config/issuers")
+            if issuers_config and not issuers_config["data"]["default_follows_latest_issuer"]:  # type: ignore -- bad type hint in stubs
+                logger.debug("Updating issuers config")
+                self._client.write_data(
+                    path=f"{mount}/config/issuers",
+                    data={
+                        "default_follows_latest_issuer": True,
+                        "default": first_issuer,
+                    },
+                )
+        except (TypeError, KeyError):
+            logger.error("Issuers config is not yet created")
+
+    def _get_autounseal_policy_name(self, relation_id: int) -> str:
+        """Return the policy name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _get_autounseal_approle_name(self, relation_id: int) -> str:
+        """Return the approle name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _get_autounseal_key_name(self, relation_id: int) -> str:
+        """Return the key name for the given relation id."""
+        return str(relation_id)
+
+    def _create_autounseal_key(self, mount_point: str, relation_id: int) -> str:
+        """Create a new autounseal key."""
+        key_name = self._get_autounseal_key_name(relation_id)
+        response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
+        logging.debug(f"Created a new autounseal key: {response}")
+        return key_name
+
+    def _destroy_autounseal_key(self, mount_point, key_name):
+        """Destroy the autounseal key."""
+        self._client.secrets.transit.delete_key(mount_point=mount_point, name=key_name)
+
+    def destroy_autounseal_credentials(self, relation_id: int, mount: str) -> None:
+        """Destroy the approle and transit key for the given relation id."""
+        # Remove the approle
+        role_name = self._get_autounseal_approle_name(relation_id)
+        self._client.auth.approle.delete_role(role_name)
+        # Remove the policy
+        policy_name = self._get_autounseal_policy_name(relation_id)
+        self._client.sys.delete_policy(policy_name)
+        # Remove the transit key
+        # FIXME: This is currently disabled because we haven't figured out how
+        # to properly handle destroying the relation, yet. Destroying the key
+        # without migrating would make it impossible to recover the vault.
+        # key_name = self.get_autounseal_key_name(relation_id)
+        # self._destroy_autounseal_key(mount, key_name)
+
+    def create_autounseal_credentials(
+        self, relation_id: int, mount: str, policy_path: str
+    ) -> tuple[str, str, str]:
+        """Create auto-unseal credentials for the given relation id.
+
+        Args:
+            relation_id: The Juju relation id to use for the approle.
+            mount: The mount point for the transit backend.
+            policy_path: Path to a file that contains the autounseal policy.
+
+        Returns:
+            A tuple containing the Role Id, Secret Id and Key Name.
+
+        """
+        key_name = self._create_autounseal_key(mount, relation_id)
+        policy_name = self._get_autounseal_policy_name(relation_id)
+        self.configure_policy(policy_name, policy_path, mount=mount, key_name=key_name)
+
+        role_name = self._get_autounseal_approle_name(relation_id)
+        role_id = self.configure_approle(role_name, policies=[policy_name], token_period="60s")
+        secret_id = self.generate_role_secret_id(role_name)
+        return key_name, role_id, secret_id

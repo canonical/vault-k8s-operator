@@ -8,7 +8,7 @@ storage "raft" {
     leader_ca_cert_file = "{{ retry.leader_ca_cert_file }}"
   }
   {% endfor %}
-  }
+}
 listener "tcp" {
   telemetry {
     unauthenticated_metrics_access = true
@@ -26,3 +26,13 @@ telemetry {
   disable_hostname = true
   prometheus_retention_time = "12h"
 }
+{% if autounseal_address %}
+seal "transit" {
+  address         = "{{ autounseal_address }}"
+  disable_renewal = "false"
+  key_name        = "{{ autounseal_key_name }}"
+  mount_path      = "{{ autounseal_mount_path }}"
+  token           = "{{ autounseal_token }}"
+  tls_ca_cert     = "{{ autounseal_tls_ca_cert }}"
+}
+{% endif %}

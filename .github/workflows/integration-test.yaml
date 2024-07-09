@@ -5,7 +5,8 @@ on:
 
 jobs:
   integration-test:
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, linux, X64, xlarge, jammy]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
