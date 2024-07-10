@@ -38,6 +38,6 @@ jobs:
           base-channel: 22.04
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: 1.15/${{ env.promote-to }}
-          origin-channel: 1.15/${{ env.promote-from }}
+          destination-channel: 1.16/${{ env.promote-to }}
+          origin-channel: 1.16/${{ env.promote-from }}
           charmcraft-channel: latest/stable
