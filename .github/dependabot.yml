@@ -10,6 +10,7 @@ updates:
       github_actions:
         patterns:
           - "*"
+    target-branch: "release-1.15"
 
   - package-ecosystem: "pip"
     directory: "/"
@@ -21,6 +22,7 @@ updates:
       pip_dependencies:
         patterns:
           - "*"
+    target-branch: "release-1.15"
 
 
   - package-ecosystem: "pip"
@@ -33,3 +35,4 @@ updates:
       pip_dependencies:
         patterns:
           - "*"
+    target-branch: "release-1.15"
