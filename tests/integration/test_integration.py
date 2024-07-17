@@ -16,7 +16,7 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import crash_pod, get_leader_unit
+from tests.integration.helpers import crash_pod, get_leader_unit, wait_for_status_message
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
@@ -243,7 +243,7 @@ class TestVaultK8sIntegrationsPart1:
             VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
             channel="stable",
-            config={"common_name": "test.example.com"},
+            config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
         )
         deployed_apps = [
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -393,9 +393,16 @@ class TestVaultK8sIntegrationsPart1:
             relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
         )
         await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            apps=[APPLICATION_NAME],
             status="active",
             timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=1,
         )
         leader_unit_index, root_token, _ = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
@@ -435,6 +442,12 @@ class TestVaultK8sIntegrationsPart1:
             status="active",
             timeout=1000,
             wait_for_exact_units=1,
+        )
+        await wait_for_status_message(
+            ops_test,
+            expected_message="Unit certificate is available",
+            app_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            count=1,
         )
 
         leader_unit_index, root_token, _ = deployed_vault_initialized_leader
