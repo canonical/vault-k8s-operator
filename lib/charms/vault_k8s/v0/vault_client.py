@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -470,7 +470,7 @@ class Vault:
                 name=role, mount_point=mount
             ).get("data", {}).get("allowed_domains", [])
         except InvalidPath:
-            logger.error("Role does not exist on the specified path.")
+            logger.warning("Role does not exist on the specified path.")
             return False
 
     def make_latest_pki_issuer_default(self, mount: str) -> None:
