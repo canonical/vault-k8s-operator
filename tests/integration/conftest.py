@@ -24,6 +24,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Path to the KV requirer charm",
     )
+    parser.addoption(
+        "--pki_requirer_charm_path",
+        action="store",
+        default=None,
+        help="Path to the PKI requirer charm",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
