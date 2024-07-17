@@ -239,8 +239,14 @@ class TestVaultK8sIntegrationsPart1:
             application_name=VAULT_KV_REQUIRER_APPLICATION_NAME,
             num_units=1,
         )
+        pki_requirer_charm_path = request.config.getoption(
+            "--pki_requirer_charm_path", default=None
+        )
+
         deploy_vault_pki_requirer = ops_test.model.deploy(
-            VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            Path(pki_requirer_charm_path).resolve()
+            if pki_requirer_charm_path
+            else VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
             channel="stable",
             config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
