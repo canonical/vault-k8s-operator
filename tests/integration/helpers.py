@@ -32,13 +32,17 @@ async def get_leader_unit(model, application_name: str) -> Unit:
 async def get_unit_status_messages(
     ops_test: OpsTest, app_name: str = APP_NAME
 ) -> List[tuple[str, str]]:
-    """Get the status messages from all the units of the given application."""
+    """Get the status messages from all the units of the given application.
+
+    Returns:
+        A list of tuples with the unit name in the first entry, and the status
+        message in the second
+    """
     return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", app_name)
     if return_code:
         raise RuntimeError(stderr)
     output = yaml.safe_load(stdout)
     unit_statuses = output["applications"][app_name]["units"]
-    print(unit_statuses)
     return [
         (unit_name, unit_status["workload-status"].get("message", ""))
         for (unit_name, unit_status) in unit_statuses.items()
@@ -79,9 +83,6 @@ async def wait_for_status_message(
             return
         time.sleep(cadence)
         timeout -= cadence
-    import pdb
-
-    pdb.set_trace()
 
     raise TimeoutError(
         f"`{app_name}` didn't show the expected status: `{expected_message}`. Last statuses: {unit_statuses}"
