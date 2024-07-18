@@ -722,6 +722,7 @@ class VaultCharm(CharmBase):
 
         try:
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
+            vault.update_autopilot_config()
             vault.enable_approle_auth_method()
             vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
             cidrs = [f"{self._bind_address}/24"]
