@@ -490,7 +490,7 @@ class Vault:
                 name=role, mount_point=mount
             ).get("data", {}).get("allowed_domains", [])
         except InvalidPath:
-            logger.error("Role does not exist on the specified path.")
+            logger.warning("Role does not exist on the specified path.")
             return False
 
     def make_latest_pki_issuer_default(self, mount: str) -> None:
