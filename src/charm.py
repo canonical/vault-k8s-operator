@@ -162,13 +162,24 @@ class VaultCharm(CharmBase):
             scheme=lambda: "https",
         )
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
+
+        configure_events = [
+            self.on.update_status,
+            self.on.vault_pebble_ready,
+            self.on.config_changed,
+            self.on[PEER_RELATION_NAME].relation_created,
+            self.on[PEER_RELATION_NAME].relation_changed,
+            self.on.tls_certificates_pki_relation_joined,
+            self.tls_certificates_pki.on.certificate_available,
+            self.vault_pki.on.certificate_creation_request,
+            self.vault_autounseal_requires.on.vault_autounseal_details_ready,
+            self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
+            self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
+        ]
+        for event in configure_events:
+            self.framework.observe(event, self._configure)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
-        self.framework.observe(self.on.update_status, self._configure)
-        self.framework.observe(self.on.vault_pebble_ready, self._configure)
-        self.framework.observe(self.on.config_changed, self._configure)
-        self.framework.observe(self.on[PEER_RELATION_NAME].relation_created, self._configure)
-        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._configure)
         self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(self.on.authorize_charm_action, self._on_authorize_charm_action)
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
@@ -177,24 +188,9 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
-        self.framework.observe(self.on.tls_certificates_pki_relation_joined, self._configure)
-        self.framework.observe(self.tls_certificates_pki.on.certificate_available, self._configure)
-        self.framework.observe(self.vault_pki.on.certificate_creation_request, self._configure)
-        self.framework.observe(
-            self.vault_autounseal_requires.on.vault_autounseal_details_ready,
-            self._configure,
-        )
-        self.framework.observe(
-            self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
-            self._configure,
-        )
         self.framework.observe(
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken,
             self._on_vault_autounseal_requirer_relation_broken,
-        )
-        self.framework.observe(
-            self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
-            self._configure,
         )
 
     def _on_vault_autounseal_requirer_relation_broken(
