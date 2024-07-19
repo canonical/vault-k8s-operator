@@ -21,8 +21,6 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v3.tls_certificates import (
-    CertificateAvailableEvent,
-    CertificateCreationRequestEvent,
     TLSCertificatesProvidesV3,
     TLSCertificatesRequiresV3,
 )
@@ -53,7 +51,6 @@ from ops.charm import (
     CollectStatusEvent,
     ConfigChangedEvent,
     InstallEvent,
-    RelationJoinedEvent,
     RemoveEvent,
 )
 from ops.main import main
@@ -180,18 +177,9 @@ class VaultCharm(CharmBase):
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
-        self.framework.observe(
-            self.on.tls_certificates_pki_relation_joined,
-            self._on_tls_certificates_pki_relation_joined,
-        )
-        self.framework.observe(
-            self.tls_certificates_pki.on.certificate_available,
-            self._on_tls_certificate_pki_certificate_available,
-        )
-        self.framework.observe(
-            self.vault_pki.on.certificate_creation_request,
-            self._on_vault_pki_certificate_creation_request,
-        )
+        self.framework.observe(self.on.tls_certificates_pki_relation_joined, self._configure)
+        self.framework.observe(self.tls_certificates_pki.on.certificate_available, self._configure)
+        self.framework.observe(self.vault_pki.on.certificate_creation_request, self._configure)
         self.framework.observe(
             self.vault_autounseal_requires.on.vault_autounseal_details_ready,
             self._configure,
@@ -485,10 +473,6 @@ class VaultCharm(CharmBase):
             nonce=event.nonce,
         )
 
-    def _on_tls_certificates_pki_relation_joined(self, _: RelationJoinedEvent) -> None:
-        """Handle the tls-certificates-pki relation joined event."""
-        self._configure_pki_secrets_engine()
-
     def _configure_pki_secrets_engine(self) -> None:
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
@@ -645,18 +629,6 @@ class VaultCharm(CharmBase):
                 return assigned_certificate.certificate
         logger.info("No certificate matches the PKI CSR in secrets")
         return None
-
-    def _on_tls_certificate_pki_certificate_available(self, event: CertificateAvailableEvent):
-        """Handle the tls-certificates-pki certificate available event."""
-        self._add_ca_certificate_to_pki_secrets_engine()
-
-    def _on_vault_pki_certificate_creation_request(
-        self, event: CertificateCreationRequestEvent
-    ) -> None:
-        """Handle the vault-pki certificate creation request event."""
-        self._generate_pki_certificate_for_requirer(
-            event.certificate_signing_request, event.relation_id
-        )
 
     def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
         """Generate a PKI certificate for a TLS requirer."""
