@@ -4,5 +4,6 @@ juju
 pyright
 pytest
 pytest-operator
+pytest-asyncio==0.21.2
 ruff
 types-hvac
