@@ -1171,6 +1171,25 @@ class VaultCharm(CharmBase):
             self._set_juju_secret(AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": vault.token})
         return vault.token
 
+    def _get_juju_secret_content(self, label: str) -> Optional[Dict[str, str]]:
+        """Retrieve the latest revision of the secret content from Juju.
+
+        Args:
+            label: The label of the secret.
+
+        Returns:
+            The secret is returned, or `None` if the secret does not exist or
+              there is an error retrieving the secret.
+        """
+        try:
+            secret = self.model.get_secret(label=label)
+            return secret.get_content(refresh=True)
+        except SecretNotFoundError:
+            return None
+        except ModelError as e:
+            logger.warning("Failed to retrieve secret `%s`: %s", label, e)
+            return None
+
     def _get_juju_secret_field(self, label: str, field: str) -> Optional[str]:
         """Retrieve the latest revision of the secret content from Juju.
 
@@ -1182,14 +1201,30 @@ class VaultCharm(CharmBase):
             The value of the field is returned, or `None` if the field does not
             exist.
 
-            If the secret does not exist, `None` is returned.
+            If the secret does not exist, or there is an error retrieving the secret, `None` is returned.
         """
-        try:
-            juju_secret = self.model.get_secret(label=label)
-        except SecretNotFoundError:
-            return None
-        content = juju_secret.get_content(refresh=True)
-        return content.get(field)
+        content = self._get_juju_secret_content(label)
+        return content.get(field) if content else None
+
+    def _get_juju_secret_fields(self, label: str, *fields: str) -> Tuple[str | None, ...]:
+        """Retrieve the latest revision of the secret content from Juju.
+
+        Args:
+            label: The label of the secret.
+            fields: The fields to retrieve from the secret.
+
+        Returns:
+            The value of the fields are returned as a tuple, or `None` if the field does not
+            exist.
+
+            If the secret does not exist, or there is an error retrieving the secret, `None` is returned for all fields.
+        """
+        content = self._get_juju_secret_content(label)
+        return (
+            tuple(content.get(field) for field in fields)
+            if content
+            else tuple(None for _ in fields)
+        )
 
     def _set_juju_secret(
         self, label: str, content: Dict[str, str], description: Optional[str] = None
@@ -1205,6 +1240,9 @@ class VaultCharm(CharmBase):
             secret = self.model.get_secret(label=label)
         except SecretNotFoundError:
             self.app.add_secret(content, label=label, description=description)
+            return
+        except ModelError as e:
+            logger.warning("Failed to retrieve secret `%s`: %s", label, e)
             return
         secret.set_content(content)
 
@@ -1256,12 +1294,10 @@ class VaultCharm(CharmBase):
         Returns:
             Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
         """
-        try:
-            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-            content = juju_secret.get_content(refresh=True)
-        except SecretNotFoundError:
-            return None, None
-        return content["role-id"], content["secret-id"]
+        role_id, secret_id = self._get_juju_secret_fields(
+            VAULT_CHARM_APPROLE_SECRET_LABEL, "role-id", "secret-id"
+        )
+        return role_id, secret_id
 
     def _remove_approle_auth_secret(self) -> None:
         """Remove the approle secret if it exists."""
