@@ -15,7 +15,6 @@ from charm import (
     AUTOUNSEAL_MOUNT_PATH,
     CHARM_POLICY_NAME,
     CHARM_POLICY_PATH,
-    PKI_CSR_SECRET_LABEL,
     PKI_RELATION_NAME,
     S3_RELATION_NAME,
     TLS_CERTIFICATES_PKI_RELATION_NAME,
@@ -190,25 +189,6 @@ class TestCharm(unittest.TestCase):
             secret = self.harness.model.get_secret(id=secret_id)
             secret.set_info(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
             self.harness.set_leader(original_leader_state)
-
-    def _set_csr_secret_in_peer_relation(self, relation_id: int, csr: str) -> None:
-        """Set the csr secret in the peer relation."""
-        content = {
-            "csr": csr,
-        }
-        original_leader_state = self.harness.charm.unit.is_leader()
-        with self.harness.hooks_disabled():
-            self.harness.set_leader(is_leader=True)
-            secret_id = self.harness.add_model_secret(owner=self.app_name, content=content)
-            secret = self.harness.model.get_secret(id=secret_id)
-            secret.set_info(label=PKI_CSR_SECRET_LABEL)
-            self.harness.set_leader(original_leader_state)
-        key_values = {"vault-pki-csr-secret-id": secret_id}
-        self.harness.update_relation_data(
-            app_or_unit=self.app_name,
-            relation_id=relation_id,
-            key_values=key_values,
-        )
 
     def setup_vault_kv_relation(self) -> tuple:
         app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
@@ -1613,7 +1593,8 @@ class TestCharm(unittest.TestCase):
             certificate_signing_request=csr.encode(), is_ca=True
         )
 
-    @patch("charm.get_common_name_from_certificate", new=Mock)
+    @patch("charm.get_common_name_from_csr", new=Mock)
+    @patch("charm.get_common_name_from_certificate", new=Mock(return_value="vault"))
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_requirer_csrs")
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_provider_certificates")
@@ -1643,13 +1624,11 @@ class TestCharm(unittest.TestCase):
         self.harness.update_config({"common_name": "vault"})
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
             role_id="root token content",
             secret_id="whatever secret id",
         )
-        self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr=csr)
-
         relation_id = self.harness.add_relation(
             relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
         )
@@ -1699,7 +1678,8 @@ class TestCharm(unittest.TestCase):
         self.mock_vault.make_latest_pki_issuer_default.assert_called_with(mount=PKI_MOUNT)
 
     @patch("ops.model.Container.restart", new=Mock)
-    @patch("charm.get_common_name_from_certificate", new=Mock)
+    @patch("charm.get_common_name_from_csr", new=Mock)
+    @patch("charm.get_common_name_from_certificate")
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_requirer_csrs")
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.get_provider_certificates")
@@ -1710,6 +1690,7 @@ class TestCharm(unittest.TestCase):
         patch_get_provider_certificates,
         patch_get_requirer_csrs,
         patch_request_certificate_creation,
+        patch_get_common_name_from_certificate,
     ):
         csr = "some csr content"
         self.mock_vault.configure_mock(
@@ -1729,13 +1710,11 @@ class TestCharm(unittest.TestCase):
         self.harness.update_config({"common_name": "vault"})
         self.harness.set_leader(is_leader=True)
         self.harness.set_can_connect(container=self.container_name, val=True)
-        peer_relation_id = self._set_peer_relation()
+        self._set_peer_relation()
         self._set_approle_secret(
             role_id="root token content",
             secret_id="whatever secret id",
         )
-        self._set_csr_secret_in_peer_relation(relation_id=peer_relation_id, csr=csr)
-
         relation_id = self.harness.add_relation(
             relation_name=TLS_CERTIFICATES_PKI_RELATION_NAME, remote_app="tls-provider"
         )
@@ -1753,12 +1732,15 @@ class TestCharm(unittest.TestCase):
         patch_get_provider_certificates.return_value = [provider_certificate]
         patch_get_requirer_csrs.return_value = [Mock(csr=csr)]
         self.harness.add_storage("config", attach=True)
+        patch_get_common_name_from_certificate.return_value = "new_common_name"
 
         # Reset mock counts, in case they were called during setup
         self.mock_vault.reset_mock()
 
+        # When
         self.harness.update_config({"common_name": "new_common_name"})
 
+        # Then
         self.mock_vault.set_pki_intermediate_ca_certificate.assert_called_with(
             certificate=certificate,
             mount=PKI_MOUNT,
@@ -1767,6 +1749,10 @@ class TestCharm(unittest.TestCase):
             allowed_domains="new_common_name", mount=PKI_MOUNT, role=PKI_ROLE_NAME
         )
 
+    @patch(
+        f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation",
+        new=Mock(),
+    )
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesProvidesV3.set_relation_certificate")
     @patch("charm.get_common_name_from_certificate")
     @patch("charm.get_common_name_from_csr")
