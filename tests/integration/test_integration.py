@@ -335,7 +335,9 @@ class TestVaultK8sIntegrationsPart1:
     ):
         secret_key = "test-key"
         secret_value = "test-value"
+        assert ops_test.model
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_1_APPLICATION_NAME]
+        assert isinstance(vault_kv_application, Application)
         vault_kv_unit = vault_kv_application.units[0]
         k8s_namespace = ops_test.model.name
 
@@ -388,8 +390,9 @@ class TestVaultK8sIntegrationsPart1:
         )
         secret_key = "test-key-2"
         secret_value = "test-value-2"
+        assert ops_test.model
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_2_APPLICATION_NAME]
-        assert vault_kv_application
+        assert isinstance(vault_kv_application, Application)
         vault_kv_unit = vault_kv_application.units[0]
         vault_kv_create_secret_action = await vault_kv_unit.run_action(
             action_name="create-secret",
