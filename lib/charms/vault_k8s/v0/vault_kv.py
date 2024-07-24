@@ -406,7 +406,7 @@ class VaultKvProvides(ops.Object):
         kv_requests = self.get_kv_requests(relation_id=relation_id)
         for request in kv_requests:
             if not self._credentials_issued_for_request(
-                nonce=request.nonce, relation_id=relation_id
+                nonce=request.nonce, relation_id=request.relation_id
             ):
                 outstanding_requests.append(request)
         return outstanding_requests
