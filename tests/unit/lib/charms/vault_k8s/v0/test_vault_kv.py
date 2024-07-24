@@ -86,9 +86,8 @@ class TestVaultKvProvides(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-    def setup_relation(self, leader: bool = True) -> tuple:
+    def setup_relation(self, remote_app: str = "vault-kv-requires", leader: bool = True) -> tuple:
         """Set up a relation between the charm and a remote app with 1 unit."""
-        remote_app = "vault-kv-requires"
         remote_unit = remote_app + "/0"
         rel_name = "vault-kv"
         self.harness.set_leader(leader)
@@ -282,6 +281,56 @@ class TestVaultKvProvides(unittest.TestCase):
             unit_name=remote_unit_2,
             mount_suffix=suffix,
             egress_subnet=egress_subnet,
+            nonce=nonce_2,
+        )
+
+    def test_given_2_vault_kv_relations_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
+        self,
+    ):
+        suffix = "dummy"
+        nonce_1 = "abcd"
+        nonce_2 = "efgh"
+        egress_subnet_1 = "10.0.0.1/32"
+        egress_subnet_2 = "10.0.0.2/32"
+        remote_app_1, remote_unit_1, _, rel_id_1 = self.setup_relation()
+        remote_app_2, remote_unit_2, _, rel_id_2 = self.setup_relation(
+            remote_app="vault-kv-requires-b"
+        )
+        self.harness.update_relation_data(
+            rel_id_1,
+            remote_unit_1,
+            key_values={"nonce": nonce_1, "egress_subnet": egress_subnet_1},
+        )
+        self.harness.update_relation_data(
+            rel_id_2,
+            remote_unit_2,
+            key_values={"nonce": nonce_2, "egress_subnet": egress_subnet_2},
+        )
+        self.harness.update_relation_data(
+            relation_id=rel_id_1,
+            app_or_unit=remote_app_1,
+            key_values={"mount_suffix": suffix + "a"},
+        )
+        self.harness.update_relation_data(
+            relation_id=rel_id_2,
+            app_or_unit=remote_app_2,
+            key_values={"mount_suffix": suffix + "b"},
+        )
+        self.harness.update_relation_data(
+            relation_id=rel_id_1,
+            app_or_unit=self.harness.charm.app.name,
+            key_values={"credentials": json.dumps({nonce_1: "whatever secret id"})},
+        )
+
+        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+
+        assert len(kv_requests) == 1
+        assert kv_requests[0] == KVRequest(
+            relation_id=rel_id_2,
+            app_name=remote_app_2,
+            unit_name=remote_unit_2,
+            mount_suffix=suffix + "b",
+            egress_subnet=egress_subnet_2,
             nonce=nonce_2,
         )
 
