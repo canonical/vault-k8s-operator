@@ -95,7 +95,8 @@ class ExampleRequirerCharm(CharmBase):
         binding = self.model.get_binding("vault-kv")
         if binding is not None:
             egress_subnet = str(binding.network.interfaces[0].subnet)
-            self.interface.request_credentials(event.relation, egress_subnet, self.get_nonce())
+            relation = self.model.get_relation(relation_name="vault-kv")
+            self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
     def get_nonce(self):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
@@ -132,7 +133,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
