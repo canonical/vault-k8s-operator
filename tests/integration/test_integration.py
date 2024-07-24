@@ -331,7 +331,7 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_kv_requirer_related_and_requirer_pod_crashes_when_create_secret_then_secret_is_created(  # noqa: E501
-        self, ops_test, deploy_requiring_charms: None
+        self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
         secret_key = "test-key"
         secret_value = "test-value"
@@ -389,6 +389,7 @@ class TestVaultK8sIntegrationsPart1:
         secret_key = "test-key-2"
         secret_value = "test-value-2"
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_2_APPLICATION_NAME]
+        assert vault_kv_application
         vault_kv_unit = vault_kv_application.units[0]
         vault_kv_create_secret_action = await vault_kv_unit.run_action(
             action_name="create-secret",
