@@ -12,6 +12,7 @@ import hvac
 import pytest
 import yaml
 from cryptography import x509
+from juju.action import Action
 from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
@@ -74,6 +75,7 @@ async def deployed_vault_initialized_leader(
 
 
 async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[int, str, str]:
+    assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)
     leader_unit_index = int(leader_unit.name.split("/")[-1])
     unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test, app_name)]
@@ -82,11 +84,19 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[int
     if seal_type == "shamir":
         initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
         root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
+        await ops_test.model.add_secret(
+            "initialization-secrets", [f"root-token={root_token}", f"unseal-key={unseal_key}"]
+        )
         return leader_unit_index, root_token, unseal_key
     initialize_response = client.sys.initialize(recovery_shares=1, recovery_threshold=1)
     root_token, recovery_key = (
         initialize_response["root_token"],
         initialize_response["recovery_keys"][0],
+    )
+    # Add the token/key to the model so they can be retrieved later if we need to debug
+    await ops_test.model.add_secret(
+        f"initialization-secrets-{app_name}",
+        [f"root-token={root_token}", f"recovery-key={recovery_key}"],
     )
     return leader_unit_index, root_token, recovery_key
 
@@ -928,7 +938,7 @@ class TestVaultK8sIntegrationsPart3:
         )
 
 
-async def run_get_certificate_action(ops_test) -> dict:
+async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
 
     Args:
@@ -937,10 +947,13 @@ async def run_get_certificate_action(ops_test) -> dict:
     Returns:
         dict: Action output
     """
+    assert ops_test.model
     tls_requirer_unit = ops_test.model.units[f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"]
+    assert isinstance(tls_requirer_unit, Unit)
     action = await tls_requirer_unit.run_action(
         action_name="get-certificate",
     )
+    assert isinstance(action, Action)
     action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=240)
     return action_output
 
