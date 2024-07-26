@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Protocol
 import hvac
 import requests
 from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
+from ops import Relation
 from requests.exceptions import ConnectionError, RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -564,66 +565,63 @@ class VaultAutounseal:
     Vault.
     """
 
-    def __init__(self, client: VaultClient, mount_path="charm-autounseal"):
+    def __init__(
+        self, client: VaultClient, relation: Relation, mount_path: str = "charm-autounseal"
+    ):
         self._client = client
+        self._relation = relation
         self._mount_path = mount_path
+        self._key_name = str(relation.id)
+        self._policy_name = f"charm-autounseal-{relation.id}"
+        self._approle_name = f"charm-autounseal-{relation.id}"
 
-    def _get_key_name(self, relation_id: int) -> str:
-        """Return the key name for the given relation id."""
-        return str(relation_id)
+    @property
+    def mount_path(self) -> str:
+        """Return the mount path for the transit backend."""
+        return self._mount_path
 
-    def _get_policy_name(self, relation_id: int) -> str:
-        """Return the policy name for the given relation id."""
-        return f"charm-autounseal-{relation_id}"
-
-    def _get_approle_name(self, relation_id: int) -> str:
-        """Return the approle name for the given relation id."""
-        return f"charm-autounseal-{relation_id}"
-
-    def _create_key(self, mount_point: str, relation_id: int) -> str:
-        """Create a new autounseal key."""
-        key_name = self._get_key_name(relation_id)
-        response = self._client.create_transit_key(mount_point=mount_point, key_name=key_name)
-        logging.debug(f"Created a new autounseal key: {response}")
-        return key_name
-
-    def enable_engine(self) -> None:
-        """Enable the transit engine for auto-unseal."""
+    def enable_transit_backend(self) -> None:
+        """Enable the transit backend if it isn't already enabled."""
         self._client.enable_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
 
-    def create_credentials(self, relation_id: int) -> tuple[str, str, str]:
-        """Create auto-unseal credentials for the given relation id.
+    @property
+    def relation(self) -> Relation:
+        """Return the relation id for the auto-unseal functionality."""
+        return self._relation
 
-        Args:
-            relation_id: The Juju relation id to use for the approle.
-            mount: The mount point for the transit backend.
-            policy_path: Path to a file that contains the autounseal policy.
+    def _create_key(self):
+        """Create a new autounseal key."""
+        response = self._client.create_transit_key(
+            mount_point=self._mount_path, key_name=self._key_name
+        )
+        logging.debug(f"Created a new autounseal key: {response}")
+
+    def create_credentials(self) -> tuple[str, str, str]:
+        """Create auto-unseal credentials for this relation.
 
         Returns:
             A tuple containing the Role Id, Secret Id and Key Name.
 
         """
-        key_name = self._create_key(self._mount_path, relation_id)
-        policy_name = self._get_policy_name(relation_id)
-        policy_content = AUTOUNSEAL_POLICY.format(mount=self._mount_path, key_name=key_name)
+        self._create_key()
+        policy_content = AUTOUNSEAL_POLICY.format(mount=self._mount_path, key_name=self._key_name)
         self._client.configure_policy(
-            policy_name, policy_content, mount=self._mount_path, key_name=key_name
+            self._policy_name, policy_content, mount=self._mount_path, key_name=self._key_name
         )
-        role_name = self._get_approle_name(relation_id)
+        role_name = self._approle_name
         role_id = self._client.configure_approle(
-            role_name, policies=[policy_name], token_period="60s"
+            role_name, policies=[self._policy_name], token_period="60s"
         )
         secret_id = self._client.generate_role_secret_id(role_name)
-        return key_name, role_id, secret_id
+        return self._key_name, role_id, secret_id
 
-    def delete_credentials(self, relation_id: int) -> None:
+    def delete_credentials(self) -> None:
         """Destroy the approle and transit key for the given relation id."""
         # Remove the approle
-        role_name = self._get_approle_name(relation_id)
+        role_name = self._approle_name
         self._client.delete_role(role_name)
         # Remove the policy
-        policy_name = self._get_policy_name(relation_id)
-        self._client.delete_policy(policy_name)
+        self._client.delete_policy(self._policy_name)
         # Remove the transit key
         # FIXME: This is currently disabled because we haven't figured out how
         # to properly handle destroying the relation, yet. Destroying the key

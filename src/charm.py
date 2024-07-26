@@ -208,11 +208,14 @@ class VaultCharm(CharmBase):
         if vault is None:
             logger.warning("Vault is not active, cannot disable vault autounseal")
             return
-        autounseal = VaultAutounseal(vault)
-        autounseal.delete_credentials(event.relation.id)
+        autounseal = VaultAutounseal(vault, event.relation)
+        autounseal.delete_credentials()
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
-        """If leader, generate new credentials for the auto-unseal requirer.
+        """Generate new credentials for the auto-unseal requirer.
+
+        This method is only applicable to the leader unit. If a non-leader
+        unit calls this method, it will have no effect.
 
         These credentials are generated and then set in the relation databag so
         that the requiring app can retrieve them, and use them to create tokens
@@ -225,15 +228,32 @@ class VaultCharm(CharmBase):
             logger.warning("Vault is not active, cannot generate autounseal credentials")
             return
 
-        autounseal = VaultAutounseal(vault)
-        autounseal.enable_engine()
+        autounseal = VaultAutounseal(vault, relation)
+        autounseal.enable_transit_backend()
 
-        key_name, approle_id, secret_id = autounseal.create_credentials(
-            relation.id,
-            AUTOUNSEAL_POLICY_PATH,
+        vault_address = self._get_relation_api_address(relation)
+        if not vault_address:
+            logger.warning("Vault address not available, unable to set autounseal credentials")
+            return
+        ca_cert = (
+            self.tls.pull_tls_file_from_workload(File.CA)
+            if self.tls.ca_certificate_is_saved()
+            else None
         )
+        if not ca_cert:
+            logger.warning("CA certificate not available, unable to set autounseal credentials")
+            return
 
-        self._set_autounseal_relation_data(relation, key_name, approle_id, secret_id)
+        key_name, approle_id, secret_id = autounseal.create_credentials()
+        self.vault_autounseal_provides.set_autounseal_data(
+            relation,
+            vault_address,
+            autounseal.mount_path,
+            key_name,
+            approle_id,
+            secret_id,
+            ca_cert,
+        )
 
     def _sync_vault_autounseal(self) -> None:
         """Go through all the vault-autounseal relations and send necessary credentials.
@@ -248,40 +268,6 @@ class VaultCharm(CharmBase):
         outstanding_requests = self.vault_autounseal_provides.get_outstanding_requests()
         for relation in outstanding_requests:
             self._generate_and_set_autounseal_credentials(relation)
-
-    def _set_autounseal_relation_data(
-        self, relation: Relation, key_name: str, approle_id: str, approle_secret_id: str
-    ) -> None:
-        """Set the required autounseal data in the relation databag.
-
-        Args:
-            relation: Relation for which the auto-unseal data is being set
-            key_name: The vault transit key name used for auto-unseal
-            approle_id: The AppRole ID which has permission to use this key
-            approle_secret_id: The AppRole secret ID
-        """
-        vault_address = self._get_relation_api_address(relation)
-        if not vault_address:
-            logger.warning("Vault address not available, ignoring request to set autounseal data")
-            return
-        ca_cert = (
-            self.tls.pull_tls_file_from_workload(File.CA)
-            if self.tls.ca_certificate_is_saved()
-            else None
-        )
-        if not ca_cert:
-            logger.warning("CA certificate not available, ignoring request to set autounseal data")
-            return
-
-        self.vault_autounseal_provides.set_autounseal_data(
-            relation,
-            vault_address,
-            AUTOUNSEAL_MOUNT_PATH,
-            key_name,
-            approle_id,
-            approle_secret_id,
-            ca_cert,
-        )
 
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""

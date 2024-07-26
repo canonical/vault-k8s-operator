@@ -327,9 +327,6 @@ class VaultAutounsealProvides(ops.Object):
                 "Attempting to set the auto-unseal data without being the leader. Ignoring the request."
             )
             return
-        if relation is None:
-            logger.warning("No relation found")
-            return
         if not relation.active:
             logger.warning("Relation is not active")
             return
