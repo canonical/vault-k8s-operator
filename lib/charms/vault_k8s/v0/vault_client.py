@@ -303,6 +303,15 @@ class Vault:
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]
 
+    def generate_role_wrapping_token(
+        self, name: str, wrap_ttl: int, cidrs: Optional[List[str]] = None
+    ) -> str:
+        """Generate a new wrapping token tied to an AppRole."""
+        response = self._client.auth.approle.generate_secret_id(
+            name, cidr_list=cidrs, wrap_ttl=wrap_ttl
+        )
+        return response["wrap_info"]["token"]
+
     def read_role_secret(self, name: str, id: str) -> dict:
         """Get definition of a secret tied to an AppRole."""
         response = self._client.auth.approle.read_secret_id(name, id)

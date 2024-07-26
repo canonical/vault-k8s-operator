@@ -179,6 +179,15 @@ class AppVaultKvRequirerSchema(BaseModel):
     mount_suffix: str = Field(
         description="Suffix to append to the mount name to get the KV mount."
     )
+    wrap_ttl: Optional[int] = Field(
+        default=None,
+        title="Wrap TTL",
+        description=(
+            "Whether to request approle secret_id as a response-wrapping token with a certain TTL."
+            " If not set, no wrapping will be made to secret_id. Otherwise, wrap_ttl specifies"
+            " the duration of seconds before the expiration of the response-wrapping token."
+        ),
+    )
 
 
 class UnitVaultKvRequirerSchema(BaseModel):
@@ -215,7 +224,7 @@ class KVRequest:
     nonce: str
 
 
-def is_requirer_data_valid(app_data: Mapping[str, str], unit_data: Mapping[str, str]) -> bool:
+def is_requirer_data_valid(app_data: Mapping[str, Any], unit_data: Mapping[str, str]) -> bool:
     """Return whether the requirer data is valid."""
     try:
         RequirerSchema(
