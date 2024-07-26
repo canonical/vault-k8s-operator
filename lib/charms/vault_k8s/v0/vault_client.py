@@ -112,7 +112,7 @@ class VaultClientError(Exception):
     """Base class for exceptions raised by the Vault client."""
 
 
-class Vault:
+class VaultClient:
     """Class to interact with Vault through its API."""
 
     def __init__(self, url: str, ca_cert_path: Optional[str]):
@@ -262,6 +262,22 @@ class Vault:
             self._client.sys.create_or_update_policy(
                 name=policy_name,
                 policy=policy if not formatting_args else policy.format(**formatting_args),
+            )
+        except VaultError as e:
+            raise VaultClientError(e) from e
+        logger.debug("Created or updated charm policy: %s", policy_name)
+
+    def create_or_update_policy(self, policy_name: str, policy_content: str) -> None:
+        """Create or update a policy within vault.
+
+        Args:
+            policy_name: Name of the policy to create
+            policy_content: The path of the file where the policy is defined, ending with .hcl
+        """
+        try:
+            self._client.sys.create_or_update_policy(
+                name=policy_name,
+                policy=policy_content,
             )
         except VaultError as e:
             raise VaultClientError(e) from e
@@ -516,47 +532,66 @@ class Vault:
         except (TypeError, KeyError):
             logger.error("Issuers config is not yet created")
 
-    def _get_autounseal_policy_name(self, relation_id: int) -> str:
-        """Return the policy name for the given relation id."""
-        return f"charm-autounseal-{relation_id}"
+    def create_transit_key(self, mount_point: str, key_name: str) -> None:
+        """Create a new key in the transit backend."""
+        response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
+        logging.debug(f"Created a new transit key. response={response}")
 
-    def _get_autounseal_approle_name(self, relation_id: int) -> str:
-        """Return the approle name for the given relation id."""
-        return f"charm-autounseal-{relation_id}"
+    def delete_role(self, role_name: str) -> None:
+        """Delete the approle with the given name."""
+        return self._client.auth.approle.delete_role(role_name)
 
-    def _get_autounseal_key_name(self, relation_id: int) -> str:
+    def delete_policy(self, policy_name: str) -> None:
+        """Delete the policy with the given name."""
+        return self._client.sys.delete_policy(policy_name)
+
+
+AUTOUNSEAL_POLICY = """
+path "{mount}/encrypt/{key_name}" {{
+    capabilities = ["update"]
+}}
+
+path "{mount}/decrypt/{key_name}" {{
+    capabilities = ["update"]
+}}
+"""
+
+
+class VaultAutounseal:
+    """Class to encapsulate the auto-unseal functionality for Vault.
+
+    This class provides the business logic for auto-unseal functionality in
+    Vault.
+    """
+
+    def __init__(self, client: VaultClient, mount_path="charm-autounseal"):
+        self._client = client
+        self._mount_path = mount_path
+
+    def _get_key_name(self, relation_id: int) -> str:
         """Return the key name for the given relation id."""
         return str(relation_id)
 
-    def _create_autounseal_key(self, mount_point: str, relation_id: int) -> str:
+    def _get_policy_name(self, relation_id: int) -> str:
+        """Return the policy name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _get_approle_name(self, relation_id: int) -> str:
+        """Return the approle name for the given relation id."""
+        return f"charm-autounseal-{relation_id}"
+
+    def _create_key(self, mount_point: str, relation_id: int) -> str:
         """Create a new autounseal key."""
-        key_name = self._get_autounseal_key_name(relation_id)
-        response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
+        key_name = self._get_key_name(relation_id)
+        response = self._client.create_transit_key(mount_point=mount_point, key_name=key_name)
         logging.debug(f"Created a new autounseal key: {response}")
         return key_name
 
-    def _destroy_autounseal_key(self, mount_point, key_name):
-        """Destroy the autounseal key."""
-        self._client.secrets.transit.delete_key(mount_point=mount_point, name=key_name)
+    def enable_engine(self) -> None:
+        """Enable the transit engine for auto-unseal."""
+        self._client.enable_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
 
-    def destroy_autounseal_credentials(self, relation_id: int, mount: str) -> None:
-        """Destroy the approle and transit key for the given relation id."""
-        # Remove the approle
-        role_name = self._get_autounseal_approle_name(relation_id)
-        self._client.auth.approle.delete_role(role_name)
-        # Remove the policy
-        policy_name = self._get_autounseal_policy_name(relation_id)
-        self._client.sys.delete_policy(policy_name)
-        # Remove the transit key
-        # FIXME: This is currently disabled because we haven't figured out how
-        # to properly handle destroying the relation, yet. Destroying the key
-        # without migrating would make it impossible to recover the vault.
-        # key_name = self.get_autounseal_key_name(relation_id)
-        # self._destroy_autounseal_key(mount, key_name)
-
-    def create_autounseal_credentials(
-        self, relation_id: int, mount: str, policy_path: str
-    ) -> tuple[str, str, str]:
+    def create_credentials(self, relation_id: int) -> tuple[str, str, str]:
         """Create auto-unseal credentials for the given relation id.
 
         Args:
@@ -568,11 +603,30 @@ class Vault:
             A tuple containing the Role Id, Secret Id and Key Name.
 
         """
-        key_name = self._create_autounseal_key(mount, relation_id)
-        policy_name = self._get_autounseal_policy_name(relation_id)
-        self.configure_policy(policy_name, policy_path, mount=mount, key_name=key_name)
-
-        role_name = self._get_autounseal_approle_name(relation_id)
-        role_id = self.configure_approle(role_name, policies=[policy_name], token_period="60s")
-        secret_id = self.generate_role_secret_id(role_name)
+        key_name = self._create_key(self._mount_path, relation_id)
+        policy_name = self._get_policy_name(relation_id)
+        policy_content = AUTOUNSEAL_POLICY.format(mount=self._mount_path, key_name=key_name)
+        self._client.configure_policy(
+            policy_name, policy_content, mount=self._mount_path, key_name=key_name
+        )
+        role_name = self._get_approle_name(relation_id)
+        role_id = self._client.configure_approle(
+            role_name, policies=[policy_name], token_period="60s"
+        )
+        secret_id = self._client.generate_role_secret_id(role_name)
         return key_name, role_id, secret_id
+
+    def delete_credentials(self, relation_id: int) -> None:
+        """Destroy the approle and transit key for the given relation id."""
+        # Remove the approle
+        role_name = self._get_approle_name(relation_id)
+        self._client.delete_role(role_name)
+        # Remove the policy
+        policy_name = self._get_policy_name(relation_id)
+        self._client.delete_policy(policy_name)
+        # Remove the transit key
+        # FIXME: This is currently disabled because we haven't figured out how
+        # to properly handle destroying the relation, yet. Destroying the key
+        # without migrating would make it impossible to recover the vault.
+        # key_name = self.get_autounseal_key_name(relation_id)
+        # self._destroy_autounseal_key(mount, key_name)

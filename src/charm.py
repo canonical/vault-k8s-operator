@@ -36,7 +36,8 @@ from charms.vault_k8s.v0.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
-    Vault,
+    VaultAutounseal,
+    VaultClient,
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
@@ -68,7 +69,6 @@ from ops.pebble import ChangeError, Layer, PathError
 logger = logging.getLogger(__name__)
 
 APPROLE_ROLE_NAME = "charm"
-AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_POLICY_PATH = "src/templates/autounseal_policy.hcl"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
@@ -208,7 +208,8 @@ class VaultCharm(CharmBase):
         if vault is None:
             logger.warning("Vault is not active, cannot disable vault autounseal")
             return
-        vault.destroy_autounseal_credentials(event.relation.id, AUTOUNSEAL_MOUNT_PATH)
+        autounseal = VaultAutounseal(vault)
+        autounseal.delete_credentials(event.relation.id)
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
         """If leader, generate new credentials for the auto-unseal requirer.
@@ -224,11 +225,11 @@ class VaultCharm(CharmBase):
             logger.warning("Vault is not active, cannot generate autounseal credentials")
             return
 
-        vault.enable_secrets_engine(SecretsBackend.TRANSIT, AUTOUNSEAL_MOUNT_PATH)
+        autounseal = VaultAutounseal(vault)
+        autounseal.enable_engine()
 
-        key_name, approle_id, secret_id = vault.create_autounseal_credentials(
+        key_name, approle_id, secret_id = autounseal.create_credentials(
             relation.id,
-            AUTOUNSEAL_MOUNT_PATH,
             AUTOUNSEAL_POLICY_PATH,
         )
 
@@ -323,7 +324,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
-        vault = Vault(
+        vault = VaultClient(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
         if not vault.is_api_available():
@@ -382,7 +383,7 @@ class VaultCharm(CharmBase):
 
         self._generate_vault_config_file()
         self._set_pebble_plan()
-        vault = Vault(
+        vault = VaultClient(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
         if not vault.is_api_available():
@@ -432,7 +433,7 @@ class VaultCharm(CharmBase):
         role_id, secret_id = self._get_approle_auth_secret()
         if not role_id or not secret_id:
             return
-        vault = Vault(url=self._api_address, ca_cert_path=None)
+        vault = VaultClient(url=self._api_address, ca_cert_path=None)
         if not vault.is_api_available():
             return
         if not vault.is_initialized():
@@ -494,7 +495,7 @@ class VaultCharm(CharmBase):
             )
             self._set_juju_secret(PKI_CSR_SECRET_LABEL, {"csr": csr})
 
-    def _is_intermediate_ca_common_name_valid(self, vault: Vault, common_name: str) -> bool:
+    def _is_intermediate_ca_common_name_valid(self, vault: VaultClient, common_name: str) -> bool:
         """Check if the intermediate CA is set with the valid common name."""
         intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
         if not intermediate_ca:
@@ -502,7 +503,7 @@ class VaultCharm(CharmBase):
         intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
         return intermediate_ca_common_name == common_name
 
-    def _is_intermediate_ca_set(self, vault: Vault, certificate: str) -> bool:
+    def _is_intermediate_ca_set(self, vault: VaultClient, certificate: str) -> bool:
         """Check if the intermediate CA is set in the PKI secrets engine."""
         intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
         return certificate == intermediate_ca
@@ -679,7 +680,7 @@ class VaultCharm(CharmBase):
             )
             return
 
-        vault = Vault(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
+        vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         vault.authenticate(Token(token))
 
         if not vault.get_token_data():
@@ -856,7 +857,7 @@ class VaultCharm(CharmBase):
         try:
             if self._approle_secret_set():
                 role_id, secret_id = self._get_approle_auth_secret()
-                vault = Vault(
+                vault = VaultClient(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
@@ -925,7 +926,7 @@ class VaultCharm(CharmBase):
 
     def _ensure_unit_credentials(
         self,
-        vault: Vault,
+        vault: VaultClient,
         relation: Relation,
         unit_name: str,
         mount: str,
@@ -953,7 +954,7 @@ class VaultCharm(CharmBase):
 
     def _create_or_update_kv_secret(
         self,
-        vault: Vault,
+        vault: VaultClient,
         relation: Relation,
         role_id: str,
         role_name: str,
@@ -977,7 +978,7 @@ class VaultCharm(CharmBase):
 
     def _create_kv_secret(
         self,
-        vault: Vault,
+        vault: VaultClient,
         relation: Relation,
         role_id: str,
         role_name: str,
@@ -998,7 +999,7 @@ class VaultCharm(CharmBase):
 
     def _update_kv_secret(
         self,
-        vault: Vault,
+        vault: VaultClient,
         relation: Relation,
         role_name: str,
         egress_subnet: str,
@@ -1131,7 +1132,7 @@ class VaultCharm(CharmBase):
             A periodic Vault token that can be used for auto-unseal.
 
         """
-        vault = Vault(
+        vault = VaultClient(
             url=autounseal_details.address,
             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
         )
@@ -1323,7 +1324,7 @@ class VaultCharm(CharmBase):
             bool: True if the restore was successful, False otherwise.
         """
         for address in self._get_peer_node_api_addresses():
-            vault = Vault(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
+            vault = VaultClient(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
             if vault.is_active():
                 break
         else:
@@ -1348,7 +1349,7 @@ class VaultCharm(CharmBase):
 
         return True
 
-    def _get_active_vault_client(self) -> Optional[Vault]:
+    def _get_active_vault_client(self) -> Optional[VaultClient]:
         """Return an initialized vault client.
 
         Returns:
@@ -1359,7 +1360,7 @@ class VaultCharm(CharmBase):
                    has not been authorized.
         """
         try:
-            vault = Vault(
+            vault = VaultClient(
                 url=self._api_address,
                 ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
             )
