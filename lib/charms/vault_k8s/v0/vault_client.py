@@ -14,10 +14,13 @@ from enum import Enum
 from typing import Dict, List, Optional, Protocol
 
 import hvac
+import ops
 import requests
 from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
 from ops import Relation
 from requests.exceptions import ConnectionError, RequestException
+from vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
+from vault_tls import File, VaultTLSManager
 
 # The unique Charmhub library identifier, never change it
 LIBID = "674754a3268d4507b749ec34214706fd"
@@ -558,7 +561,7 @@ path "{mount}/decrypt/{key_name}" {{
 """
 
 
-class VaultAutounseal:
+class VaultAutounsealManager:
     """Class to encapsulate the auto-unseal functionality for Vault.
 
     This class provides the business logic for auto-unseal functionality in
@@ -566,7 +569,13 @@ class VaultAutounseal:
     """
 
     def __init__(
-        self, client: VaultClient, relation: Relation, mount_path: str = "charm-autounseal"
+        self,
+        client: VaultClient,
+        relation: Relation,
+        tls_manager: VaultTLSManager,
+        provides: VaultAutounsealProvides,
+        mount_path: str = "charm-autounseal",
+        port: int = 8200,
     ):
         self._client = client
         self._relation = relation
@@ -574,11 +583,33 @@ class VaultAutounseal:
         self._key_name = str(relation.id)
         self._policy_name = f"charm-autounseal-{relation.id}"
         self._approle_name = f"charm-autounseal-{relation.id}"
+        self._tls_manager = tls_manager
+        self._provides = provides
+        self._port = port
+
+    @property
+    def api_address(self) -> str:
+        """Fetch the api address from relation and returns it.
+
+        Example: "https://10.152.183.20:8200"
+        """
+        binding = self._tls_manager.model.get_binding(self.relation)
+        if binding is None:
+            raise VaultClientError("Failed to fetch binding from relation")
+        return f"https://{binding.network.ingress_address}:{self._port}"
 
     @property
     def mount_path(self) -> str:
         """Return the mount path for the transit backend."""
         return self._mount_path
+
+    @property
+    def ca_cert(self) -> str:
+        """Return the CA certificate for the vault."""
+        ca_cert = self._tls_manager.pull_tls_file_from_workload(File.CA)
+        if not ca_cert:
+            raise VaultClientError("Failed to fetch CA certificate from workload")
+        return ca_cert
 
     def enable_transit_backend(self) -> None:
         """Enable the transit backend if it isn't already enabled."""
@@ -615,6 +646,19 @@ class VaultAutounseal:
         secret_id = self._client.generate_role_secret_id(role_name)
         return self._key_name, role_id, secret_id
 
+    def create_and_set_credentials(self) -> None:
+        """Create and set the auto-unseal credentials for this relation."""
+        key, role, secret = self.create_credentials()
+        self._provides.set_autounseal_data(
+            self.relation,
+            self.api_address,
+            self.mount_path,
+            key,
+            role,
+            secret,
+            self.ca_cert,
+        )
+
     def delete_credentials(self) -> None:
         """Destroy the approle and transit key for the given relation id."""
         # Remove the approle
@@ -628,3 +672,16 @@ class VaultAutounseal:
         # without migrating would make it impossible to recover the vault.
         # key_name = self.get_autounseal_key_name(relation_id)
         # self._destroy_autounseal_key(mount, key_name)
+
+    def _sync_vault_autounseal(self) -> None:
+        """Go through all the vault-autounseal relations and send necessary credentials.
+
+        This looks for any outstanding requests for auto-unseal that may have
+        been missed. If there are any, it generates the credentials and sets
+        them in the relation databag.
+        """
+        self.enable_transit_backend()
+        outstanding_requests = self._provides.get_outstanding_requests()
+        for relation in outstanding_requests:
+            # TODO: we need another class that represents the relation!
+            self.create_and_set_credentials(relation)

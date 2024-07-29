@@ -36,7 +36,7 @@ from charms.vault_k8s.v0.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
-    VaultAutounseal,
+    VaultAutounsealRelation,
     VaultClient,
     VaultClientError,
 )
@@ -208,7 +208,9 @@ class VaultCharm(CharmBase):
         if vault is None:
             logger.warning("Vault is not active, cannot disable vault autounseal")
             return
-        autounseal = VaultAutounseal(vault, event.relation)
+        autounseal = VaultAutounsealRelation(
+            vault, event.relation, self.tls, self.vault_autounseal_provides
+        )
         autounseal.delete_credentials()
 
     def _generate_and_set_autounseal_credentials(self, relation: Relation) -> None:
@@ -228,46 +230,11 @@ class VaultCharm(CharmBase):
             logger.warning("Vault is not active, cannot generate autounseal credentials")
             return
 
-        autounseal = VaultAutounseal(vault, relation)
+        autounseal = VaultAutounsealRelation(
+            vault, relation, self.tls, self.vault_autounseal_provides
+        )
         autounseal.enable_transit_backend()
-
-        vault_address = self._get_relation_api_address(relation)
-        if not vault_address:
-            logger.warning("Vault address not available, unable to set autounseal credentials")
-            return
-        ca_cert = (
-            self.tls.pull_tls_file_from_workload(File.CA)
-            if self.tls.ca_certificate_is_saved()
-            else None
-        )
-        if not ca_cert:
-            logger.warning("CA certificate not available, unable to set autounseal credentials")
-            return
-
-        key_name, approle_id, secret_id = autounseal.create_credentials()
-        self.vault_autounseal_provides.set_autounseal_data(
-            relation,
-            vault_address,
-            autounseal.mount_path,
-            key_name,
-            approle_id,
-            secret_id,
-            ca_cert,
-        )
-
-    def _sync_vault_autounseal(self) -> None:
-        """Go through all the vault-autounseal relations and send necessary credentials.
-
-        This looks for any outstanding requests for auto-unseal that may have
-        been missed. If there are any, it generates the credentials and sets
-        them in the relation databag.
-        """
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-autounseal request")
-            return
-        outstanding_requests = self.vault_autounseal_provides.get_outstanding_requests()
-        for relation in outstanding_requests:
-            self._generate_and_set_autounseal_credentials(relation)
+        autounseal.create_and_set_credentials()
 
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
