@@ -216,7 +216,7 @@ class TestVaultKvProvides(unittest.TestCase):
             self.harness.get_relation_data(rel_id, self.harness.charm.app.name)["credentials"]
         ) == {unit_name: secret.id}
 
-        with self.assertLogs(level='DEBUG') as log:
+        with self.assertLogs(level="DEBUG") as log:
             self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
         self.assertIn("Secret id has not changed, not updating the relation", log.output[0])
 

@@ -379,7 +379,9 @@ class VaultKvProvides(ops.Object):
                 nonce,
             )
             return
-        standard_secret_id = secret.id[len("secret:"):] if secret.id.startswith("secret:") else secret.id
+        standard_secret_id = (
+            secret.id[len("secret:") :] if secret.id.startswith("secret:") else secret.id
+        )
         if standard_secret_id in credentials.get(nonce, ""):
             logger.debug(
                 "Secret id has not changed, not updating the relation '%s:%d' for nonce %r",
