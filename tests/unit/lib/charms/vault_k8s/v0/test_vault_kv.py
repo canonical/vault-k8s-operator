@@ -203,6 +203,23 @@ class TestVaultKvProvides(unittest.TestCase):
             rel_id, self.harness.charm.app.name
         )
 
+    def test_given_secret_id_not_changed_when_setting_credentials_then_relation_data_is_not_updated(
+        self,
+    ):
+        """Secret._id is None when the secret has been looked up by label."""
+        _, remote_unit, relation, rel_id = self.setup_relation()
+        unit_name = remote_unit.replace("/", "-")
+        secret = self.harness.charm.app.add_secret({"role-id": "111", "role-secret-id": "222"})
+        self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
+
+        assert json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.charm.app.name)["credentials"]
+        ) == {unit_name: secret.id}
+
+        with self.assertLogs(level='DEBUG') as log:
+            self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
+        self.assertIn("Secret id has not changed, not updating the relation", log.output[0])
+
     def test_given_no_request_when_get_outstanding_kv_requests_then_empty_list_is_returned(self):
         kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
 
