@@ -12,7 +12,8 @@ from charms.vault_k8s.v0.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
-    Vault,
+    VaultAutounsealManager,
+    VaultClient,
     VaultClientError,
 )
 from hvac.exceptions import InvalidPath
@@ -22,7 +23,7 @@ TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
 class TestVault(unittest.TestCase):
     def test_given_token_as_auth_details_when_authenticate_then_token_is_set(self):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.authenticate(Token("some token"))
 
         assert vault._client.token == "some token"
@@ -31,7 +32,7 @@ class TestVault(unittest.TestCase):
     def test_given_approle_as_auth_details_when_authenticate_then_approle_login_is_called(
         self, patch_approle_login
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.authenticate(AppRole(role_id="some role id", secret_id="some secret id"))
 
         patch_approle_login.assert_called_with(
@@ -40,7 +41,7 @@ class TestVault(unittest.TestCase):
 
     @patch("hvac.api.auth_methods.token.Token.lookup_self")
     def test_given_token_data_when_get_token_data_lookup_self_called(self, patch_lookup):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.get_token_data()
         patch_lookup.assert_called()
 
@@ -49,14 +50,14 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
 
         self.assertFalse(vault.is_api_available())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_api_returns_when_is_api_available_then_return_true(self, patch_health_status):
         patch_health_status.return_value = requests.Response()
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
 
         self.assertTrue(vault.is_api_available())
 
@@ -65,7 +66,7 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         node_id = "whatever node id"
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         patch_health_status.return_value = {
             "data": {"config": {"servers": [{"node_id": node_id}]}}
         }
@@ -77,7 +78,7 @@ class TestVault(unittest.TestCase):
         self, patch_health_status
     ):
         node_id = "whatever node id"
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         patch_health_status.return_value = {
             "data": {"config": {"servers": [{"node_id": "not our node"}]}}
         }
@@ -100,7 +101,7 @@ class TestVault(unittest.TestCase):
             }
         }
 
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.get_num_raft_peers()
 
@@ -110,7 +111,7 @@ class TestVault(unittest.TestCase):
     def test_given_approle_not_in_auth_methods_when_enable_approle_auth_then_approle_is_added_to_auth_methods(  # noqa: E501
         self, patch_enable_auth_method
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
 
         vault.enable_approle_auth_method()
 
@@ -121,7 +122,7 @@ class TestVault(unittest.TestCase):
         self,
         patch_enable_audit_device,
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
@@ -132,7 +133,7 @@ class TestVault(unittest.TestCase):
         self,
         patch_enable_audit_device,
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
         patch_enable_audit_device.assert_called_once_with(
             device_type="file", options={"file_path": "stdout"}
@@ -142,7 +143,7 @@ class TestVault(unittest.TestCase):
     def test_given_policy_with_mount_when_configure_policy_then_policy_is_formatted_properly(
         self, patch_create_policy
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.configure_policy(
             "test-policy", policy_path=f"{TEST_PATH}/kv_with_mount.hcl", mount="example"
         )
@@ -157,7 +158,7 @@ class TestVault(unittest.TestCase):
     def test_given_policy_without_mount_when_configure_policy_then_policy_created_correctly(
         self, patch_create_policy
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.configure_policy("test-policy", policy_path=f"{TEST_PATH}/kv_mounted.hcl")
         with open(f"{TEST_PATH}/kv_mounted.hcl", "r") as f:
             policy = f.read()
@@ -172,7 +173,7 @@ class TestVault(unittest.TestCase):
         self, patch_create_approle, patch_read_role_id
     ):
         patch_read_role_id.return_value = {"data": {"role_id": "1234"}}
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         assert "1234" == vault.configure_approle(
             "test-approle",
             policies=["root", "default"],
@@ -196,7 +197,7 @@ class TestVault(unittest.TestCase):
     def test_given_secrets_engine_with_valid_params_when_enable_secrets_engine_then_secrets_engine_enabled(
         self, patch_enable_secrets_engine
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.enable_secrets_engine(SecretsBackend.KV_V2, "some/path")
 
         patch_enable_secrets_engine.assert_called_with(
@@ -209,7 +210,7 @@ class TestVault(unittest.TestCase):
     def test_when_disable_secrets_engine_then_secrets_engine_disabled(
         self, mock_disable_secrets_engine: MagicMock
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         vault.disable_secrets_engine("some/path")
 
         mock_disable_secrets_engine.assert_called_with("some/path")
@@ -219,9 +220,12 @@ class TestVault(unittest.TestCase):
     def test_when_destroy_autounseal_credentials_then_approle_and_policy_are_deleted(
         self, mock_delete_role: MagicMock, mock_delete_policy: MagicMock
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         relation_id = 1
         mount = "example"
+        autounseal = VaultAutounsealManager(
+            vault,
+        )
         vault.destroy_autounseal_credentials(relation_id, mount)
 
         mock_delete_role.assert_called_with(f"charm-autounseal-{relation_id}")
@@ -240,7 +244,7 @@ class TestVault(unittest.TestCase):
         mock_generate_secret_id: MagicMock,
         mock_create_policy: MagicMock,
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         relation_id = 1
         mount = "example_mount"
         vault.create_autounseal_credentials(relation_id, mount, AUTOUNSEAL_POLICY_PATH)
@@ -268,7 +272,7 @@ class TestVault(unittest.TestCase):
         response = requests.Response()
         response.status_code = 200
         patch_health_status.return_value = response
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertTrue(vault.is_active_or_standby())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
@@ -278,7 +282,7 @@ class TestVault(unittest.TestCase):
         response = requests.Response()
         response.status_code = 429
         patch_health_status.return_value = response
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertTrue(vault.is_active_or_standby())
         self.assertFalse(vault.is_active())
 
@@ -289,13 +293,13 @@ class TestVault(unittest.TestCase):
         response = requests.Response()
         response.status_code = 501
         patch_health_status.return_value = response
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active_or_standby())
 
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_connection_error_when_is_active_then_return_false(self, patch_health_status):
         patch_health_status.side_effect = requests.exceptions.ConnectionError()
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         self.assertFalse(vault.is_active_or_standby())
 
     @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
@@ -303,9 +307,9 @@ class TestVault(unittest.TestCase):
         self,
         patch_read_pki_issuers,
     ):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         patch_read_pki_issuers.side_effect = InvalidPath()
-        with self.assertRaises(VaultClientError):
+        with self.assertRaises(VaultClient):
             vault.make_latest_pki_issuer_default(mount="test")
 
     @patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
@@ -320,7 +324,7 @@ class TestVault(unittest.TestCase):
         patch_read.return_value = {
             "data": {"default_follows_latest_issuer": False, "default": "whatever issuer"}
         }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
         mount = "test"
         vault.make_latest_pki_issuer_default(mount=mount)
@@ -344,7 +348,7 @@ class TestVault(unittest.TestCase):
         patch_read.return_value = {
             "data": {"default_follows_latest_issuer": True, "default": "whatever issuer"}
         }
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
         patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
         mount = "test"
         vault.make_latest_pki_issuer_default(mount=mount)

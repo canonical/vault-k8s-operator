@@ -12,7 +12,6 @@ import hcl  # type: ignore[import-untyped]
 import requests
 from botocore.response import StreamingBody
 from charm import (
-    AUTOUNSEAL_MOUNT_PATH,
     CHARM_POLICY_NAME,
     CHARM_POLICY_PATH,
     PKI_CSR_SECRET_LABEL,
@@ -35,7 +34,7 @@ from charms.vault_k8s.v0.vault_client import (
     Certificate,
     SecretsBackend,
     Token,
-    Vault,
+    VaultClient,
 )
 from charms.vault_k8s.v0.vault_s3 import S3Error
 from charms.vault_k8s.v0.vault_tls import (
@@ -117,7 +116,7 @@ class TestConfigFileContentMatches(unittest.TestCase):
 
 class TestCharm(unittest.TestCase):
     patcher_vault_tls_manager = patch("charm.VaultTLSManager", autospec=VaultTLSManager)
-    patcher_vault = patch("charm.Vault", autospec=Vault)
+    patcher_vault = patch("charm.Vault", autospec=VaultClient)
 
     def setUp(self):
         self.mock_vault_tls_manager = TestCharm.patcher_vault_tls_manager.start().return_value
@@ -1847,8 +1846,10 @@ class TestCharm(unittest.TestCase):
         role_id = "role_id"
         secret_id = "secret_id"
         ca_cert = "ca_cert"
+        mount_path = "charm-autounseal"
+        token = "some token"
         mock_get_details.return_value = AutounsealDetails(
-            address, AUTOUNSEAL_MOUNT_PATH, key_name, role_id, secret_id, ca_cert
+            address, mount_path, key_name, role_id, secret_id, ca_cert
         )
         relation_id = self.harness.add_relation(
             relation_name="vault-autounseal-requires", remote_app="autounseal-provider"
@@ -1861,20 +1862,20 @@ class TestCharm(unittest.TestCase):
             relation_id=relation_id,
             key_values={},
         )
-        self.mock_vault.token = "some token"
+        self.mock_vault.token = token
 
         # When
         self.harness.charm.vault_autounseal_requires.on.vault_autounseal_details_ready.emit(
-            address, AUTOUNSEAL_MOUNT_PATH, key_name, role_id, secret_id, ca_cert
+            address, mount_path, key_name, role_id, secret_id, ca_cert
         )
 
         # Then
         root = self.harness.get_filesystem_root(self.container_name)
         pushed_content_hcl = hcl.loads((root / "vault/config/vault.hcl").read_text())
         assert pushed_content_hcl["seal"]["transit"]["address"] == address
-        assert pushed_content_hcl["seal"]["transit"]["mount_path"] == AUTOUNSEAL_MOUNT_PATH
-        assert pushed_content_hcl["seal"]["transit"]["token"] == "some token"
-        assert pushed_content_hcl["seal"]["transit"]["key_name"] == "some key"
+        assert pushed_content_hcl["seal"]["transit"]["mount_path"] == mount_path
+        assert pushed_content_hcl["seal"]["transit"]["token"] == token
+        assert pushed_content_hcl["seal"]["transit"]["key_name"] == key_name
         self.mock_vault.authenticate.assert_called_with(AppRole(role_id, secret_id))
         self.mock_vault_tls_manager.push_autounseal_ca_cert.assert_called_with(ca_cert)
 
@@ -1911,7 +1912,7 @@ class TestCharm(unittest.TestCase):
         mock_set_autounseal_data.assert_called_once_with(
             relation,
             "https://10.0.0.10:8200",
-            AUTOUNSEAL_MOUNT_PATH,
+            "charm-autounseal",
             "key name",
             "autounseal role id",
             "autounseal secret id",
@@ -1942,5 +1943,5 @@ class TestCharm(unittest.TestCase):
 
         # Then
         self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
-            relation_id, AUTOUNSEAL_MOUNT_PATH
+            relation_id, "charm-autounseal"
         )

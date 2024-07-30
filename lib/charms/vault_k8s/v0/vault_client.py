@@ -14,12 +14,11 @@ from enum import Enum
 from typing import Dict, List, Optional, Protocol
 
 import hvac
-import ops
 import requests
 from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
-from ops import Relation
+from ops import Model, Relation, SecretNotFoundError
 from requests.exceptions import ConnectionError, RequestException
-from vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
+from vault_autounseal import AutounsealDetails, VaultAutounsealProvides, VaultAutounsealRequires
 from vault_tls import File, VaultTLSManager
 
 # The unique Charmhub library identifier, never change it
@@ -562,46 +561,52 @@ path "{mount}/decrypt/{key_name}" {{
 
 
 class VaultAutounsealManager:
-    """Class to encapsulate the auto-unseal functionality for Vault.
+    """Encapsulates the auto-unseal functionality at a feature level.
 
     This class provides the business logic for auto-unseal functionality in
     Vault.
     """
 
+    @dataclass(frozen=True)
+    class _VaultAutounsealRelationDetails:
+        """Details of the auto-unseal relation."""
+
+        relation: Relation
+        port: int = 8200
+
+        @property
+        def key_name(self) -> str:
+            """Return the key name for the relation."""
+            return str(self.relation.id)
+
+        @property
+        def policy_name(self) -> str:
+            """Return the policy name for the relation."""
+            return f"charm-autounseal-{self.relation.id}"
+
+        @property
+        def approle_name(self) -> str:
+            """Return the approle name for the relation."""
+            return f"charm-autounseal-{self.relation.id}"
+
     def __init__(
         self,
         client: VaultClient,
-        relation: Relation,
         tls_manager: VaultTLSManager,
         provides: VaultAutounsealProvides,
         mount_path: str = "charm-autounseal",
-        port: int = 8200,
     ):
         self._client = client
-        self._relation = relation
-        self._mount_path = mount_path
-        self._key_name = str(relation.id)
-        self._policy_name = f"charm-autounseal-{relation.id}"
-        self._approle_name = f"charm-autounseal-{relation.id}"
         self._tls_manager = tls_manager
         self._provides = provides
-        self._port = port
+        self._mount_path = mount_path
 
-    @property
-    def api_address(self) -> str:
-        """Fetch the api address from relation and returns it.
-
-        Example: "https://10.152.183.20:8200"
-        """
-        binding = self._tls_manager.model.get_binding(self.relation)
+    def get_address(self, relation: Relation) -> str:
+        """Fetch the address from the relation and return it."""
+        binding = self._tls_manager.model.get_binding(relation)
         if binding is None:
             raise VaultClientError("Failed to fetch binding from relation")
-        return f"https://{binding.network.ingress_address}:{self._port}"
-
-    @property
-    def mount_path(self) -> str:
-        """Return the mount path for the transit backend."""
-        return self._mount_path
+        return str(binding.network.ingress_address)
 
     @property
     def ca_cert(self) -> str:
@@ -611,77 +616,176 @@ class VaultAutounsealManager:
             raise VaultClientError("Failed to fetch CA certificate from workload")
         return ca_cert
 
+    @property
+    def mount_path(self) -> str:
+        """Return the mount path for the transit backend."""
+        return self._mount_path
+
     def enable_transit_backend(self) -> None:
         """Enable the transit backend if it isn't already enabled."""
         self._client.enable_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
 
-    @property
-    def relation(self) -> Relation:
-        """Return the relation id for the auto-unseal functionality."""
-        return self._relation
-
-    def _create_key(self):
-        """Create a new autounseal key."""
-        response = self._client.create_transit_key(
-            mount_point=self._mount_path, key_name=self._key_name
-        )
-        logging.debug(f"Created a new autounseal key: {response}")
-
-    def create_credentials(self) -> tuple[str, str, str]:
-        """Create auto-unseal credentials for this relation.
-
-        Returns:
-            A tuple containing the Role Id, Secret Id and Key Name.
-
-        """
-        self._create_key()
-        policy_content = AUTOUNSEAL_POLICY.format(mount=self._mount_path, key_name=self._key_name)
-        self._client.configure_policy(
-            self._policy_name, policy_content, mount=self._mount_path, key_name=self._key_name
-        )
-        role_name = self._approle_name
-        role_id = self._client.configure_approle(
-            role_name, policies=[self._policy_name], token_period="60s"
-        )
-        secret_id = self._client.generate_role_secret_id(role_name)
-        return self._key_name, role_id, secret_id
-
-    def create_and_set_credentials(self) -> None:
-        """Create and set the auto-unseal credentials for this relation."""
-        key, role, secret = self.create_credentials()
-        self._provides.set_autounseal_data(
-            self.relation,
-            self.api_address,
-            self.mount_path,
-            key,
-            role,
-            secret,
-            self.ca_cert,
-        )
-
-    def delete_credentials(self) -> None:
-        """Destroy the approle and transit key for the given relation id."""
-        # Remove the approle
-        role_name = self._approle_name
-        self._client.delete_role(role_name)
-        # Remove the policy
-        self._client.delete_policy(self._policy_name)
-        # Remove the transit key
-        # FIXME: This is currently disabled because we haven't figured out how
-        # to properly handle destroying the relation, yet. Destroying the key
-        # without migrating would make it impossible to recover the vault.
-        # key_name = self.get_autounseal_key_name(relation_id)
-        # self._destroy_autounseal_key(mount, key_name)
-
-    def _sync_vault_autounseal(self) -> None:
+    def sync_vault_autounseal(self) -> None:
         """Go through all the vault-autounseal relations and send necessary credentials.
 
         This looks for any outstanding requests for auto-unseal that may have
         been missed. If there are any, it generates the credentials and sets
         them in the relation databag.
         """
-        self.enable_transit_backend()
         outstanding_requests = self._provides.get_outstanding_requests()
+        if outstanding_requests:
+            self.enable_transit_backend()
         for relation in outstanding_requests:
-            # TODO: we need another class that represents the relation!
-            self.create_and_set_credentials(relation)
+            self.create_credentials(relation)
+
+    @staticmethod
+    def _get_details(relation: Relation) -> _VaultAutounsealRelationDetails:
+        """Return the details of the auto-unseal relation."""
+        return VaultAutounsealManager._VaultAutounsealRelationDetails(relation)
+
+    def _create_key(self, key_name) -> None:
+        """Create a new autounseal key."""
+        response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
+        logging.debug(f"Created a new autounseal key: {response}")
+
+    def create_credentials(self, relation: Relation) -> tuple[str, str, str]:
+        """Create auto-unseal credentials for the given relation."""
+        relation_details = self._get_details(relation)
+        self._create_key(relation_details.key_name)
+        policy_content = AUTOUNSEAL_POLICY.format(
+            mount=self.mount_path, key_name=relation_details.key_name
+        )
+        self._client.create_or_update_policy(
+            relation_details.policy_name,
+            policy_content,
+        )
+        role_id = self._client.configure_approle(
+            relation_details.approle_name,
+            policies=[relation_details.policy_name],
+            token_period="60s",
+        )
+        secret_id = self._client.generate_role_secret_id(relation_details.approle_name)
+        self._provides.set_autounseal_data(
+            relation,
+            self.get_address(relation),
+            self.mount_path,
+            relation_details.key_name,
+            role_id,
+            secret_id,
+            self.ca_cert,
+        )
+        return relation_details.key_name, role_id, secret_id
+
+    def delete_credentials(self, relation: Relation) -> None:
+        """Destroy the approle and transit key for the given relation."""
+        relation_details = self._get_details(relation)
+        role_name = relation_details.approle_name
+        self._client.delete_role(role_name)
+        self._client.delete_policy(relation_details.policy_name)
+
+
+@dataclass
+class AutounsealConfigurationDetails:
+    """Credentials required for configuring auto-unseal on Vault."""
+
+    address: str
+    mount_path: str
+    key_name: str
+    token: str
+    ca_cert_path: str
+
+
+class VaultAutounsealRequirerManager:
+    """Encapsulates the auto-unseal functionality from the perspective of the Vault being auto-unsealed."""
+
+    AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
+
+    def __init__(
+        self,
+        tls_manager: VaultTLSManager,
+        model: Model,
+        requires: VaultAutounsealRequires,
+    ):
+        self._tls_manager = tls_manager
+        self._model = model
+        self._requires = requires
+
+    def vault_configuration_details(self) -> Optional[AutounsealConfigurationDetails]:
+        """Return the configuration details for the vault."""
+        autounseal_details = self._requires.get_details()
+        if not autounseal_details:
+            return None
+        return AutounsealConfigurationDetails(
+            autounseal_details.address,
+            autounseal_details.mount_path,
+            autounseal_details.key_name,
+            self._get_autounseal_vault_token(autounseal_details),
+            self._tls_manager.pull_tls_file_from_workload(File.CA),
+        )
+
+    def _get_autounseal_vault_token(self, autounseal_details: AutounsealDetails) -> str:
+        """Retrieve the auto-unseal Vault token, or generate a new one if required.
+
+        Retrieves the last used token from Juju secrets, and validates that it
+        is still valid. If the token is not valid, a new token is generated and
+        stored in the Juju secret. A valid token is returned.
+
+        Args:
+            autounseal_details: The autounseal configuration details.
+
+        Returns:
+            A periodic Vault token that can be used for auto-unseal.
+
+        """
+        external_vault = VaultClient(
+            url=autounseal_details.address,
+            ca_cert_path=self._tls_manager.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
+        )
+        existing_token = self._get_juju_secret_field(self.AUTOUNSEAL_TOKEN_SECRET_LABEL, "token")
+        # If we don't already have a token, or if the existing token is invalid,
+        # authenticate with the AppRole details to generate a new token.
+        if not existing_token or not external_vault.authenticate(Token(existing_token)):
+            external_vault.authenticate(
+                AppRole(autounseal_details.role_id, autounseal_details.secret_id)
+            )
+            self._set_juju_secret(
+                self.AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": external_vault.token}
+            )
+        return external_vault.token
+
+    def _get_juju_secret_field(self, label: str, field: str) -> Optional[str]:
+        """Retrieve the latest revision of the secret content from Juju.
+
+        Args:
+            label: The label of the secret.
+            field: The field to retrieve from the secret.
+
+        Returns:
+            The value of the field is returned, or `None` if the field does not
+            exist.
+
+            If the secret does not exist, `None` is returned.
+        """
+        try:
+            juju_secret = self._model.get_secret(label=label)
+        except SecretNotFoundError:
+            return None
+        content = juju_secret.get_content(refresh=True)
+        return content.get(field)
+
+    def _set_juju_secret(
+        self, label: str, content: Dict[str, str], description: Optional[str] = None
+    ) -> None:
+        """Set the secret content at `label`, overwrite if it already exists.
+
+        Args:
+            label: The label of the secret.
+            content: The content of the secret.
+            description: The description of the secret.
+        """
+        try:
+            secret = self._model.get_secret(label=label)
+        except SecretNotFoundError:
+            self._model.app.add_secret(content, label=label, description=description)
+            return
+        secret.set_content(content)
