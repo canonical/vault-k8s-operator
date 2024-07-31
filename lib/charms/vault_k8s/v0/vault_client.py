@@ -560,34 +560,44 @@ path "{mount}/decrypt/{key_name}" {{
 """
 
 
-class VaultAutounsealManager:
-    """Encapsulates the auto-unseal functionality at a feature level.
+@dataclass
+class VaultAutounsealRelationDetails:
+    """Computes the auto-unseal related values for a relation.
 
-    This class provides the business logic for auto-unseal functionality in
-    Vault.
+    This class is used to compute the static details for a vault-autounseal
+    relation, such as the key name, policy name, and approle name. These values
+    are all based on the relation ID.
+
+    This class provides a central place to manage the naming conventions for
+    the auto-unseal functionality.
     """
 
-    @dataclass(frozen=True)
-    class _VaultAutounsealRelationDetails:
-        """Details of the auto-unseal relation."""
+    relation: Relation
 
-        relation: Relation
-        port: int = 8200
+    @property
+    def key_name(self) -> str:
+        """Return the key name for the relation."""
+        return str(self.relation.id)
 
-        @property
-        def key_name(self) -> str:
-            """Return the key name for the relation."""
-            return str(self.relation.id)
+    @property
+    def policy_name(self) -> str:
+        """Return the policy name for the relation."""
+        return f"charm-autounseal-{self.relation.id}"
 
-        @property
-        def policy_name(self) -> str:
-            """Return the policy name for the relation."""
-            return f"charm-autounseal-{self.relation.id}"
+    @property
+    def approle_name(self) -> str:
+        """Return the approle name for the relation."""
+        return f"charm-autounseal-{self.relation.id}"
 
-        @property
-        def approle_name(self) -> str:
-            """Return the approle name for the relation."""
-            return f"charm-autounseal-{self.relation.id}"
+
+class VaultAutounsealManager:
+    """Encapsulates the auto-unseal functionality.
+
+    This class provides the business logic for auto-unseal functionality in
+    Vault charms. It is opinionated, and aims to make the interface to enabling
+    and managing the feature as simple as possible. Flexibility is sacrificed
+    for simplicity.
+    """
 
     def __init__(
         self,
@@ -609,7 +619,7 @@ class VaultAutounsealManager:
         return str(binding.network.ingress_address)
 
     @property
-    def ca_cert(self) -> str:
+    def _ca_cert(self) -> str:
         """Return the CA certificate for the vault."""
         ca_cert = self._tls_manager.pull_tls_file_from_workload(File.CA)
         if not ca_cert:
@@ -638,19 +648,20 @@ class VaultAutounsealManager:
         for relation in outstanding_requests:
             self.create_credentials(relation)
 
-    @staticmethod
-    def _get_details(relation: Relation) -> _VaultAutounsealRelationDetails:
-        """Return the details of the auto-unseal relation."""
-        return VaultAutounsealManager._VaultAutounsealRelationDetails(relation)
-
     def _create_key(self, key_name) -> None:
-        """Create a new autounseal key."""
         response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
         logging.debug(f"Created a new autounseal key: {response}")
 
     def create_credentials(self, relation: Relation) -> tuple[str, str, str]:
-        """Create auto-unseal credentials for the given relation."""
-        relation_details = self._get_details(relation)
+        """Create auto-unseal credentials for the given relation.
+
+        Args:
+            relation: The relation to create the credentials for.
+
+        Returns:
+            A tuple containing the key name, role ID, and secret ID.
+        """
+        relation_details = VaultAutounsealRelationDetails(relation)
         self._create_key(relation_details.key_name)
         policy_content = AUTOUNSEAL_POLICY.format(
             mount=self.mount_path, key_name=relation_details.key_name
@@ -672,13 +683,21 @@ class VaultAutounsealManager:
             relation_details.key_name,
             role_id,
             secret_id,
-            self.ca_cert,
+            self._ca_cert,
         )
         return relation_details.key_name, role_id, secret_id
 
     def delete_credentials(self, relation: Relation) -> None:
-        """Destroy the approle and transit key for the given relation."""
-        relation_details = self._get_details(relation)
+        """Destroy the approle and policy for the given relation.
+
+        The transit key is not deleted, as we don't yet have a path for
+        disabling auto-unseal, and removing the key would prevent us from ever
+        recovering the vault if a relation is removed.
+
+        Args:
+            relation: The relation to delete the credentials for.
+        """
+        relation_details = VaultAutounsealRelationDetails(relation)
         role_name = relation_details.approle_name
         self._client.delete_role(role_name)
         self._client.delete_policy(relation_details.policy_name)
