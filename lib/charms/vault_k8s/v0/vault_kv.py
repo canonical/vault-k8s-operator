@@ -94,7 +94,7 @@ class ExampleRequirerCharm(CharmBase):
         # Update status might not be the best place
         binding = self.model.get_binding("vault-kv")
         if binding is not None:
-            egress_subnet = str(binding.network.interfaces[0].subnet)
+            egress_subnet = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
             relation = self.model.get_relation(relation_name="vault-kv")
             self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
