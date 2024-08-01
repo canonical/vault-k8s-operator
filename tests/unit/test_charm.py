@@ -200,10 +200,10 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader()
         rel_id = self.harness.add_relation(relation_name, app_name)
         unit_name = app_name + "/0"
-        egress_subnet = "10.20.20.20/32"
+        egress_subnet = ["10.20.20.20/32"]
         self.harness.add_relation_unit(rel_id, unit_name)
         self.harness.update_relation_data(
-            rel_id, unit_name, {"egress_subnet": egress_subnet, "nonce": "0"}
+            rel_id, unit_name, {"egress_subnet": json.dumps(egress_subnet), "nonce": "0"}
         )
 
         return (rel_id, egress_subnet)
@@ -1396,7 +1396,7 @@ class TestCharm(unittest.TestCase):
         event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
         event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
-        event.egress_subnet = "2.2.2.0/24"
+        event.egress_subnet = ["2.2.2.0/24"]
         event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         self.mock_vault.enable_secrets_engine.assert_called_once_with(
@@ -1432,7 +1432,7 @@ class TestCharm(unittest.TestCase):
         event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
         event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
-        event.egress_subnet = "2.2.2.0/24"
+        event.egress_subnet = ["2.2.2.0/24"]
         event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         set_vault_url.assert_called()
@@ -1458,7 +1458,7 @@ class TestCharm(unittest.TestCase):
             secret_id="whatever secret id",
         )
         rel_id, egress_subnet = self.setup_vault_kv_relation()
-        self.mock_vault.read_role_secret.return_value = {"cidr_list": [egress_subnet]}
+        self.mock_vault.read_role_secret.return_value = {"cidr_list": egress_subnet}
 
         mount_suffix = "whatever-suffix"
         self.harness.update_relation_data(
@@ -1468,7 +1468,7 @@ class TestCharm(unittest.TestCase):
 
         with patch("ops.Secret.set_content") as set_content:
             self.harness.update_relation_data(
-                rel_id, unit_name, {"egress_subnet": "10.20.20.240/32"}
+                rel_id, unit_name, {"egress_subnet": json.dumps(["10.20.20.240/32"])}
             )
             assert set_content.call_count == 1
 
@@ -1499,7 +1499,7 @@ class TestCharm(unittest.TestCase):
         event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
         event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
         event.mount_suffix = "suffix"
-        event.egress_subnet = "2.2.2.0/24"
+        event.egress_subnet = ["2.2.2.0/24"]
         event.nonce = "123123"
         self.harness.charm._on_new_vault_kv_client_attached(event)
         self.mock_vault.enable_secrets_engine.assert_called_with(

@@ -617,7 +617,7 @@ class VaultCharm(CharmBase):
         app_name: str,
         unit_name: str,
         mount_suffix: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
         nonce: str,
     ):
         if not self.unit.is_leader():
@@ -934,7 +934,7 @@ class VaultCharm(CharmBase):
         relation: Relation,
         mount: str,
         ca_certificate: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
     ) -> None:
         """Set relation data for vault-kv.
 
@@ -958,7 +958,7 @@ class VaultCharm(CharmBase):
         unit_name: str,
         mount: str,
         nonce: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
     ):
         """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
@@ -966,7 +966,7 @@ class VaultCharm(CharmBase):
         role_id = vault.configure_approle(
             role_name,
             policies=[policy_name],
-            cidrs=[egress_subnet],
+            cidrs=egress_subnet,
             token_ttl="1h",
             token_max_ttl="1h",
         )
@@ -985,7 +985,7 @@ class VaultCharm(CharmBase):
         relation: Relation,
         role_id: str,
         role_name: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
     ) -> Secret:
         """Create or update a KV secret for a unit.
 
@@ -1009,11 +1009,11 @@ class VaultCharm(CharmBase):
         relation: Relation,
         role_id: str,
         role_name: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
         label: str,
     ) -> Secret:
         """Create a vault kv secret, store its id in the peer relation and return it."""
-        role_secret_id = vault.generate_role_secret_id(role_name, [egress_subnet])
+        role_secret_id = vault.generate_role_secret_id(role_name, egress_subnet)
         secret = self.app.add_secret(
             {"role-id": role_id, "role-secret-id": role_secret_id},
             label=label,
@@ -1029,7 +1029,7 @@ class VaultCharm(CharmBase):
         vault: Vault,
         relation: Relation,
         role_name: str,
-        egress_subnet: str,
+        egress_subnet: List[str],
         label: str,
         secret_id: str,
     ) -> Secret:
@@ -1039,9 +1039,9 @@ class VaultCharm(CharmBase):
         credentials = secret.get_content(refresh=True)
         role_secret_id_data = vault.read_role_secret(role_name, credentials["role-secret-id"])
         # if unit subnet is already in cidr_list, skip
-        if egress_subnet in role_secret_id_data["cidr_list"]:
+        if sorted(egress_subnet) == sorted(role_secret_id_data["cidr_list"]):
             return secret
-        credentials["role-secret-id"] = vault.generate_role_secret_id(role_name, [egress_subnet])
+        credentials["role-secret-id"] = vault.generate_role_secret_id(role_name, egress_subnet)
         secret.set_content(credentials)
         return secret
 

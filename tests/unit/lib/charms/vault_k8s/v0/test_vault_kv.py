@@ -107,7 +107,7 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": "abcd", "egress_subnet": "10.0.0.1/32"},
+            key_values={"nonce": "abcd", "egress_subnet": json.dumps(["10.0.0.1/32"])},
         )
         args, _ = _on_new_vault_kv_client_attached.call_args
         event = args[0]
@@ -213,12 +213,12 @@ class TestVaultKvProvides(unittest.TestCase):
     ):
         suffix = "dummy"
         nonce = "abcd"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnet = ["10.0.0.1/32"]
         remote_app, remote_unit, _, rel_id = self.setup_relation()
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": nonce, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce, "egress_subnet": json.dumps(egress_subnet)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -244,7 +244,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnet = ["10.0.0.1/32"]
         remote_app, remote_unit_1, _, rel_id = self.setup_relation()
         remote_unit_2 = remote_app + "/1"
         self.harness.add_relation_unit(
@@ -254,12 +254,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce_1, "egress_subnet": json.dumps(egress_subnet)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce_2, "egress_subnet": json.dumps(egress_subnet)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -290,8 +290,8 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnet_1 = "10.0.0.1/32"
-        egress_subnet_2 = "10.0.0.2/32"
+        egress_subnet_1 = ["10.0.0.1/32"]
+        egress_subnet_2 = ["10.0.0.2/32"]
         remote_app_1, remote_unit_1, _, rel_id_1 = self.setup_relation()
         remote_app_2, remote_unit_2, _, rel_id_2 = self.setup_relation(
             remote_app="vault-kv-requires-b"
@@ -299,12 +299,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id_1,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": egress_subnet_1},
+            key_values={"nonce": nonce_1, "egress_subnet": json.dumps(egress_subnet_1)},
         )
         self.harness.update_relation_data(
             rel_id_2,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": egress_subnet_2},
+            key_values={"nonce": nonce_2, "egress_subnet": json.dumps(egress_subnet_2)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id_1,
@@ -342,7 +342,7 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": nonce, "egress_subnet": "10.0.0.1/32"},
+            key_values={"nonce": nonce, "egress_subnet": json.dumps(["10.0.0.1/32"])},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -368,7 +368,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce1 = "abcd"
         nonce2 = "efgh"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnet = ["10.0.0.1/32"]
         remote_app, remote_unit_1, _, rel_id = self.setup_relation()
         remote_unit_2 = remote_app + "/1"
         self.harness.add_relation_unit(
@@ -378,12 +378,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce1, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce1, "egress_subnet": json.dumps(egress_subnet)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce2, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce2, "egress_subnet": json.dumps(egress_subnet)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
