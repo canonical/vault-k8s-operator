@@ -54,7 +54,8 @@ class ExampleRequirerCharm(CharmBase):
 
     def _on_connected(self, event: vault_kv.VaultKvConnectedEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
-        egress_subnet = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+        egress_subnets = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+        egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
         self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
     def _on_ready(self, event: vault_kv.VaultKvReadyEvent):
@@ -95,6 +96,7 @@ class ExampleRequirerCharm(CharmBase):
         binding = self.model.get_binding("vault-kv")
         if binding is not None:
             egress_subnet = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+            egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
             relation = self.model.get_relation(relation_name="vault-kv")
             self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
 
@@ -164,7 +166,7 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
-    egress_subnet: str = Field(description="The CIDR allowed by the role.")
+    egress_subnets: str = Field(description="The CIDR allowed by the role.")
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."
@@ -184,7 +186,7 @@ class AppVaultKvRequirerSchema(BaseModel):
 class UnitVaultKvRequirerSchema(BaseModel):
     """Unit schema of the requirer side of the vault-kv interface."""
 
-    egress_subnet: str = Field(description="Egress subnet to use, in CIDR notation.")
+    egress_subnets: str = Field(description="Egress subnet to use, in CIDR notation.")
     nonce: str = Field(
         description="Uniquely identifying value for this unit. `secrets.token_hex(16)` is recommended."
     )
@@ -211,7 +213,7 @@ class KVRequest:
     app_name: str
     unit_name: str
     mount_suffix: str
-    egress_subnet: List[str]
+    egress_subnets: List[str]
     nonce: str
 
 
@@ -254,7 +256,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         app_name: str,
         unit_name: str,
         mount_suffix: str,
-        egress_subnet: List[str],
+        egress_subnets: List[str],
         nonce: str,
     ):
         super().__init__(handle)
@@ -262,7 +264,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         self.app_name = app_name
         self.unit_name = unit_name
         self.mount_suffix = mount_suffix
-        self.egress_subnet = egress_subnet
+        self.egress_subnets = egress_subnets
         self.nonce = nonce
 
     def snapshot(self) -> dict:
@@ -272,7 +274,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
             "app_name": self.app_name,
             "unit_name": self.unit_name,
             "mount_suffix": self.mount_suffix,
-            "egress_subnet": self.egress_subnet,
+            "egress_subnets": self.egress_subnets,
             "nonce": self.nonce,
         }
 
@@ -283,7 +285,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         self.app_name = snapshot["app_name"]
         self.unit_name = snapshot["unit_name"]
         self.mount_suffix = snapshot["mount_suffix"]
-        self.egress_subnet = snapshot["egress_subnet"]
+        self.egress_subnets = snapshot["egress_subnets"]
         self.nonce = snapshot["nonce"]
 
 
@@ -335,7 +337,7 @@ class VaultKvProvides(ops.Object):
                 app_name=event.app.name,
                 unit_name=unit.name,
                 mount_suffix=event.relation.data[event.app]["mount_suffix"],
-                egress_subnet=json.loads(event.relation.data[unit]["egress_subnet"]),
+                egress_subnets=json.loads(event.relation.data[unit]["egress_subnets"]),
                 nonce=event.relation.data[unit]["nonce"],
             )
 
@@ -369,11 +371,11 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["mount"] = mount
 
-    def set_egress_subnet(self, relation: ops.Relation, egress_subnet: List[str]):
-        """Set the egress_subnet on the relation."""
+    def set_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
+        """Set the egress_subnets on the relation."""
         if not self.charm.unit.is_leader():
             return
-        relation.data[self.charm.app]["egress_subnet"] = json.dumps(egress_subnet)
+        relation.data[self.charm.app]["egress_subnets"] = json.dumps(egress_subnets)
 
     def set_unit_credentials(
         self,
@@ -454,7 +456,7 @@ class VaultKvProvides(ops.Object):
                         app_name=relation.app.name,
                         unit_name=unit.name,
                         mount_suffix=app_data["mount_suffix"],
-                        egress_subnet=json.loads(unit_data["egress_subnet"]),
+                        egress_subnets=json.loads(unit_data["egress_subnets"]),
                         nonce=unit_data["nonce"],
                     )
                 )
@@ -567,9 +569,9 @@ class VaultKvRequires(ops.Object):
         """Set the nonce on the relation."""
         relation.data[self.charm.unit]["nonce"] = nonce
 
-    def _set_unit_egress_subnet(self, relation: ops.Relation, egress_subnet: List[str]):
-        """Set the egress_subnet on the relation."""
-        relation.data[self.charm.unit]["egress_subnet"] = json.dumps(egress_subnet)
+    def _set_unit_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
+        """Set the egress_subnets on the relation."""
+        relation.data[self.charm.unit]["egress_subnets"] = json.dumps(egress_subnets)
 
     def _handle_relation(self, event: ops.EventBase):
         """Run when a new unit joins the relation or when the address of the unit changes.
@@ -619,7 +621,7 @@ class VaultKvRequires(ops.Object):
         """
         if isinstance(egress_subnet, str):
             egress_subnet = [egress_subnet]
-        self._set_unit_egress_subnet(relation, egress_subnet)
+        self._set_unit_egress_subnets(relation, egress_subnet)
         self._set_unit_nonce(relation, nonce)
 
     def get_vault_url(self, relation: ops.Relation) -> Optional[str]:

@@ -60,8 +60,9 @@ class VaultKVRequirerCharm(CharmBase):
         if not binding:
             logger.error("Binding not found")
             return
-        egress_subnet = [str(subnet) for subnet in binding.network.egress_subnets]
-        self.vault_kv.request_credentials(relation, egress_subnet, self.get_nonce())
+        egress_subnets = [str(subnet) for subnet in binding.network.egress_subnets]
+        egress_subnets.append(str(binding.network.interfaces[0].subnet))
+        self.vault_kv.request_credentials(relation, egress_subnets, self.get_nonce())
 
     def _on_kv_ready(self, event: VaultKvReadyEvent):
         """Store the Vault KV credentials in a secret."""
