@@ -56,7 +56,7 @@ class ExampleRequirerCharm(CharmBase):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
         egress_subnets = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
         egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
-        self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
+        self.interface.request_credentials(relation, egress_subnets, self.get_nonce())
 
     def _on_ready(self, event: vault_kv.VaultKvReadyEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
@@ -95,10 +95,10 @@ class ExampleRequirerCharm(CharmBase):
         # Update status might not be the best place
         binding = self.model.get_binding("vault-kv")
         if binding is not None:
-            egress_subnet = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+            egress_subnets = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
             egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
             relation = self.model.get_relation(relation_name="vault-kv")
-            self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
+            self.interface.request_credentials(relation, egress_subnets, self.get_nonce())
 
     def get_nonce(self):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
@@ -186,7 +186,7 @@ class AppVaultKvRequirerSchema(BaseModel):
 class UnitVaultKvRequirerSchema(BaseModel):
     """Unit schema of the requirer side of the vault-kv interface."""
 
-    egress_subnets: str = Field(description="Egress subnet to use, in CIDR notation.")
+    egress_subnets: str = Field(description="Egress subnets to use, in CIDR notation.")
     nonce: str = Field(
         description="Uniquely identifying value for this unit. `secrets.token_hex(16)` is recommended."
     )
@@ -616,7 +616,7 @@ class VaultKvRequires(ops.Object):
         Generated secret ids are tied to the unit egress_subnet, so if the egress_subnet
         changes a new secret id must be generated.
 
-        A change in egress_subnet can happen when the pod is rescheduled to a different
+        A change in egress_subnets can happen when the pod is rescheduled to a different
         node by the underlying substrate without a change from Juju.
         """
         if isinstance(egress_subnet, str):
