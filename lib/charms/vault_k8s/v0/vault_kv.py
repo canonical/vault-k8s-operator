@@ -166,7 +166,7 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
-    egress_subnets: str = Field(description="The CIDR allowed by the role.")
+    egress_subnet: str = Field(description="The CIDRs allowed by the role separated by commas.")
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."
@@ -186,7 +186,9 @@ class AppVaultKvRequirerSchema(BaseModel):
 class UnitVaultKvRequirerSchema(BaseModel):
     """Unit schema of the requirer side of the vault-kv interface."""
 
-    egress_subnets: str = Field(description="Egress subnets to use, in CIDR notation.")
+    egress_subnet: str = Field(
+        description="Egress subnets to use separated by commas, in CIDR notation."
+    )
     nonce: str = Field(
         description="Uniquely identifying value for this unit. `secrets.token_hex(16)` is recommended."
     )
@@ -337,7 +339,7 @@ class VaultKvProvides(ops.Object):
                 app_name=event.app.name,
                 unit_name=unit.name,
                 mount_suffix=event.relation.data[event.app]["mount_suffix"],
-                egress_subnets=json.loads(event.relation.data[unit]["egress_subnets"]),
+                egress_subnets=event.relation.data[unit]["egress_subnet"].split(","),
                 nonce=event.relation.data[unit]["nonce"],
             )
 
@@ -375,7 +377,7 @@ class VaultKvProvides(ops.Object):
         """Set the egress_subnets on the relation."""
         if not self.charm.unit.is_leader():
             return
-        relation.data[self.charm.app]["egress_subnets"] = json.dumps(egress_subnets)
+        relation.data[self.charm.app]["egress_subnet"] = ",".join(egress_subnets)
 
     def set_unit_credentials(
         self,
@@ -456,7 +458,7 @@ class VaultKvProvides(ops.Object):
                         app_name=relation.app.name,
                         unit_name=unit.name,
                         mount_suffix=app_data["mount_suffix"],
-                        egress_subnets=json.loads(unit_data["egress_subnets"]),
+                        egress_subnets=unit_data["egress_subnet"].split(","),
                         nonce=unit_data["nonce"],
                     )
                 )
@@ -571,7 +573,7 @@ class VaultKvRequires(ops.Object):
 
     def _set_unit_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
         """Set the egress_subnets on the relation."""
-        relation.data[self.charm.unit]["egress_subnets"] = json.dumps(egress_subnets)
+        relation.data[self.charm.unit]["egress_subnet"] = ",".join(egress_subnets)
 
     def _handle_relation(self, event: ops.EventBase):
         """Run when a new unit joins the relation or when the address of the unit changes.

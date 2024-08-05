@@ -107,7 +107,7 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": "abcd", "egress_subnets": json.dumps(["10.0.0.1/32"])},
+            key_values={"nonce": "abcd", "egress_subnet": "10.0.0.1/32"},
         )
         args, _ = _on_new_vault_kv_client_attached.call_args
         event = args[0]
@@ -218,7 +218,7 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": nonce, "egress_subnets": json.dumps(egress_subnets)},
+            key_values={"nonce": nonce, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -254,12 +254,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnets": json.dumps(egress_subnets)},
+            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnets": json.dumps(egress_subnets)},
+            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -290,7 +290,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnets_1 = ["10.0.0.1/32"]
+        egress_subnets_1 = ["10.0.0.1/32", "10.0.1.1/32"]
         egress_subnets_2 = ["10.0.0.2/32"]
         remote_app_1, remote_unit_1, _, rel_id_1 = self.setup_relation()
         remote_app_2, remote_unit_2, _, rel_id_2 = self.setup_relation(
@@ -299,12 +299,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id_1,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnets": json.dumps(egress_subnets_1)},
+            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets_1)},
         )
         self.harness.update_relation_data(
             rel_id_2,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnets": json.dumps(egress_subnets_2)},
+            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets_2)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id_1,
@@ -342,7 +342,7 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": nonce, "egress_subnets": json.dumps(["10.0.0.1/32"])},
+            key_values={"nonce": nonce, "egress_subnet": "10.0.0.1/32"},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -378,12 +378,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce1, "egress_subnets": json.dumps(egress_subnets)},
+            key_values={"nonce": nonce1, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce2, "egress_subnets": json.dumps(egress_subnets)},
+            key_values={"nonce": nonce2, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -488,7 +488,7 @@ class TestVaultKvRequires(unittest.TestCase):
                 "vault_url": "https://vault.example.com",
                 "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
-                "egress_subnets": "1.1.1.1",
+                "egress_subnet": "1.1.1.1",
                 "credentials": json.dumps({"abcd": "dummy"}),
             },
         )

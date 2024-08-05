@@ -203,7 +203,7 @@ class TestCharm(unittest.TestCase):
         egress_subnets = ["10.20.20.20/32"]
         self.harness.add_relation_unit(rel_id, unit_name)
         self.harness.update_relation_data(
-            rel_id, unit_name, {"egress_subnets": json.dumps(egress_subnets), "nonce": "0"}
+            rel_id, unit_name, {"egress_subnet": ",".join(egress_subnets), "nonce": "0"}
         )
 
         return (rel_id, egress_subnets)
@@ -1468,7 +1468,7 @@ class TestCharm(unittest.TestCase):
 
         with patch("ops.Secret.set_content") as set_content:
             self.harness.update_relation_data(
-                rel_id, unit_name, {"egress_subnets": json.dumps(["10.20.20.240/32"])}
+                rel_id, unit_name, {"egress_subnet": "10.20.20.240/32"}
             )
             assert set_content.call_count == 1
 
