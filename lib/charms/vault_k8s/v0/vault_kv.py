@@ -219,6 +219,18 @@ class KVRequest:
     nonce: str
 
 
+def get_egress_subnets_list_from_relation_data(relation_databag: Mapping[str, str]) -> List[str]:
+    """Return the egress_subnet as a list.
+
+    This function converts the string with values separated by commas to a list.
+
+    Args:
+        relation_databag: the relation databag of the unit or the app.
+    """
+    print(type(relation_databag))
+    return [subnet.strip() for subnet in relation_databag.get("egress_subnet", "").split(",")]
+
+
 def is_requirer_data_valid(app_data: Mapping[str, str], unit_data: Mapping[str, str]) -> bool:
     """Return whether the requirer data is valid."""
     try:
@@ -339,7 +351,9 @@ class VaultKvProvides(ops.Object):
                 app_name=event.app.name,
                 unit_name=unit.name,
                 mount_suffix=event.relation.data[event.app]["mount_suffix"],
-                egress_subnets=event.relation.data[unit]["egress_subnet"].split(","),
+                egress_subnets=get_egress_subnets_list_from_relation_data(
+                    event.relation.data[unit]
+                ),
                 nonce=event.relation.data[unit]["nonce"],
             )
 
@@ -458,7 +472,7 @@ class VaultKvProvides(ops.Object):
                         app_name=relation.app.name,
                         unit_name=unit.name,
                         mount_suffix=app_data["mount_suffix"],
-                        egress_subnets=unit_data["egress_subnet"].split(","),
+                        egress_subnets=get_egress_subnets_list_from_relation_data(unit_data),
                         nonce=unit_data["nonce"],
                     )
                 )

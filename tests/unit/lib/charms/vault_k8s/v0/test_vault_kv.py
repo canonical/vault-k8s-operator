@@ -15,6 +15,7 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvProvides,
     VaultKvReadyEvent,
     VaultKvRequires,
+    get_egress_subnets_list_from_relation_data,
 )
 from ops import testing
 from ops.charm import CharmBase
@@ -504,3 +505,14 @@ class TestVaultKvRequires(unittest.TestCase):
     ):
         self.setup_relation()
         _on_ready.assert_not_called()
+
+    def test_given_egress_subnets_in_relation_databag_when_get_egress_subnets_list_from_relation_data_then_list_is_returned(  # noqa: E501
+        self,
+    ):
+        relation_datbage_dict = {
+            "nonce": "abcd",
+            "egress_subnet": "10.0.0.1/32, 10.0.1.1/32,10.0.2.1/32",
+        }
+        assert sorted(get_egress_subnets_list_from_relation_data(relation_datbage_dict)) == sorted(
+            ["10.0.0.1/32", "10.0.1.1/32", "10.0.2.1/32"]
+        )
