@@ -227,7 +227,6 @@ def get_egress_subnets_list_from_relation_data(relation_databag: Mapping[str, st
     Args:
         relation_databag: the relation databag of the unit or the app.
     """
-    print(type(relation_databag))
     return [subnet.strip() for subnet in relation_databag.get("egress_subnet", "").split(",")]
 
 
