@@ -54,8 +54,9 @@ class ExampleRequirerCharm(CharmBase):
 
     def _on_connected(self, event: vault_kv.VaultKvConnectedEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
-        egress_subnet = str(self.model.get_binding(relation).network.interfaces[0].subnet)
-        self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
+        egress_subnets = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+        egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
+        self.interface.request_credentials(relation, egress_subnets, self.get_nonce())
 
     def _on_ready(self, event: vault_kv.VaultKvReadyEvent):
         relation = self.model.get_relation(event.relation_name, event.relation_id)
@@ -94,9 +95,10 @@ class ExampleRequirerCharm(CharmBase):
         # Update status might not be the best place
         binding = self.model.get_binding("vault-kv")
         if binding is not None:
-            egress_subnet = str(binding.network.interfaces[0].subnet)
+            egress_subnets = [str(subnet) for subnet in self.model.get_binding(relation).network.egress_subnets][0].subnet]
+            egress_subnets.append(str(self.model.get_binding(relation).network.interfaces[0].subnet))
             relation = self.model.get_relation(relation_name="vault-kv")
-            self.interface.request_credentials(relation, egress_subnet, self.get_nonce())
+            self.interface.request_credentials(relation, egress_subnets, self.get_nonce())
 
     def get_nonce(self):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
@@ -133,7 +135,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 10
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -164,7 +166,7 @@ class VaultKvProviderSchema(BaseModel):
     ca_certificate: str = Field(
         description="The CA certificate to use when validating the Vault server's certificate."
     )
-    egress_subnet: str = Field(description="The CIDR allowed by the role.")
+    egress_subnet: str = Field(description="The CIDRs allowed by the role separated by commas.")
     credentials: Json[Mapping[str, str]] = Field(
         description=(
             "Mapping of unit name and credentials for that unit."
@@ -184,7 +186,9 @@ class AppVaultKvRequirerSchema(BaseModel):
 class UnitVaultKvRequirerSchema(BaseModel):
     """Unit schema of the requirer side of the vault-kv interface."""
 
-    egress_subnet: str = Field(description="Egress subnet to use, in CIDR notation.")
+    egress_subnet: str = Field(
+        description="Egress subnets to use separated by commas, in CIDR notation."
+    )
     nonce: str = Field(
         description="Uniquely identifying value for this unit. `secrets.token_hex(16)` is recommended."
     )
@@ -211,8 +215,19 @@ class KVRequest:
     app_name: str
     unit_name: str
     mount_suffix: str
-    egress_subnet: str
+    egress_subnets: List[str]
     nonce: str
+
+
+def get_egress_subnets_list_from_relation_data(relation_databag: Mapping[str, str]) -> List[str]:
+    """Return the egress_subnet as a list.
+
+    This function converts the string with values separated by commas to a list.
+
+    Args:
+        relation_databag: the relation databag of the unit or the app.
+    """
+    return [subnet.strip() for subnet in relation_databag.get("egress_subnet", "").split(",")]
 
 
 def is_requirer_data_valid(app_data: Mapping[str, str], unit_data: Mapping[str, str]) -> bool:
@@ -238,6 +253,12 @@ def is_provider_data_valid(data: Mapping[str, str]) -> bool:
         return False
 
 
+class VaultKvGoneAwayEvent(ops.EventBase):
+    """VaultKvGoneAwayEvent Event."""
+
+    pass
+
+
 class NewVaultKvClientAttachedEvent(ops.EventBase):
     """New vault kv client attached event."""
 
@@ -248,7 +269,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         app_name: str,
         unit_name: str,
         mount_suffix: str,
-        egress_subnet: str,
+        egress_subnets: List[str],
         nonce: str,
     ):
         super().__init__(handle)
@@ -256,7 +277,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         self.app_name = app_name
         self.unit_name = unit_name
         self.mount_suffix = mount_suffix
-        self.egress_subnet = egress_subnet
+        self.egress_subnets = egress_subnets
         self.nonce = nonce
 
     def snapshot(self) -> dict:
@@ -266,7 +287,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
             "app_name": self.app_name,
             "unit_name": self.unit_name,
             "mount_suffix": self.mount_suffix,
-            "egress_subnet": self.egress_subnet,
+            "egress_subnets": self.egress_subnets,
             "nonce": self.nonce,
         }
 
@@ -277,7 +298,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         self.app_name = snapshot["app_name"]
         self.unit_name = snapshot["unit_name"]
         self.mount_suffix = snapshot["mount_suffix"]
-        self.egress_subnet = snapshot["egress_subnet"]
+        self.egress_subnets = snapshot["egress_subnets"]
         self.nonce = snapshot["nonce"]
 
 
@@ -285,6 +306,7 @@ class VaultKvProviderEvents(ops.ObjectEvents):
     """List of events that the Vault Kv provider charm can leverage."""
 
     new_vault_kv_client_attached = ops.EventSource(NewVaultKvClientAttachedEvent)
+    gone_away = ops.EventSource(VaultKvGoneAwayEvent)
 
 
 class VaultKvProvides(ops.Object):
@@ -303,6 +325,10 @@ class VaultKvProvides(ops.Object):
         self.framework.observe(
             self.charm.on[relation_name].relation_changed,
             self._on_relation_changed,
+        )
+        self.framework.observe(
+            self.charm.on[relation_name].relation_broken,
+            self._on_vault_kv_relation_broken,
         )
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent):
@@ -324,9 +350,15 @@ class VaultKvProvides(ops.Object):
                 app_name=event.app.name,
                 unit_name=unit.name,
                 mount_suffix=event.relation.data[event.app]["mount_suffix"],
-                egress_subnet=event.relation.data[unit]["egress_subnet"],
+                egress_subnets=get_egress_subnets_list_from_relation_data(
+                    event.relation.data[unit]
+                ),
                 nonce=event.relation.data[unit]["nonce"],
             )
+
+    def _on_vault_kv_relation_broken(self, event: ops.RelationBrokenEvent):
+        """Handle relation broken."""
+        self.on.gone_away.emit()
 
     def set_vault_url(self, relation: ops.Relation, vault_url: str):
         """Set the vault_url on the relation."""
@@ -354,11 +386,11 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["mount"] = mount
 
-    def set_egress_subnet(self, relation: ops.Relation, egress_subnet: str):
-        """Set the egress_subnet on the relation."""
+    def set_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
+        """Set the egress_subnets on the relation."""
         if not self.charm.unit.is_leader():
             return
-        relation.data[self.charm.app]["egress_subnet"] = egress_subnet
+        relation.data[self.charm.app]["egress_subnet"] = ",".join(egress_subnets)
 
     def set_unit_credentials(
         self,
@@ -439,7 +471,7 @@ class VaultKvProvides(ops.Object):
                         app_name=relation.app.name,
                         unit_name=unit.name,
                         mount_suffix=app_data["mount_suffix"],
-                        egress_subnet=unit_data["egress_subnet"],
+                        egress_subnets=get_egress_subnets_list_from_relation_data(unit_data),
                         nonce=unit_data["nonce"],
                     )
                 )
@@ -508,12 +540,6 @@ class VaultKvReadyEvent(ops.EventBase):
         self.relation_name = snapshot["relation_name"]
 
 
-class VaultKvGoneAwayEvent(ops.EventBase):
-    """VaultKvGoneAwayEvent Event."""
-
-    pass
-
-
 class VaultKvRequireEvents(ops.ObjectEvents):
     """List of events that the Vault Kv requirer charm can leverage."""
 
@@ -558,9 +584,9 @@ class VaultKvRequires(ops.Object):
         """Set the nonce on the relation."""
         relation.data[self.charm.unit]["nonce"] = nonce
 
-    def _set_unit_egress_subnet(self, relation: ops.Relation, egress_subnet: str):
-        """Set the egress_subnet on the relation."""
-        relation.data[self.charm.unit]["egress_subnet"] = egress_subnet
+    def _set_unit_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
+        """Set the egress_subnets on the relation."""
+        relation.data[self.charm.unit]["egress_subnet"] = ",".join(egress_subnets)
 
     def _handle_relation(self, event: ops.EventBase):
         """Run when a new unit joins the relation or when the address of the unit changes.
@@ -597,16 +623,20 @@ class VaultKvRequires(ops.Object):
         """Handle relation broken."""
         self.on.gone_away.emit()
 
-    def request_credentials(self, relation: ops.Relation, egress_subnet: str, nonce: str) -> None:
+    def request_credentials(
+        self, relation: ops.Relation, egress_subnet: Union[List[str], str], nonce: str
+    ) -> None:
         """Request credentials from the vault-kv relation.
 
         Generated secret ids are tied to the unit egress_subnet, so if the egress_subnet
         changes a new secret id must be generated.
 
-        A change in egress_subnet can happen when the pod is rescheduled to a different
+        A change in egress_subnets can happen when the pod is rescheduled to a different
         node by the underlying substrate without a change from Juju.
         """
-        self._set_unit_egress_subnet(relation, egress_subnet)
+        if isinstance(egress_subnet, str):
+            egress_subnet = [egress_subnet]
+        self._set_unit_egress_subnets(relation, egress_subnet)
         self._set_unit_nonce(relation, nonce)
 
     def get_vault_url(self, relation: ops.Relation) -> Optional[str]:

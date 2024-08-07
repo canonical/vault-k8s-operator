@@ -15,6 +15,7 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvProvides,
     VaultKvReadyEvent,
     VaultKvRequires,
+    get_egress_subnets_list_from_relation_data,
 )
 from ops import testing
 from ops.charm import CharmBase
@@ -213,12 +214,12 @@ class TestVaultKvProvides(unittest.TestCase):
     ):
         suffix = "dummy"
         nonce = "abcd"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnets = ["10.0.0.1/32"]
         remote_app, remote_unit, _, rel_id = self.setup_relation()
         self.harness.update_relation_data(
             rel_id,
             remote_unit,
-            key_values={"nonce": nonce, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -234,7 +235,7 @@ class TestVaultKvProvides(unittest.TestCase):
             app_name=remote_app,
             unit_name=remote_unit,
             mount_suffix=suffix,
-            egress_subnet=egress_subnet,
+            egress_subnets=egress_subnets,
             nonce=nonce,
         )
 
@@ -244,7 +245,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnets = ["10.0.0.1/32"]
         remote_app, remote_unit_1, _, rel_id = self.setup_relation()
         remote_unit_2 = remote_app + "/1"
         self.harness.add_relation_unit(
@@ -254,12 +255,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -280,7 +281,7 @@ class TestVaultKvProvides(unittest.TestCase):
             app_name=remote_app,
             unit_name=remote_unit_2,
             mount_suffix=suffix,
-            egress_subnet=egress_subnet,
+            egress_subnets=egress_subnets,
             nonce=nonce_2,
         )
 
@@ -290,8 +291,8 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnet_1 = "10.0.0.1/32"
-        egress_subnet_2 = "10.0.0.2/32"
+        egress_subnets_1 = ["10.0.0.1/32", "10.0.1.1/32"]
+        egress_subnets_2 = ["10.0.0.2/32"]
         remote_app_1, remote_unit_1, _, rel_id_1 = self.setup_relation()
         remote_app_2, remote_unit_2, _, rel_id_2 = self.setup_relation(
             remote_app="vault-kv-requires-b"
@@ -299,12 +300,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id_1,
             remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": egress_subnet_1},
+            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets_1)},
         )
         self.harness.update_relation_data(
             rel_id_2,
             remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": egress_subnet_2},
+            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets_2)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id_1,
@@ -330,7 +331,7 @@ class TestVaultKvProvides(unittest.TestCase):
             app_name=remote_app_2,
             unit_name=remote_unit_2,
             mount_suffix=suffix + "b",
-            egress_subnet=egress_subnet_2,
+            egress_subnets=egress_subnets_2,
             nonce=nonce_2,
         )
 
@@ -368,7 +369,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce1 = "abcd"
         nonce2 = "efgh"
-        egress_subnet = "10.0.0.1/32"
+        egress_subnets = ["10.0.0.1/32"]
         remote_app, remote_unit_1, _, rel_id = self.setup_relation()
         remote_unit_2 = remote_app + "/1"
         self.harness.add_relation_unit(
@@ -378,12 +379,12 @@ class TestVaultKvProvides(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             remote_unit_1,
-            key_values={"nonce": nonce1, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce1, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             rel_id,
             remote_unit_2,
-            key_values={"nonce": nonce2, "egress_subnet": egress_subnet},
+            key_values={"nonce": nonce2, "egress_subnet": ",".join(egress_subnets)},
         )
         self.harness.update_relation_data(
             relation_id=rel_id,
@@ -399,7 +400,7 @@ class TestVaultKvProvides(unittest.TestCase):
             app_name=remote_app,
             unit_name=remote_unit_1,
             mount_suffix=suffix,
-            egress_subnet=egress_subnet,
+            egress_subnets=egress_subnets,
             nonce=nonce1,
         )
         expected_kv_request_2 = KVRequest(
@@ -407,7 +408,7 @@ class TestVaultKvProvides(unittest.TestCase):
             app_name=remote_app,
             unit_name=remote_unit_2,
             mount_suffix=suffix,
-            egress_subnet=egress_subnet,
+            egress_subnets=egress_subnets,
             nonce=nonce2,
         )
         assert expected_kv_request_1 in kv_requests
@@ -504,3 +505,14 @@ class TestVaultKvRequires(unittest.TestCase):
     ):
         self.setup_relation()
         _on_ready.assert_not_called()
+
+    def test_given_egress_subnets_in_relation_databag_when_get_egress_subnets_list_from_relation_data_then_list_is_returned(  # noqa: E501
+        self,
+    ):
+        relation_datbage_dict = {
+            "nonce": "abcd",
+            "egress_subnet": "10.0.0.1/32, 10.0.1.1/32,10.0.2.1/32",
+        }
+        assert sorted(get_egress_subnets_list_from_relation_data(relation_datbage_dict)) == sorted(
+            ["10.0.0.1/32", "10.0.1.1/32", "10.0.2.1/32"]
+        )
