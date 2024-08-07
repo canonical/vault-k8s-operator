@@ -360,8 +360,7 @@ class VaultCharm(CharmBase):
     def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
         """Handle config-changed event.
 
-        Configures pebble layer, sets the unit address in the peer relation, starts the vault
-        service, and unseals Vault.
+        Configures pebble layer, configures certificates, starts the vault service, and unseals Vault.
         """
         if not self._container.can_connect():
             return
@@ -1060,8 +1059,6 @@ class VaultCharm(CharmBase):
 
     def _get_vault_kv_secrets_in_peer_relation(self) -> Dict[str, str]:
         """Return the vault kv secrets from the peer relation."""
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
         relation = self.model.get_relation(PEER_RELATION_NAME)
         secrets = json.loads(relation.data[self.app].get("vault-kv-secrets", "{}"))  # type: ignore[union-attr]  # noqa: E501
         return secrets
@@ -1072,8 +1069,6 @@ class VaultCharm(CharmBase):
 
     def _set_vault_kv_secret_in_peer_relation(self, label: str, secret_id: str):
         """Set the vault kv secret in the peer relation."""
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
         secrets = self._get_vault_kv_secrets_in_peer_relation()
         secrets[label] = secret_id
         relation = self.model.get_relation(PEER_RELATION_NAME)
@@ -1434,11 +1429,8 @@ class VaultCharm(CharmBase):
         Returns:
             str: Bind address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not peer_relation:
-            return None
         try:
-            binding = self.model.get_binding(peer_relation)
+            binding = self.model.get_binding("juju-info")
             if not binding or not binding.network.bind_address:
                 return None
             return str(binding.network.bind_address)
@@ -1452,11 +1444,8 @@ class VaultCharm(CharmBase):
         Returns:
             str: Ingress address
         """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not peer_relation:
-            return None
         try:
-            binding = self.model.get_binding(peer_relation)
+            binding = self.model.get_binding("juju-info")
             if not binding or not binding.network.ingress_address:
                 return None
             return str(binding.network.ingress_address)
