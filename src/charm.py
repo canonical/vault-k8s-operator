@@ -477,10 +477,6 @@ class VaultCharm(CharmBase):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self._remove_juju_secret_by_label(label=label)
 
-    def _get_vault_kv_secret_label(self, unit_name: str):
-        unit_name_dash = unit_name.replace("/", "-")
-        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
-
     def _configure_pki_secrets_engine(self) -> None:
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
@@ -1307,6 +1303,10 @@ class VaultCharm(CharmBase):
             juju_secret.remove_all_revisions()
         except SecretNotFoundError:
             return
+
+    def _get_vault_kv_secret_label(self, unit_name: str):
+        unit_name_dash = unit_name.replace("/", "-")
+        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
