@@ -39,7 +39,11 @@ from charms.vault_k8s.v0.vault_client import (
     Vault,
     VaultClientError,
 )
-from charms.vault_k8s.v0.vault_kv import NewVaultKvClientAttachedEvent, VaultKvProvides
+from charms.vault_k8s.v0.vault_kv import (
+    NewVaultKvClientAttachedEvent,
+    VaultKvClientDetachedEvent,
+    VaultKvProvides,
+)
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from container import Container
@@ -186,6 +190,9 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
         self.framework.observe(
             self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
+        )
+        self.framework.observe(
+            self.vault_kv.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
         self.framework.observe(
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken,
@@ -465,6 +472,14 @@ class VaultCharm(CharmBase):
             egress_subnets=event.egress_subnets,
             nonce=event.nonce,
         )
+
+    def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
+        label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
+        self._remove_juju_secret_by_label(label=label)
+
+    def _get_vault_kv_secret_label(self, unit_name: str):
+        unit_name_dash = unit_name.replace("/", "-")
+        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
 
     def _configure_pki_secrets_engine(self) -> None:
         """Configure the PKI secrets engine."""
@@ -889,7 +904,7 @@ class VaultCharm(CharmBase):
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
                 if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
-                    self._remove_approle_auth_secret()
+                    self._remove_juju_secret_by_label(VAULT_CHARM_APPROLE_SECRET_LABEL)
         except Exception as e:
             logger.error("Failed to remove old approle secret: %s", e)
             event.fail(message="Failed to remove old approle secret.")
@@ -970,30 +985,35 @@ class VaultCharm(CharmBase):
             token_ttl="1h",
             token_max_ttl="1h",
         )
+        juju_secret_label = self._get_vault_kv_secret_label(unit_name=unit_name)
         secret = self._create_or_update_kv_secret(
             vault,
+            nonce,
             relation,
             role_id,
             role_name,
             egress_subnets,
+            juju_secret_label,
         )
         self.vault_kv.set_unit_credentials(relation, nonce, secret)
 
     def _create_or_update_kv_secret(
         self,
         vault: Vault,
+        nonce: str,
         relation: Relation,
         role_id: str,
         role_name: str,
         egress_subnets: List[str],
+        label: str,
     ) -> Secret:
         """Create or update a KV secret for a unit.
 
         Fetch secret id from peer relation, if it exists, update the secret,
         otherwise create it.
         """
-        label = KV_SECRET_PREFIX + role_name
-        secret_id = self._get_vault_kv_secret_in_peer_relation(label)
+        current_credentials = self.vault_kv.get_credentials(relation)
+        secret_id = current_credentials.get(nonce, None)
         if secret_id is None:
             return self._create_kv_secret(
                 vault, relation, role_id, role_name, egress_subnets, label
@@ -1020,7 +1040,6 @@ class VaultCharm(CharmBase):
         )
         if secret.id is None:
             raise RuntimeError(f"Unexpected error, just created secret {label!r} has no id")
-        self._set_vault_kv_secret_in_peer_relation(label, secret.id)
         secret.grant(relation)
         return secret
 
@@ -1057,27 +1076,6 @@ class VaultCharm(CharmBase):
         credential_nonces = self.vault_kv.get_credentials(relation).keys()
         if nonce not in set(credential_nonces):
             self.vault_kv.remove_unit_credentials(relation, nonce=nonce)
-
-    def _get_vault_kv_secrets_in_peer_relation(self) -> Dict[str, str]:
-        """Return the vault kv secrets from the peer relation."""
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        relation = self.model.get_relation(PEER_RELATION_NAME)
-        secrets = json.loads(relation.data[self.app].get("vault-kv-secrets", "{}"))  # type: ignore[union-attr]  # noqa: E501
-        return secrets
-
-    def _get_vault_kv_secret_in_peer_relation(self, label: str) -> Optional[str]:
-        """Return the vault kv secret id associated to input label from peer relation."""
-        return self._get_vault_kv_secrets_in_peer_relation().get(label)
-
-    def _set_vault_kv_secret_in_peer_relation(self, label: str, secret_id: str):
-        """Set the vault kv secret in the peer relation."""
-        if not self._is_peer_relation_created():
-            raise RuntimeError("Peer relation not created")
-        secrets = self._get_vault_kv_secrets_in_peer_relation()
-        secrets[label] = secret_id
-        relation = self.model.get_relation(PEER_RELATION_NAME)
-        relation.data[self.app].update({"vault-kv-secrets": json.dumps(secrets, sort_keys=True)})  # type: ignore[union-attr]  # noqa: E501
 
     def _delete_vault_data(self) -> None:
         """Delete Vault's data."""
@@ -1299,10 +1297,10 @@ class VaultCharm(CharmBase):
         )
         return role_id, secret_id
 
-    def _remove_approle_auth_secret(self) -> None:
-        """Remove the approle secret if it exists."""
+    def _remove_juju_secret_by_label(self, label: str):
+        """Remove the specified secret if it exists."""
         try:
-            juju_secret = self.model.get_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+            juju_secret = self.model.get_secret(label=label)
             juju_secret.remove_all_revisions()
         except SecretNotFoundError:
             return

@@ -259,6 +259,25 @@ class VaultKvGoneAwayEvent(ops.EventBase):
     pass
 
 
+class VaultKvClientDetachedEvent(ops.EventBase):
+    """VaultKvClientDetachedEvent Event."""
+
+    def __init__(self, handle: ops.Handle, unit_name: str):
+        super().__init__(handle)
+        self.unit_name = unit_name
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Return snapshot data that should be persisted."""
+        return {
+            "unit_name": self.unit_name,
+        }
+
+    def restore(self, snapshot: Dict[str, Any]) -> None:
+        """Restore the event from a snapshot."""
+        super().restore(snapshot)
+        self.unit_name = snapshot["unit_name"]
+
+
 class NewVaultKvClientAttachedEvent(ops.EventBase):
     """New vault kv client attached event."""
 
@@ -306,7 +325,7 @@ class VaultKvProviderEvents(ops.ObjectEvents):
     """List of events that the Vault Kv provider charm can leverage."""
 
     new_vault_kv_client_attached = ops.EventSource(NewVaultKvClientAttachedEvent)
-    gone_away = ops.EventSource(VaultKvGoneAwayEvent)
+    vault_kv_client_detached = ops.EventSource(VaultKvClientDetachedEvent)
 
 
 class VaultKvProvides(ops.Object):
@@ -327,8 +346,8 @@ class VaultKvProvides(ops.Object):
             self._on_relation_changed,
         )
         self.framework.observe(
-            self.charm.on[relation_name].relation_broken,
-            self._on_vault_kv_relation_broken,
+            self.charm.on[relation_name].relation_departed,
+            self._on_vault_kv_relation_departed,
         )
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent):
@@ -356,9 +375,10 @@ class VaultKvProvides(ops.Object):
                 nonce=event.relation.data[unit]["nonce"],
             )
 
-    def _on_vault_kv_relation_broken(self, event: ops.RelationBrokenEvent):
-        """Handle relation broken."""
-        self.on.gone_away.emit()
+    def _on_vault_kv_relation_departed(self, event: ops.RelationDepartedEvent):
+        """Handle relation departed."""
+        if event.departing_unit:
+            self.on.vault_kv_client_detached.emit(unit_name=event.departing_unit.name)
 
     def set_vault_url(self, relation: ops.Relation, vault_url: str):
         """Set the vault_url on the relation."""
