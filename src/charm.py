@@ -1012,6 +1012,9 @@ class VaultCharm(CharmBase):
         Fetch secret id from peer relation, if it exists, update the secret,
         otherwise create it.
         """
+        # TODO bug: https://bugs.launchpad.net/juju/+bug/2075153
+        # Until the referenced bug is fixed we must pass the secret ID here
+        # not to lose the secret://modeluuid:secretID format
         current_credentials = self.vault_kv.get_credentials(relation)
         secret_id = current_credentials.get(nonce, None)
         if secret_id is None:
