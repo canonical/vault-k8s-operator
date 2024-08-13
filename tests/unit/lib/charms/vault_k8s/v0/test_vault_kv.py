@@ -10,6 +10,7 @@ from unittest.mock import patch
 from charms.vault_k8s.v0.vault_kv import (
     KVRequest,
     NewVaultKvClientAttachedEvent,
+    VaultKvClientDetachedEvent,
     VaultKvConnectedEvent,
     VaultKvGoneAwayEvent,
     VaultKvProvides,
@@ -20,16 +21,18 @@ from charms.vault_k8s.v0.vault_kv import (
 from ops import testing
 from ops.charm import CharmBase
 
+VAULT_KV_RELATION_NAME = "vault-kv"
+
 
 class VaultKvProviderCharm(CharmBase):
     metadata_yaml = textwrap.dedent(
-        """
+        f"""
         name: vault-kv-provider
         containers:
           vault:
             resource: vault-image
         provides:
-          vault-kv:
+          {VAULT_KV_RELATION_NAME}:
             interface: vault-kv
         """
     )
@@ -40,20 +43,26 @@ class VaultKvProviderCharm(CharmBase):
         self.framework.observe(
             self.interface.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
         )
+        self.framework.observe(
+            self.interface.on.vault_kv_client_detached, self._on_vault_kv_client_detached
+        )
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
+        pass
+
+    def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
         pass
 
 
 class VaultKvRequirerCharm(CharmBase):
     metadata_yaml = textwrap.dedent(
-        """
+        f"""
         name: vault-kv-requirer
         containers:
           my-app:
             resource: my-app-image
         requires:
-          vault-kv:
+          {VAULT_KV_RELATION_NAME}:
             interface: vault-kv
         """
     )
@@ -62,7 +71,7 @@ class VaultKvRequirerCharm(CharmBase):
         super().__init__(*args)
         self.interface = VaultKvRequires(
             self,
-            relation_name="vault-kv",
+            relation_name=VAULT_KV_RELATION_NAME,
             mount_suffix="dummy",
         )
         self.framework.observe(self.interface.on.connected, self._on_connected)
@@ -90,7 +99,7 @@ class TestVaultKvProvides(unittest.TestCase):
     def setup_relation(self, remote_app: str = "vault-kv-requires", leader: bool = True) -> tuple:
         """Set up a relation between the charm and a remote app with 1 unit."""
         remote_unit = remote_app + "/0"
-        rel_name = "vault-kv"
+        rel_name = VAULT_KV_RELATION_NAME
         self.harness.set_leader(leader)
         rel_id = self.harness.add_relation(rel_name, remote_app)
         relation = self.harness.model.get_relation(rel_name, rel_id)
@@ -414,6 +423,17 @@ class TestVaultKvProvides(unittest.TestCase):
         assert expected_kv_request_1 in kv_requests
         assert expected_kv_request_2 in kv_requests
 
+    @patch("test_vault_kv.VaultKvProviderCharm._on_vault_kv_client_detached")
+    def test_given_vault_kv_relation_when_relation_departed_then_vault_kv_client_detached_event_fired(
+        self, _on_vault_kv_client_detached
+    ):
+        _, remote_unit, _, rel_id = self.setup_relation()
+        self.harness.remove_relation(rel_id)
+        args, _ = _on_vault_kv_client_detached.call_args
+        event = args[0]
+        assert isinstance(event, VaultKvClientDetachedEvent)
+        assert event.unit_name == remote_unit
+
 
 class TestVaultKvRequires(unittest.TestCase):
     def setUp(self):
@@ -426,7 +446,7 @@ class TestVaultKvRequires(unittest.TestCase):
     def setup_relation(self, leader: bool = True) -> tuple:
         remote_app = "vault-kv-provides"
         remote_unit = remote_app + "/0"
-        rel_name = "vault-kv"
+        rel_name = VAULT_KV_RELATION_NAME
         self.harness.set_leader(leader)
         rel_id = self.harness.add_relation(rel_name, remote_app)
         relation = self.harness.model.get_relation(rel_name, rel_id)

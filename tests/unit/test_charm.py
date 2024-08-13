@@ -1506,6 +1506,43 @@ class TestCharm(unittest.TestCase):
             SecretsBackend.KV_V2, "charm-vault-kv-requirer-suffix"
         )
 
+    @patch("ops.model.Secret.remove_all_revisions")
+    def test_given_vault_kv_client_when_client_detached_then_kv_secret_is_removed(
+        self,
+        patch_remove_secret,
+    ):
+        self.mock_vault.configure_mock(
+            **{
+                "configure_approle.return_value": "12345678",
+                "generate_role_secret_id.return_value": "11111111",
+            },
+        )
+        self.mock_vault_tls_manager.pull_tls_file_from_workload.return_value = "test cert"
+
+        self.harness.add_relation(relation_name="vault-peers", remote_app="vault")
+        self.harness.set_leader(is_leader=True)
+        self.harness.set_can_connect(container=self.container_name, val=True)
+        event = Mock()
+        event.params = {"relation_name": "relation", "relation_id": "99"}
+        self._set_approle_secret(
+            role_id="root token content",
+            secret_id="whatever secret id",
+        )
+        rel_id, _ = self.setup_vault_kv_relation()
+        event = Mock()
+        event.relation_name = VAULT_KV_RELATION_NAME
+        event.relation_id = rel_id
+        event.app_name = VAULT_KV_REQUIRER_APPLICATION_NAME
+        event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
+        event.mount_suffix = "suffix"
+        event.egress_subnets = ["2.2.2.0/24"]
+        event.nonce = "123123"
+        self.harness.charm._on_new_vault_kv_client_attached(event)
+        kv_client_detached_event = Mock()
+        kv_client_detached_event.unit_name = f"{VAULT_KV_REQUIRER_APPLICATION_NAME}/0"
+        self.harness.charm._on_vault_kv_client_detached(kv_client_detached_event)
+        patch_remove_secret.assert_called()
+
     # Test PKI
     @patch("charm.get_common_name_from_certificate", new=Mock)
     @patch(f"{TLS_CERTIFICATES_LIB_PATH}.TLSCertificatesRequiresV3.request_certificate_creation")
