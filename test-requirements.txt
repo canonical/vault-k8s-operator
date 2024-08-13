@@ -110,7 +110,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.374
+pyright==1.1.375
     # via -r test-requirements.in
 pytest==8.3.2
     # via
@@ -121,7 +121,7 @@ pytest-asyncio==0.21.2
     # via
     #   -r test-requirements.in
     #   pytest-operator
-pytest-operator==0.35.0
+pytest-operator==0.36.0
     # via -r test-requirements.in
 python-dateutil==2.9.0.post0
     # via kubernetes
@@ -142,7 +142,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.5.6
+ruff==0.5.7
     # via -r test-requirements.in
 six==1.16.0
     # via
