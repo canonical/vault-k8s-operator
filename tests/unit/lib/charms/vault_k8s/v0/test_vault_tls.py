@@ -2,7 +2,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -244,95 +243,6 @@ class TestCharmTLS(unittest.TestCase):
         assert (
             (root / "vault/certs/cert.pem").read_text().startswith("-----BEGIN CERTIFICATE-----")
         )
-
-    def test_given_certificate_access_relation_when_relation_joined_then_new_request_is_created(
-        self,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        root = self.harness.get_filesystem_root(self.container_name)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        (root / "vault/certs/ca.pem").write_text(EXAMPLE_CA)
-        (root / "vault/certs/key.pem").write_text(EXAMPLE_PK)
-        (root / "vault/certs/cert.pem").write_text("old cert")
-
-        self._set_peer_relation()
-        self._set_tls_access_certificate_relation()
-        self.harness.charm.tls.configure_certificates("1.1.1.1")
-
-        assert (root / "vault/certs/csr.pem").exists()
-
-    def test_given_certificate_access_relation_when_cert_available_then_new_cert_saved(
-        self,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        root = self.harness.get_filesystem_root(self.container_name)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        (root / "vault/certs/key.pem").write_text(EXAMPLE_PK)
-        (root / "vault/certs/csr.pem").write_text("some csr")
-
-        self._set_peer_relation()
-        rel_id = self._set_tls_access_certificate_relation()
-
-        requirer_databag = [{"certificate_signing_request": "some csr", "ca": False}]
-
-        provider_databag = [
-            {
-                "ca": "some ca",
-                "chain": ["new cert"],
-                "certificate": EXAMPLE_CERTIFICATE,
-                "certificate_signing_request": "some csr",
-                "recommended_expiry_notification_time": 720,
-            }
-        ]
-
-        self.harness.update_relation_data(
-            rel_id, "some-tls-provider", {"certificates": json.dumps(provider_databag)}
-        )
-        self.harness.update_relation_data(
-            rel_id,
-            self.harness.charm.unit.name,
-            {"certificate_signing_requests": json.dumps(requirer_databag)},
-        )
-
-        self.harness.charm._container.restart = Mock()  # type: ignore [method-assign]
-        self.harness.charm.tls.configure_certificates("1.1.1.1")
-
-        self.harness.charm._container.restart.assert_called_with(self.container_name)
-        assert (root / "vault/certs/cert.pem").exists()
-        assert (root / "vault/certs/ca.pem").exists()
-
-    def test_given_certificate_access_relation_when_wrong_cert_available_then_saved_cert_not_changed(
-        self,
-    ):
-        self.harness.set_leader(is_leader=True)
-        self.harness.add_storage(storage_name="certs", attach=True)
-        root = self.harness.get_filesystem_root(self.container_name)
-        self.harness.set_can_connect(container=self.container_name, val=True)
-        (root / "vault/certs/key.pem").write_text(EXAMPLE_PK)
-        (root / "vault/certs/ca.pem").write_text(EXAMPLE_CA)
-        (root / "vault/certs/csr.pem").write_text("different csr")
-        (root / "vault/certs/cert.pem").write_text("different cert")
-
-        self._set_peer_relation()
-        rel_id = self._set_tls_access_certificate_relation()
-
-        provider_databag = [
-            {
-                "ca": "some ca",
-                "chain": ["new cert"],
-                "certificate": EXAMPLE_CERTIFICATE,
-                "certificate_signing_request": "some csr",
-            }
-        ]
-
-        self.harness.update_relation_data(
-            rel_id, "some-tls-provider", {"certificates": json.dumps(provider_databag)}
-        )
-
-        self.harness.charm.tls.configure_certificates("1.1.1.1")
-        assert (root / "vault/certs/cert.pem").read_text().startswith("different cert")
 
     @patch("ops.model.Model.get_binding")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(

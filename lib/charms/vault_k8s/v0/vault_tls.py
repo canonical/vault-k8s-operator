@@ -3,24 +3,25 @@
 
 """This file includes methods to manage TLS certificates within the Vault charms."""
 
+import ipaddress
 import logging
 import os
-import socket
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta, timezone
 from enum import Enum, auto
 from signal import SIGHUP
-from typing import List, Optional, TextIO, Tuple
+from typing import FrozenSet, List, TextIO, Tuple
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
-from charms.tls_certificates_interface.v3.tls_certificates import (
-    TLSCertificatesRequiresV3,
-    generate_ca,
-    generate_certificate,
-    generate_csr,
-    generate_private_key,
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequest,
+    TLSCertificatesRequiresV4,
 )
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from ops import EventBase, ModelError, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.pebble import PathError
@@ -33,7 +34,11 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
+
+
+PRIVATE_KEY_SIZE = 2048
+PRIVATE_KEY_PUBLIC_EXPONENT = 65537
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -53,6 +58,17 @@ TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
 
 VAULT_CA_SUBJECT = "Vault self signed CA"
+
+
+class TLSMode(Enum):
+    """This class defines the different modes of TLS configuration.
+
+    SELF_SIGNED: The charm will generate a self signed certificate.
+    TLS_INTEGRATION: The charm will use the TLS integration relation.
+    """
+
+    SELF_SIGNED = 1
+    TLS_INTEGRATION = 2
 
 
 # TODO Move this class, it doesn't belong here.
@@ -113,7 +129,6 @@ class File(Enum):
     CERT = auto()
     KEY = auto()
     CA = auto()
-    CSR = auto()
     AUTOUNSEAL_CA = auto()
 
 
@@ -126,6 +141,9 @@ class VaultTLSManager(Object):
         service_name: str,
         tls_directory_path: str,
         workload: WorkloadBase,
+        common_name: str,
+        sans_dns: FrozenSet[str] = frozenset(),
+        sans_ips: FrozenSet[str] = frozenset(),
     ):
         """Create a new VaultTLSManager object.
 
@@ -136,41 +154,39 @@ class VaultTLSManager(Object):
             tls_directory_path: Path of the directory
                 where certificates should be stored on the workload.
             workload: Either a Container or a Machine.
+            common_name: The common name of the certificate
+            sans_dns: Subject alternative names of the certificate
+            sans_ips: Subject alternative IP addresses of the certificate
         """
         super().__init__(charm, "tls")
         self.charm = charm
         self.workload = workload
         self._service_name = service_name
         self.tls_directory_path = tls_directory_path
-        self.tls_access = TLSCertificatesRequiresV3(charm, TLS_CERTIFICATE_ACCESS_RELATION_NAME)
+        self.common_name = common_name
+        self.sans_dns = sans_dns
+        self.sans_ips = sans_ips
+        self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
-
-        self.framework.observe(
-            self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_joined,
-            self._on_certificate_config_changed,
-        )
-        self.framework.observe(
-            self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_broken,
-            self._on_tls_certificates_access_relation_broken,
-        )
-        self.framework.observe(
-            self.tls_access.on.certificate_available,
-            self._on_certificate_config_changed,
-        )
-        self.framework.observe(
-            self.tls_access.on.certificate_expiring, self._on_certificate_config_changed
-        )
-        self.framework.observe(
-            self.tls_access.on.certificate_invalidated, self._on_certificate_config_changed
-        )
-        self.framework.observe(
-            self.charm.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
-            self._on_certificate_config_changed,
-        )
-
-    def _on_certificate_config_changed(self, event: EventBase):
-        """Handle TLS configuration changes. Makes the charm reconfigure its environment."""
-        self.charm.on.config_changed.emit()
+        if self.mode == TLSMode.TLS_INTEGRATION:
+            self.tls_access = TLSCertificatesRequiresV4(
+                charm=charm,
+                relationship_name=TLS_CERTIFICATE_ACCESS_RELATION_NAME,
+                certificate_requests=self._get_certificate_requests(),
+            )
+            self.framework.observe(
+                self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_changed,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_broken,
+                self._on_tls_certificates_access_relation_broken,
+            )
+        elif self.mode == TLSMode.SELF_SIGNED:
+            self.tls_access = None
+            self.framework.observe(
+                self.charm.on.config_changed, self._configure_self_signed_certificates
+            )
 
     def _on_tls_certificates_access_relation_broken(self, event: RelationBrokenEvent):
         """Handle leaving the tls access relation.
@@ -181,46 +197,92 @@ class VaultTLSManager(Object):
         self._remove_all_certs_from_workload()
         self.charm.on.config_changed.emit()
 
-    def configure_certificates(self, subject_ip: str) -> None:
-        """Configure the certificates that are used to connect to and communicate with Vault.
-
-        Args:
-            subject_ip: The ip address for which the certificates will be configured for.
-        """
-        if not self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
-            if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
-                ca_private_key, ca_certificate = generate_vault_ca_certificate()
-                self._set_ca_certificate_secret(ca_private_key, ca_certificate)
-                logger.info("Saved the Vault generated CA cert in juju secrets.")
-            if (not self.tls_file_pushed_to_workload(File.CA)) or (
-                not self.tls_file_pushed_to_workload(File.CERT)
-            ):
-                self._generate_self_signed_certs(subject_ip)
-                logger.info(
-                    "Saved Vault generated CA and self signed certificate to %s.",
-                    self.charm.unit.name,
-                )
-                self._restart_vault()
-            return
-
-        if self._should_request_new_certificate():
-            self._send_new_certificate_request_to_provider(
-                self.pull_tls_file_from_workload(File.CSR), subject_ip
+    def _get_certificate_requests(self) -> List[CertificateRequest]:
+        if not self.common_name:
+            return []
+        return [
+            CertificateRequest(
+                common_name=self.common_name,
             )
-            logger.info("CSR for unit %s sent to access relation.", self.charm.unit.name)
-        existing_csr = self.pull_tls_file_from_workload(File.CSR)
-        signed_cert = self.tls_access._find_certificate_in_relation_data(existing_csr)
-        if signed_cert and signed_cert.certificate != self.pull_tls_file_from_workload(File.CERT):
-            self._push_tls_file_to_workload(File.CERT, signed_cert.certificate)
+        ]
+
+    def _get_mode(self) -> TLSMode:
+        """Determine the TLS mode of the charm."""
+        if self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+            return TLSMode.TLS_INTEGRATION
+        return TLSMode.SELF_SIGNED
+
+    def _configure_self_signed_certificates(self, _: EventBase) -> None:
+        """Configure the charm with self signed certificates."""
+        if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
+            ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            self._set_ca_certificate_secret(ca_private_key, ca_certificate)
+            logger.info("Saved the Vault generated CA cert in juju secrets.")
+        existing_unit_private_key = self.pull_tls_file_from_workload(File.KEY)
+        if existing_unit_private_key:
+            logger.debug("Found existing private key in workload.")
+            return
+        ca_private_key, ca_certificate = self._get_ca_certificate_secret()
+        if not ca_certificate:
+            logger.debug("No CA certificate found.")
+            return
+        unit_private_key, unit_certificate = generate_vault_unit_certificate(
+            common_name=self.common_name,
+            sans_dns=self.sans_dns,
+            sans_ips=self.sans_ips,
+            ca_certificate=ca_certificate,
+            ca_private_key=ca_private_key,
+        )
+        self._push_tls_file_to_workload(File.KEY, unit_private_key)
+        self._push_tls_file_to_workload(File.CERT, unit_certificate)
+        self._push_tls_file_to_workload(File.CA, ca_certificate)
+        logger.info(
+            "Saved Vault generated CA and self signed certificate to %s.",
+            self.charm.unit.name,
+        )
+        self._restart_vault()
+
+    def _configure_tls_integration(self, _: EventBase) -> None:
+        """Configure the charm with the TLS integration relation.
+
+        Retrieve assigned certificate and private key from the relation and save them to the workload.
+        """
+        if not self.tls_access:
+            logger.debug("No TLS access relation.")
+            return
+        certificate_requests = self._get_certificate_requests()
+        if not certificate_requests:
+            logger.debug("No certificate requests.")
+            return
+        assigned_certificate, private_key = self.tls_access.get_assigned_certificate(
+            certificate_request=certificate_requests[0]
+        )
+        if not assigned_certificate:
+            logger.debug("No certificate assigned.")
+            return
+        if not private_key:
+            logger.debug("No private key assigned.")
+            return
+        reload = False
+        if str(private_key) != self.pull_tls_file_from_workload(File.KEY):
+            self._push_tls_file_to_workload(File.KEY, str(private_key))
+            logger.info(
+                "Private key from access relation saved for unit %s.",
+                self.charm.unit.name,
+            )
+            reload = True
+        if str(assigned_certificate.certificate) != self.pull_tls_file_from_workload(File.CERT):
+            self._push_tls_file_to_workload(File.CERT, str(assigned_certificate.certificate))
             logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
-            if self.pull_tls_file_from_workload(File.CA) != signed_cert.ca:
-                self._push_tls_file_to_workload(File.CA, signed_cert.ca)
-                self._restart_vault()
-            else:
-                self._reload_vault()
+            reload = True
+        if self.pull_tls_file_from_workload(File.CA) != str(assigned_certificate.ca):
+            self._push_tls_file_to_workload(File.CA, str(assigned_certificate.ca))
+            reload = True
+        if reload:
+            self._reload_vault()
 
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
@@ -234,79 +296,6 @@ class VaultTLSManager(Object):
             for relation in self.charm.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
                 self.certificate_transfer.remove_certificate(relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
-
-    def _generate_self_signed_certs(self, subject_ip: str) -> None:
-        """Recreate a unit certificate from the Vault CA certificate, then saves it.
-
-        Args:
-            subject_ip: The subject of the unit certificate.
-        """
-        self._remove_all_certs_from_workload()
-
-        if not (private_key := self.pull_tls_file_from_workload(File.KEY)):
-            private_key = generate_private_key().decode()
-            self._push_tls_file_to_workload(File.KEY, private_key)
-
-        ca_private_key, ca_certificate = self._get_ca_certificate_secret()
-        self._push_tls_file_to_workload(File.CA, ca_certificate)
-        sans_ip = [subject_ip]
-        certificate = generate_vault_unit_certificate(
-            subject=subject_ip,
-            sans_ip=sans_ip,
-            sans_dns=[socket.getfqdn()],
-            ca_certificate=ca_certificate.encode(),
-            ca_private_key=ca_private_key.encode(),
-            unit_private_key=private_key.encode(),
-        )
-        self._push_tls_file_to_workload(File.CERT, certificate)
-
-    def _should_request_new_certificate(self) -> bool:
-        """Determine if we should request a new certificate from the tls relation."""
-        if not self.charm.model.relations.get(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
-            return False
-
-        csr_is_in_workload = (existing_csr := self.pull_tls_file_from_workload(File.CSR))
-        fulfilled_csrs = self.tls_access.get_certificate_signing_requests(fulfilled_only=True)
-        pending_csrs = self.tls_access.get_certificate_signing_requests(unfulfilled_only=True)
-        expired_certs = self.tls_access.get_expiring_certificates()
-
-        existing_csr_is_fulfilled = any(existing_csr in csr_obj.csr for csr_obj in fulfilled_csrs)
-        existing_csr_is_pending = any(existing_csr in csr_obj.csr for csr_obj in pending_csrs)
-        existing_csr_expiring = any(
-            existing_csr in cert_obj.certificate for cert_obj in expired_certs
-        )
-
-        if csr_is_in_workload:
-            if existing_csr_is_fulfilled and not existing_csr_expiring:
-                return False
-            if existing_csr_is_pending:
-                return False
-        return True
-
-    def _send_new_certificate_request_to_provider(
-        self, old_csr: Optional[str], subject_ip: str
-    ) -> None:
-        """Create and send a new certificate signing request to the provider.
-
-        Args:
-            old_csr: Optional value that is used to decide wether to send a renewal or new request.
-            subject_ip: string that is the subject of the certificate.
-        """
-        if not (private_key := self.pull_tls_file_from_workload(File.KEY)):
-            private_key = generate_private_key().decode()
-            self._push_tls_file_to_workload(File.KEY, private_key)
-
-        new_csr = generate_csr(
-            private_key=private_key.encode(),
-            subject=subject_ip,
-            sans_ip=[subject_ip],
-            sans_dns=[socket.getfqdn()],
-        )
-        self._push_tls_file_to_workload(File.CSR, new_csr.decode())
-        if old_csr:
-            self.tls_access.request_certificate_renewal(old_csr.encode(), new_csr)
-        else:
-            self.tls_access.request_certificate_creation(new_csr)
 
     def get_tls_file_path_in_workload(self, file: File) -> str:
         """Return the requested file's location in the workload.
@@ -408,7 +397,6 @@ class VaultTLSManager(Object):
         """Remove the certificate files that are used for authentication."""
         self._remove_tls_file_from_workload(File.CA)
         self._remove_tls_file_from_workload(File.CERT)
-        self._remove_tls_file_from_workload(File.CSR)
         logger.debug("Removed existing certificate files from workload.")
 
     def _reload_vault(self) -> None:
@@ -496,45 +484,156 @@ def generate_vault_ca_certificate() -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: CA Private key, CA certificate
     """
-    ca_private_key = generate_private_key()
-    ca_certificate = generate_ca(
+    ca_private_key = _generate_private_key()
+    ca_certificate = _generate_ca(
         private_key=ca_private_key,
-        subject=VAULT_CA_SUBJECT,
+        common_name=VAULT_CA_SUBJECT,
         validity=365 * 50,
     )
-
-    return ca_private_key.decode(), ca_certificate.decode()
+    return ca_private_key, ca_certificate
 
 
 def generate_vault_unit_certificate(
-    subject: str,
-    sans_ip: List[str],
-    sans_dns: List[str],
-    ca_certificate: bytes,
-    ca_private_key: bytes,
-    unit_private_key: bytes,
-) -> str:
+    common_name: str,
+    sans_ips: FrozenSet[str],
+    sans_dns: FrozenSet[str],
+    ca_certificate: str,
+    ca_private_key: str,
+) -> Tuple[str, str]:
     """Generate Vault unit certificates valid for 50 years.
 
     Args:
-        subject: Subject of the certificate
-        sans_ip: List of IP addresses to add to the SAN
-        sans_dns: List of DNS subject alternative names
+        common_name: Common name of the certificate
+        sans_ips: Subject alternative IP addresses of the certificate
+        sans_dns: Subject alternative names of the certificate
         ca_certificate: CA certificate
         ca_private_key: CA private key
-        unit_private_key: Unit private key
 
     Returns:
-        Tuple[str, str]: Unit private key, Unit certificate
+        Tuple[str, str]: Private key, Certificate
     """
-    vault_private_key = generate_private_key() if not unit_private_key else unit_private_key
-    csr = generate_csr(
-        private_key=vault_private_key, subject=subject, sans_ip=sans_ip, sans_dns=sans_dns
-    )
-    vault_certificate = generate_certificate(
-        ca=ca_certificate,
+    vault_private_key = _generate_private_key()
+    vault_certificate = _generate_certificate(
+        private_key=vault_private_key,
+        common_name=common_name,
+        sans_ips=sans_ips,
+        sans_dns=sans_dns,
+        ca_certificate=ca_certificate,
         ca_key=ca_private_key,
-        csr=csr,
         validity=365 * 50,
     )
-    return vault_certificate.decode()
+    return vault_private_key, vault_certificate
+
+
+def _generate_private_key() -> str:
+    """Generate a private key."""
+    private_key = rsa.generate_private_key(
+        public_exponent=PRIVATE_KEY_PUBLIC_EXPONENT,
+        key_size=PRIVATE_KEY_SIZE,
+    )
+    key_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=(serialization.NoEncryption()),
+    )
+    return key_bytes.decode().strip()
+
+
+def _generate_ca(
+    private_key: str,
+    common_name: str,
+    validity: int,
+) -> str:
+    """Generate a CA Certificate.
+
+    Args:
+        private_key (bytes): Private key
+        common_name (str): Common Name that can be an IP or a Full Qualified Domain Name (FQDN).
+        validity (int): Certificate validity time (in days)
+
+    Returns:
+        str: CA Certificate.
+    """
+    private_key_object = serialization.load_pem_private_key(private_key.encode(), password=None)
+    subject_name = x509.Name(
+        [
+            x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name),
+        ]
+    )
+    subject_identifier_object = x509.SubjectKeyIdentifier.from_public_key(
+        private_key_object.public_key()  # type: ignore[arg-type]
+    )
+    subject_identifier = key_identifier = subject_identifier_object.public_bytes()
+    key_usage = x509.KeyUsage(
+        digital_signature=True,
+        key_encipherment=True,
+        key_cert_sign=True,
+        key_agreement=False,
+        content_commitment=False,
+        data_encipherment=False,
+        crl_sign=False,
+        encipher_only=False,
+        decipher_only=False,
+    )
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject_name)
+        .issuer_name(subject_name)
+        .public_key(private_key_object.public_key())  # type: ignore[arg-type]
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
+        .add_extension(x509.SubjectKeyIdentifier(digest=subject_identifier), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier(
+                key_identifier=key_identifier,
+                authority_cert_issuer=None,
+                authority_cert_serial_number=None,
+            ),
+            critical=False,
+        )
+        .add_extension(key_usage, critical=True)
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(private_key_object, hashes.SHA256())  # type: ignore[arg-type]
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
+
+
+def _generate_certificate(
+    private_key: str,
+    common_name: str,
+    sans_dns: FrozenSet[str],
+    sans_ips: FrozenSet[str],
+    ca_certificate: str,
+    ca_key: str,
+    validity: int,
+) -> str:
+    """Generate a self-signed certificate directly."""
+    private_key_obj = serialization.load_pem_private_key(private_key.encode(), password=None)
+    assert isinstance(private_key_obj, rsa.RSAPrivateKey)
+    ca_cert_obj = x509.load_pem_x509_certificate(ca_certificate.encode())
+    subject = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)])
+    cert_builder = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(ca_cert_obj.issuer)
+        .public_key(private_key_obj.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [x509.IPAddress(ipaddress.ip_address(san)) for san in sans_ips]
+                + [x509.DNSName(san) for san in sans_dns]
+            ),
+            critical=False,
+        )
+    )
+    cert = cert_builder.sign(
+        private_key=serialization.load_pem_private_key(ca_key.encode(), password=None),  # type: ignore[reportArgumentType]
+        algorithm=hashes.SHA256(),
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
