@@ -126,10 +126,11 @@ class Vault:
         """
         try:
             auth_details.login(self._client)
-        except (VaultError, ConnectionError) as e:
+            self._client.auth.token.lookup_self()
+        except (VaultError, ConnectionError, Forbidden) as e:
             logger.warning("Failed login to Vault: %s", e)
             return False
-        return bool(self.get_token_data())
+        return True
 
     def get_token_data(self) -> Optional[Dict]:
         """Check if given token is accepted by vault, and returns the token data if so."""
