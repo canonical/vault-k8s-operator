@@ -15,21 +15,40 @@ from charms.vault_k8s.v0.vault_client import (
     Vault,
     VaultClientError,
 )
-from hvac.exceptions import InvalidPath
+from hvac.exceptions import Forbidden, InvalidPath
 
 TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
 
 class TestVault(unittest.TestCase):
-    def test_given_token_as_auth_details_when_authenticate_then_token_is_set(self):
+    @patch("hvac.api.auth_methods.token.Token.lookup_self")
+    def test_given_token_as_auth_details_when_authenticate_then_token_is_set(self, _):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.authenticate(Token("some token"))
 
         assert vault._client.token == "some token"
 
+    @patch("hvac.api.auth_methods.token.Token.lookup_self")
+    def test_given_valid_token_as_auth_details_when_authenticate_then_authentication_succeeds(
+        self, patch_lookup
+    ):
+        patch_lookup.return_value = {"data": "random data"}
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        self.assertTrue(vault.authenticate(Token("some token")))
+
+    @patch("hvac.api.auth_methods.token.Token.lookup_self")
+    def test_given_invalid_token_as_auth_details_when_authenticate_then_authentication_fails(
+        self, patch_lookup
+    ):
+        patch_lookup.side_effect = Forbidden()
+        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+        vault.authenticate(Token("some token"))
+        self.assertFalse(vault.authenticate(Token("some token")))
+
+    @patch("hvac.api.auth_methods.token.Token.lookup_self")
     @patch("hvac.api.auth_methods.approle.AppRole.login")
     def test_given_approle_as_auth_details_when_authenticate_then_approle_login_is_called(
-        self, patch_approle_login
+        self, patch_approle_login, _
     ):
         vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
         vault.authenticate(AppRole(role_id="some role id", secret_id="some secret id"))

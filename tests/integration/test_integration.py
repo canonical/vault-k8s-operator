@@ -937,6 +937,36 @@ class TestVaultK8sIntegrationsPart3:
             idle_period=5,
         )
 
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_b_is_deployed_and_unsealed_when_scale_down_then_up_then_status_is_active(
+        self, ops_test: OpsTest, deploy_requiring_charms: None
+    ):
+        assert ops_test.model
+
+        app = ops_test.model.applications["vault-b"]
+        assert isinstance(app, Application)
+        await app.scale(3)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=1,
+            idle_period=5,
+        )
+        await app.scale(0)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=65,
+        )
+        await app.scale(3)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=5,
+        )
+
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
