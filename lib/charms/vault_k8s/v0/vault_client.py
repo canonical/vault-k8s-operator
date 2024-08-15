@@ -122,7 +122,7 @@ class Vault:
         """Find and use the token related with the given auth method.
 
         Returns:
-            bool: True if the authentication was successful and the token was successful.
+            bool: True if the authentication was successful and the token was accepted by vault.
         """
         try:
             auth_details.login(self._client)
