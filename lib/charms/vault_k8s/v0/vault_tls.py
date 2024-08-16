@@ -3,11 +3,9 @@
 
 """This file includes methods to manage TLS certificates within the Vault charms."""
 
-import ipaddress
 import logging
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
 from enum import Enum, auto
 from signal import SIGHUP
 from typing import FrozenSet, List, TextIO, Tuple
@@ -16,12 +14,15 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
 from charms.tls_certificates_interface.v4.tls_certificates import (
+    Certificate,
     CertificateRequest,
+    PrivateKey,
     TLSCertificatesRequiresV4,
+    generate_ca,
+    generate_certificate,
+    generate_csr,
+    generate_private_key,
 )
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from ops import EventBase, ModelError, Object, RelationBrokenEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.pebble import PathError
@@ -229,7 +230,7 @@ class VaultTLSManager(Object):
         unit_private_key, unit_certificate = generate_vault_unit_certificate(
             common_name=self.common_name,
             sans_dns=self.sans_dns,
-            sans_ips=self.sans_ips,
+            sans_ip=self.sans_ips,
             ca_certificate=ca_certificate,
             ca_private_key=ca_private_key,
         )
@@ -484,18 +485,18 @@ def generate_vault_ca_certificate() -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: CA Private key, CA certificate
     """
-    ca_private_key = _generate_private_key()
-    ca_certificate = _generate_ca(
+    ca_private_key = generate_private_key()
+    ca_certificate = generate_ca(
         private_key=ca_private_key,
         common_name=VAULT_CA_SUBJECT,
         validity=365 * 50,
     )
-    return ca_private_key, ca_certificate
+    return str(ca_private_key), str(ca_certificate)
 
 
 def generate_vault_unit_certificate(
     common_name: str,
-    sans_ips: FrozenSet[str],
+    sans_ip: FrozenSet[str],
     sans_dns: FrozenSet[str],
     ca_certificate: str,
     ca_private_key: str,
@@ -504,7 +505,7 @@ def generate_vault_unit_certificate(
 
     Args:
         common_name: Common name of the certificate
-        sans_ips: Subject alternative IP addresses of the certificate
+        sans_ip: Subject alternative IP addresses of the certificate
         sans_dns: Subject alternative names of the certificate
         ca_certificate: CA certificate
         ca_private_key: CA private key
@@ -512,128 +513,17 @@ def generate_vault_unit_certificate(
     Returns:
         Tuple[str, str]: Private key, Certificate
     """
-    vault_private_key = _generate_private_key()
-    vault_certificate = _generate_certificate(
+    vault_private_key = generate_private_key()
+    csr = generate_csr(
         private_key=vault_private_key,
         common_name=common_name,
-        sans_ips=sans_ips,
+        sans_ip=sans_ip,
         sans_dns=sans_dns,
-        ca_certificate=ca_certificate,
-        ca_key=ca_private_key,
+    )
+    vault_certificate = generate_certificate(
+        ca=Certificate.from_string(ca_certificate),
+        ca_private_key=PrivateKey.from_string(ca_private_key),
+        csr=csr,
         validity=365 * 50,
     )
-    return vault_private_key, vault_certificate
-
-
-def _generate_private_key() -> str:
-    """Generate a private key."""
-    private_key = rsa.generate_private_key(
-        public_exponent=PRIVATE_KEY_PUBLIC_EXPONENT,
-        key_size=PRIVATE_KEY_SIZE,
-    )
-    key_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=(serialization.NoEncryption()),
-    )
-    return key_bytes.decode().strip()
-
-
-def _generate_ca(
-    private_key: str,
-    common_name: str,
-    validity: int,
-) -> str:
-    """Generate a CA Certificate.
-
-    Args:
-        private_key (bytes): Private key
-        common_name (str): Common Name that can be an IP or a Full Qualified Domain Name (FQDN).
-        validity (int): Certificate validity time (in days)
-
-    Returns:
-        str: CA Certificate.
-    """
-    private_key_object = serialization.load_pem_private_key(private_key.encode(), password=None)
-    subject_name = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name),
-        ]
-    )
-    subject_identifier_object = x509.SubjectKeyIdentifier.from_public_key(
-        private_key_object.public_key()  # type: ignore[arg-type]
-    )
-    subject_identifier = key_identifier = subject_identifier_object.public_bytes()
-    key_usage = x509.KeyUsage(
-        digital_signature=True,
-        key_encipherment=True,
-        key_cert_sign=True,
-        key_agreement=False,
-        content_commitment=False,
-        data_encipherment=False,
-        crl_sign=False,
-        encipher_only=False,
-        decipher_only=False,
-    )
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject_name)
-        .issuer_name(subject_name)
-        .public_key(private_key_object.public_key())  # type: ignore[arg-type]
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.now(timezone.utc))
-        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
-        .add_extension(x509.SubjectKeyIdentifier(digest=subject_identifier), critical=False)
-        .add_extension(
-            x509.AuthorityKeyIdentifier(
-                key_identifier=key_identifier,
-                authority_cert_issuer=None,
-                authority_cert_serial_number=None,
-            ),
-            critical=False,
-        )
-        .add_extension(key_usage, critical=True)
-        .add_extension(
-            x509.BasicConstraints(ca=True, path_length=None),
-            critical=True,
-        )
-        .sign(private_key_object, hashes.SHA256())  # type: ignore[arg-type]
-    )
-    return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
-
-
-def _generate_certificate(
-    private_key: str,
-    common_name: str,
-    sans_dns: FrozenSet[str],
-    sans_ips: FrozenSet[str],
-    ca_certificate: str,
-    ca_key: str,
-    validity: int,
-) -> str:
-    """Generate a self-signed certificate directly."""
-    private_key_obj = serialization.load_pem_private_key(private_key.encode(), password=None)
-    assert isinstance(private_key_obj, rsa.RSAPrivateKey)
-    ca_cert_obj = x509.load_pem_x509_certificate(ca_certificate.encode())
-    subject = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)])
-    cert_builder = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(ca_cert_obj.issuer)
-        .public_key(private_key_obj.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.now(timezone.utc))
-        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
-        .add_extension(
-            x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.ip_address(san)) for san in sans_ips]
-                + [x509.DNSName(san) for san in sans_dns]
-            ),
-            critical=False,
-        )
-    )
-    cert = cert_builder.sign(
-        private_key=serialization.load_pem_private_key(ca_key.encode(), password=None),  # type: ignore[reportArgumentType]
-        algorithm=hashes.SHA256(),
-    )
-    return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
+    return str(vault_private_key), str(vault_certificate)
