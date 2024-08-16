@@ -496,10 +496,10 @@ class CertificateSigningRequest:
             sans_ip = frozenset([str(san) for san in sans.get_values_for_type(x509.IPAddress)])
             sans_oid = frozenset([str(san) for san in sans.get_values_for_type(x509.RegisteredID)])
         except x509.ExtensionNotFound:
-            sans = frozenset()
-            sans_dns = frozenset()
-            sans_ip = frozenset()
-            sans_oid = frozenset()
+            sans = None
+            sans_dns = None
+            sans_ip = None
+            sans_oid = None
         return cls(
             raw=csr.strip(),
             common_name=str(common_name[0].value),

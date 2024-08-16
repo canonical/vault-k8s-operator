@@ -7,7 +7,6 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from signal import SIGHUP
 from typing import FrozenSet, List, TextIO, Tuple
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -36,10 +35,6 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 LIBPATCH = 12
-
-
-PRIVATE_KEY_SIZE = 2048
-PRIVATE_KEY_PUBLIC_EXPONENT = 65537
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -144,7 +139,7 @@ class VaultTLSManager(Object):
         workload: WorkloadBase,
         common_name: str,
         sans_dns: FrozenSet[str] = frozenset(),
-        sans_ips: FrozenSet[str] = frozenset(),
+        sans_ip: FrozenSet[str] = frozenset(),
     ):
         """Create a new VaultTLSManager object.
 
@@ -157,7 +152,7 @@ class VaultTLSManager(Object):
             workload: Either a Container or a Machine.
             common_name: The common name of the certificate
             sans_dns: Subject alternative names of the certificate
-            sans_ips: Subject alternative IP addresses of the certificate
+            sans_ip: Subject alternative IP addresses of the certificate
         """
         super().__init__(charm, "tls")
         self.charm = charm
@@ -166,7 +161,7 @@ class VaultTLSManager(Object):
         self.tls_directory_path = tls_directory_path
         self.common_name = common_name
         self.sans_dns = sans_dns
-        self.sans_ips = sans_ips
+        self.sans_ip = sans_ip
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         if self.mode == TLSMode.TLS_INTEGRATION:
@@ -188,6 +183,9 @@ class VaultTLSManager(Object):
             self.framework.observe(
                 self.charm.on.config_changed, self._configure_self_signed_certificates
             )
+            self.framework.observe(
+                self.charm.on.update_status, self._configure_self_signed_certificates
+            )
 
     def _on_tls_certificates_access_relation_broken(self, event: RelationBrokenEvent):
         """Handle leaving the tls access relation.
@@ -203,7 +201,7 @@ class VaultTLSManager(Object):
             return []
         return [
             CertificateRequest(
-                common_name=self.common_name,
+                common_name=self.common_name, sans_dns=self.sans_dns, sans_ip=self.sans_ip
             )
         ]
 
@@ -230,7 +228,7 @@ class VaultTLSManager(Object):
         unit_private_key, unit_certificate = generate_vault_unit_certificate(
             common_name=self.common_name,
             sans_dns=self.sans_dns,
-            sans_ip=self.sans_ips,
+            sans_ip=self.sans_ip,
             ca_certificate=ca_certificate,
             ca_private_key=ca_private_key,
         )
@@ -264,26 +262,26 @@ class VaultTLSManager(Object):
         if not private_key:
             logger.debug("No private key assigned.")
             return
-        reload = False
+        restart = False
         if str(private_key) != self.pull_tls_file_from_workload(File.KEY):
             self._push_tls_file_to_workload(File.KEY, str(private_key))
             logger.info(
                 "Private key from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
-            reload = True
+            restart = True
         if str(assigned_certificate.certificate) != self.pull_tls_file_from_workload(File.CERT):
             self._push_tls_file_to_workload(File.CERT, str(assigned_certificate.certificate))
             logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
-            reload = True
+            restart = True
         if self.pull_tls_file_from_workload(File.CA) != str(assigned_certificate.ca):
             self._push_tls_file_to_workload(File.CA, str(assigned_certificate.ca))
-            reload = True
-        if reload:
-            self._reload_vault()
+            restart = True
+        if restart:
+            self._restart_vault()
 
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
@@ -399,17 +397,6 @@ class VaultTLSManager(Object):
         self._remove_tls_file_from_workload(File.CA)
         self._remove_tls_file_from_workload(File.CERT)
         logger.debug("Removed existing certificate files from workload.")
-
-    def _reload_vault(self) -> None:
-        """Send a SIGHUP signal to the process running Vault.
-
-        Reloads Vault's files and fails gracefully.
-        """
-        try:
-            self.workload.send_signal(signal=SIGHUP, process=self._service_name)
-            logger.debug("Vault reload requested")
-        except Exception:
-            logger.debug("Couldn't send signal to process. Proceeding normally.")
 
     def _restart_vault(self) -> None:
         """Attempt to restart the Vault server."""

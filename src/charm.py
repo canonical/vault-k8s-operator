@@ -159,7 +159,7 @@ class VaultCharm(CharmBase):
             tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
             common_name=self._ingress_address if self._ingress_address else "",
             sans_dns=frozenset([socket.getfqdn()]),
-            sans_ips=frozenset([self._ingress_address] if self._ingress_address else []),
+            sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
         )
         self.ingress = IngressPerAppRequirer(
             charm=self,
@@ -379,13 +379,13 @@ class VaultCharm(CharmBase):
             return
         if not self._bind_address or not self._ingress_address:
             return
-        try:
-            self.tls.get_tls_file_path_in_charm(File.CA)
-        except VaultCertsError:
+        if not self.tls.ca_certificate_secret_exists():
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
+        if not self.tls.tls_file_pushed_to_workload(File.CA):
             return
-        if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
+        if not self.tls.tls_file_pushed_to_workload(File.CERT):
+            return
+        if not self.tls.tls_file_pushed_to_workload(File.KEY):
             return
 
         self._generate_vault_config_file()
