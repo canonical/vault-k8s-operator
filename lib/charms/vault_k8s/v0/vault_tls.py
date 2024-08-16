@@ -202,7 +202,6 @@ class VaultTLSManager(Object):
                 )
                 self._restart_vault()
             return
-
         if self._should_request_new_certificate():
             self._send_new_certificate_request_to_provider(
                 self.pull_tls_file_from_workload(File.CSR), subject_ip
@@ -246,7 +245,6 @@ class VaultTLSManager(Object):
         if not (private_key := self.pull_tls_file_from_workload(File.KEY)):
             private_key = generate_private_key().decode()
             self._push_tls_file_to_workload(File.KEY, private_key)
-
         ca_private_key, ca_certificate = self._get_ca_certificate_secret()
         self._push_tls_file_to_workload(File.CA, ca_certificate)
         sans_ip = [subject_ip]

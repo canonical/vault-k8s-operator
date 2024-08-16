@@ -11,17 +11,6 @@ from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
 import hcl  # type: ignore[import-untyped]
 import requests
 from botocore.response import StreamingBody
-from charm import (
-    AUTOUNSEAL_MOUNT_PATH,
-    CHARM_POLICY_NAME,
-    CHARM_POLICY_PATH,
-    PKI_RELATION_NAME,
-    S3_RELATION_NAME,
-    TLS_CERTIFICATES_PKI_RELATION_NAME,
-    VAULT_CHARM_APPROLE_SECRET_LABEL,
-    VaultCharm,
-    config_file_content_matches,
-)
 from charms.tls_certificates_interface.v3.tls_certificates import (
     ProviderCertificate,
 )
@@ -44,6 +33,18 @@ from charms.vault_k8s.v0.vault_tls import (
 )
 from ops import pebble, testing
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+
+from charm import (
+    AUTOUNSEAL_MOUNT_PATH,
+    CHARM_POLICY_NAME,
+    CHARM_POLICY_PATH,
+    PKI_RELATION_NAME,
+    S3_RELATION_NAME,
+    TLS_CERTIFICATES_PKI_RELATION_NAME,
+    VAULT_CHARM_APPROLE_SECRET_LABEL,
+    VaultCharm,
+    config_file_content_matches,
+)
 
 S3_RELATION_LIB_PATH = "charms.data_platform_libs.v0.s3"
 S3_LIB_PATH = "charms.vault_k8s.v0.vault_s3"
@@ -986,9 +987,9 @@ class TestCharm(unittest.TestCase):
 
         action_output = self.harness.run_action("create-backup")
 
-        self.assertIn("backup-id", action_output.results)
+        assert "backup-id" in action_output.results
         backup_id = action_output.results["backup-id"]
-        self.assertIn(f"vault-backup-{self.model_name}", backup_id)
+        assert f"vault-backup-{self.model_name}" in backup_id
 
     def test_given_s3_relation_not_created_when_list_backups_action_then_action_fails(self):
         self.harness.set_leader(is_leader=True)

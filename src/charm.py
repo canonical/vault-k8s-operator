@@ -46,7 +46,6 @@ from charms.vault_k8s.v0.vault_kv import (
 )
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
-from container import Container
 from cryptography import x509
 from jinja2 import Environment, FileSystemLoader
 from ops import CharmBase, MaintenanceStatus
@@ -68,6 +67,8 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
+
+from container import Container
 
 logger = logging.getLogger(__name__)
 
@@ -385,7 +386,6 @@ class VaultCharm(CharmBase):
         self.tls.configure_certificates(self._ingress_address)
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             return
-
         self._generate_vault_config_file()
         self._set_pebble_plan()
         vault = Vault(
