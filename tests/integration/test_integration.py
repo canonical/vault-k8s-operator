@@ -945,18 +945,17 @@ class TestVaultK8sIntegrationsPart3:
 
         app = ops_test.model.applications["vault-b"]
         assert isinstance(app, Application)
-        await app.scale(3)
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
             status="active",
-            wait_for_exact_units=1,
+            wait_for_exact_units=3,
             idle_period=5,
         )
         await app.scale(0)
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
-            status="active",
-            wait_for_exact_units=3,
+            status="waiting",
+            wait_for_exact_units=0,
             idle_period=65,
         )
         await app.scale(3)
