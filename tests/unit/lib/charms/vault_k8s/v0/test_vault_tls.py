@@ -18,7 +18,6 @@ from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 TLS_CERTIFICATES_LIB_PATH = "charms.tls_certificates_interface.v3.tls_certificates"
 CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v0.certificate_transfer"
 VAULT_TLS_PATH = "charms.vault_k8s.v0.vault_tls"
-TESTING_MOUNT_PATH = os.path.dirname(os.path.realpath(__file__)) + "/test_mounts/"
 
 
 class TestCharmTLS:
