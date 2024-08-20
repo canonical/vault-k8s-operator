@@ -2,6 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 import time
+from base64 import b64decode
 from pathlib import Path
 from typing import List
 
@@ -87,3 +88,10 @@ async def wait_for_status_message(
     raise TimeoutError(
         f"`{app_name}` didn't show the expected status: `{expected_message}`. Last statuses: {unit_statuses}"
     )
+
+
+async def get_model_secret_field(ops_test: OpsTest, label: str, field: str) -> str:
+    secrets = await ops_test.model.list_secrets(show_secrets=True)  # type: ignore
+    secret = next(secret for secret in secrets if secret.label == label)
+    field_content = b64decode(secret.value.data[field]).decode("utf-8")
+    return field_content
