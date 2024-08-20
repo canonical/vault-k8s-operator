@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import requests
-from charm import AUTOUNSEAL_POLICY_PATH
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -16,6 +15,8 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from hvac.exceptions import Forbidden, InvalidPath
+
+from charm import AUTOUNSEAL_POLICY_PATH
 
 TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
