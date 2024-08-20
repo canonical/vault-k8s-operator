@@ -17,7 +17,7 @@ APP_NAME = METADATA["name"]
 
 def crash_pod(name: str, namespace: str) -> None:
     """Simulate a pod crash by deleting the pod."""
-    k8s = KubernetesClient()  # type: ignore until https://github.com/gtsystem/lightkube/pull/60 is merged
+    k8s = KubernetesClient()
     k8s.delete(Pod, name=name, namespace=namespace)
 
 

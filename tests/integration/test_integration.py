@@ -31,6 +31,7 @@ VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
 MINIO_APPLICATION_NAME = "minio"
+AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
@@ -938,7 +939,7 @@ class TestVaultK8sIntegrationsPart3:
         )
 
     @pytest.mark.abort_on_fail
-    async def test_given_vault_b_is_deployed_and_unsealed_when_scale_down_then_up_then_status_is_active(
+    async def test_given_vault_b_is_deployed_and_unsealed_when_all_units_crash_then_units_recover(
         self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
         assert ops_test.model
@@ -951,14 +952,10 @@ class TestVaultK8sIntegrationsPart3:
             wait_for_exact_units=3,
             idle_period=5,
         )
-        await app.scale(0)
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="waiting",
-            wait_for_exact_units=0,
-            idle_period=65,
-        )
-        await app.scale(3)
+        k8s_namespace = ops_test.model.name
+        crash_pod(name="vault-b-0", namespace=k8s_namespace)
+        crash_pod(name="vault-b-1", namespace=k8s_namespace)
+        crash_pod(name="vault-b-2", namespace=k8s_namespace)
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
             status="active",
