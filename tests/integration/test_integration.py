@@ -17,7 +17,12 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import crash_pod, get_leader_unit, wait_for_status_message
+from tests.integration.helpers import (
+    crash_pod,
+    get_leader_unit,
+    get_model_secret_field,
+    wait_for_status_message,
+)
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
@@ -31,6 +36,7 @@ VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
 MINIO_APPLICATION_NAME = "minio"
+AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
@@ -937,6 +943,65 @@ class TestVaultK8sIntegrationsPart3:
             idle_period=5,
         )
 
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_b_is_deployed_and_unsealed_when_all_units_crash_then_units_recover(
+        self, ops_test: OpsTest, deploy_requiring_charms: None
+    ):
+        assert ops_test.model
+
+        app = ops_test.model.applications["vault-b"]
+        assert isinstance(app, Application)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=5,
+        )
+        k8s_namespace = ops_test.model.name
+        crash_pod(name="vault-b-0", namespace=k8s_namespace)
+        crash_pod(name="vault-b-1", namespace=k8s_namespace)
+        crash_pod(name="vault-b-2", namespace=k8s_namespace)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=5,
+        )
+
+    @pytest.mark.abort_on_fail
+    async def test_given_vault_b_is_deployed_and_unsealed_when_auth_token_goes_bad_then_units_recover(
+        self,
+        ops_test: OpsTest,
+        deploy_requiring_charms: None,
+        deployed_vault_initialized_leader: Tuple[int, str, str],
+    ):
+        assert ops_test.model
+
+        app = ops_test.model.applications["vault-b"]
+        assert isinstance(app, Application)
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=5,
+        )
+        auth_token = await get_model_secret_field(
+            ops_test=ops_test, label=AUTOUNSEAL_TOKEN_SECRET_LABEL, field="token"
+        )
+        leader_unit_index, root_token, _ = deployed_vault_initialized_leader
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        revoke_token(
+            token_to_revoke=auth_token,
+            root_token=root_token,
+            endpoint=unit_addresses[leader_unit_index],
+        )
+        await ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="active",
+            wait_for_exact_units=3,
+            idle_period=5,
+        )
+
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
@@ -1187,3 +1252,9 @@ def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mo
     return str(
         loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
     )
+
+
+def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    client.revoke_token(token=token_to_revoke)
