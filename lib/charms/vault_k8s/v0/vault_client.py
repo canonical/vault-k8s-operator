@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 15
+LIBPATCH = 16
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -119,10 +119,15 @@ class Vault:
         self._client = hvac.Client(url=url, verify=ca_cert_path if ca_cert_path else False)
 
     def authenticate(self, auth_details: AuthMethod) -> bool:
-        """Find and use the token related with the given auth method."""
+        """Find and use the token related with the given auth method.
+
+        Returns:
+            bool: True if the authentication was successful and the token was accepted by vault.
+        """
         try:
             auth_details.login(self._client)
-        except (VaultError, ConnectionError) as e:
+            self._client.auth.token.lookup_self()
+        except (VaultError, ConnectionError, Forbidden) as e:
             logger.warning("Failed login to Vault: %s", e)
             return False
         return True
