@@ -25,6 +25,7 @@ TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certifi
 TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
 CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v0.certificate_transfer"
 VAULT_TLS_PATH = "charms.vault_k8s.v0.vault_tls"
+VAULT_CA_SUBJECT = "Vault self signed CA"
 
 
 class TestCharmTLS:
@@ -229,7 +230,6 @@ class TestCharmTLS:
                 remote_app_name="some-tls-provider",
             )
             private_key = generate_private_key()
-
             ca_private_key = generate_private_key()
             ca_certificate = generate_ca(
                 common_name="ca",
@@ -246,7 +246,6 @@ class TestCharmTLS:
                 ca_private_key=ca_private_key,
                 validity=365,
             )
-
             provider_certificate = ProviderCertificate(
                 certificate_signing_request=csr,
                 relation_id=certificates_relation.relation_id,
@@ -297,7 +296,7 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_TLS_PATH}.generate_certificate")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
-        self, generate_certificate
+        self, patch_generate_certificate
     ):
         private_key = generate_private_key()
         ca_private_key = generate_private_key()
@@ -316,7 +315,7 @@ class TestCharmTLS:
             ca_private_key=ca_private_key,
             validity=365,
         )
-        generate_certificate.return_value = certificate
+        patch_generate_certificate.return_value = certificate
         with tempfile.TemporaryDirectory() as temp_dir:
             peer_relation = scenario.PeerRelation(
                 endpoint="vault-peers",
@@ -361,6 +360,182 @@ class TestCharmTLS:
             ca_cert_path = temp_dir + "/cert.pem"
             assert os.path.exists(ca_cert_path)
             assert open(ca_cert_path).read() == str(certificate)
+
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    def test_given_self_signed_certificates_already_created_when_update_status_then_new_certificates_are_not_generated(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                peers_data={
+                    0: {
+                        "node_api_address": "http://1.2.3.4",
+                    },
+                },
+            )
+            certs_mount = scenario.Mount("/vault/certs", temp_dir)
+            config_mount = scenario.Mount("/vault/config", temp_dir)
+            vault_container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = scenario.Storage(
+                name="certs",
+            )
+            config_storage = scenario.Storage(
+                name="config",
+            )
+            ca_certificate_secret = scenario.Secret(
+                id="1",
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+                contents={0: {"privatekey": "some private key", "certificate": "some cert"}},
+                owner="app",
+            )
+            state_in = scenario.State(
+                containers=[vault_container],
+                storage=[certs_storage, config_storage],
+                secrets=[ca_certificate_secret],
+                leader=True,
+                relations=[peer_relation],
+            )
+            private_key = generate_private_key()
+            ca_private_key = generate_private_key()
+            ca_certificate = generate_ca(
+                common_name=VAULT_CA_SUBJECT,
+                private_key=ca_private_key,
+                validity=365,
+            )
+            csr = generate_csr(
+                private_key=private_key,
+                common_name="my.domain",
+            )
+            certificate = generate_certificate(
+                csr=csr,
+                ca=ca_certificate,
+                ca_private_key=ca_private_key,
+                validity=365,
+            )
+            with open(temp_dir + "/ca.pem", "w") as f:
+                f.write(str(ca_certificate))
+
+            with open(temp_dir + "/cert.pem", "w") as f:
+                f.write(str(certificate))
+
+            self.ctx.run("update_status", state_in)
+
+            with open(temp_dir + "/ca.pem", "r") as f:
+                assert f.read() == str(ca_certificate)
+            with open(temp_dir + "/cert.pem", "r") as f:
+                assert f.read() == str(certificate)
+            modification_time_cert_pem = os.stat(temp_dir + "/cert.pem").st_mtime
+            modification_time_ca_pem = os.stat(temp_dir + "/ca.pem").st_mtime
+            assert os.stat(temp_dir + "/cert.pem").st_mtime == modification_time_cert_pem
+            assert os.stat(temp_dir + "/ca.pem").st_mtime == modification_time_ca_pem
+
+    @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_sealed", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_initialized", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_api_available", new=Mock)
+    @patch("charms.vault_k8s.v0.vault_client.Vault.is_raft_cluster_healthy", new=Mock)
+    @patch(f"{VAULT_TLS_PATH}.generate_ca")
+    @patch(f"{VAULT_TLS_PATH}.generate_certificate")
+    def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
+        self, patch_generate_certificate, patch_generate_ca
+    ):
+        self_signed_private_key = generate_private_key()
+        self_signed_ca_private_key = generate_private_key()
+        self_signed_ca_certificate = generate_ca(
+            common_name=VAULT_CA_SUBJECT,
+            private_key=self_signed_ca_private_key,
+            validity=365,
+        )
+        self_signed_csr = generate_csr(
+            private_key=self_signed_private_key,
+            common_name="my.domain",
+        )
+        self_signed_certificate = generate_certificate(
+            csr=self_signed_csr,
+            ca=self_signed_ca_certificate,
+            ca_private_key=self_signed_ca_private_key,
+            validity=365,
+        )
+        patch_generate_ca.return_value = self_signed_ca_certificate
+        patch_generate_certificate.return_value = self_signed_certificate
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                peers_data={
+                    0: {
+                        "node_api_address": "http://1.2.3.4",
+                    },
+                },
+            )
+            certs_mount = scenario.Mount("/vault/certs", temp_dir)
+            config_mount = scenario.Mount("/vault/config", temp_dir)
+            vault_container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = scenario.Storage(
+                name="certs",
+            )
+            config_storage = scenario.Storage(
+                name="config",
+            )
+
+            state_in = scenario.State(
+                containers=[vault_container],
+                storage=[certs_storage, config_storage],
+                secrets=[],
+                leader=True,
+                relations=[peer_relation],
+            )
+            tls_integration_private_key = generate_private_key()
+            tls_integration_ca_private_key = generate_private_key()
+            tls_integration_ca_certificate = generate_ca(
+                common_name="tls integration ca",
+                private_key=tls_integration_ca_private_key,
+                validity=365,
+            )
+            tls_integration_csr = generate_csr(
+                private_key=tls_integration_private_key,
+                common_name="my.domain",
+            )
+            tls_integration_certificate = generate_certificate(
+                csr=tls_integration_csr,
+                ca=tls_integration_ca_certificate,
+                ca_private_key=tls_integration_ca_private_key,
+                validity=365,
+            )
+            with open(temp_dir + "/ca.pem", "w") as f:
+                f.write(str(tls_integration_ca_certificate))
+            with open(temp_dir + "/cert.pem", "w") as f:
+                f.write(str(tls_integration_certificate))
+
+            self.ctx.run("update_status", state_in)
+
+            with open(temp_dir + "/ca.pem", "r") as f:
+                assert f.read() == str(self_signed_ca_certificate)
+            with open(temp_dir + "/cert.pem", "r") as f:
+                assert f.read() == str(self_signed_certificate)
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.Vault.is_active", new=Mock)
