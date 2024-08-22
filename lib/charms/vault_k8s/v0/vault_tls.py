@@ -195,15 +195,6 @@ class VaultTLSManager(Object):
             self._configure_ca_cert_relation,
         )
 
-    # def _on_tls_certificates_access_relation_broken(self, event: RelationBrokenEvent):
-    #     """Handle leaving the tls access relation.
-
-    #     Regenerates self signed certificates from the saved self generated root CA
-    #     and reloads vault.
-    #     """
-    #     self._remove_all_certs_from_workload()
-    #     self.charm.on.config_changed.emit()
-
     def _configure_ca_cert_relation(self, event: EventBase):
         """Send the CA certificate to the relation."""
         self.send_ca_cert()
@@ -405,13 +396,6 @@ class VaultTLSManager(Object):
     def ca_certificate_is_saved(self) -> bool:
         """Return wether a CA cert is saved in the charm."""
         return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
-
-    # def _remove_all_certs_from_workload(self) -> None:
-    #     """Remove the certificate files that are used for authentication."""
-    #     self._remove_tls_file_from_workload(File.CA)
-    #     self._remove_tls_file_from_workload(File.CERT)
-    #     self._remove_tls_file_from_workload(File.KEY)
-    #     logger.debug("Removed existing certificate files from workload.")
 
     def _restart_vault(self) -> None:
         """Attempt to restart the Vault server."""
