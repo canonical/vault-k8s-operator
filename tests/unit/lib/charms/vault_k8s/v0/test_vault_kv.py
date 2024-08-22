@@ -63,6 +63,7 @@ class VaultKvProviderCharm(CharmBase):
             relation_name=VAULT_KV_RELATION_NAME,
             relation_id=int(relation_id),
         )
+        assert relation
         self.interface.set_vault_url(relation, url)
 
     def _on_set_mount_action(self, event: ActionEvent):
@@ -72,6 +73,7 @@ class VaultKvProviderCharm(CharmBase):
             relation_name=VAULT_KV_RELATION_NAME,
             relation_id=int(relation_id),
         )
+        assert relation
         self.interface.set_mount(relation, mount)
 
     def _on_set_unit_credentials_action(self, event: ActionEvent):
@@ -82,6 +84,7 @@ class VaultKvProviderCharm(CharmBase):
             relation_name=VAULT_KV_RELATION_NAME,
             relation_id=int(relation_id),
         )
+        assert relation
         secret = self.model.get_secret(id=secret_id)
         self.interface.set_unit_credentials(relation=relation, nonce=nonce, secret=secret)
 
@@ -608,6 +611,7 @@ class TestVaultKvProvides(unittest.TestCase):
         action_output = self.ctx.run_action(action, state_in)
 
         assert action_output.success is True
+        assert action_output.results
         assert {
             "relation_id": vault_kv_relation.relation_id,
             "app_name": vault_kv_relation.remote_app_name,
