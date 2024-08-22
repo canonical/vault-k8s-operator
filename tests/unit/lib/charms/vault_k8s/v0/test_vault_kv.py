@@ -3,12 +3,12 @@
 # See LICENSE file for licensing details.
 
 import json
-import textwrap
 import unittest
-from unittest.mock import patch
+from dataclasses import asdict
 
+import pytest
+import scenario
 from charms.vault_k8s.v0.vault_kv import (
-    KVRequest,
     NewVaultKvClientAttachedEvent,
     VaultKvClientDetachedEvent,
     VaultKvConnectedEvent,
@@ -18,25 +18,12 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvRequires,
     get_egress_subnets_list_from_relation_data,
 )
-from ops import testing
-from ops.charm import CharmBase
+from ops.charm import ActionEvent, CharmBase
 
 VAULT_KV_RELATION_NAME = "vault-kv"
 
 
 class VaultKvProviderCharm(CharmBase):
-    metadata_yaml = textwrap.dedent(
-        f"""
-        name: vault-kv-provider
-        containers:
-          vault:
-            resource: vault-image
-        provides:
-          {VAULT_KV_RELATION_NAME}:
-            interface: vault-kv
-        """
-    )
-
     def __init__(self, *args):
         super().__init__(*args)
         self.interface = VaultKvProvides(self, "vault-kv")
@@ -46,6 +33,22 @@ class VaultKvProviderCharm(CharmBase):
         self.framework.observe(
             self.interface.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
+        self.framework.observe(
+            self.on.set_vault_url_action,
+            self._on_set_vault_url_action,
+        )
+        self.framework.observe(self.on.set_mount_action, self._on_set_mount_action)
+        self.framework.observe(
+            self.on.set_unit_credentials_action, self._on_set_unit_credentials_action
+        )
+        self.framework.observe(
+            self.on.get_outstanding_kv_requests_action,
+            self._on_get_outstanding_kv_requests_action,
+        )
+        self.framework.observe(
+            self.on.get_kv_requests_action,
+            self._on_get_kv_requests_action,
+        )
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         pass
@@ -53,20 +56,49 @@ class VaultKvProviderCharm(CharmBase):
     def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
         pass
 
+    def _on_set_vault_url_action(self, event: ActionEvent):
+        url = event.params.get("url", "")
+        relation_id = event.params.get("relation-id", "")
+        relation = self.model.get_relation(
+            relation_name=VAULT_KV_RELATION_NAME,
+            relation_id=int(relation_id),
+        )
+        self.interface.set_vault_url(relation, url)
+
+    def _on_set_mount_action(self, event: ActionEvent):
+        mount = event.params.get("mount", "")
+        relation_id = event.params.get("relation-id", "")
+        relation = self.model.get_relation(
+            relation_name=VAULT_KV_RELATION_NAME,
+            relation_id=int(relation_id),
+        )
+        self.interface.set_mount(relation, mount)
+
+    def _on_set_unit_credentials_action(self, event: ActionEvent):
+        nonce = event.params.get("nonce", "")
+        secret_id = event.params.get("secret-id", "")
+        relation_id = event.params.get("relation-id", "")
+        relation = self.model.get_relation(
+            relation_name=VAULT_KV_RELATION_NAME,
+            relation_id=int(relation_id),
+        )
+        secret = self.model.get_secret(id=secret_id)
+        self.interface.set_unit_credentials(relation=relation, nonce=nonce, secret=secret)
+
+    def _on_get_outstanding_kv_requests_action(self, event: ActionEvent):
+        kv_requests = self.interface.get_outstanding_kv_requests()
+        event.set_results(
+            {"kv-requests": json.dumps([asdict(kv_request) for kv_request in kv_requests])}
+        )
+
+    def _on_get_kv_requests_action(self, event: ActionEvent):
+        kv_requests = self.interface.get_kv_requests()
+        event.set_results(
+            {"kv-requests": json.dumps([asdict(kv_request) for kv_request in kv_requests])}
+        )
+
 
 class VaultKvRequirerCharm(CharmBase):
-    metadata_yaml = textwrap.dedent(
-        f"""
-        name: vault-kv-requirer
-        containers:
-          my-app:
-            resource: my-app-image
-        requires:
-          {VAULT_KV_RELATION_NAME}:
-            interface: vault-kv
-        """
-    )
-
     def __init__(self, *args):
         super().__init__(*args)
         self.interface = VaultKvRequires(
@@ -89,134 +121,293 @@ class VaultKvRequirerCharm(CharmBase):
 
 
 class TestVaultKvProvides(unittest.TestCase):
-    def setUp(self):
-        self.harness = testing.Harness(
-            VaultKvProviderCharm, meta=VaultKvProviderCharm.metadata_yaml
+    @pytest.fixture(autouse=True)
+    def context(self):
+        self.ctx = scenario.Context(
+            charm_type=VaultKvProviderCharm,
+            meta={
+                "name": "vault-kv-provider",
+                "provides": {"vault-kv": {"interface": "vault-kv"}},
+            },
+            actions={
+                "set-vault-url": {
+                    "description": "Set the vault url",
+                    "params": {
+                        "url": {
+                            "type": "string",
+                            "description": "The url of the vault server",
+                        },
+                        "relation-id": {
+                            "type": "string",
+                            "description": "The relation id",
+                        },
+                    },
+                },
+                "set-mount": {
+                    "description": "Set the mount",
+                    "params": {
+                        "mount": {
+                            "type": "string",
+                            "description": "The mount",
+                        },
+                        "relation-id": {
+                            "type": "string",
+                            "description": "The relation id",
+                        },
+                    },
+                },
+                "set-unit-credentials": {
+                    "description": "Set the unit credentials",
+                    "params": {
+                        "nonce": {
+                            "type": "string",
+                            "description": "The nonce",
+                        },
+                        "secret-id": {
+                            "type": "string",
+                            "description": "The secret id",
+                        },
+                        "relation-id": {
+                            "type": "string",
+                            "description": "The relation id",
+                        },
+                    },
+                },
+                "get-outstanding-kv-requests": {
+                    "description": "Get the outstanding kv requests",
+                },
+                "get-kv-requests": {
+                    "description": "Get the kv requests",
+                },
+            },
         )
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
 
-    def setup_relation(self, remote_app: str = "vault-kv-requires", leader: bool = True) -> tuple:
-        """Set up a relation between the charm and a remote app with 1 unit."""
-        remote_unit = remote_app + "/0"
-        rel_name = VAULT_KV_RELATION_NAME
-        self.harness.set_leader(leader)
-        rel_id = self.harness.add_relation(rel_name, remote_app)
-        relation = self.harness.model.get_relation(rel_name, rel_id)
-        assert relation
-        self.harness.add_relation_unit(rel_id, remote_unit)
-        return remote_app, remote_unit, relation, rel_id
-
-    @patch("test_vault_kv.VaultKvProviderCharm._on_new_vault_kv_client_attached")
     def test_given_unit_joined_when_all_data_present_then_new_client_attached_fired(
-        self, _on_new_vault_kv_client_attached
+        self,
     ):
-        remote_app, remote_unit, _, rel_id = self.setup_relation()
         suffix = "dummy"
-        self.harness.update_relation_data(rel_id, remote_app, {"mount_suffix": suffix})
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit,
-            key_values={"nonce": "abcd", "egress_subnet": "10.0.0.1/32"},
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": "abcd", "egress_subnet": "10.0.0.1/32"}},
         )
-        args, _ = _on_new_vault_kv_client_attached.call_args
-        event = args[0]
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+        )
 
-        assert isinstance(event, NewVaultKvClientAttachedEvent)
-        assert args[0].mount_suffix == suffix
+        self.ctx.run(vault_kv_relation.changed_event, state_in)
 
-    @patch("test_vault_kv.VaultKvProviderCharm._on_new_vault_kv_client_attached")
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], NewVaultKvClientAttachedEvent)
+        assert self.ctx.emitted_events[1].egress_subnets == ["10.0.0.1/32"]
+        assert self.ctx.emitted_events[1].mount_suffix == suffix
+        assert self.ctx.emitted_events[1].nonce == "abcd"
+
     def test_given_unit_joined_when_missing_data_then_new_client_attached_is_never_fired(
-        self, _on_new_vault_kv_client_attached
+        self,
     ):
-        self.setup_relation()
-        _on_new_vault_kv_client_attached.assert_not_called()
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+        )
+
+        self.ctx.run(vault_kv_relation.changed_event, state_in)
+
+        assert len(self.ctx.emitted_events) == 1
 
     def test_given_unit_is_leader_when_setting_vault_url_then_relation_data_is_updated(
         self,
     ):
-        _, _, relation, rel_id = self.setup_relation()
-        vault_url = "https://vault.example.com"
-        self.harness.charm.interface.set_vault_url(relation, vault_url)
-
-        assert (
-            self.harness.get_relation_data(rel_id, self.harness.charm.app.name)["vault_url"]
-            == vault_url
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
         )
+        vault_url = "https://vault.example.com"
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
+        action = scenario.Action(
+            "set-vault-url",
+            params={
+                "url": vault_url,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {"vault_url": vault_url}
 
     def test_given_unit_is_not_leader_when_setting_vault_url_then_relation_data_is_not_updated(
         self,
     ):
-        _, _, relation, rel_id = self.setup_relation(leader=False)
-        vault_url = "https://vault.example.com"
-        self.harness.charm.interface.set_vault_url(relation, vault_url)
-
-        assert "vault_url" not in self.harness.get_relation_data(
-            rel_id, self.harness.charm.app.name
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
         )
+        vault_url = "https://vault.example.com"
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=False,
+        )
+        action = scenario.Action(
+            "set-vault-url",
+            params={
+                "url": vault_url,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {}
 
     def test_given_unit_is_leader_when_setting_mount_then_relation_data_is_updated(
         self,
     ):
-        _, _, relation, rel_id = self.setup_relation()
-        mount = "charm-vault-kv-requires-dummy"
-        self.harness.charm.interface.set_mount(relation, mount)
-
-        assert (
-            self.harness.get_relation_data(rel_id, self.harness.charm.app.name)["mount"] == mount
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
         )
+        mount = "charm-vault-kv-requires-dummy"
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
+        action = scenario.Action(
+            "set-mount",
+            params={
+                "mount": mount,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {"mount": mount}
 
     def test_given_unit_is_not_leader_when_setting_mount_then_relation_data_is_not_updated(
         self,
     ):
-        _, _, relation, rel_id = self.setup_relation(leader=False)
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
         mount = "charm-vault-kv-requires-dummy"
-        self.harness.charm.interface.set_mount(relation, mount)
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=False,
+        )
+        action = scenario.Action(
+            "set-mount",
+            params={
+                "mount": mount,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
+        )
 
-        assert "mount" not in self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {}
 
     def test_given_unit_is_leader_when_setting_credentials_then_relation_data_is_updated(
         self,
     ):
-        _, remote_unit, relation, rel_id = self.setup_relation()
-        unit_name = remote_unit.replace("/", "-")
-        secret = self.harness.charm.app.add_secret({"role-id": "111", "role-secret-id": "222"})
-        self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
+        secret = scenario.Secret(id="secret-id", contents={0: {}})
+        nonce = "abcd"
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            secrets=[secret],
+            leader=True,
+        )
+        action = scenario.Action(
+            "set-unit-credentials",
+            params={
+                "nonce": nonce,
+                "secret-id": secret.id,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
+        )
 
-        assert json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.charm.app.name)["credentials"]
-        ) == {unit_name: secret.id}
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {
+            "credentials": json.dumps({nonce: f"secret:{secret.id}"})
+        }
 
     def test_given_unit_is_not_leader_when_setting_credentials_then_relation_data_is_not_updated(
         self,
     ):
-        _, remote_unit, relation, rel_id = self.setup_relation(leader=False)
-        unit_name = remote_unit.replace("/", "-")
-        secret = self.harness.charm.app.add_secret({"role-id": "111", "role-secret-id": "222"})
-        self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
-
-        assert "credentials" not in self.harness.get_relation_data(
-            rel_id, self.harness.charm.app.name
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
+        secret = scenario.Secret(id="secret-id", contents={0: {}})
+        nonce = "abcd"
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            secrets=[secret],
+            leader=False,
+        )
+        action = scenario.Action(
+            "set-unit-credentials",
+            params={
+                "nonce": nonce,
+                "secret-id": secret.id,
+                "relation-id": str(vault_kv_relation.relation_id),
+            },
         )
 
-    def test_given_secret_is_missing_id_when_setting_credentials_then_relation_data_is_not_updated(
-        self,
-    ):
-        """Secret._id is None when the secret has been looked up by label."""
-        _, remote_unit, relation, rel_id = self.setup_relation()
-        unit_name = remote_unit.replace("/", "-")
-        secret = self.harness.charm.app.add_secret({"role-id": "111", "role-secret-id": "222"})
-        secret._id = None
-        self.harness.charm.interface.set_unit_credentials(relation, unit_name, secret)
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert "credentials" not in self.harness.get_relation_data(
-            rel_id, self.harness.charm.app.name
-        )
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {}
 
     def test_given_no_request_when_get_outstanding_kv_requests_then_empty_list_is_returned(self):
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
+        action = scenario.Action("get-outstanding-kv-requests")
 
-        assert len(kv_requests) == 0
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results == {"kv-requests": "[]"}
 
     def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(
         self,
@@ -224,29 +415,36 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce = "abcd"
         egress_subnets = ["10.0.0.1/32"]
-        remote_app, remote_unit, _, rel_id = self.setup_relation()
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit,
-            key_values={"nonce": nonce, "egress_subnet": ",".join(egress_subnets)},
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
         )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=remote_app,
-            key_values={"mount_suffix": suffix},
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
         )
+        action = scenario.Action("get-outstanding-kv-requests")
 
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 1
-        assert kv_requests[0] == KVRequest(
-            relation_id=rel_id,
-            app_name=remote_app,
-            unit_name=remote_unit,
-            mount_suffix=suffix,
-            egress_subnets=egress_subnets,
-            nonce=nonce,
-        )
+        assert action_output.success is True
+        assert action_output.results == {
+            "kv-requests": json.dumps(
+                [
+                    {
+                        "relation_id": vault_kv_relation.relation_id,
+                        "app_name": vault_kv_relation.remote_app_name,
+                        "unit_name": f"{vault_kv_relation.remote_app_name}/0",
+                        "mount_suffix": suffix,
+                        "egress_subnets": egress_subnets,
+                        "nonce": nonce,
+                    }
+                ]
+            )
+        }
 
     def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
         self,
@@ -255,44 +453,40 @@ class TestVaultKvProvides(unittest.TestCase):
         nonce_1 = "abcd"
         nonce_2 = "efgh"
         egress_subnets = ["10.0.0.1/32"]
-        remote_app, remote_unit_1, _, rel_id = self.setup_relation()
-        remote_unit_2 = remote_app + "/1"
-        self.harness.add_relation_unit(
-            rel_id,
-            remote_unit_2,
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={
+                0: {"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)},
+                1: {"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)},
+            },
+            local_app_data={"credentials": json.dumps({nonce_1: "whatever secret id"})},
         )
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)},
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
         )
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)},
-        )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=remote_app,
-            key_values={"mount_suffix": suffix},
-        )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=self.harness.charm.app.name,
-            key_values={"credentials": json.dumps({nonce_1: "whatever secret id"})},
-        )
+        action = scenario.Action("get-outstanding-kv-requests")
 
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 1
-        assert kv_requests[0] == KVRequest(
-            relation_id=rel_id,
-            app_name=remote_app,
-            unit_name=remote_unit_2,
-            mount_suffix=suffix,
-            egress_subnets=egress_subnets,
-            nonce=nonce_2,
-        )
+        assert action_output.success is True
+        assert action_output.results == {
+            "kv-requests": json.dumps(
+                [
+                    {
+                        "relation_id": vault_kv_relation.relation_id,
+                        "app_name": vault_kv_relation.remote_app_name,
+                        "unit_name": f"{vault_kv_relation.remote_app_name}/1",
+                        "mount_suffix": suffix,
+                        "egress_subnets": egress_subnets,
+                        "nonce": nonce_2,
+                    }
+                ]
+            )
+        }
 
     def test_given_2_vault_kv_relations_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
         self,
@@ -300,212 +494,261 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce_1 = "abcd"
         nonce_2 = "efgh"
-        egress_subnets_1 = ["10.0.0.1/32", "10.0.1.1/32"]
-        egress_subnets_2 = ["10.0.0.2/32"]
-        remote_app_1, remote_unit_1, _, rel_id_1 = self.setup_relation()
-        remote_app_2, remote_unit_2, _, rel_id_2 = self.setup_relation(
-            remote_app="vault-kv-requires-b"
+        egress_subnets = ["10.0.0.1/32"]
+        vault_kv_relation_1 = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)}},
         )
-        self.harness.update_relation_data(
-            rel_id_1,
-            remote_unit_1,
-            key_values={"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets_1)},
+        vault_kv_relation_2 = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)}},
         )
-        self.harness.update_relation_data(
-            rel_id_2,
-            remote_unit_2,
-            key_values={"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets_2)},
+        state_in = scenario.State(
+            relations=[vault_kv_relation_1, vault_kv_relation_2],
+            leader=True,
         )
-        self.harness.update_relation_data(
-            relation_id=rel_id_1,
-            app_or_unit=remote_app_1,
-            key_values={"mount_suffix": suffix + "a"},
-        )
-        self.harness.update_relation_data(
-            relation_id=rel_id_2,
-            app_or_unit=remote_app_2,
-            key_values={"mount_suffix": suffix + "b"},
-        )
-        self.harness.update_relation_data(
-            relation_id=rel_id_1,
-            app_or_unit=self.harness.charm.app.name,
-            key_values={"credentials": json.dumps({nonce_1: "whatever secret id"})},
-        )
+        action = scenario.Action("get-outstanding-kv-requests")
 
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 1
-        assert kv_requests[0] == KVRequest(
-            relation_id=rel_id_2,
-            app_name=remote_app_2,
-            unit_name=remote_unit_2,
-            mount_suffix=suffix + "b",
-            egress_subnets=egress_subnets_2,
-            nonce=nonce_2,
-        )
+        assert action_output.success is True
+        assert action_output.results == {
+            "kv-requests": json.dumps(
+                [
+                    {
+                        "relation_id": vault_kv_relation_1.relation_id,
+                        "app_name": vault_kv_relation_1.remote_app_name,
+                        "unit_name": f"{vault_kv_relation_1.remote_app_name}/0",
+                        "mount_suffix": suffix,
+                        "egress_subnets": egress_subnets,
+                        "nonce": nonce_1,
+                    },
+                    {
+                        "relation_id": vault_kv_relation_2.relation_id,
+                        "app_name": vault_kv_relation_2.remote_app_name,
+                        "unit_name": f"{vault_kv_relation_2.remote_app_name}/0",
+                        "mount_suffix": suffix,
+                        "egress_subnets": egress_subnets,
+                        "nonce": nonce_2,
+                    },
+                ]
+            )
+        }
 
     def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(
         self,
     ):
+        suffix = "dummy"
         nonce = "abcd"
-        remote_app, remote_unit, _, rel_id = self.setup_relation()
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit,
-            key_values={"nonce": nonce, "egress_subnet": "10.0.0.1/32"},
+        egress_subnets = ["10.0.0.1/32"]
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
+            local_app_data={"credentials": json.dumps({nonce: "whatever secret id"})},
         )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=remote_app,
-            key_values={"mount_suffix": "dummy"},
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
         )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=self.harness.charm.app.name,
-            key_values={"credentials": json.dumps({nonce: "whatever secret id"})},
-        )
+        action = scenario.Action("get-outstanding-kv-requests")
 
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 0
+        assert action_output.success is True
+        assert action_output.results == {"kv-requests": "[]"}
 
     def test_given_no_request_when_get_kv_requests_then_empty_list_is_returned(self):
-        kv_requests = self.harness.charm.interface.get_outstanding_kv_requests()
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_data={},
+            remote_units_data={0: {}},
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
+        action = scenario.Action("get-kv-requests")
 
-        assert len(kv_requests) == 0
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results == {"kv-requests": "[]"}
 
     def test_given_2_requests_when_get_kv_requests_then_requests_are_returned(self):
         suffix = "dummy"
         nonce1 = "abcd"
         nonce2 = "efgh"
         egress_subnets = ["10.0.0.1/32"]
-        remote_app, remote_unit_1, _, rel_id = self.setup_relation()
-        remote_unit_2 = remote_app + "/1"
-        self.harness.add_relation_unit(
-            rel_id,
-            remote_unit_2,
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={
+                0: {"nonce": nonce1, "egress_subnet": ",".join(egress_subnets)},
+                1: {"nonce": nonce2, "egress_subnet": ",".join(egress_subnets)},
+            },
         )
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit_1,
-            key_values={"nonce": nonce1, "egress_subnet": ",".join(egress_subnets)},
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
         )
-        self.harness.update_relation_data(
-            rel_id,
-            remote_unit_2,
-            key_values={"nonce": nonce2, "egress_subnet": ",".join(egress_subnets)},
-        )
-        self.harness.update_relation_data(
-            relation_id=rel_id,
-            app_or_unit=remote_app,
-            key_values={"mount_suffix": suffix},
-        )
+        action = scenario.Action("get-kv-requests")
 
-        kv_requests = self.harness.charm.interface.get_kv_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 2
-        expected_kv_request_1 = KVRequest(
-            relation_id=rel_id,
-            app_name=remote_app,
-            unit_name=remote_unit_1,
-            mount_suffix=suffix,
-            egress_subnets=egress_subnets,
-            nonce=nonce1,
-        )
-        expected_kv_request_2 = KVRequest(
-            relation_id=rel_id,
-            app_name=remote_app,
-            unit_name=remote_unit_2,
-            mount_suffix=suffix,
-            egress_subnets=egress_subnets,
-            nonce=nonce2,
-        )
-        assert expected_kv_request_1 in kv_requests
-        assert expected_kv_request_2 in kv_requests
+        assert action_output.success is True
+        assert {
+            "relation_id": vault_kv_relation.relation_id,
+            "app_name": vault_kv_relation.remote_app_name,
+            "unit_name": f"{vault_kv_relation.remote_app_name}/0",
+            "mount_suffix": suffix,
+            "egress_subnets": egress_subnets,
+            "nonce": nonce1,
+        } in json.loads(action_output.results["kv-requests"])
+        assert {
+            "relation_id": vault_kv_relation.relation_id,
+            "app_name": vault_kv_relation.remote_app_name,
+            "unit_name": f"{vault_kv_relation.remote_app_name}/1",
+            "mount_suffix": suffix,
+            "egress_subnets": egress_subnets,
+            "nonce": nonce2,
+        } in json.loads(action_output.results["kv-requests"])
 
-    @patch("test_vault_kv.VaultKvProviderCharm._on_vault_kv_client_detached")
     def test_given_vault_kv_relation_when_relation_departed_then_vault_kv_client_detached_event_fired(
-        self, _on_vault_kv_client_detached
+        self,
     ):
-        _, remote_unit, _, rel_id = self.setup_relation()
-        self.harness.remove_relation(rel_id)
-        args, _ = _on_vault_kv_client_detached.call_args
-        event = args[0]
-        assert isinstance(event, VaultKvClientDetachedEvent)
-        assert event.unit_name == remote_unit
-
-
-class TestVaultKvRequires(unittest.TestCase):
-    def setUp(self):
-        self.harness = testing.Harness(
-            VaultKvRequirerCharm, meta=VaultKvRequirerCharm.metadata_yaml
+        suffix = "dummy"
+        nonce = "abcd"
+        egress_subnets = ["10.0.0.1/32"]
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-requirer",
+            remote_app_data={"mount_suffix": suffix},
+            remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
         )
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
 
-    def setup_relation(self, leader: bool = True) -> tuple:
-        remote_app = "vault-kv-provides"
-        remote_unit = remote_app + "/0"
-        rel_name = VAULT_KV_RELATION_NAME
-        self.harness.set_leader(leader)
-        rel_id = self.harness.add_relation(rel_name, remote_app)
-        relation = self.harness.model.get_relation(rel_name, rel_id)
-        assert relation
-        self.harness.add_relation_unit(rel_id, remote_unit)
-        self.harness.charm.interface.request_credentials(relation, "10.20.20.1/32", "abcd")
-        return remote_app, remote_unit, relation, rel_id
+        self.ctx.run(vault_kv_relation.departed_event, state_in)
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvClientDetachedEvent)
+        assert self.ctx.emitted_events[1].unit_name == f"{vault_kv_relation.remote_app_name}/0"
+
+
+class TestVaultKvRequires:
+    @pytest.fixture(autouse=True)
+    def context(self):
+        self.ctx = scenario.Context(
+            charm_type=VaultKvRequirerCharm,
+            meta={
+                "name": "vault-kv-requirer",
+                "requires": {"vault-kv": {"interface": "vault-kv"}},
+            },
+        )
+
     def test_given_unit_leader_when_unit_joined_then_connected_event_fired_and_all_relation_data_is_updated(  # noqa: E501
-        self, _on_connected
+        self,
     ):
-        rel_id = self.setup_relation()[-1]
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
 
-        args, _ = _on_connected.call_args
-        event = args[0]
+        state_out = self.ctx.run(vault_kv_relation.joined_event, state_in)
 
-        app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        assert isinstance(event, VaultKvConnectedEvent)
-        assert app_relation_data["mount_suffix"] == self.harness.charm.interface.mount_suffix
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
+        assert state_out.relations[0].local_app_data == {"mount_suffix": "dummy"}
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
-    def test_given_unit_leader_when_config_changed_then_connected_event_fired(self, _on_connected):
-        self.setup_relation()
-        self.harness.charm.on.config_changed.emit()
+    def test_given_unit_leader_when_config_changed_then_connected_event_fired(self):
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
 
-        self.assertEqual(_on_connected.call_count, 2)
+        state_out = self.ctx.run("config-changed", state_in)
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_connected")
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
+        assert state_out.relations[0].local_app_data == {"mount_suffix": "dummy"}
+
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
-        self, _on_connected
+        self,
     ):
-        rel_id = self.setup_relation(leader=False)[-1]
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=False,
+        )
 
-        args, _ = _on_connected.call_args
-        event = args[0]
+        state_out = self.ctx.run(vault_kv_relation.joined_event, state_in)
 
-        app_relation_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
-        assert isinstance(event, VaultKvConnectedEvent)
-        assert "mount_suffix" not in app_relation_data
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
+        assert state_out.relations[0].local_app_data == {}
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_gone_away")
     def test_given_all_units_departed_when_relation_broken_then_gone_away_event_fired(
-        self, _on_gone_away
+        self,
     ):
-        rel_id = self.setup_relation()[-1]
-        self.harness.remove_relation(rel_id)
-        args, _ = _on_gone_away.call_args
-        event = args[0]
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
 
-        assert isinstance(event, VaultKvGoneAwayEvent)
+        self.ctx.run(vault_kv_relation.broken_event, state_in)
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_ready")
-    def test_given_relation_changed_when_all_data_present_then_ready_event_fired(self, _on_ready):
-        remote_app, _, _, rel_id = self.setup_relation()
-        self.harness.update_relation_data(
-            rel_id,
-            remote_app,
-            {
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvGoneAwayEvent)
+
+    def test_given_relation_changed_when_all_data_present_then_ready_event_fired(self):
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+            local_unit_data={
+                "nonce": "abcd",
+            },
+            remote_app_data={
                 "vault_url": "https://vault.example.com",
                 "ca_certificate": "ca certificate data",
                 "mount": "charm-vault-kv-requires-dummy",
@@ -513,18 +756,38 @@ class TestVaultKvRequires(unittest.TestCase):
                 "credentials": json.dumps({"abcd": "dummy"}),
             },
         )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
 
-        args, _ = _on_ready.call_args
-        event = args[0]
+        self.ctx.run(vault_kv_relation.changed_event, state_in)
 
-        assert isinstance(event, VaultKvReadyEvent)
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultKvReadyEvent)
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
 
-    @patch("test_vault_kv.VaultKvRequirerCharm._on_ready")
     def test_given_relation_changed_when_data_missing_then_ready_event_never_fired(
-        self, _on_ready
+        self,
     ):
-        self.setup_relation()
-        _on_ready.assert_not_called()
+        vault_kv_relation = scenario.Relation(
+            endpoint="vault-kv",
+            interface="vault-kv",
+            remote_app_name="vault-kv-provides",
+            local_unit_data={
+                "nonce": "abcd",
+            },
+            remote_app_data={},
+        )
+        state_in = scenario.State(
+            relations=[vault_kv_relation],
+            leader=True,
+        )
+
+        self.ctx.run(vault_kv_relation.changed_event, state_in)
+
+        assert len(self.ctx.emitted_events) == 1
 
     def test_given_egress_subnets_in_relation_databag_when_get_egress_subnets_list_from_relation_data_then_list_is_returned(  # noqa: E501
         self,
