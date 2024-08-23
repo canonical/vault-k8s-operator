@@ -358,7 +358,7 @@ class VaultTLSManager(Object):
         """Get the vault CA certificate secret.
 
         Returns:
-            Tuple[Optional[str], Optional[str]]: The CA private key and certificate
+            The CA private key and certificate as a tuple
         """
         juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
         content = juju_secret.get_content(refresh=True)
@@ -369,12 +369,6 @@ class VaultTLSManager(Object):
         private_key: str,
         certificate: str,
     ) -> None:
-        """Set the vault CA certificate secret.
-
-        Args:
-            private_key: Private key
-            certificate: certificate
-        """
         juju_secret_content = {
             "privatekey": private_key,
             "certificate": certificate,
