@@ -226,6 +226,9 @@ class VaultTLSManager(Object):
         ):
             logger.debug("Found existing self signed certificate in workload.")
             return
+        if not self.ca_certificate_secret_exists():
+            logger.debug("No CA certificate found.")
+            return
         ca_private_key, ca_certificate = self._get_ca_certificate_secret()
         if not ca_certificate:
             logger.debug("No CA certificate found.")
