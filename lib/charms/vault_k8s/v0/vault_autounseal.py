@@ -401,7 +401,7 @@ class VaultAutounsealProvides(ops.Object):
         if relation.app is None:
             logger.warning("No remote application yet")
             return None
-        credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
+        credentials_secret_id = relation.data[self.charm.app].get("credentials_secret_id")
         if credentials_secret_id is None:
             return None
         secret = self.model.get_secret(id=credentials_secret_id)
