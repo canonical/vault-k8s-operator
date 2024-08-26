@@ -64,7 +64,7 @@ where `vault a` is the Vault app which will provide the autounseal service, and
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import ops
 from interface_tester import DataBagSchema
@@ -346,7 +346,7 @@ class VaultAutounsealProvides(ops.Object):
             }
         )
 
-    def get_outstanding_requests(self, relation_id: Optional[int] = None) -> List[Relation]:
+    def get_outstanding_requests(self, relation_id: int | None = None) -> List[Relation]:
         """Get the outstanding requests for the relation.
 
         This will retrieve any vault-autounseal relations that have not yet had
@@ -359,7 +359,7 @@ class VaultAutounsealProvides(ops.Object):
                 outstanding_requests.append(relation)
         return outstanding_requests
 
-    def get_active_relations(self, relation_id: Optional[int] = None) -> List[Relation]:
+    def get_active_relations(self, relation_id: int | None = None) -> List[Relation]:
         """Get all active relations on the relation name this class was initialized with.
 
         Args:
@@ -379,14 +379,14 @@ class VaultAutounsealProvides(ops.Object):
         )
         return [relation for relation in relations if relation.active]
 
-    def _credentials_issued_for_request(self, relation_id: Optional[int]) -> bool:
+    def _credentials_issued_for_request(self, relation_id: int | None) -> bool:
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
             return False
         credentials = self._get_credentials(relation)
         return credentials is not None
 
-    def _get_credentials(self, relation: ops.Relation) -> Optional[ApproleDetails]:
+    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
         """Retrieve the credentials from the Juju secret.
 
         Args:
@@ -449,7 +449,7 @@ class VaultAutounsealRequires(ops.Object):
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         self.on.vault_autounseal_provider_relation_broken.emit()
 
-    def get_details(self) -> Optional[AutounsealDetails]:
+    def get_details(self) -> AutounsealDetails | None:
         """Return the vault address, role id, secret id and ca certificate from the relation databag.
 
         Returns:
@@ -480,7 +480,7 @@ class VaultAutounsealRequires(ops.Object):
             ca_certificate,
         )
 
-    def _get_credentials(self, relation: ops.Relation) -> Optional[ApproleDetails]:
+    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
         """Return the token from the Juju secret.
 
         Returns:
@@ -499,7 +499,7 @@ class VaultAutounsealRequires(ops.Object):
         return _get_credentials_from_secret(secret)
 
 
-def _get_credentials_from_secret(secret: ops.Secret) -> Optional[ApproleDetails]:
+def _get_credentials_from_secret(secret: ops.Secret) -> ApproleDetails | None:
     """Retrieve the Approle credentials from the Juju secret.
 
     Args:

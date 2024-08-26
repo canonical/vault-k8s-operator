@@ -15,7 +15,7 @@ Add the following dependencies to the charm's requirements.txt file:
 """
 
 import logging
-from typing import IO, List, Optional, cast
+from typing import IO, List, cast
 
 import boto3
 from botocore.config import Config
@@ -65,7 +65,7 @@ class S3:
         access_key: str,
         secret_key: str,
         endpoint: str,
-        region: Optional[str] = AWS_DEFAULT_REGION,
+        region: str | None = AWS_DEFAULT_REGION,
     ):
         self.access_key = access_key
         self.secret_key = secret_key
@@ -185,7 +185,7 @@ class S3:
             logger.error("Error getting objects list from bucket %s: %s", bucket_name, e)
             raise S3Error(f"Error getting objects list from bucket {bucket_name}: {e}")
 
-    def get_content(self, bucket_name: str, object_key: str) -> Optional[StreamingBody]:
+    def get_content(self, bucket_name: str, object_key: str) -> StreamingBody | None:
         """Get object content from S3 bucket by key.
 
         Args:
@@ -193,7 +193,7 @@ class S3:
             object_key: S3 object key.
 
         Returns:
-            Optional[StreamingBody]: File like object with the content of the S3 object.
+            File like object with the content of the S3 object, or None if the object does not exist.
         """
         bucket = self.s3.Bucket(bucket_name)
         try:
