@@ -11,7 +11,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Protocol
 
 import hvac
 import requests
@@ -115,7 +115,7 @@ class VaultClientError(Exception):
 class Vault:
     """Class to interact with Vault through its API."""
 
-    def __init__(self, url: str, ca_cert_path: Optional[str]):
+    def __init__(self, url: str, ca_cert_path: str | None):
         self._client = hvac.Client(url=url, verify=ca_cert_path if ca_cert_path else False)
 
     def authenticate(self, auth_details: AuthMethod) -> bool:
@@ -132,7 +132,7 @@ class Vault:
             return False
         return True
 
-    def get_token_data(self) -> Optional[Dict]:
+    def get_token_data(self) -> Dict | None:
         """Check if given token is accepted by vault, and returns the token data if so."""
         try:
             token_data = self._client.auth.token.lookup_self()["data"]
@@ -277,8 +277,8 @@ class Vault:
         role_name: str,
         token_ttl=None,
         token_max_ttl=None,
-        policies: Optional[List[str]] = None,
-        cidrs: Optional[List[str]] = None,
+        policies: List[str] | None = None,
+        cidrs: List[str] | None = None,
         token_period=None,
     ) -> str:
         """Create/update a role within vault associating the supplied policies.
@@ -303,7 +303,7 @@ class Vault:
         response = self._client.auth.approle.read_role_id(role_name)
         return response["data"]["role_id"]
 
-    def generate_role_secret_id(self, name: str, cidrs: Optional[List[str]] = None) -> str:
+    def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
         """Generate a new secret tied to an AppRole."""
         response = self._client.auth.approle.generate_secret_id(name, cidr_list=cidrs)
         return response["data"]["secret_id"]
@@ -380,7 +380,7 @@ class Vault:
         role: str,
         csr: str,
         common_name: str,
-    ) -> Optional[Certificate]:
+    ) -> Certificate | None:
         """Sign a certificate signing request for the PKI backend.
 
         Args:

@@ -12,7 +12,7 @@ import json
 import logging
 import socket
 from dataclasses import dataclass
-from typing import IO, Dict, List, Optional, Tuple, cast
+from typing import IO, Dict, List, Tuple, cast
 
 import hcl
 from botocore.response import StreamingBody
@@ -368,7 +368,7 @@ class VaultCharm(CharmBase):
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
-    def _configure(self, event: Optional[ConfigChangedEvent] = None) -> None:  # noqa: C901
+    def _configure(self, event: ConfigChangedEvent | None = None) -> None:  # noqa: C901
         """Handle config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
@@ -524,7 +524,7 @@ class VaultCharm(CharmBase):
         intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
         return intermediate_ca_common_name == common_name
 
-    def _get_pki_intermediate_ca_csr(self) -> Optional[str]:
+    def _get_pki_intermediate_ca_csr(self) -> str | None:
         """Get the current CSR from the relation data."""
         csrs = self.tls_certificates_pki.get_requirer_csrs()
         if not csrs:
@@ -651,7 +651,7 @@ class VaultCharm(CharmBase):
         self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnets)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
-    def _get_pki_ca_certificate(self) -> Optional[str]:
+    def _get_pki_ca_certificate(self) -> str | None:
         """Return the PKI CA certificate provided by the TLS provider.
 
         Validate that the CSR matches the one in secrets.
@@ -924,7 +924,7 @@ class VaultCharm(CharmBase):
                 s3_parameters[key] = value.strip()
         return s3_parameters
 
-    def _check_s3_pre_requisites(self) -> Optional[str]:
+    def _check_s3_pre_requisites(self) -> str | None:
         """Check if the S3 pre-requisites are met."""
         if not self.unit.is_leader():
             return "Only leader unit can perform backup operations"
@@ -1099,7 +1099,7 @@ class VaultCharm(CharmBase):
         except ModelError:
             return False
 
-    def _get_relation_api_address(self, relation: Relation) -> Optional[str]:
+    def _get_relation_api_address(self, relation: Relation) -> str | None:
         """Fetch the api address from relation and returns it.
 
         Example: "https://10.152.183.20:8200"
@@ -1125,7 +1125,7 @@ class VaultCharm(CharmBase):
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
-    def _get_autounseal_configuration(self) -> Optional[AutounsealConfigurationDetails]:
+    def _get_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
         """Retrieve the autounseal configuration details, if available.
 
         Returns the autounseal configuration details if all the required
@@ -1171,7 +1171,7 @@ class VaultCharm(CharmBase):
             self._set_juju_secret(AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": vault.token})
         return vault.token
 
-    def _get_juju_secret_content(self, label: str) -> Optional[Dict[str, str]]:
+    def _get_juju_secret_content(self, label: str) -> Dict[str, str] | None:
         """Retrieve the latest revision of the secret content from Juju.
 
         Args:
@@ -1190,7 +1190,7 @@ class VaultCharm(CharmBase):
             logger.warning("Failed to retrieve secret `%s`: %s", label, e)
             return None
 
-    def _get_juju_secret_field(self, label: str, field: str) -> Optional[str]:
+    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
         """Retrieve the latest revision of the secret content from Juju.
 
         Args:
@@ -1227,7 +1227,7 @@ class VaultCharm(CharmBase):
         )
 
     def _set_juju_secret(
-        self, label: str, content: Dict[str, str], description: Optional[str] = None
+        self, label: str, content: Dict[str, str], description: str | None = None
     ) -> None:
         """Set the secret content at `label`, overwrite if it already exists.
 
@@ -1288,11 +1288,11 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _get_approle_auth_secret(self) -> Tuple[Optional[str], Optional[str]]:
+    def _get_approle_auth_secret(self) -> Tuple[str | None, str | None]:
         """Get the vault approle login details secret.
 
         Returns:
-            Tuple[Optional[str], Optional[List[str]]]: The root token and unseal keys.
+            The root token and unseal keys.
         """
         role_id, secret_id = self._get_juju_secret_fields(
             VAULT_CHARM_APPROLE_SECRET_LABEL, "role-id", "secret-id"
@@ -1355,11 +1355,12 @@ class VaultCharm(CharmBase):
             return False
         return False
 
-    def _create_raft_snapshot(self) -> Optional[IO[bytes]]:
+    def _create_raft_snapshot(self) -> IO[bytes] | None:
         """Create a snapshot of Vault.
 
         Returns:
-            IO[bytes]: The snapshot content as a file like object.
+            The snapshot content as a file like object, or None if the snapshot
+            could not be created.
         """
         if not (vault := self._get_active_vault_client()):
             logger.error("Failed to get Vault client, cannot create snapshot.")
@@ -1402,7 +1403,7 @@ class VaultCharm(CharmBase):
 
         return True
 
-    def _get_active_vault_client(self) -> Optional[Vault]:
+    def _get_active_vault_client(self) -> Vault | None:
         """Return an initialized vault client.
 
         Returns:
@@ -1432,7 +1433,7 @@ class VaultCharm(CharmBase):
         return vault
 
     @property
-    def _bind_address(self) -> Optional[str]:
+    def _bind_address(self) -> str | None:
         """Fetch the bind address from peer relation and returns it.
 
         Returns:
@@ -1450,7 +1451,7 @@ class VaultCharm(CharmBase):
             return None
 
     @property
-    def _ingress_address(self) -> Optional[str]:
+    def _ingress_address(self) -> str | None:
         """Fetch the ingress address from peer relation and returns it.
 
         Returns:
@@ -1525,7 +1526,7 @@ def _render_vault_config_file(
     raft_storage_path: str,
     node_id: str,
     retry_joins: List[Dict[str, str]],
-    autounseal_details: Optional[AutounsealConfigurationDetails] = None,
+    autounseal_details: AutounsealConfigurationDetails | None = None,
 ) -> str:
     jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
     template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
