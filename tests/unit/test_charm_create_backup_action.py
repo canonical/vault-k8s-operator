@@ -110,7 +110,7 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         assert action_output.success is False
         assert action_output.failure == "Failed to create S3 session."
 
-    def test_given_bucket_not_created_when_create_backup_then_action_fails(self):
+    def test_given_bucket_creation_returns_none_when_create_backup_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
             **{
                 "get_s3_connection_info.return_value": {
