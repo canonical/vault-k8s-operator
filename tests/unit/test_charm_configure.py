@@ -15,6 +15,7 @@ from charms.vault_k8s.v0.vault_client import (
     Certificate,
     SecretsBackend,
 )
+from charms.vault_k8s.v0.vault_kv import KVRequest
 from ops.pebble import Layer
 
 from tests.unit.certificates import (
@@ -175,7 +176,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 is_ca=True,
             )
 
-    def test_given_vault_is_available_when_pki_certificate_is_available_then_certificate_added_to_vault_pki_and_latest_issuer_set_to_default(
+    def test_given_vault_is_available_when_configure_then_certificate_added_to_vault_pki_and_latest_issuer_set_to_default(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -242,7 +243,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 role="charm",
             )
 
-    def test_given_vault_available_when_vault_pki_certificate_creation_request_then_certificate_is_provided(
+    def test_given_vault_available_when_configure_then_certificate_is_provided(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -331,7 +332,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
     # Test Auto unseal
 
-    def test_given_autounseal_details_available_when_autounseal_details_ready_then_transit_stanza_generated(
+    def test_given_autounseal_details_available_when_configure_then_transit_stanza_generated(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -423,7 +424,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_vault.authenticate.assert_called_with(AppRole("role id", "secret id"))
             self.mock_tls.push_autounseal_ca_cert.assert_called_with("ca cert")
 
-    def test_given_outstanding_autounseal_requests_when_autounseal_initialize_then_credentials_are_set(
+    def test_given_outstanding_autounseal_requests_when_configure_then_credentials_are_set(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -511,3 +512,172 @@ class TestCharmConfigure(VaultCharmFixtures):
                 approle_secret_id,
                 "my ca",
             )
+
+    # Test Vault KV
+
+    # def test_given_unit_not_leader_when_new_vault_kv_client_attached_then_event_kv_relation_data_not_set(
+    #     self,
+    # ):
+    #     with tempfile.TemporaryDirectory() as temp_dir:
+
+    # self.harness.set_leader(is_leader=False)
+    # self.harness.set_can_connect(container=self.container_name, val=True)
+    # vault_kv_relation_name = "vault-kv"
+    # vault_kv_relation_id = self.harness.add_relation(
+    #     relation_name=vault_kv_relation_name, remote_app="vault-kv-remote"
+    # )
+    # self.harness.add_relation_unit(
+    #     relation_id=vault_kv_relation_id, remote_unit_name="vault-kv-remote/0"
+    # )
+    # event = Mock()
+    # event.relation_id = vault_kv_relation_id
+    # self.harness.charm._on_new_vault_kv_client_attached(event)
+    # patch_set_vault_url.assert_not_called()
+    # patch_set_mount.assert_not_called()
+    # patch_set_ca_certificate.assert_not_called()
+    # patch_audit_device_enabled.assert_not_called()
+
+    def test_given_outstanding_kv_request_when_configure_then_kv_relation_data_is_set(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_vault.configure_mock(
+                **{
+                    "token": "some token",
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "generate_role_secret_id.return_value": "kv role secret id",
+                    "configure_approle.return_value": "kv role id",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+            )
+            kv_relation = scenario.Relation(
+                endpoint="vault-kv",
+                interface="vault-kv",
+            )
+            vault_config_mount = scenario.Mount(
+                location="/vault/config",
+                src=temp_dir,
+            )
+            container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            approle_secret = scenario.Secret(
+                id="0",
+                label="vault-approle-auth-details",
+                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            )
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                relations=[peer_relation, kv_relation],
+                secrets=[approle_secret],
+            )
+            self.mock_kv_provides_get_outstanding_kv_requests.return_value = [
+                KVRequest(
+                    relation_id=kv_relation.relation_id,
+                    app_name="vault-kv-remote",
+                    unit_name="vault-kv-remote/0",
+                    mount_suffix="suffix",
+                    egress_subnets=["2.2.2.0/24"],
+                    nonce="123123",
+                )
+            ]
+            self.mock_kv_provides_get_credentials.return_value = {}
+
+            state_out = self.ctx.run(container.pebble_ready_event, state_in)
+
+            self.mock_vault.enable_secrets_engine.assert_called_once_with(
+                SecretsBackend.KV_V2, "charm-vault-kv-remote-suffix"
+            )
+            self.mock_kv_provides_set_ca_certificate.assert_called()
+            self.mock_kv_provides_set_egress_subnets.assert_called()
+            self.mock_kv_provides_set_vault_url.assert_called()
+            assert state_out.secrets[1].label == "kv-creds-vault-kv-remote-0"
+            assert state_out.secrets[1].contents == {
+                0: {"role-id": "kv role id", "role-secret-id": "kv role secret id"}
+            }
+
+    def test_given_related_kv_client_unit_egress_is_updated_when_configure_then_secret_content_is_updated(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            nonce = "123123"
+            self.mock_vault.configure_mock(
+                **{
+                    "token": "some token",
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "generate_role_secret_id.return_value": "new kv role secret id",
+                    "configure_approle.return_value": "kv role id",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+            )
+            kv_relation = scenario.Relation(
+                endpoint="vault-kv",
+                interface="vault-kv",
+            )
+            vault_config_mount = scenario.Mount(
+                location="/vault/config",
+                src=temp_dir,
+            )
+            container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            approle_secret = scenario.Secret(
+                id="0",
+                label="vault-approle-auth-details",
+                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            )
+            kv_secret = scenario.Secret(
+                id="1",
+                label="kv-creds-vault-kv-remote-0",
+                contents={
+                    0: {"role-id": "kv role id", "role-secret-id": "initial kv role secret id"}
+                },
+                owner="app",
+            )
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                relations=[peer_relation, kv_relation],
+                secrets=[approle_secret, kv_secret],
+            )
+            self.mock_kv_provides_get_outstanding_kv_requests.return_value = [
+                KVRequest(
+                    relation_id=kv_relation.relation_id,
+                    app_name="vault-kv-remote",
+                    unit_name="vault-kv-remote/0",
+                    mount_suffix="suffix",
+                    egress_subnets=["2.2.2.0/24"],
+                    nonce=nonce,
+                )
+            ]
+            self.mock_kv_provides_get_credentials.return_value = {nonce: kv_secret.id}
+
+            state_out = self.ctx.run(container.pebble_ready_event, state_in)
+
+            assert state_out.secrets[1].label == "kv-creds-vault-kv-remote-0"
+            assert state_out.secrets[1].contents == {
+                0: {"role-id": "kv role id", "role-secret-id": "initial kv role secret id"},
+                1: {"role-id": "kv role id", "role-secret-id": "new kv role secret id"},
+            }

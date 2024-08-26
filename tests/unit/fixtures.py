@@ -38,6 +38,13 @@ class VaultCharmFixtures:
         "charm.VaultAutounsealProvides.set_autounseal_data"
     )
     patcher_autounseal_requires_get_details = patch("charm.VaultAutounsealRequires.get_details")
+    patcher_kv_provides_get_outstanding_kv_requests = patch(
+        "charm.VaultKvProvides.get_outstanding_kv_requests"
+    )
+    patcher_kv_provides_set_ca_certificate = patch("charm.VaultKvProvides.set_ca_certificate")
+    patcher_kv_provides_set_egress_subnets = patch("charm.VaultKvProvides.set_egress_subnets")
+    patcher_kv_provides_set_vault_url = patch("charm.VaultKvProvides.set_vault_url")
+    patcher_kv_provides_get_credentials = patch("charm.VaultKvProvides.get_credentials")
     patcher_get_binding = patch("ops.model.Model.get_binding")
 
     @pytest.fixture(autouse=True)
@@ -67,6 +74,21 @@ class VaultCharmFixtures:
         )
         self.mock_autounseal_requires_get_details = (
             VaultCharmFixtures.patcher_autounseal_requires_get_details.start()
+        )
+        self.mock_kv_provides_get_outstanding_kv_requests = (
+            VaultCharmFixtures.patcher_kv_provides_get_outstanding_kv_requests.start()
+        )
+        self.mock_kv_provides_set_ca_certificate = (
+            VaultCharmFixtures.patcher_kv_provides_set_ca_certificate.start()
+        )
+        self.mock_kv_provides_set_egress_subnets = (
+            VaultCharmFixtures.patcher_kv_provides_set_egress_subnets.start()
+        )
+        self.mock_kv_provides_set_vault_url = (
+            VaultCharmFixtures.patcher_kv_provides_set_vault_url.start()
+        )
+        self.mock_kv_provides_get_credentials = (
+            VaultCharmFixtures.patcher_kv_provides_get_credentials.start()
         )
         self.mock_get_binding = VaultCharmFixtures.patcher_get_binding.start()
 
