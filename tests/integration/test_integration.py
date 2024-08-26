@@ -4,7 +4,6 @@
 import asyncio
 import json
 import logging
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -119,16 +118,15 @@ class TestVaultK8s:
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         async with ops_test.fast_forward(fast_interval="10s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
-            await wait_for_vault_status_message(
+            await wait_for_status_message(
                 ops_test=ops_test,
-                count=1,
                 expected_message="Please authorize charm (see `authorize-charm` action)",
             )
-            unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
-            await wait_for_vault_status_message(
+            unseal_all_vaults(unit_addresses, root_token, unseal_key)
+            await wait_for_status_message(
                 ops_test=ops_test,
-                count=NUM_VAULT_UNITS,
                 expected_message="Please authorize charm (see `authorize-charm` action)",
+                count=NUM_VAULT_UNITS,
             )
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
@@ -149,8 +147,8 @@ class TestVaultK8s:
         crashing_pod_index = 1
         k8s_namespace = ops_test.model.name
         crash_pod(name=f"{APPLICATION_NAME}-1", namespace=k8s_namespace)
-        await wait_for_vault_status_message(
-            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
+        await wait_for_status_message(
+            ops_test, expected_message="Please unseal Vault", timeout=300
         )
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
@@ -175,8 +173,8 @@ class TestVaultK8s:
         assert isinstance(app, Application)
         await app.scale(num_units)
 
-        await wait_for_vault_status_message(
-            ops_test, count=1, expected_message="Please unseal Vault", timeout=300
+        await wait_for_status_message(
+            ops_test, expected_message="Please unseal Vault", timeout=300
         )
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[-1], root_token, unseal_key)
@@ -294,7 +292,7 @@ class TestVaultK8sIntegrationsPart1:
 
         _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        unseal_all_vaults(unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
@@ -572,7 +570,7 @@ class TestVaultK8sIntegrationsPart1:
 
         _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        unseal_all_vaults(unit_addresses, root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
             await ops_test.model.wait_for_idle(
@@ -622,7 +620,7 @@ class TestVaultK8sIntegrationsPart1:
 
         _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        unseal_all_vaults(unit_addresses, root_token, unseal_key)
 
         async with ops_test.fast_forward(fast_interval="10s"):
             await ops_test.model.wait_for_idle(
@@ -701,7 +699,7 @@ class TestVaultK8sIntegrationsPart2:
 
         _, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        unseal_all_vaults(unit_addresses, root_token, unseal_key)
         yield
         remove_coroutines = [
             ops_test.model.remove_application(app_name=app_name) for app_name in deployed_apps
@@ -878,7 +876,7 @@ class TestVaultK8sIntegrationsPart3:
 
         leader_unit_index, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        unseal_all_vaults(ops_test, unit_addresses, root_token, unseal_key)
+        unseal_all_vaults(unit_addresses, root_token, unseal_key)
         yield
         await ops_test.model.remove_application(app_name="vault-b")
 
@@ -896,9 +894,8 @@ class TestVaultK8sIntegrationsPart3:
                 apps=["vault-b"], status="blocked", wait_for_exact_units=1, idle_period=5
             )
 
-            await wait_for_vault_status_message(
+            await wait_for_status_message(
                 ops_test=ops_test,
-                count=1,
                 expected_message="Please initialize Vault",
                 app_name="vault-b",
             )
@@ -906,9 +903,8 @@ class TestVaultK8sIntegrationsPart3:
             leader_unit_index, root_token, recovery_key = await initialize_vault_leader(
                 ops_test, "vault-b"
             )
-            await wait_for_vault_status_message(
+            await wait_for_status_message(
                 ops_test=ops_test,
-                count=1,
                 expected_message="Please authorize charm (see `authorize-charm` action)",
                 app_name="vault-b",
             )
@@ -1171,44 +1167,6 @@ async def read_vault_unit_statuses(
     return output
 
 
-async def wait_for_vault_status_message(
-    ops_test: OpsTest,
-    count: int,
-    expected_message: str,
-    timeout: int = 100,
-    cadence: int = 2,
-    app_name: str = APPLICATION_NAME,
-) -> None:
-    """Wait for the correct vault status messages to appear.
-
-    This function is necessary because ops_test doesn't provide the facilities to discriminate
-    depending on the status message of the units, just the application statuses.
-
-    Args:
-        ops_test: Ops test Framework.
-        count: How many units that are expected to be emitting the expected message
-        expected_message: The message that vault units should be setting as a status message
-        timeout: Wait time in seconds to get proxied endpoints.
-        cadence: How long to wait before running the command again
-        app_name: Application name of the Vault, defaults to "vault-k8s"
-
-    Raises:
-        TimeoutError: If the expected amount of statuses weren't found in the given timeout.
-    """
-    while timeout > 0:
-        vault_status = await read_vault_unit_statuses(ops_test, app_name=app_name)
-        seen = 0
-        for row in vault_status:
-            if row.get("message") == expected_message:
-                seen += 1
-
-        if seen == count:
-            return
-        time.sleep(cadence)
-        timeout -= cadence
-    raise TimeoutError(f"Vault didn't show the expected status: `{expected_message}`")
-
-
 def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
     client.token = root_token
@@ -1217,9 +1175,7 @@ def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
     client.sys.submit_unseal_key(unseal_key)
 
 
-def unseal_all_vaults(
-    ops_test: OpsTest, unit_addresses: List[str], root_token: str, unseal_key: str
-):
+def unseal_all_vaults(unit_addresses: List[str], root_token: str, unseal_key: str):
     for endpoint in unit_addresses:
         unseal_vault(endpoint, root_token, unseal_key)
 
