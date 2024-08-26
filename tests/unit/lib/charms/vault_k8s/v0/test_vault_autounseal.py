@@ -2,381 +2,467 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import textwrap
-import unittest
-from unittest.mock import MagicMock, patch
 
+import pytest
+import scenario
 from charms.vault_k8s.v0.vault_autounseal import (
-    AutounsealDetails,
     VaultAutounsealDetailsReadyEvent,
     VaultAutounsealProvides,
-    VaultAutounsealRequirerRelationBroken,
-    VaultAutounsealRequirerRelationCreated,
     VaultAutounsealRequires,
 )
-from ops import Relation, testing
-from ops.charm import CharmBase
-
-AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
-AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
-AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
+from ops.charm import ActionEvent, CharmBase
 
 
 class VaultAutounsealProviderCharm(CharmBase):
-    metadata_yaml = textwrap.dedent(
-        """
-        name: vault-autounseal-provider
-        containers:
-          vault:
-            resource: vault-image
-        provides:
-          vault-autounseal-provides:
-            interface: vault-autounseal
-            limit: 2
-        """
-    )
-
     def __init__(self, *args):
         super().__init__(*args)
-        self.interface = VaultAutounsealProvides(self, AUTOUNSEAL_PROVIDES_RELATION_NAME)
+        self.interface = VaultAutounsealProvides(self, "vault-autounseal-provides")
         self.framework.observe(
-            self.interface.on.vault_autounseal_requirer_relation_created,
-            self._on_vault_autounseal_requirer_relation_created,
+            self.on.set_autounseal_data_action, self._on_set_autounseal_data_action
         )
         self.framework.observe(
-            self.interface.on.vault_autounseal_requirer_relation_broken,
-            self._on_vault_autounseal_requirer_relation_created,
+            self.on.get_outstanding_requests_action, self._on_get_outstanding_requests_action
         )
 
-    def _on_vault_autounseal_requirer_relation_created(
-        self, event: VaultAutounsealRequirerRelationCreated
-    ):
-        pass
+    def _on_set_autounseal_data_action(self, event: ActionEvent):
+        ca_certificate = event.params.get("ca-certificate")
+        relation_id = event.params.get("relation-id")
+        vault_address = event.params.get("vault-address")
+        mount_path = event.params.get("mount-path")
+        key_name = event.params.get("key-name")
+        approle_role_id = event.params.get("approle-role-id")
+        approle_secret_id = event.params.get("approle-secret-id")
+        assert ca_certificate
+        assert relation_id
+        assert vault_address
+        assert mount_path
+        assert key_name
+        assert approle_role_id
+        assert approle_secret_id
 
-    def _on_vault_autounseal_requirer_relation_broken(
-        self, event: VaultAutounsealRequirerRelationBroken
-    ):
-        pass
-
-
-class VaultAutounsealRequirerCharm(CharmBase):
-    metadata_yaml = textwrap.dedent(
-        """
-        name: vault-autounseal-requirer
-        containers:
-          vault:
-            resource: vault-image
-        requires:
-          vault-autounseal-requires:
-            interface: vault-autounseal
-        """
-    )
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.interface = VaultAutounsealRequires(self, AUTOUNSEAL_REQUIRES_RELATION_NAME)
-        self.framework.observe(
-            self.interface.on.vault_autounseal_details_ready, self._on_details_ready
-        )
-
-    def _on_details_ready(self, event: VaultAutounsealDetailsReadyEvent):
-        pass
-
-
-class TestVaultAutounsealProvides(unittest.TestCase):
-    def setUp(self):
-        self.harness = testing.Harness(
-            VaultAutounsealProviderCharm, meta=VaultAutounsealProviderCharm.metadata_yaml
-        )
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
-
-    def setup_relation(
-        self, leader: bool = True, remote_app: str = "vault-autounseal-requires"
-    ) -> tuple[str, str, Relation]:
-        """Set up a relation between the charm and a remote app with 1 unit."""
-        remote_unit = f"{remote_app}/0"
-        rel_name = AUTOUNSEAL_PROVIDES_RELATION_NAME
-        self.harness.set_leader(leader)
-        rel_id = self.harness.add_relation(rel_name, remote_app)
-        relation = self.harness.model.get_relation(rel_name, rel_id)
+        relation = self.model.get_relation("vault-autounseal-provides", int(relation_id))
         assert relation
-        self.harness.add_relation_unit(rel_id, remote_unit)
-        return remote_app, remote_unit, relation
 
-    @patch(
-        "ops.model.Application.add_secret",
-    )
-    def test_given_unit_is_leader_when_set_autounseal_data_then_relation_data_is_updated(
-        self, mock_add_secret: MagicMock
-    ):
-        remote_app, remote_unit, relation = self.setup_relation()
-        vault_address = "https://vault.example.com"
-        key_name = "some key name"
-        approle_id = "some approle id"
-        approle_secret_id = "some approle secret id"
-        ca_certificate = "my ca certificate"
-
-        mock_add_secret.return_value = MagicMock(**{"id": "some secret id"})
-
-        self.harness.charm.interface.set_autounseal_data(
-            relation,
-            vault_address,
-            AUTOUNSEAL_MOUNT_PATH,
-            key_name,
-            approle_id,
-            approle_secret_id,
-            ca_certificate,
+        self.interface.set_autounseal_data(
+            ca_certificate=ca_certificate,
+            relation=relation,
+            vault_address=vault_address,
+            mount_path=mount_path,
+            key_name=key_name,
+            approle_role_id=approle_role_id,
+            approle_secret_id=approle_secret_id,
         )
-        mock_add_secret.assert_called_once()
-        assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {
-            "address": vault_address,
-            "mount_path": AUTOUNSEAL_MOUNT_PATH,
-            "key_name": key_name,
-            "credentials_secret_id": "some secret id",
-            "ca_certificate": ca_certificate,
+
+    def _on_get_outstanding_requests_action(self, event: ActionEvent):
+        relations = self.interface.get_outstanding_requests()
+        event.set_results(results={"relations": [relation.id for relation in relations]})
+
+
+class TestVaultAutounsealProvides:
+    @pytest.fixture(autouse=True)
+    def context(self):
+        self.ctx = scenario.Context(
+            charm_type=VaultAutounsealProviderCharm,
+            meta={
+                "name": "vault-autounseal-provider",
+                "provides": {"vault-autounseal-provides": {"interface": "vault-autounseal"}},
+            },
+            actions={
+                "set-autounseal-data": {
+                    "description": "Set the autounseal data",
+                    "params": {
+                        "ca-certificate": {
+                            "type": "string",
+                            "description": "The CA certificate",
+                        },
+                        "relation-id": {
+                            "type": "string",
+                            "description": "The relation id",
+                        },
+                        "vault-address": {
+                            "type": "string",
+                            "description": "The Vault address",
+                        },
+                        "mount-path": {
+                            "type": "string",
+                            "description": "The mount path",
+                        },
+                        "key-name": {
+                            "type": "string",
+                            "description": "The key name",
+                        },
+                        "approle-role-id": {
+                            "type": "string",
+                            "description": "The approle role id",
+                        },
+                        "approle-secret-id": {
+                            "type": "string",
+                            "description": "The approle secret id",
+                        },
+                    },
+                },
+                "get-outstanding-requests": {
+                    "description": "Get the outstanding requests",
+                },
+            },
+        )
+
+    def test_given_unit_is_leader_when_set_autounseal_data_then_relation_data_is_updated(
+        self,
+    ):
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            leader=True,
+        )
+        action = scenario.Action(
+            "set-autounseal-data",
+            params={
+                "ca-certificate": "my ca certificate",
+                "relation-id": str(vault_autounseal_relation.relation_id),
+                "vault-address": "https://vault.example.com",
+                "mount-path": "charm-autounseal",
+                "key-name": "some key name",
+                "approle-role-id": "some approle id",
+                "approle-secret-id": "some approle secret id",
+            },
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert (
+            action_output.state.relations[0].local_app_data["ca_certificate"]
+            == "my ca certificate"
+        )
+        assert (
+            action_output.state.relations[0].local_app_data["address"]
+            == "https://vault.example.com"
+        )
+        assert action_output.state.relations[0].local_app_data["mount_path"] == "charm-autounseal"
+        assert action_output.state.relations[0].local_app_data["key_name"] == "some key name"
+        assert "credentials_secret_id" in action_output.state.relations[0].local_app_data
+        credentials_secret_id = action_output.state.relations[0].local_app_data[
+            "credentials_secret_id"
+        ]
+        juju_secret = action_output.state.secrets[0]
+        assert juju_secret.contents == {
+            0: {"role-id": "some approle id", "secret-id": "some approle secret id"}
         }
+        assert juju_secret.id == credentials_secret_id
 
     def test_given_unit_is_not_leader_when_set_autounseal_data_then_relation_data_not_updated(
         self,
     ):
-        remote_app, remote_unit, relation = self.setup_relation(leader=False)
-        vault_address = "https://vault.example.com"
-        key_name = "some key name"
-        approle_id = "some approle id"
-        approle_secret_id = "some approle secret id"
-        ca_certificate = "my ca certificate"
-
-        self.harness.charm.interface.set_autounseal_data(
-            relation,
-            vault_address,
-            AUTOUNSEAL_MOUNT_PATH,
-            key_name,
-            approle_id,
-            approle_secret_id,
-            ca_certificate,
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
         )
-        assert self.harness.get_relation_data(relation.id, self.harness.charm.app.name) == {}
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            leader=False,
+        )
+        action = scenario.Action(
+            "set-autounseal-data",
+            params={
+                "ca-certificate": "my ca certificate",
+                "relation-id": str(vault_autounseal_relation.relation_id),
+                "vault-address": "https://vault.example.com",
+                "mount-path": "charm-autounseal",
+                "key-name": "some key name",
+                "approle-role-id": "some approle id",
+                "approle-secret-id": "some approle secret id",
+            },
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.state.relations[0].local_app_data == {}
+        assert len(action_output.state.secrets) == 0
 
     def test_given_no_request_when_get_outstanding_requests_then_empty_list_is_returned(self):
-        kv_requests = self.harness.charm.interface.get_outstanding_requests()
+        state_in = scenario.State(
+            relations=[],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-outstanding-requests",
+        )
 
-        assert len(kv_requests) == 0
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["relations"] == []
 
     def test_given_1_outstanding_request_when_get_outstanding_requests_then_request_is_returned(
         self,
     ):
-        remote_app, remote_unit, relation = self.setup_relation()
-
-        self.harness.update_relation_data(
-            relation.id,
-            remote_app,
-            key_values={
-                # "credentials_secret_id": secret_id,  # Missing!
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
-            },
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+            local_app_data={"address": "https://vault.example.com"},
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-outstanding-requests",
         )
 
-        outstanding_requests = self.harness.charm.interface.get_outstanding_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(outstanding_requests) == 1
-        assert [relation.id for relation in outstanding_requests] == [relation.id]
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["relations"] == [vault_autounseal_relation.relation_id]
 
     def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_requests_then_outstanding_request_is_returned(
         self,
     ):
-        remote_app_1, _, relation_1 = self.setup_relation(remote_app="vault-autounseal-requires-1")
-        remote_app_2, _, relation_2 = self.setup_relation(remote_app="vault-autounseal-requires-2")
-
-        secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": "some role", "secret-id": "some secret"}
+        vault_autounseal_relation_1_credentials_secret = scenario.Secret(
+            id="0",
+            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            owner="app",
         )
-
-        self.harness.update_relation_data(
-            relation_1.id,
-            remote_app_1,
-            key_values={
-                "credentials_secret_id": secret_id,
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
+        vault_autounseal_relation_1 = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+            local_app_data={
+                "credentials_secret_id": str(vault_autounseal_relation_1_credentials_secret.id)
             },
         )
-        self.harness.update_relation_data(
-            relation_2.id,
-            remote_app_2,
-            key_values={
-                # "credentials_secret_id": secret_id,  # Missing!
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
-            },
+        vault_autounseal_relation_2 = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
+            secrets=[vault_autounseal_relation_1_credentials_secret],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-outstanding-requests",
         )
 
-        kv_requests = self.harness.charm.interface.get_outstanding_requests()
+        action_output = self.ctx.run_action(action, state_in)
 
-        assert len(kv_requests) == 1
-        assert kv_requests[0].id == relation_2.id
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["relations"] == [vault_autounseal_relation_2.relation_id]
 
-    def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(
+    def test_given_satisfied_request_when_get_outstanding_requests_then_request_is_not_returned(
         self,
     ):
-        remote_app, remote_unit, relation = self.setup_relation()
-
-        secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": "some role", "secret-id": "some secret"}
+        vault_autounseal_relation_credentials_secret = scenario.Secret(
+            id="0",
+            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            owner="app",
         )
-        self.harness.update_relation_data(
-            relation.id,
-            remote_app,
-            key_values={
-                "credentials_secret_id": secret_id,
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+            local_app_data={
+                "credentials_secret_id": str(vault_autounseal_relation_credentials_secret.id)
+            },
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            secrets=[vault_autounseal_relation_credentials_secret],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-outstanding-requests",
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["relations"] == []
+
+    def test_given_2_requests_when_get_outstanding_requests_then_requests_are_returned(self):
+        vault_autounseal_relation_1 = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+        )
+        vault_autounseal_relation_2 = scenario.Relation(
+            endpoint="vault-autounseal-provides",
+            interface="vault-autounseal",
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-outstanding-requests",
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["relations"] == [
+            vault_autounseal_relation_1.relation_id,
+            vault_autounseal_relation_2.relation_id,
+        ]
+
+
+class VaultAutounsealRequirerCharm(CharmBase):
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.interface = VaultAutounsealRequires(self, "vault-autounseal-requires")
+        self.framework.observe(self.on.get_details_action, self._on_get_details_action)
+
+    def _on_get_details_action(self, event: ActionEvent):
+        details = self.interface.get_details()
+        if not details:
+            event.fail("No details available")
+            return
+        event.set_results(
+            results={
+                "details": {
+                    "address": details.address,
+                    "mount-path": details.mount_path,
+                    "key-name": details.key_name,
+                    "role-id": details.role_id,
+                    "secret-id": details.secret_id,
+                    "ca-certificate": details.ca_certificate,
+                }
+            }
+        )
+
+
+class TestVaultAutounsealRequires:
+    @pytest.fixture(autouse=True)
+    def context(self):
+        self.ctx = scenario.Context(
+            charm_type=VaultAutounsealRequirerCharm,
+            meta={
+                "name": "vault-autounseal-requirer",
+                "provides": {"vault-autounseal-requires": {"interface": "vault-autounseal"}},
+            },
+            actions={
+                "get-details": {
+                    "description": "Get the details",
+                },
             },
         )
 
-        outstanding_requests = self.harness.charm.interface.get_outstanding_requests()
-
-        assert len(outstanding_requests) == 0
-
-    def test_given_no_request_when_get_requests_then_empty_list_is_returned(self):
-        kv_requests = self.harness.charm.interface.get_outstanding_requests()
-
-        assert len(kv_requests) == 0
-
-    def test_given_2_requests_when_get_requests_then_requests_are_returned(self):
-        remote_app_1, _, relation_1 = self.setup_relation(remote_app="vault-autounseal-requires-1")
-        remote_app_2, _, relation_2 = self.setup_relation(remote_app="vault-autounseal-requires-2")
-
-        self.harness.update_relation_data(
-            relation_1.id,
-            remote_app_1,
-            key_values={
-                # "credentials_secret_id": secret_id,  # Missing!
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
-            },
-        )
-        self.harness.update_relation_data(
-            relation_2.id,
-            remote_app_2,
-            key_values={
-                # "credentials_secret_id": secret_id,  # Missing!
-                "address": "https://vault.example.com",
-                "ca_certificate": "some ca certificate",
-            },
-        )
-
-        requests = self.harness.charm.interface.get_outstanding_requests()
-
-        assert len(requests) == 2
-        assert {relation.id for relation in requests} == {relation_1.id, relation_2.id}
-
-
-class TestVaultAutounsealRequires(unittest.TestCase):
-    def setUp(self):
-        self.harness = testing.Harness(
-            VaultAutounsealRequirerCharm, meta=VaultAutounsealRequirerCharm.metadata_yaml
-        )
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
-
-    def setup_relation(self, leader: bool = True) -> tuple:
-        """Set up a relation between the charm and a remote app with 1 unit."""
-        remote_app = "vault-autounseal-provider"
-        remote_unit = f"{remote_app}/0"
-        rel_name = AUTOUNSEAL_REQUIRES_RELATION_NAME
-        self.harness.set_leader(leader)
-        rel_id = self.harness.add_relation(rel_name, remote_app)
-        relation = self.harness.model.get_relation(rel_name, rel_id)
-        assert relation
-        self.harness.add_relation_unit(rel_id, remote_unit)
-        return remote_app, remote_unit, relation
-
-    @patch("test_vault_autounseal.VaultAutounsealRequirerCharm._on_details_ready")
-    def test_given_unit_joined_when_all_data_present_then_vault_auto_unseal_details_ready_event_is_fired(
-        self, _on_details_ready
+    def test_given_unit_joined_when_relation_changed_then_vault_auto_unseal_details_ready_event_is_fired(
+        self,
     ):
-        remote_app, remote_unit, relation = self.setup_relation()
-        vault_url = "https://vault.example.com"
-        key_name = "some key name"
-        role_id = "some role id"
-        secret_id = "some secret"
-        credentials_secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": role_id, "secret-id": secret_id}
+        vault_autounseal_credentials_secret = scenario.Secret(
+            id="0",
+            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
         )
-        ca_certificate = "some ca certificate"
-        self.harness.update_relation_data(
-            relation.id,
-            remote_app,
-            {
-                "address": vault_url,
-                "mount_path": AUTOUNSEAL_MOUNT_PATH,
-                "key_name": key_name,
-                "credentials_secret_id": credentials_secret_id,
-                "ca_certificate": ca_certificate,
+
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-requires",
+            interface="vault-autounseal",
+            remote_app_data={
+                "address": "https://vault.example.com",
+                "mount_path": "charm-autounseal",
+                "key_name": "some key name",
+                "credentials_secret_id": str(vault_autounseal_credentials_secret.id),
+                "ca_certificate": "some ca certificate",
             },
         )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            secrets=[vault_autounseal_credentials_secret],
+            leader=True,
+        )
 
-        args, _ = _on_details_ready.call_args
-        event = args[0]
+        self.ctx.run(vault_autounseal_relation.changed_event, state_in)
 
-        assert isinstance(event, VaultAutounsealDetailsReadyEvent)
-        assert event.address == vault_url
-        assert event.mount_path == AUTOUNSEAL_MOUNT_PATH
-        assert event.key_name == key_name
-        assert event.role_id == role_id
-        assert event.secret_id == secret_id
-        assert event.ca_certificate == ca_certificate
+        assert len(self.ctx.emitted_events) == 2
+        assert isinstance(self.ctx.emitted_events[1], VaultAutounsealDetailsReadyEvent)
+        assert self.ctx.emitted_events[1].address == "https://vault.example.com"
+        assert self.ctx.emitted_events[1].mount_path == "charm-autounseal"
+        assert self.ctx.emitted_events[1].key_name == "some key name"
+        assert self.ctx.emitted_events[1].role_id == "some role id"
+        assert self.ctx.emitted_events[1].secret_id == "some secret id"
+        assert self.ctx.emitted_events[1].ca_certificate == "some ca certificate"
 
-    @patch("test_vault_autounseal.VaultAutounsealRequirerCharm._on_details_ready")
     def test_given_unit_joined_when_data_missing_then_vault_auto_unseal_details_ready_event_not_fired(
-        self, _on_details_ready
+        self,
     ):
-        remote_app, remote_unit, relation = self.setup_relation()
-        vault_url = "https://vault.example.com"
-        credentials_secret_id = "some secret id"
-        self.harness.update_relation_data(
-            relation.id,
-            remote_app,
-            {
-                "address": vault_url,
-                "credentials_secret_id": credentials_secret_id,
-                # "ca_certificate": Missing!
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-requires",
+            interface="vault-autounseal",
+            remote_app_data={
+                "address": "https://vault.example.com",
+                "mount_path": "charm-autounseal",
+                "key_name": "some key name",
+                # "credentials_secret_id": Missing!
+                "ca_certificate": "some ca certificate",
             },
         )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            leader=True,
+        )
 
-        _on_details_ready.assert_not_called()
+        self.ctx.run(vault_autounseal_relation.changed_event, state_in)
+
+        assert len(self.ctx.emitted_events) == 1
 
     def test_given_all_details_present_when_get_details_then_details_are_returned(self):
-        remote_app, remote_unit, relation = self.setup_relation()
-
-        vault_url = "https://vault.example.com"
-        key_name = "some key name"
-        role_id = "some role id"
-        secret_id = "some secret"
-        credentials_secret_id = self.harness.add_model_secret(
-            self.harness.charm.app, {"role-id": role_id, "secret-id": secret_id}
-        )
-        ca_certificate = "some ca certificate"
-        self.harness.update_relation_data(
-            relation.id,
-            remote_app,
-            {
-                "address": vault_url,
-                "mount_path": AUTOUNSEAL_MOUNT_PATH,
-                "key_name": key_name,
-                "credentials_secret_id": credentials_secret_id,
-                "ca_certificate": ca_certificate,
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-requires",
+            interface="vault-autounseal",
+            remote_app_data={
+                "address": "https://vault.example.com",
+                "mount_path": "charm-autounseal",
+                "key_name": "some key name",
+                "credentials_secret_id": "0",
+                "ca_certificate": "some ca certificate",
             },
         )
-
-        details = self.harness.charm.interface.get_details()
-
-        assert details == AutounsealDetails(
-            vault_url, AUTOUNSEAL_MOUNT_PATH, key_name, role_id, secret_id, ca_certificate
+        vault_autounseal_credentials_secret = scenario.Secret(
+            id="0",
+            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            secrets=[vault_autounseal_credentials_secret],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-details",
         )
 
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is True
+        assert action_output.results
+        assert action_output.results["details"] == {
+            "address": "https://vault.example.com",
+            "mount-path": "charm-autounseal",
+            "key-name": "some key name",
+            "role-id": "some role id",
+            "ca-certificate": "some ca certificate",
+            "secret-id": "some secret id",
+        }
+
     def test_given_no_details_when_get_details_then_none_is_returned(self):
-        details = self.harness.charm.interface.get_details()
-        assert details is None
+        vault_autounseal_relation = scenario.Relation(
+            endpoint="vault-autounseal-requires",
+            interface="vault-autounseal",
+        )
+        state_in = scenario.State(
+            relations=[vault_autounseal_relation],
+            leader=True,
+        )
+        action = scenario.Action(
+            "get-details",
+        )
+
+        action_output = self.ctx.run_action(action, state_in)
+
+        assert action_output.success is False
