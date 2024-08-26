@@ -121,7 +121,7 @@ import json
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
 
 import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
@@ -434,7 +434,7 @@ class VaultKvProvides(ops.Object):
         credentials[nonce] = secret.id
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def remove_unit_credentials(self, relation: ops.Relation, nonce: Union[str, Iterable[str]]):
+    def remove_unit_credentials(self, relation: ops.Relation, nonce: str | Iterable[str]):
         """Remove nonce(s) from the relation."""
         if not self.charm.unit.is_leader():
             return
@@ -453,7 +453,7 @@ class VaultKvProvides(ops.Object):
         """Get the unit credentials from the relation."""
         return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
-    def get_outstanding_kv_requests(self, relation_id: Optional[int] = None) -> List[KVRequest]:
+    def get_outstanding_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get the outstanding requests for the relation."""
         outstanding_requests: List[KVRequest] = []
         kv_requests = self.get_kv_requests(relation_id=relation_id)
@@ -464,7 +464,7 @@ class VaultKvProvides(ops.Object):
                 outstanding_requests.append(request)
         return outstanding_requests
 
-    def get_kv_requests(self, relation_id: Optional[int] = None) -> List[KVRequest]:
+    def get_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get all KV requests for the relation."""
         kv_requests: List[KVRequest] = []
         relations = (
@@ -497,7 +497,7 @@ class VaultKvProvides(ops.Object):
                 )
         return kv_requests
 
-    def _credentials_issued_for_request(self, nonce: str, relation_id: Optional[int]) -> bool:
+    def _credentials_issued_for_request(self, nonce: str, relation_id: int | None) -> bool:
         """Return whether credentials have been issued for the request."""
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
@@ -644,7 +644,7 @@ class VaultKvRequires(ops.Object):
         self.on.gone_away.emit()
 
     def request_credentials(
-        self, relation: ops.Relation, egress_subnet: Union[List[str], str], nonce: str
+        self, relation: ops.Relation, egress_subnet: List[str] | str, nonce: str
     ) -> None:
         """Request credentials from the vault-kv relation.
 
@@ -659,25 +659,19 @@ class VaultKvRequires(ops.Object):
         self._set_unit_egress_subnets(relation, egress_subnet)
         self._set_unit_nonce(relation, nonce)
 
-    def get_vault_url(self, relation: ops.Relation) -> Optional[str]:
+    def get_vault_url(self, relation: ops.Relation) -> str | None:
         """Return the vault_url from the relation."""
-        if relation.app is None:
-            return None
         return relation.data[relation.app].get("vault_url")
 
-    def get_ca_certificate(self, relation: ops.Relation) -> Optional[str]:
+    def get_ca_certificate(self, relation: ops.Relation) -> str | None:
         """Return the ca_certificate from the relation."""
-        if relation.app is None:
-            return None
         return relation.data[relation.app].get("ca_certificate")
 
-    def get_mount(self, relation: ops.Relation) -> Optional[str]:
+    def get_mount(self, relation: ops.Relation) -> str | None:
         """Return the mount from the relation."""
-        if relation.app is None:
-            return None
         return relation.data[relation.app].get("mount")
 
-    def get_unit_credentials(self, relation: ops.Relation) -> Optional[str]:
+    def get_unit_credentials(self, relation: ops.Relation) -> str | None:
         """Return the unit credentials from the relation.
 
         Unit credentials are stored in the relation data as a Juju secret id.

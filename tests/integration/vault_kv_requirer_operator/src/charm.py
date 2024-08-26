@@ -5,7 +5,6 @@
 import logging
 import secrets
 from pathlib import Path
-from typing import Optional
 
 from charms.vault_k8s.v0.vault_kv import (
     VaultKvConnectedEvent,
@@ -162,7 +161,7 @@ class VaultKVRequirerCharm(CharmBase):
         secret = self.model.get_secret(label=NONCE_SECRET_LABEL)
         return secret.get_content(refresh=True)["nonce"]
 
-    def _get_ca_cert_location_in_charm(self) -> Optional[Path]:
+    def _get_ca_cert_location_in_charm(self) -> Path | None:
         """Return the CA certificate location in the charm (not in the workload).
 
         This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
