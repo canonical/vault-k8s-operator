@@ -49,10 +49,10 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         peer_relation = scenario.PeerRelation(
             endpoint="vault-peers",
         )
+        self.mock_get_binding.return_value = None
         state_in = scenario.State(
             containers=[container],
             relations=[peer_relation],
-            networks={"vault-peers": scenario.Network.default(private_address="")},
         )
 
         state_out = self.ctx.run("collect_unit_status", state_in)

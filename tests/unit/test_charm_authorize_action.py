@@ -6,7 +6,7 @@
 import scenario
 from charms.vault_k8s.v0.vault_client import AuditDeviceType, VaultClientError
 
-from tests.unit.fixtures import VaultCharmFixtures
+from tests.unit.fixtures import MockBinding, VaultCharmFixtures
 
 
 class TestCharmAuthorizeAction(VaultCharmFixtures):
@@ -118,13 +118,17 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             == f"Vault returned an error while authorizing the charm: {my_error_message}"
         )
 
-    def test_given_when_then_charm_is_authorized(self):
+    def test_given_when_authorize_charm_then_charm_is_authorized(self):
         self.mock_vault.configure_mock(
             **{
                 "get_token_data.return_value": "token data",
                 "configure_approle.return_value": "my-role-id",
                 "generate_role_secret_id.return_value": "my-secret-id",
             },
+        )
+        self.mock_get_binding.return_value = MockBinding(
+            bind_address="1.2.3.4",
+            ingress_address="1.2.3.4",
         )
         container = scenario.Container(
             name="vault",
@@ -142,7 +146,6 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             leader=True,
             secrets=[user_provided_secret],
             relations=[peer_relation],
-            networks={"vault-peers": scenario.Network.default(private_address="1.2.3.4")},
         )
         action = scenario.Action(
             name="authorize-charm",

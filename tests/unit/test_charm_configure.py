@@ -7,7 +7,11 @@ import tempfile
 
 import hcl
 import scenario
+from charms.vault_k8s.v0.vault_autounseal import (
+    AutounsealDetails,
+)
 from charms.vault_k8s.v0.vault_client import (
+    AppRole,
     Certificate,
     SecretsBackend,
 )
@@ -17,13 +21,19 @@ from tests.unit.certificates import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
 )
-from tests.unit.fixtures import VaultCharmFixtures
+from tests.unit.fixtures import MockBinding, VaultCharmFixtures
+
+
+class MockRelation:
+    def __init__(self, id: int):
+        self.id = id
 
 
 class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_config_file_is_pushed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_socket_fqdn.return_value = "myhostname"
+            self.mock_autounseal_requires_get_details.return_value = None
             model_name = "whatever"
             vault_raft_mount = scenario.Mount(
                 location="/vault/raft",
@@ -64,6 +74,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
     def test_given_leader_when_configure_then_pebble_layer_is_planned(self):
         with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
                 src=temp_dir,
@@ -118,6 +129,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             self.mock_pki_requirer_get_assigned_certificates.return_value = []
+            self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
                 src=temp_dir,
@@ -178,6 +190,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_common_name_allowed_in_pki_role.return_value": False,
                 },
             )
+            self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
                 src=temp_dir,
@@ -249,6 +262,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                     ),
                 },
             )
+            self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
                 src=temp_dir,
@@ -313,4 +327,187 @@ class TestCharmConfigure(VaultCharmFixtures):
                 ca="my ca",
                 certificate_signing_request=requirer_csr.csr,
                 chain=["my ca"],
+            )
+
+    # Test Auto unseal
+
+    def test_given_autounseal_details_available_when_autounseal_details_ready_then_transit_stanza_generated(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            key_name = "my key"
+            approle_id = "my approle id"
+            approle_secret_id = "my approle secret id"
+            self.mock_vault.configure_mock(
+                **{
+                    "token": "some token",
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "generate_pki_intermediate_ca_csr.return_value": "my csr",
+                    "is_common_name_allowed_in_pki_role.return_value": False,
+                    "create_autounseal_credentials.return_value": (
+                        key_name,
+                        approle_id,
+                        approle_secret_id,
+                    ),
+                },
+            )
+            self.mock_tls.configure_mock(
+                **{
+                    "pull_tls_file_from_workload.return_value": "my ca",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = AutounsealDetails(
+                "1.2.3.4", "charm-autounseal", "key name", "role id", "secret id", "ca cert"
+            )
+            vault_config_mount = scenario.Mount(
+                location="/vault/config",
+                src=temp_dir,
+            )
+            container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+            )
+            pki_relation_provider = scenario.Relation(
+                endpoint="tls-certificates-pki",
+                interface="tls-certificates",
+                remote_app_name="tls-provider",
+            )
+            vault_autounseal_relation = scenario.Relation(
+                endpoint="vault-autounseal-provides",
+                interface="vault-autounseal",
+                remote_app_name="vault-autounseal-requirer",
+            )
+            provider_certificate = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=pki_relation_provider.relation_id,
+            )
+            self.mock_get_binding.return_value = MockBinding(
+                bind_address="myhostname",
+                ingress_address="myhostname",
+            )
+            self.mock_pki_requirer_get_assigned_certificates.return_value = [provider_certificate]
+            relation = MockRelation(id=vault_autounseal_relation.relation_id)
+            self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
+            approle_secret = scenario.Secret(
+                id="0",
+                label="vault-approle-auth-details",
+                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            )
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, pki_relation_provider, vault_autounseal_relation],
+                config={"common_name": "myhostname.com"},
+            )
+
+            self.ctx.run(container.pebble_ready_event, state_in)
+
+            with open(f"{temp_dir}/vault.hcl", "r") as f:
+                actual_config = f.read()
+            actual_config_hcl = hcl.loads(actual_config)
+            assert actual_config_hcl["seal"]["transit"]["address"] == "1.2.3.4"
+            assert actual_config_hcl["seal"]["transit"]["mount_path"] == "charm-autounseal"
+            assert actual_config_hcl["seal"]["transit"]["token"] == "some token"
+            assert actual_config_hcl["seal"]["transit"]["key_name"] == "key name"
+            self.mock_vault.authenticate.assert_called_with(AppRole("role id", "secret id"))
+            self.mock_tls.push_autounseal_ca_cert.assert_called_with("ca cert")
+
+    def test_given_outstanding_autounseal_requests_when_autounseal_initialize_then_credentials_are_set(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            key_name = "my key"
+            approle_id = "my approle id"
+            approle_secret_id = "my approle secret id"
+            self.mock_vault.configure_mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "generate_pki_intermediate_ca_csr.return_value": "my csr",
+                    "is_common_name_allowed_in_pki_role.return_value": False,
+                    "create_autounseal_credentials.return_value": (
+                        key_name,
+                        approle_id,
+                        approle_secret_id,
+                    ),
+                },
+            )
+            self.mock_tls.configure_mock(
+                **{
+                    "pull_tls_file_from_workload.return_value": "my ca",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            vault_config_mount = scenario.Mount(
+                location="/vault/config",
+                src=temp_dir,
+            )
+            container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+            )
+            pki_relation_provider = scenario.Relation(
+                endpoint="tls-certificates-pki",
+                interface="tls-certificates",
+                remote_app_name="tls-provider",
+            )
+            vault_autounseal_relation = scenario.Relation(
+                endpoint="vault-autounseal-provides",
+                interface="vault-autounseal",
+                remote_app_name="vault-autounseal-requirer",
+            )
+            provider_certificate = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=pki_relation_provider.relation_id,
+            )
+            self.mock_get_binding.return_value = MockBinding(
+                bind_address="myhostname",
+                ingress_address="myhostname",
+            )
+            self.mock_pki_requirer_get_assigned_certificates.return_value = [provider_certificate]
+            relation = MockRelation(id=vault_autounseal_relation.relation_id)
+            self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
+            approle_secret = scenario.Secret(
+                id="0",
+                label="vault-approle-auth-details",
+                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            )
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, pki_relation_provider, vault_autounseal_relation],
+                config={"common_name": "myhostname.com"},
+            )
+
+            self.ctx.run(container.pebble_ready_event, state_in)
+
+            self.mock_autounseal_provides_set_data.assert_called_with(
+                relation,
+                "https://myhostname:8200",
+                "charm-autounseal",
+                key_name,
+                approle_id,
+                approle_secret_id,
+                "my ca",
             )
