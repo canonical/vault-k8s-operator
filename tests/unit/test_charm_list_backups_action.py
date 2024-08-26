@@ -153,7 +153,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             action_output.failure == "Failed to run list-backups action - Failed to list backups."
         )
 
-    def test_given_s3_available_when_list_backups_then_backup_created(self):
+    def test_given_s3_available_when_list_backups_then_backup_listed(self):
         self.mock_s3_requirer.configure_mock(
             **{
                 "get_s3_connection_info.return_value": {

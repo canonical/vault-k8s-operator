@@ -228,7 +228,7 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         assert action_output.success is False
         assert action_output.failure == "Failed to restore vault."
 
-    def test_given_when_then(self):
+    def test_given_200_response_when_restore_backup_then_action_success(self):
         self.mock_s3_requirer.configure_mock(
             **{
                 "get_s3_connection_info.return_value": {
