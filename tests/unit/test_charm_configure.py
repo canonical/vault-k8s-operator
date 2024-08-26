@@ -513,30 +513,6 @@ class TestCharmConfigure(VaultCharmFixtures):
                 "my ca",
             )
 
-    # Test Vault KV
-
-    # def test_given_unit_not_leader_when_new_vault_kv_client_attached_then_event_kv_relation_data_not_set(
-    #     self,
-    # ):
-    #     with tempfile.TemporaryDirectory() as temp_dir:
-
-    # self.harness.set_leader(is_leader=False)
-    # self.harness.set_can_connect(container=self.container_name, val=True)
-    # vault_kv_relation_name = "vault-kv"
-    # vault_kv_relation_id = self.harness.add_relation(
-    #     relation_name=vault_kv_relation_name, remote_app="vault-kv-remote"
-    # )
-    # self.harness.add_relation_unit(
-    #     relation_id=vault_kv_relation_id, remote_unit_name="vault-kv-remote/0"
-    # )
-    # event = Mock()
-    # event.relation_id = vault_kv_relation_id
-    # self.harness.charm._on_new_vault_kv_client_attached(event)
-    # patch_set_vault_url.assert_not_called()
-    # patch_set_mount.assert_not_called()
-    # patch_set_ca_certificate.assert_not_called()
-    # patch_audit_device_enabled.assert_not_called()
-
     def test_given_outstanding_kv_request_when_configure_then_kv_relation_data_is_set(
         self,
     ):
