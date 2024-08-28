@@ -353,26 +353,13 @@ class Vault:
         """Get the intermediate CA for the PKI backend."""
         return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
 
-    def generate_pki_intermediate_ca_csr(self, mount: str, common_name: str) -> str:
-        """Generate an intermediate CA CSR for the PKI backend.
-
-        Returns:
-            str: The Certificate Signing Request.
-        """
-        response = self._client.secrets.pki.generate_intermediate(
+    def import_ca_certificate_and_key(self, mount: str, certificate: str, private_key: str):
+        """Import the CA certificate and private key for the PKI backend."""
+        pem_bundle = generate_pem_bundle(certificate=certificate, private_key=private_key)
+        self._client.secrets.pki.submit_ca_information(
+            pem_bundle=pem_bundle,
             mount_point=mount,
-            common_name=common_name,
-            type="internal",
         )
-        logger.info("Generated a CSR for the intermediate CA for the PKI backend")
-        return response["data"]["csr"]
-
-    def set_pki_intermediate_ca_certificate(self, certificate: str, mount: str) -> None:
-        """Set the intermediate CA certificate for the PKI backend."""
-        self._client.secrets.pki.set_signed_intermediate(
-            certificate=certificate, mount_point=mount
-        )
-        logger.info("Set the intermediate CA certificate for the PKI backend")
 
     def sign_pki_certificate_signing_request(
         self,
@@ -581,3 +568,8 @@ class Vault:
         role_id = self.configure_approle(role_name, policies=[policy_name], token_period="60s")
         secret_id = self.generate_role_secret_id(role_name)
         return key_name, role_id, secret_id
+
+
+def generate_pem_bundle(certificate: str, private_key: str) -> str:
+    """Generate a PEM bundle from a certificate and private key."""
+    return f"{certificate}\n{private_key}"

@@ -19,17 +19,14 @@ class VaultCharmFixtures:
     patcher_s3_requirer = patch("charm.S3Requirer", autospec=S3Requirer)
     patcher_s3 = patch("charm.S3", autospec=S3)
     patcher_socket_fqdn = patch("socket.getfqdn")
-    patcher_pki_requirer_request_certificate_creation = patch(
-        "charm.TLSCertificatesRequiresV3.request_certificate_creation"
-    )
-    patcher_pki_requirer_get_assigned_certificates = patch(
-        "charm.TLSCertificatesRequiresV3.get_assigned_certificates"
+    patcher_pki_requirer_get_assigned_certificate = patch(
+        "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
     )
     patcher_pki_provider_get_outstanding_certificate_requests = patch(
-        "charm.TLSCertificatesProvidesV3.get_outstanding_certificate_requests"
+        "charm.TLSCertificatesProvidesV4.get_outstanding_certificate_requests"
     )
     patcher_pki_provider_set_relation_certificate = patch(
-        "charm.TLSCertificatesProvidesV3.set_relation_certificate"
+        "charm.TLSCertificatesProvidesV4.set_relation_certificate"
     )
     patcher_autounseal_provides_get_outstanding_requests = patch(
         "charm.VaultAutounsealProvides.get_outstanding_requests"
@@ -54,11 +51,8 @@ class VaultCharmFixtures:
         self.mock_s3_requirer = VaultCharmFixtures.patcher_s3_requirer.start().return_value
         self.mock_s3 = VaultCharmFixtures.patcher_s3.start()
         self.mock_socket_fqdn = VaultCharmFixtures.patcher_socket_fqdn.start()
-        self.mock_pki_requirer_request_certificate_creation = (
-            VaultCharmFixtures.patcher_pki_requirer_request_certificate_creation.start()
-        )
-        self.mock_pki_requirer_get_assigned_certificates = (
-            VaultCharmFixtures.patcher_pki_requirer_get_assigned_certificates.start()
+        self.mock_pki_requirer_get_assigned_certificate = (
+            VaultCharmFixtures.patcher_pki_requirer_get_assigned_certificate.start()
         )
         self.mock_pki_provider_get_outstanding_certificate_requests = (
             VaultCharmFixtures.patcher_pki_provider_get_outstanding_certificate_requests.start()
