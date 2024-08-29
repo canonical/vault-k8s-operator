@@ -1,0 +1,7 @@
+alert: VaultClusterLeadershipSetupFailureRule
+expr: vault_core_leadership_setup_failed > 500
+labels:
+    severity: critical
+annotations:
+    summary: "Spike in delay during Vault leadership setup"
+    description: "Leadership setup took longer than 500ms"

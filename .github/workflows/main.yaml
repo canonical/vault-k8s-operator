@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main", "release-*"]
+  push:
+    branches: ["main", "release-*"]
+
+concurrency:
+  group: ${{ (github.ref == 'refs/heads/main' && format('ignore-main-{0}', github.run_id)) || (contains(github.ref, 'refs/heads/release-') && format('ignore-release-{0}', github.run_id)) || format('{0}-{1}', github.workflow, github.ref_name) }}
+  cancel-in-progress: true
+
+jobs:
+  lint-report:
+    uses: ./.github/workflows/lint-report.yaml
+
+  grafana-dashboard-lint-report:
+    uses: ./.github/workflows/grafana-dashboard-lint-report.yaml
+
+  static-analysis:
+    name: Static analysis
+    uses: ./.github/workflows/static-analysis.yaml
+
+  unit-tests-with-coverage:
+    uses: ./.github/workflows/unit-test.yaml
+
+  build:
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+
+  integration-test:
+    needs:
+      - build
+    uses: ./.github/workflows/integration-test.yaml
+
+  publish-charm:
+    needs:
+      - lint-report
+      - grafana-dashboard-lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+      - integration-test
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    uses: ./.github/workflows/publish-charm.yaml
+    secrets: inherit
