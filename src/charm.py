@@ -140,6 +140,7 @@ class VaultCharm(CharmBase):
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
             certificate_requests=[certificate_request] if certificate_request else [],
             mode=Mode.APP,
+            refresh_events=[self.on.config_changed],
         )
         self.vault_autounseal_provides = VaultAutounsealProvides(
             self, AUTOUNSEAL_PROVIDES_RELATION_NAME

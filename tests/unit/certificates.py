@@ -57,6 +57,7 @@ def generate_example_requirer_csr(common_name: str, relation_id: int) -> Require
     return RequirerCSR(
         relation_id=relation_id,
         certificate_signing_request=csr,
+        is_ca=False,
     )
 
 
