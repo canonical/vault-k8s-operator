@@ -338,27 +338,14 @@ class TestCharmConfigure(VaultCharmFixtures):
             peer_relation = scenario.PeerRelation(
                 endpoint="vault-peers",
             )
-            pki_relation_provider = scenario.Relation(
-                endpoint="tls-certificates-pki",
-                interface="tls-certificates",
-                remote_app_name="tls-provider",
-            )
             vault_autounseal_relation = scenario.Relation(
                 endpoint="vault-autounseal-provides",
                 interface="vault-autounseal",
                 remote_app_name="vault-autounseal-requirer",
             )
-            provider_certificate, private_key = generate_example_provider_certificate(
-                common_name="myhostname.com",
-                relation_id=pki_relation_provider.relation_id,
-            )
             self.mock_get_binding.return_value = MockBinding(
                 bind_address="myhostname",
                 ingress_address="myhostname",
-            )
-            self.mock_pki_requirer_get_assigned_certificate.return_value = (
-                provider_certificate,
-                private_key,
             )
             relation = MockRelation(id=vault_autounseal_relation.relation_id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
@@ -371,7 +358,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
-                relations=[peer_relation, pki_relation_provider, vault_autounseal_relation],
+                relations=[peer_relation, vault_autounseal_relation],
                 config={"common_name": "myhostname.com"},
             )
 
@@ -430,27 +417,14 @@ class TestCharmConfigure(VaultCharmFixtures):
             peer_relation = scenario.PeerRelation(
                 endpoint="vault-peers",
             )
-            pki_relation_provider = scenario.Relation(
-                endpoint="tls-certificates-pki",
-                interface="tls-certificates",
-                remote_app_name="tls-provider",
-            )
             vault_autounseal_relation = scenario.Relation(
                 endpoint="vault-autounseal-provides",
                 interface="vault-autounseal",
                 remote_app_name="vault-autounseal-requirer",
             )
-            provider_certificate, private_key = generate_example_provider_certificate(
-                common_name="myhostname.com",
-                relation_id=pki_relation_provider.relation_id,
-            )
             self.mock_get_binding.return_value = MockBinding(
                 bind_address="myhostname",
                 ingress_address="myhostname",
-            )
-            self.mock_pki_requirer_get_assigned_certificate.return_value = (
-                provider_certificate,
-                private_key,
             )
             relation = MockRelation(id=vault_autounseal_relation.relation_id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
@@ -463,7 +437,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
-                relations=[peer_relation, pki_relation_provider, vault_autounseal_relation],
+                relations=[peer_relation, vault_autounseal_relation],
                 config={"common_name": "myhostname.com"},
             )
 
