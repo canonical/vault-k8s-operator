@@ -12,11 +12,11 @@ attrs==23.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.5
+boto3==1.35.10
     # via -r requirements.in
-boto3-stubs[s3]==1.35.5
+boto3-stubs[s3]==1.35.10
     # via -r requirements.in
-botocore==1.35.5
+botocore==1.35.10
     # via
     #   boto3
     #   s3transfer
@@ -33,7 +33,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via typer
-cosl==0.0.23
+cosl==0.0.26
     # via -r requirements.in
 cryptography==43.0.0
     # via -r requirements.in
@@ -63,7 +63,9 @@ jsonschema==4.23.0
 jsonschema-specifications==2023.12.1
     # via jsonschema
 lightkube==0.15.4
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cosl
 lightkube-models==1.30.0.8
     # via
     #   -r requirements.in
@@ -72,12 +74,12 @@ markupsafe==2.1.5
     # via jinja2
 mypy-boto3-s3==1.35.2
     # via boto3-stubs
-ops==2.15.0
+ops==2.16.0
     # via
     #   -r requirements.in
     #   cosl
     #   ops-scenario
-ops-scenario==6.1.5
+ops-scenario==6.1.6
     # via pytest-interface-tester
 packaging==24.0
     # via pytest
