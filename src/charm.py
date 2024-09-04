@@ -20,9 +20,14 @@ from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tls_certificates_interface.v3.tls_certificates import (
-    TLSCertificatesProvidesV3,
-    TLSCertificatesRequiresV3,
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    Certificate,
+    CertificateRequest,
+    Mode,
+    ProviderCertificate,
+    RequirerCSR,
+    TLSCertificatesProvidesV4,
+    TLSCertificatesRequiresV4,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_autounseal import (
@@ -46,7 +51,6 @@ from charms.vault_k8s.v0.vault_kv import (
 )
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
-from cryptography import x509
 from jinja2 import Environment, FileSystemLoader
 from ops import CharmBase, MaintenanceStatus
 from ops.charm import (
@@ -126,9 +130,17 @@ class VaultCharm(CharmBase):
         self._container = Container(container=self.unit.get_container(self._container_name))
         self.unit.set_ports(self.VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
-        self.vault_pki = TLSCertificatesProvidesV3(self, PKI_RELATION_NAME)
-        self.tls_certificates_pki = TLSCertificatesRequiresV3(
-            self, TLS_CERTIFICATES_PKI_RELATION_NAME
+        self.vault_pki = TLSCertificatesProvidesV4(
+            charm=self,
+            relationship_name=PKI_RELATION_NAME,
+        )
+        certificate_request = self._get_certificate_request()
+        self.tls_certificates_pki = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
+            certificate_requests=[certificate_request] if certificate_request else [],
+            mode=Mode.APP,
+            refresh_events=[self.on.config_changed],
         )
         self.vault_autounseal_provides = VaultAutounsealProvides(
             self, AUTOUNSEAL_PROVIDES_RELATION_NAME
@@ -178,7 +190,6 @@ class VaultCharm(CharmBase):
             self.on[PEER_RELATION_NAME].relation_changed,
             self.on.tls_certificates_pki_relation_joined,
             self.tls_certificates_pki.on.certificate_available,
-            self.vault_pki.on.certificate_creation_request,
             self.vault_autounseal_requires.on.vault_autounseal_details_ready,
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
             self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
@@ -406,7 +417,6 @@ class VaultCharm(CharmBase):
         if not (vault := self._get_active_vault_client()):
             return
         self._configure_pki_secrets_engine()
-        self._add_ca_certificate_to_pki_secrets_engine()
         self._sync_vault_autounseal()
         self._sync_vault_kv()
         self._sync_vault_pki()
@@ -480,7 +490,7 @@ class VaultCharm(CharmBase):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self._remove_juju_secret_by_label(label=label)
 
-    def _configure_pki_secrets_engine(self) -> None:
+    def _configure_pki_secrets_engine(self) -> None:  # noqa: C901
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki certificate request")
@@ -496,86 +506,41 @@ class VaultCharm(CharmBase):
             logger.debug("Common name config is not valid, skipping")
             return
         config_common_name = self._get_config_common_name()
-        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
-        if not self._common_name_matches_current_csr(config_common_name):
-            csr = vault.generate_pki_intermediate_ca_csr(
-                mount=PKI_MOUNT, common_name=config_common_name
-            )
-            self._revoke_issued_certificates_and_remove_csr()
-            self.tls_certificates_pki.request_certificate_creation(
-                certificate_signing_request=csr.encode(),
-                is_ca=True,
-            )
-
-    def _revoke_issued_certificates_and_remove_csr(self) -> None:
-        """Revoke all certificates issued by the PKI secrets engine and remove intermediate CA CSR."""
-        csrs = self.tls_certificates_pki.get_requirer_csrs()
-        # There should only be one of them, but for sanity we iterate the list.
-        for csr in csrs:
-            self.tls_certificates_pki.request_certificate_revocation(csr.csr.encode())
-        logger.info("Revoking all certificates issued by the PKI backend.")
-        self.vault_pki.revoke_all_certificates()
-
-    def _is_intermediate_ca_common_name_match(self, vault: Vault, common_name: str) -> bool:
-        """Check if the intermediate CA is set with the valid common name."""
-        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        if not intermediate_ca:
-            return False
-        intermediate_ca_common_name = get_common_name_from_certificate(intermediate_ca)
-        return intermediate_ca_common_name == common_name
-
-    def _get_pki_intermediate_ca_csr(self) -> str | None:
-        """Get the current CSR from the relation data."""
-        csrs = self.tls_certificates_pki.get_requirer_csrs()
-        if not csrs:
-            return None
-        assert len(csrs) == 1, f"Only one CSR should be available, found {len(csrs)}: {csrs}"
-        csr = csrs[0].csr
-        return csr
-
-    def _common_name_matches_current_csr(self, common_name: str) -> bool:
-        """Return True if the common name provided matches what is in the CSR in the relation data."""
-        csr = self._get_pki_intermediate_ca_csr()
-        if not csr:
-            return False
-        csr_common_name = get_common_name_from_csr(csr)
-        is_match = csr_common_name == common_name
-        if not is_match:
-            logger.info("Common name changed from `%s` to `%s`", csr_common_name, common_name)
-        return is_match
-
-    def _vault_intermediate_ca_matches(self, vault: Vault, certificate: str) -> bool:
-        """Check if the intermediate CA in the Vault PKI enginer is set to the certificate provided."""
-        intermediate_ca = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        return certificate == intermediate_ca
-
-    def _add_ca_certificate_to_pki_secrets_engine(self) -> None:
-        """Add the CA certificate to the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        certificate = self._get_pki_ca_certificate()
-        if not certificate:
-            logger.debug("No certificate available")
-            return
-        config_common_name = self._get_config_common_name()
         if not config_common_name:
             logger.error("Common name is not set in the charm config")
             return
-
-        certificate_common_name = get_common_name_from_certificate(certificate)
+        certificate_request = self._get_certificate_request()
+        if not certificate_request:
+            logger.error("Certificate request is not valid")
+            return
+        provider_certificate, private_key = self.tls_certificates_pki.get_assigned_certificate(
+            certificate_request=certificate_request
+        )
+        if not provider_certificate:
+            logger.debug("No certificate available")
+            return
+        if not private_key:
+            logger.debug("No private key available")
+            return
+        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
+        existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
         if (
-            config_common_name == certificate_common_name
-            and not self._vault_intermediate_ca_matches(vault, certificate)
+            existing_ca_certificate
+            and Certificate.from_string(existing_ca_certificate)
+            == provider_certificate.certificate
         ):
-            vault.set_pki_intermediate_ca_certificate(certificate=certificate, mount=PKI_MOUNT)
-
+            logger.debug("CA certificate already set in the PKI secrets engine")
+            return
+        self.vault_pki.revoke_all_certificates()
+        vault.import_ca_certificate_and_key(
+            certificate=str(provider_certificate.certificate),
+            private_key=str(private_key),
+            mount=PKI_MOUNT,
+        )
         if not vault.is_common_name_allowed_in_pki_role(
-            role=PKI_ROLE_NAME, mount=PKI_MOUNT, common_name=config_common_name
+            role=PKI_ROLE_NAME,
+            mount=PKI_MOUNT,
+            common_name=config_common_name,
         ):
             vault.create_or_update_pki_charm_role(
                 allowed_domains=config_common_name,
@@ -588,6 +553,15 @@ class VaultCharm(CharmBase):
         except VaultClientError as e:
             logger.error("Failed to make latest issuer default: %s", e)
 
+    def _get_certificate_request(self) -> CertificateRequest | None:
+        common_name = self._get_config_common_name()
+        if not common_name:
+            return None
+        return CertificateRequest(
+            common_name=common_name,
+            is_ca=True,
+        )
+
     def _sync_vault_pki(self) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
         if not self.unit.is_leader():
@@ -596,8 +570,7 @@ class VaultCharm(CharmBase):
         outstanding_pki_requests = self.vault_pki.get_outstanding_certificate_requests()
         for pki_request in outstanding_pki_requests:
             self._generate_pki_certificate_for_requirer(
-                csr=pki_request.csr,
-                relation_id=pki_request.relation_id,
+                requirer_csr=pki_request,
             )
 
     def _sync_vault_kv(self) -> None:
@@ -651,24 +624,7 @@ class VaultCharm(CharmBase):
         self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnets)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
-    def _get_pki_ca_certificate(self) -> str | None:
-        """Return the PKI CA certificate provided by the TLS provider.
-
-        Validate that the CSR matches the one in secrets.
-        """
-        assigned_certificates = self.tls_certificates_pki.get_assigned_certificates()
-        if not assigned_certificates:
-            return None
-        if len(assigned_certificates) > 1:
-            logger.warning(
-                f"Only one certificate should be available, found {len(assigned_certificates)}"
-            )
-
-        # Return the last certificate, as it is probably the most recent one.
-        # We shouldn't have more than 1 anyway.
-        return assigned_certificates[-1].certificate
-
-    def _generate_pki_certificate_for_requirer(self, csr: str, relation_id: int):
+    def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCSR):
         """Generate a PKI certificate for a TLS requirer."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki request")
@@ -687,23 +643,24 @@ class VaultCharm(CharmBase):
         if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
             return
-        requested_csr = csr
-        requested_common_name = get_common_name_from_csr(requested_csr)
         certificate = vault.sign_pki_certificate_signing_request(
             mount=PKI_MOUNT,
             role=PKI_ROLE_NAME,
-            csr=requested_csr,
-            common_name=requested_common_name,
+            csr=str(requirer_csr.certificate_signing_request),
+            common_name=requirer_csr.certificate_signing_request.common_name,
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")
             return
+        provider_certificate = ProviderCertificate(
+            relation_id=requirer_csr.relation_id,
+            certificate=Certificate.from_string(certificate.certificate),
+            certificate_signing_request=requirer_csr.certificate_signing_request,
+            ca=Certificate.from_string(certificate.ca),
+            chain=[Certificate.from_string(cert) for cert in certificate.chain],
+        )
         self.vault_pki.set_relation_certificate(
-            relation_id=relation_id,
-            certificate=certificate.certificate,
-            certificate_signing_request=csr,
-            ca=certificate.ca,
-            chain=certificate.chain,
+            provider_certificate=provider_certificate,
         )
 
     def _on_authorize_charm_action(self, event: ActionEvent) -> None:
@@ -1604,20 +1561,6 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
         new_retry_join_api_addresses == existing_retry_join_api_addresses
         and new_content_hcl == existing_config_hcl
     )
-
-
-def get_common_name_from_certificate(certificate: str) -> str:
-    """Get the common name from a certificate."""
-    loaded_certificate = x509.load_pem_x509_certificate(certificate.encode("utf-8"))
-    return str(
-        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
-    )
-
-
-def get_common_name_from_csr(csr: str) -> str:
-    """Get the common name from a CSR."""
-    loaded_csr = x509.load_pem_x509_csr(csr.encode("utf-8"))
-    return str(loaded_csr.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value)  # type: ignore[reportAttributeAccessIssue]
 
 
 if __name__ == "__main__":  # pragma: no cover
