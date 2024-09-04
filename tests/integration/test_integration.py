@@ -246,8 +246,7 @@ class TestVaultK8sIntegrationsPart1:
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-            trust=True,
-            channel="stable",
+            channel="edge",
         )
         deploy_vault_kv_requirer_1 = ops_test.model.deploy(
             kv_requirer_charm_path,

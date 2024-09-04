@@ -353,7 +353,7 @@ class Certificate:
 
     raw: str
     common_name: str
-    is_ca: bool
+    is_ca: bool = False
     sans_dns: Optional[FrozenSet[str]] = frozenset()
     sans_ip: Optional[FrozenSet[str]] = frozenset()
     sans_oid: Optional[FrozenSet[str]] = frozenset()
@@ -413,13 +413,13 @@ class Certificate:
             sans_oid = []
         expiry_time = certificate_object.not_valid_after_utc
         validity_start_time = certificate_object.not_valid_before_utc
-        is_ca: bool = False
+        is_ca = False
         try:
             is_ca = certificate_object.extensions.get_extension_for_oid(
                 ExtensionOID.BASIC_CONSTRAINTS
             ).value.ca  # type: ignore[reportAttributeAccessIssue]
         except x509.ExtensionNotFound:
-            is_ca = False
+            pass
 
         return cls(
             raw=certificate.strip(),
