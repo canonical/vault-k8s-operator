@@ -18,7 +18,7 @@ idna==3.7
     # via requests
 iniconfig==2.0.0
     # via pytest
-ops==2.15.0
+ops==2.16.1
     # via
     #   -r requirements.in
     #   ops-scenario
@@ -28,11 +28,11 @@ packaging==24.0
     # via pytest
 pluggy==1.5.0
     # via pytest
-pydantic==2.8.2
+pydantic==2.9.0
     # via
     #   -r requirements.in
     #   pytest-interface-tester
-pydantic-core==2.20.1
+pydantic-core==2.23.2
     # via pydantic
 pytest==8.2.1
     # via pytest-interface-tester
@@ -50,6 +50,8 @@ typing-extensions==4.12.1
     # via
     #   pydantic
     #   pydantic-core
+tzdata==2024.1
+    # via pydantic
 urllib3==2.2.2
     # via requests
 websocket-client==1.8.0
