@@ -68,9 +68,9 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-ops==2.16.0
+ops==2.16.1
     # via ops-scenario
-ops-scenario==6.1.6
+ops-scenario==7.0.1
     # via -r test-requirements.in
 packaging==24.0
     # via
@@ -114,7 +114,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.378
+pyright==1.1.379
     # via -r test-requirements.in
 pytest==8.3.2
     # via
