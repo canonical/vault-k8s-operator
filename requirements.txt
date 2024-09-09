@@ -12,11 +12,11 @@ attrs==23.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.10
+boto3==1.35.14
     # via -r requirements.in
-boto3-stubs[s3]==1.35.10
+boto3-stubs[s3]==1.35.14
     # via -r requirements.in
-botocore==1.35.10
+botocore==1.35.14
     # via
     #   boto3
     #   s3transfer
@@ -33,7 +33,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via typer
-cosl==0.0.26
+cosl==0.0.31
     # via -r requirements.in
 cryptography==43.0.1
     # via -r requirements.in
@@ -79,7 +79,7 @@ ops==2.16.0
     #   -r requirements.in
     #   cosl
     #   ops-scenario
-ops-scenario==6.1.6
+ops-scenario==6.1.7
     # via pytest-interface-tester
 packaging==24.0
     # via pytest
