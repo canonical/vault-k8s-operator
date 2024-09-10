@@ -13,7 +13,7 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 
 class TestCharmRemove(VaultCharmFixtures):
-    def test_given_can_connect_when_remove_then_data_is_deleted(
+    def test_given_can_connect_when_remove_then_node_removed_from_raft_cluster_data_is_deleted(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -53,6 +53,9 @@ class TestCharmRemove(VaultCharmFixtures):
                 f.write("data")
 
             self.ctx.run("remove", state_in)
+            self.mock_vault.remove_raft_node.assert_called_with(
+                node_id=f"{model_name}-vault-k8s/0"
+            )
             assert not os.path.exists(f"{temp_dir}/vault.db")
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
 

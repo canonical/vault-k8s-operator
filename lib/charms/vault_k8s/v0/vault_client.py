@@ -440,6 +440,11 @@ class Vault:
         """Check if raft cluster is healthy."""
         return self.get_raft_cluster_state()["healthy"]
 
+    def remove_raft_node(self, node_id: str) -> None:
+        """Remove raft peer."""
+        self._client.sys.remove_raft_node(server_id=node_id)
+        logger.info("Removed raft node %s", node_id)
+
     def is_node_in_raft_peers(self, node_id: str) -> bool:
         """Check if node is in raft peers."""
         raft_config = self._client.sys.read_raft_config()

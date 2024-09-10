@@ -435,6 +435,7 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
+        self._remove_node_from_raft_cluster()
         if self._vault_service_is_running():
             try:
                 self._container.stop(self._service_name)
@@ -442,6 +443,25 @@ class VaultCharm(CharmBase):
                 logger.warning("Failed to stop Vault service")
                 pass
         self._delete_vault_data()
+
+    def _remove_node_from_raft_cluster(self):
+        """Remove the node from the raft cluster."""
+        role_id, secret_id = self._get_approle_auth_secret()
+        if not role_id or not secret_id:
+            return
+        vault = Vault(url=self._api_address, ca_cert_path=None)
+        if not vault.is_api_available():
+            return
+        if not vault.is_initialized():
+            return
+        try:
+            if vault.is_sealed():
+                return
+        except VaultClientError:
+            return
+        vault.authenticate(AppRole(role_id, secret_id))
+        if vault.is_node_in_raft_peers(node_id=self._node_id) and vault.get_num_raft_peers() > 1:
+            vault.remove_raft_node(node_id=self._node_id)
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""

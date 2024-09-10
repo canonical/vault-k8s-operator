@@ -52,6 +52,12 @@ path "sys/storage/raft/configuration" {
   capabilities = ["read"]
 }
 
+# Allow removing nodes from the raft backend
+# This is required for the charm to prune dead nodes from the raft backend
+path "sys/storage/raft/remove-peer" {
+  capabilities = ["update"]
+}
+
 # Allow taking snapshots of Vault
 path "sys/storage/raft/snapshot" {
   capabilities = ["read"]
