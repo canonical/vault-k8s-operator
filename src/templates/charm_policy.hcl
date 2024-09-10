@@ -1,9 +1,9 @@
 # Allow management of secrets on secret engines starting with charm- prefix
-# Allows reading, writing, updating and listing secrets
+# Allows reading, writing, updating, deleting and listing secrets
 # Wildcard path is required as the charm won't know the rest of the path for the kv mount at the time of policy creation
 # KV mount path with charm prefix is provided by the KV requirer
 path "charm-*"{
-  capabilities = [ "create", "read", "update", "list"]
+  capabilities = [ "create", "read", "update", "list", "delete"]
 }
 
 # Allow discovery of all policies
@@ -21,7 +21,7 @@ path "sys/policy/charm-*" {
 # Allow discovery of secrets backends
 
 # Allow management of approle's with charm- prefix
-# Allows creating, reading, updating and deleting approle's
+# Allows creating, reading, updating, deleting and listing approle's
 # The wildcard path is required as the charm won't know the full path of the approle at the time of approle creation in the case of vault-kv
 path "auth/approle/role/charm-*" {
   capabilities = ["create", "read", "update", "delete", "list"]
@@ -33,10 +33,10 @@ path "auth/approle/role/" {
 }
 
 # Allow charm- prefixes secrets backends to be mounted and managed
-# Allows the charm to enable, read and update secret engines
+# Allows enabling, reading, updating, deleting and listing secret engines
 # The wildcard path is required as the charm won't know the full path of the secret engine at the time of secret engine creation in the case of vault-kv
 path "sys/mounts/charm-*" {
-  capabilities = ["create", "read", "update", "list"]
+  capabilities = ["create", "read", "update", "list", "delete"]
 }
 
 path "sys/mounts/" {
