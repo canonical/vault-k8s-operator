@@ -11,7 +11,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Protocol
+from typing import List, Protocol
 
 import hvac
 import requests
@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 17
+LIBPATCH = 18
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -131,14 +131,6 @@ class Vault:
             logger.warning("Failed login to Vault: %s", e)
             return False
         return True
-
-    def get_token_data(self) -> Dict | None:
-        """Check if given token is accepted by vault, and returns the token data if so."""
-        try:
-            token_data = self._client.auth.token.lookup_self()["data"]
-        except Forbidden:
-            return None
-        return token_data
 
     @property
     def token(self) -> str:
@@ -340,15 +332,6 @@ class Vault:
         except InvalidPath:
             logger.info("Secret engine at `%s` is already disabled", path)
 
-    def is_secret_engine_enabled(self, path: str) -> bool:
-        """Check if a mount is enabled."""
-        return f"{path}/" in self._client.sys.list_mounted_secrets_engines()
-
-    def is_intermediate_ca_set(self, mount: str, certificate: str) -> bool:
-        """Check if the intermediate CA is set for the PKI backend."""
-        intermediate_ca = self._client.secrets.pki.read_ca_certificate(mount_point=mount)
-        return intermediate_ca == certificate
-
     def get_intermediate_ca(self, mount: str) -> str:
         """Get the intermediate CA for the PKI backend."""
         return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
@@ -456,11 +439,6 @@ class Vault:
     def is_raft_cluster_healthy(self) -> bool:
         """Check if raft cluster is healthy."""
         return self.get_raft_cluster_state()["healthy"]
-
-    def remove_raft_node(self, node_id: str) -> None:
-        """Remove raft peer."""
-        self._client.sys.remove_raft_node(server_id=node_id)
-        logger.info("Removed raft node %s", node_id)
 
     def is_node_in_raft_peers(self, node_id: str) -> bool:
         """Check if node is in raft peers."""

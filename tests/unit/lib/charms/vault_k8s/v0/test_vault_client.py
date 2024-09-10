@@ -58,12 +58,6 @@ class TestVault(unittest.TestCase):
             role_id="some role id", secret_id="some secret id", use_token=True
         )
 
-    @patch("hvac.api.auth_methods.token.Token.lookup_self")
-    def test_given_token_data_when_get_token_data_lookup_self_called(self, patch_lookup):
-        vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
-        vault.get_token_data()
-        patch_lookup.assert_called()
-
     @patch("hvac.api.system_backend.health.Health.read_health_status")
     def test_given_connection_error_when_is_api_available_then_return_false(
         self, patch_health_status

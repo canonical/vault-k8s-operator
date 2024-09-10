@@ -10,7 +10,7 @@ from tests.unit.fixtures import MockBinding, VaultCharmFixtures
 
 
 class TestCharmAuthorizeAction(VaultCharmFixtures):
-    def test_given_unit_not_leader_when_authorize_cham_action_then_fails(self):
+    def test_given_unit_not_leader_when_authorize_charm_then_action_fails(self):
         container = scenario.Container(
             name="vault",
             can_connect=True,
@@ -28,7 +28,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         assert action_output.success is False
         assert action_output.failure == "This action must be run on the leader unit."
 
-    def test_given_secret_id_not_found_when_authorize_charm_then_fails(self):
+    def test_given_secret_id_not_found_when_authorize_charm_then_action_fails(self):
         container = scenario.Container(
             name="vault",
             can_connect=True,
@@ -50,10 +50,10 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             == "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
         )
 
-    def test_given_invalid_token_when_authorize_charm_then_fails(self):
+    def test_given_invalid_token_when_authorize_charm_then_action_fails(self):
         self.mock_vault.configure_mock(
             **{
-                "get_token_data.return_value": None,
+                "authenticate.return_value": False,
             },
         )
         container = scenario.Container(
@@ -83,11 +83,11 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             == "The token provided is not valid. Please use a Vault token with the appropriate permissions."
         )
 
-    def test_given_vault_client_error_when_authorize_charm_then_fails(self):
+    def test_given_vault_client_error_when_authorize_charm_then_action_fails(self):
         my_error_message = "my error message"
         self.mock_vault.configure_mock(
             **{
-                "get_token_data.return_value": "token data",
+                "authenticate.return_value": True,
                 "enable_audit_device.side_effect": VaultClientError(my_error_message),
             },
         )
@@ -121,7 +121,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
     def test_given_when_authorize_charm_then_charm_is_authorized(self):
         self.mock_vault.configure_mock(
             **{
-                "get_token_data.return_value": "token data",
+                "authenticate.return_value": True,
                 "configure_approle.return_value": "my-role-id",
                 "generate_role_secret_id.return_value": "my-secret-id",
             },
