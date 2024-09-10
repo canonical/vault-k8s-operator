@@ -79,8 +79,10 @@ ops==2.16.1
     #   -r requirements.in
     #   cosl
     #   ops-scenario
-ops-scenario==7.0.1
-    # via pytest-interface-tester
+ops-scenario==6.1.6
+    # via
+    #   -r requirements.in
+    #   pytest-interface-tester
 packaging==24.1
     # via pytest
 pluggy==1.5.0

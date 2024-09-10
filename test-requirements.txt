@@ -88,7 +88,7 @@ ops==2.16.1
     # via
     #   -c requirements.txt
     #   ops-scenario
-ops-scenario==7.0.1
+ops-scenario==6.1.6
     # via
     #   -c requirements.txt
     #   -r test-requirements.in
