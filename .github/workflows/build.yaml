@@ -8,12 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-    
+
       - name: Setup LXD
         uses: canonical/setup-lxd@main
         with:
-            channel: 5.20/stable
-    
+          channel: 5.20/stable
+
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
 
@@ -31,18 +31,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup LXD
         uses: canonical/setup-lxd@main
         with:
           channel: 5.20/stable
-      
+
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
 
       - name: Build KV Requirer charm
         run: |
           cp lib/charms/vault_k8s/v0/vault_kv.py tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
+          cp kv-requirements.txt tests/integration/vault_kv_requirer_operator/requirements.txt
           cd tests/integration/vault_kv_requirer_operator
           charmcraft pack --verbose
 
