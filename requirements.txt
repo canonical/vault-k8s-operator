@@ -22,7 +22,7 @@ botocore==1.35.10
     #   s3transfer
 botocore-stubs==1.34.89
     # via boto3-stubs
-certifi==2024.2.2
+certifi==2024.7.4
     # via
     #   httpcore
     #   httpx
