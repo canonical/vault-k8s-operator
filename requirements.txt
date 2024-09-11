@@ -12,11 +12,11 @@ attrs==24.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.15
+boto3==1.35.16
     # via -r requirements.in
-boto3-stubs[s3]==1.35.15
+boto3-stubs[s3]==1.35.16
     # via -r requirements.in
-botocore==1.35.15
+botocore==1.35.16
     # via
     #   boto3
     #   s3transfer
@@ -74,12 +74,12 @@ markupsafe==2.1.5
     # via jinja2
 mypy-boto3-s3==1.35.2
     # via boto3-stubs
-ops==2.16.1
+ops==2.16.0
     # via
     #   -r requirements.in
     #   cosl
     #   ops-scenario
-ops-scenario==6.1.6
+ops-scenario==6.1.7
     # via
     #   -r requirements.in
     #   pytest-interface-tester
@@ -89,12 +89,12 @@ pluggy==1.5.0
     # via pytest
 pycparser==2.22
     # via cffi
-pydantic==2.8.2
+pydantic==2.9.1
     # via
     #   -r requirements.in
     #   cosl
     #   pytest-interface-tester
-pydantic-core==2.20.1
+pydantic-core==2.23.3
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
@@ -118,7 +118,7 @@ requests==2.32.3
     # via
     #   -r requirements.in
     #   hvac
-rpds-py==0.18.0
+rpds-py==0.20.0
     # via
     #   -r requirements.in
     #   jsonschema
