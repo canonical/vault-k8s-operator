@@ -1,5 +1,5 @@
 ops
 hvac
-pydantic==2.8.2
+pydantic==2.9.1
 pytest-interface-tester
-ops-scenario==6.1.6
+ops-scenario==6.1.7
