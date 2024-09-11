@@ -751,7 +751,7 @@ class VaultCharm(CharmBase):
 
         response = vault.create_snapshot()
         content_uploaded = s3.upload_content(
-            content=response.raw,
+            content=response.raw,  # type: ignore[reportArgumentType]
             bucket_name=s3_parameters["bucket"],
             key=backup_key,
         )
@@ -1320,7 +1320,7 @@ class VaultCharm(CharmBase):
             logger.error("Failed to get Vault client, cannot create snapshot.")
             return None
         response = vault.create_snapshot()
-        return response.raw
+        return response.raw  # type: ignore[reportReturnType]
 
     def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.

@@ -7,4 +7,4 @@ pytest-operator
 pytest-asyncio==0.21.2
 ruff
 types-hvac
-ops-scenario
+ops-scenario==6.1.6
