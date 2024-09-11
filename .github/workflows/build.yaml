@@ -43,7 +43,6 @@ jobs:
       - name: Build KV Requirer charm
         run: |
           cp lib/charms/vault_k8s/v0/vault_kv.py tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
-          cp kv-requirements.txt tests/integration/vault_kv_requirer_operator/requirements.txt
           cd tests/integration/vault_kv_requirer_operator
           charmcraft pack --verbose
 

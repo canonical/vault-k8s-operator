@@ -12,7 +12,9 @@ updates:
           - "*"
 
   - package-ecosystem: "pip"
-    directory: "/"
+    directories:
+      - "/"
+      - "tests/integration/vault_kv_requirer_operator"
     schedule:
       interval: "weekly"
     commit-message:

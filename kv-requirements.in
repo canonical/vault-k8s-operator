@@ -1,5 +1,0 @@
-ops
-hvac
-pydantic==2.8.2
-pytest-interface-tester
-ops-scenario==6.1.6
