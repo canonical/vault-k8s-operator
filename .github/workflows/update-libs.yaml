@@ -39,7 +39,7 @@ jobs:
           CHARMCRAFT_AUTH: "${{ secrets.CHARMCRAFT_AUTH }}"
 
       - name: Create a PR for local changes
-        uses: peter-evans/create-pull-request@v7.0.1
+        uses: peter-evans/create-pull-request@v7.0.3
         with:
           token: ${{ secrets.TELCO_GITHUB_BOT_TOKEN }}
           commit-message: "chore: update charm libraries"
