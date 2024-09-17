@@ -33,6 +33,7 @@ SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 VAULT_KV_REQUIRER_1_APPLICATION_NAME = "vault-kv-requirer-a"
 VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+VAULT_PKI_REQUIRER_REVISION = 93
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
 MINIO_APPLICATION_NAME = "minio"
 AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
@@ -267,6 +268,7 @@ class TestVaultK8sIntegrationsPart1:
             if pki_requirer_charm_path
             else VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            revision=VAULT_PKI_REQUIRER_REVISION,
             channel="stable",
             config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
         )
