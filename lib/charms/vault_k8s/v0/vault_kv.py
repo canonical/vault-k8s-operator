@@ -135,7 +135,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -197,14 +197,14 @@ class UnitVaultKvRequirerSchema(BaseModel):
 class ProviderSchema(DataBagSchema):
     """The schema for the provider side of this interface."""
 
-    app: VaultKvProviderSchema  # type: ignore
+    app: VaultKvProviderSchema  # pyright: ignore[reportIncompatibleVariableOverride, reportGeneralTypeIssues]
 
 
 class RequirerSchema(DataBagSchema):
     """The schema for the requirer side of this interface."""
 
-    app: AppVaultKvRequirerSchema  # type: ignore
-    unit: UnitVaultKvRequirerSchema  # type: ignore
+    app: AppVaultKvRequirerSchema  # pyright: ignore[reportIncompatibleVariableOverride, reportGeneralTypeIssues]
+    unit: UnitVaultKvRequirerSchema  # pyright: ignore[reportIncompatibleVariableOverride, reportGeneralTypeIssues]
 
 
 @dataclass
@@ -470,7 +470,7 @@ class VaultKvProvides(ops.Object):
         relations = (
             [
                 relation
-                for relation in self.model.relations[self.relation_name]
+                for relation in self.model.relations.get(self.relation_name, [])
                 if relation.id == relation_id
             ]
             if relation_id is not None
@@ -506,58 +506,43 @@ class VaultKvProvides(ops.Object):
         return credentials.get(nonce) is not None
 
 
-class VaultKvConnectedEvent(ops.EventBase):
+class VaultKvBaseEvent(ops.EventBase):
+    """Base class for VaultKV requirer events."""
+
+    def __init__(
+        self,
+        handle: ops.Handle,
+        relation_id: int,
+        relation_name: str,
+    ):
+        super().__init__(handle)
+        self.relation_id = relation_id
+        self.relation_name = relation_name
+
+    def snapshot(self) -> dict:
+        """Return snapshot data that should be persisted."""
+        return {
+            "relation_id": self.relation_id,
+            "relation_name": self.relation_name,
+        }
+
+    def restore(self, snapshot: Dict[str, Any]):
+        """Restore the value state from a given snapshot."""
+        super().restore(snapshot)
+        self.relation_id = snapshot["relation_id"]
+        self.relation_name = snapshot["relation_name"]
+
+
+class VaultKvConnectedEvent(VaultKvBaseEvent):
     """VaultKvConnectedEvent Event."""
 
-    def __init__(
-        self,
-        handle: ops.Handle,
-        relation_id: int,
-        relation_name: str,
-    ):
-        super().__init__(handle)
-        self.relation_id = relation_id
-        self.relation_name = relation_name
-
-    def snapshot(self) -> dict:
-        """Return snapshot data that should be persisted."""
-        return {
-            "relation_id": self.relation_id,
-            "relation_name": self.relation_name,
-        }
-
-    def restore(self, snapshot: Dict[str, Any]):
-        """Restore the value state from a given snapshot."""
-        super().restore(snapshot)
-        self.relation_id = snapshot["relation_id"]
-        self.relation_name = snapshot["relation_name"]
+    pass
 
 
-class VaultKvReadyEvent(ops.EventBase):
+class VaultKvReadyEvent(VaultKvBaseEvent):
     """VaultKvReadyEvent Event."""
 
-    def __init__(
-        self,
-        handle: ops.Handle,
-        relation_id: int,
-        relation_name: str,
-    ):
-        super().__init__(handle)
-        self.relation_id = relation_id
-        self.relation_name = relation_name
-
-    def snapshot(self) -> dict:
-        """Return snapshot data that should be persisted."""
-        return {
-            "relation_id": self.relation_id,
-            "relation_name": self.relation_name,
-        }
-
-    def restore(self, snapshot: Dict[str, Any]):
-        """Restore the value state from a given snapshot."""
-        super().restore(snapshot)
-        self.relation_id = snapshot["relation_id"]
-        self.relation_name = snapshot["relation_name"]
+    pass
 
 
 class VaultKvRequireEvents(ops.ObjectEvents):
