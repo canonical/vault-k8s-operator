@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """Library for the vault-autounseal relation.
 
@@ -88,7 +88,7 @@ class LogAdapter(logging.LoggerAdapter):
     prefix = "vault_autounseal"
 
     def process(self, msg, kwargs):
-        """Decides the format for the prepended text."""
+        """Prepend the prefix to the log message."""
         return f"[{self.prefix}] {msg}", kwargs
 
 
@@ -394,7 +394,8 @@ class VaultAutounsealProvides(ops.Object):
         )
         return [relation for relation in relations if relation.active]
 
-    def _credentials_issued_for_request(self, relation_id: int | None) -> bool:
+    def _credentials_issued_for_request(self, relation_id: int) -> bool:
+        # If Id is none and more than on relation is present we get an error
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
             return False

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """Library for the vault-kv relation.
 
@@ -497,7 +497,7 @@ class VaultKvProvides(ops.Object):
                 )
         return kv_requests
 
-    def _credentials_issued_for_request(self, nonce: str, relation_id: int | None) -> bool:
+    def _credentials_issued_for_request(self, nonce: str, relation_id: int) -> bool:
         """Return whether credentials have been issued for the request."""
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:

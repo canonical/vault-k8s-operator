@@ -1,5 +1,5 @@
 # Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """This file includes methods to manage TLS certificates within the Vault charms."""
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
+
 """Library for interacting with a Vault cluster.
 
 This library shares operations that interact with Vault through its API. It is
