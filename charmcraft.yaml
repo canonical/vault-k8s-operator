@@ -21,6 +21,7 @@ links:
   issues:
     - https://github.com/canonical/vault-k8s-operator/issues
   documentation: https://discourse.charmhub.io/t/vault-operator-kubernetes/12123
+  contact: https://matrix.to/#/!yAkGlrYcBFYzYRvOlQ:ubuntu.com?via=ubuntu.com&via=matrix.org&via=mozilla.org
 
 containers:
   vault:
@@ -127,12 +128,12 @@ actions:
       Authorizes the charm to be able to interact with Vault to manage its
       operations. A token is required for Vault to use to create the app role and
       the policy the charm will use to interact with Vault. This token must be
-      placed in juju secret, and this secret should be granted to the charm.
+      placed in a juju secret, and access to this secret should be granted to the charm.
     params:
       secret-id:
         type: string
         description: >-
-          A secret id from juju that contains a token for Vault that can create 
+          The Juju secret ID for the secret containing a token for Vault that can create 
           new policies, such as the root token that is provided upon initializing 
           Vault. Used to create the app role and policy for the charm. It is not
           stored by the charm.
@@ -141,7 +142,7 @@ actions:
   create-backup:
     description: >-
       Creates a snapshot of the Raft backend and saves it to the S3 storage.
-      Returns backup ID.
+      Returns the backup ID.
 
   list-backups:
     description: >-
@@ -150,7 +151,7 @@ actions:
   restore-backup:
     description: >-
       Restores a backup from the S3 storage to the Raft backend.
-      Returns backup ID.
+      Returns the backup ID.
     params:
       backup-id:
         type: string

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """Library for the vault-autounseal relation.
 
@@ -68,7 +68,7 @@ from typing import Any, Dict, List
 
 import ops
 from interface_tester import DataBagSchema
-from ops import Relation, RelationDataContent, SecretNotFoundError, model  # type: ignore
+from ops import Relation, RelationDataContent, SecretNotFoundError, model
 from pydantic import BaseModel, Field, ValidationError
 
 # The unique Charmhub library identifier, never change it
@@ -79,7 +79,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -88,7 +88,7 @@ class LogAdapter(logging.LoggerAdapter):
     prefix = "vault_autounseal"
 
     def process(self, msg, kwargs):
-        """Decides the format for the prepended text."""
+        """Prepend the prefix to the log message."""
         return f"[{self.prefix}] {msg}", kwargs
 
 
@@ -116,7 +116,7 @@ class VaultAutounsealProviderSchema(BaseModel):
 class ProviderSchema(DataBagSchema):
     """The schema for the provider side of this interface."""
 
-    app: VaultAutounsealProviderSchema  # type: ignore
+    app: VaultAutounsealProviderSchema  # pyright: ignore[reportIncompatibleVariableOverride, reportGeneralTypeIssues]
 
 
 class VaultAutounsealDetailsReadyEvent(ops.EventBase):
@@ -125,6 +125,17 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
     def __init__(
         self, handle: ops.Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
     ):
+        """VaultAutounsealDetailsReadyEvent.
+
+        Args:
+            handle: ops.Handle
+            address: The address of the Vault server to connect to.
+            mount_path: The path to the transit engine mount point where the key is stored.
+            key_name: The name of the transit key to use for autounseal.
+            role_id: Approle role ID.
+            secret_id: Approle secret ID.
+            ca_certificate: The CA certificate to use when validating the Vault server's certificate.
+        """
         super().__init__(handle)
         self.address = address
         self.mount_path = mount_path
@@ -272,9 +283,11 @@ class VaultAutounsealProvides(ops.Object):
         )
 
     def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
+        """Handle the relation created event and emit a custom event."""
         self.on.vault_autounseal_requirer_relation_created.emit(relation=event.relation)
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
+        """Handle the relation broken event and emit a custom event."""
         self.on.vault_autounseal_requirer_relation_broken.emit(relation=event.relation)
 
     def _create_autounseal_credentials_secret(
@@ -354,9 +367,11 @@ class VaultAutounsealProvides(ops.Object):
         """
         outstanding_requests: List[Relation] = []
         requirer_requests = self.get_active_relations(relation_id=relation_id)
-        for relation in requirer_requests:
-            if not self._credentials_issued_for_request(relation_id=relation.id):
-                outstanding_requests.append(relation)
+        outstanding_requests = [
+            relation
+            for relation in requirer_requests
+            if not self._credentials_issued_for_request(relation_id=relation.id)
+        ]
         return outstanding_requests
 
     def get_active_relations(self, relation_id: int | None = None) -> List[Relation]:
@@ -371,7 +386,7 @@ class VaultAutounsealProvides(ops.Object):
         relations = (
             [
                 relation
-                for relation in self.model.relations[self.relation_name]
+                for relation in self.model.relations.get(self.relation_name, [])
                 if relation.id == relation_id
             ]
             if relation_id is not None
@@ -379,7 +394,8 @@ class VaultAutounsealProvides(ops.Object):
         )
         return [relation for relation in relations if relation.active]
 
-    def _credentials_issued_for_request(self, relation_id: int | None) -> bool:
+    def _credentials_issued_for_request(self, relation_id: int) -> bool:
+        # If Id is none and more than on relation is present we get an error
         relation = self.model.get_relation(self.relation_name, relation_id)
         if not relation:
             return False

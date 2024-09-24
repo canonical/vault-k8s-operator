@@ -56,10 +56,10 @@ from ops import CharmBase, MaintenanceStatus
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
-    ConfigChangedEvent,
     InstallEvent,
     RemoveEvent,
 )
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import (
     ActiveStatus,
@@ -379,7 +379,7 @@ class VaultCharm(CharmBase):
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
-    def _configure(self, event: ConfigChangedEvent | None = None) -> None:  # noqa: C901
+    def _configure(self, _: EventBase) -> None:  # noqa: C901
         """Handle config-changed event.
 
         Configures pebble layer, sets the unit address in the peer relation, starts the vault
@@ -1301,13 +1301,8 @@ class VaultCharm(CharmBase):
 
     def _approle_secret_set(self) -> bool:
         """Return whether approle secret is stored."""
-        try:
-            role_id, secret_id = self._get_approle_auth_secret()
-            if role_id and secret_id:
-                return True
-        except SecretNotFoundError:
-            return False
-        return False
+        role_id, secret_id = self._get_approle_auth_secret()
+        return bool(role_id and secret_id)
 
     def _create_raft_snapshot(self) -> IO[bytes] | None:
         """Create a snapshot of Vault.
@@ -1517,9 +1512,7 @@ def _seal_type_has_changed(content_a: str, content_b: str) -> bool:
 
 
 def _contains_transit_stanza(config: dict) -> bool:
-    if "seal" in config and "transit" in config["seal"]:
-        return True
-    return False
+    return "seal" in config and "transit" in config["seal"]
 
 
 def config_file_content_matches(existing_content: str, new_content: str) -> bool:

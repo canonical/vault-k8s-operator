@@ -10,23 +10,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Fetch Charm Under Test
         uses: actions/download-artifact@v4
         with:
           name: built-charm
           path: built/
-      
+
       - name: Get Charm Under Test Path
         id: charm-path
         run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
-      
+
       - name: Fetch KV Requirer Charm
         uses: actions/download-artifact@v4
         with:
           name: kv-requirer-charm
           path: kv-requirer/
-      
+
       - name: Get KV Requirer Charm Path
         id: kv-requirer-charm-path
         run: echo "charm_path=$(find kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
@@ -38,23 +38,30 @@ jobs:
           channel: 1.29-strict/stable
           juju-channel: 3.4/stable
           lxd-channel: 5.20/stable
-  
+
       - name: Enable Metallb
-        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"
+        run: |
+          IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
+          IFS='.' read -r i1 i2 i3 i4 <<< "$IPADDR"
+          START_IP="$i1.$i2.$i3.$((i4+1))"
+          END_IP="$i1.$i2.$i3.$((i4+9))"
+          RANGE="$START_IP-$END_IP"
+          echo "RANGE=$RANGE" >> $GITHUB_OUTPUT
+          /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:$RANGE"
 
       - name: Run integration tests
         run: |
           tox -e integration -- \
             --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
             --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"
-  
+
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: charmcraft-logs
           path: /home/runner/.local/state/charmcraft/log/*.log
-  
+
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """S3 helper functions for Vault charms.
 
@@ -33,7 +33,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 
 class LogAdapter(logging.LoggerAdapter):

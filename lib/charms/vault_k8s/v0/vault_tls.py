@@ -1,5 +1,5 @@
 # Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """This file includes methods to manage TLS certificates within the Vault charms."""
 
@@ -34,7 +34,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -384,11 +384,9 @@ class VaultTLSManager(Object):
         """Return whether CA certificate is stored in secret."""
         try:
             ca_private_key, ca_certificate = self._get_ca_certificate_secret()
-            if ca_private_key and ca_certificate:
-                return True
+            return bool(ca_private_key and ca_certificate)
         except SecretNotFoundError:
             return False
-        return False
 
     def ca_certificate_is_saved(self) -> bool:
         """Return wether a CA cert is saved in the charm."""
