@@ -1198,6 +1198,22 @@ class TLSCertificatesRequiresV4(Object):
         self._renew_certificate_request(csr)
         event.secret.remove_all_revisions()
 
+    def renew_certificate(self, csr: str, is_ca: bool) -> None:
+        """Request the renewal of the certificate matching the given certificate request."""
+        certificate_request = CertificateRequest.from_csr(csr, is_ca)
+        secret_label = self._get_csr_secret_label(certificate_request)
+        try:
+            secret = self.model.get_secret(label=secret_label)
+            current_csr = secret.get_content(refresh=True)["csr"]
+            if current_csr != csr:
+                logger.info("No matching CSR found - Skipping")
+                return
+        except SecretNotFoundError:
+            logger.info("Failed to get CSR from secret - Skipping renewal")
+            return
+        self._renew_certificate_request(certificate_request)
+        secret.remove_all_revisions()
+
     def _renew_certificate_request(self, csr: CertificateSigningRequest):
         """Remove existing CSR from relation data and create a new one."""
         self._remove_requirer_csr_from_relation_data(csr)

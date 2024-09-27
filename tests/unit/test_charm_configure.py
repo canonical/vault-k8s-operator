@@ -4,6 +4,7 @@
 
 
 import tempfile
+from datetime import timedelta
 
 import hcl
 import scenario
@@ -161,11 +162,14 @@ class TestCharmConfigure(VaultCharmFixtures):
                 leader=True,
                 secrets=[approle_secret],
                 relations=[peer_relation, pki_relation],
-                config={"common_name": "myhostname.com"},
+                config={
+                    "common_name": "myhostname.com",
+                },
             )
             provider_certificate, private_key = generate_example_provider_certificate(
                 common_name="myhostname.com",
                 relation_id=pki_relation.relation_id,
+                validity=timedelta(hours=24),
             )
             self.mock_pki_requirer_get_assigned_certificate.return_value = (
                 provider_certificate,
@@ -185,10 +189,91 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_vault.make_latest_pki_issuer_default.assert_called_once_with(
                 mount="charm-pki",
             )
+            twelve_hours_in_seconds = 12 * 3600
             self.mock_vault.create_or_update_pki_charm_role.assert_called_once_with(
                 allowed_domains="myhostname.com",
                 mount="charm-pki",
                 role="charm",
+                max_ttl=f"{twelve_hours_in_seconds}s",
+            )
+
+    def test_given_pki_intermediate_certificate_inactive_when_configure_then_certificate_is_renewed(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_vault.configure_mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "get_intermediate_ca.return_value": "",
+                    "is_common_name_allowed_in_pki_role.return_value": False,
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            vault_config_mount = scenario.Mount(
+                location="/vault/config",
+                src=temp_dir,
+            )
+            container = scenario.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = scenario.PeerRelation(
+                endpoint="vault-peers",
+            )
+            pki_relation = scenario.Relation(
+                endpoint="tls-certificates-pki",
+                interface="tls-certificates",
+            )
+            approle_secret = scenario.Secret(
+                id="0",
+                label="vault-approle-auth-details",
+                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            )
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, pki_relation],
+                config={
+                    "common_name": "myhostname.com",
+                },
+            )
+            provider_certificate, private_key = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=pki_relation.relation_id,
+                validity=timedelta(hours=24),
+            )
+            self.mock_pki_requirer_get_assigned_certificate.return_value = (
+                provider_certificate,
+                private_key,
+            )
+
+            self.ctx.run(container.pebble_ready_event, state_in)
+            state_in = scenario.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, pki_relation],
+                config={
+                    "common_name": "myhostname.com",
+                },
+            )
+            # Imitate ttl of issued certificates (by pki role) being longer than the CA validity
+            self.mock_vault.get_role_max_ttl.return_value = "25h"
+            self.mock_vault.get_intermediate_ca.return_value = str(
+                provider_certificate.certificate
+            )
+            self.ctx.run(container.pebble_ready_event, state_in)
+
+            self.mock_pki_requirer_renew_certificate.assert_called_once_with(
+                csr=str(provider_certificate.certificate_signing_request),
             )
 
     def test_given_vault_available_when_configure_then_certificate_is_provided(

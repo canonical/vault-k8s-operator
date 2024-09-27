@@ -4,6 +4,7 @@
 
 import os
 import tempfile
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
@@ -234,7 +235,7 @@ class TestCharmTLS:
             ca_certificate = generate_ca(
                 common_name="ca",
                 private_key=ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             csr = generate_csr(
                 private_key=private_key,
@@ -244,7 +245,7 @@ class TestCharmTLS:
                 csr=csr,
                 ca=ca_certificate,
                 ca_private_key=ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             provider_certificate = ProviderCertificate(
                 certificate_signing_request=csr,
@@ -303,7 +304,7 @@ class TestCharmTLS:
         ca_certificate = generate_ca(
             common_name="ca",
             private_key=ca_private_key,
-            validity=365,
+            validity=timedelta(days=365),
         )
         csr = generate_csr(
             private_key=private_key,
@@ -313,7 +314,7 @@ class TestCharmTLS:
             csr=csr,
             ca=ca_certificate,
             ca_private_key=ca_private_key,
-            validity=365,
+            validity=timedelta(days=365),
         )
         patch_generate_certificate.return_value = certificate
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -414,7 +415,7 @@ class TestCharmTLS:
             ca_certificate = generate_ca(
                 common_name=VAULT_CA_SUBJECT,
                 private_key=ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             csr = generate_csr(
                 private_key=private_key,
@@ -424,7 +425,7 @@ class TestCharmTLS:
                 csr=csr,
                 ca=ca_certificate,
                 ca_private_key=ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             with open(temp_dir + "/ca.pem", "w") as f:
                 f.write(str(ca_certificate))
@@ -459,7 +460,7 @@ class TestCharmTLS:
         self_signed_ca_certificate = generate_ca(
             common_name=VAULT_CA_SUBJECT,
             private_key=self_signed_ca_private_key,
-            validity=365,
+            validity=timedelta(days=365),
         )
         self_signed_csr = generate_csr(
             private_key=self_signed_private_key,
@@ -469,7 +470,7 @@ class TestCharmTLS:
             csr=self_signed_csr,
             ca=self_signed_ca_certificate,
             ca_private_key=self_signed_ca_private_key,
-            validity=365,
+            validity=timedelta(days=365),
         )
         patch_generate_ca.return_value = self_signed_ca_certificate
         patch_generate_certificate.return_value = self_signed_certificate
@@ -513,7 +514,7 @@ class TestCharmTLS:
             tls_integration_ca_certificate = generate_ca(
                 common_name="tls integration ca",
                 private_key=tls_integration_ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             tls_integration_csr = generate_csr(
                 private_key=tls_integration_private_key,
@@ -523,7 +524,7 @@ class TestCharmTLS:
                 csr=tls_integration_csr,
                 ca=tls_integration_ca_certificate,
                 ca_private_key=tls_integration_ca_private_key,
-                validity=365,
+                validity=timedelta(days=365),
             )
             with open(temp_dir + "/ca.pem", "w") as f:
                 f.write(str(tls_integration_ca_certificate))

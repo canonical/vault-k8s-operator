@@ -22,6 +22,9 @@ class VaultCharmFixtures:
     patcher_pki_requirer_get_assigned_certificate = patch(
         "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
     )
+    patcher_pki_requirer_renew_certificate = patch(
+        "charm.TLSCertificatesRequiresV4.renew_certificate"
+    )
     patcher_pki_provider_get_outstanding_certificate_requests = patch(
         "charm.TLSCertificatesProvidesV4.get_outstanding_certificate_requests"
     )
@@ -54,6 +57,9 @@ class VaultCharmFixtures:
         self.mock_pki_requirer_get_assigned_certificate = (
             VaultCharmFixtures.patcher_pki_requirer_get_assigned_certificate.start()
         )
+        self.mock_pki_requirer_renew_certificate = (
+            VaultCharmFixtures.patcher_pki_requirer_renew_certificate.start()
+        )
         self.mock_pki_provider_get_outstanding_certificate_requests = (
             VaultCharmFixtures.patcher_pki_provider_get_outstanding_certificate_requests.start()
         )
@@ -85,6 +91,9 @@ class VaultCharmFixtures:
             VaultCharmFixtures.patcher_kv_provides_get_credentials.start()
         )
         self.mock_get_binding = VaultCharmFixtures.patcher_get_binding.start()
+        self.mock_pki_requirer_renew_certificate = (
+            VaultCharmFixtures.patcher_pki_requirer_renew_certificate.start()
+        )
 
     @pytest.fixture(autouse=True)
     def context(self):

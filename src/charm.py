@@ -7,11 +7,11 @@
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
 
-import datetime
 import json
 import logging
 import socket
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import IO, Dict, List, Tuple, cast
 
 import hcl
@@ -490,6 +490,11 @@ class VaultCharm(CharmBase):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self._remove_juju_secret_by_label(label=label)
 
+    def _common_name_config_is_valid(self) -> bool:
+        """Return whether the config value for the common name is valid."""
+        common_name = self._get_config_common_name()
+        return common_name != ""
+
     def _configure_pki_secrets_engine(self) -> None:  # noqa: C901
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
@@ -524,11 +529,16 @@ class VaultCharm(CharmBase):
             return
         vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
         existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        if (
-            existing_ca_certificate
-            and Certificate.from_string(existing_ca_certificate)
-            == provider_certificate.certificate
-        ):
+        existing_cert = (
+            Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
+        )
+        if existing_cert and existing_cert == provider_certificate.certificate:
+            if not self._intermediate_ca_is_active(vault, existing_cert):
+                self.tls_certificates_pki.renew_certificate(
+                    csr=str(provider_certificate.certificate_signing_request),
+                )
+                logger.debug("Renewing CA certificate")
+                return
             logger.debug("CA certificate already set in the PKI secrets engine")
             return
         self.vault_pki.revoke_all_certificates()
@@ -542,16 +552,58 @@ class VaultCharm(CharmBase):
             mount=PKI_MOUNT,
             common_name=config_common_name,
         ):
+            issued_certificates_validity = self._calculate_pki_certificates_validity(
+                provider_certificate.certificate
+            )
             vault.create_or_update_pki_charm_role(
                 allowed_domains=config_common_name,
                 mount=PKI_MOUNT,
                 role=PKI_ROLE_NAME,
+                max_ttl=issued_certificates_validity,
             )
         # Can run only after the first issuer has been actually created.
         try:
             vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
         except VaultClientError as e:
             logger.error("Failed to make latest issuer default: %s", e)
+
+    def _intermediate_ca_is_active(
+        self, vault: Vault, intermediate_ca_certificate: Certificate
+    ) -> bool:
+        """Check if intermediate CA can sign certificates.
+
+        Vault PKI doesn't allow signing certificates that would outlast the CA.
+        We check here that the time remaining for the CA to expire is longer than the
+        certificates we are about to issue.
+        """
+        current_ttl = vault.get_role_max_ttl(role=PKI_ROLE_NAME, mount=PKI_MOUNT)
+        if (
+            not current_ttl
+            or not intermediate_ca_certificate.expiry_time
+            or not intermediate_ca_certificate.validity_start_time
+        ):
+            return False
+        if not (current_ttl_time := self._parse_time_string(current_ttl)):
+            return False
+        current_ttl_seconds = current_ttl_time.total_seconds()
+        certificate_validity = (
+            intermediate_ca_certificate.expiry_time
+            - intermediate_ca_certificate.validity_start_time
+        )
+        certificate_validity_seconds = certificate_validity.total_seconds()
+        return certificate_validity_seconds > current_ttl_seconds
+
+    def _calculate_pki_certificates_validity(self, certificate: Certificate) -> str:
+        """Calculate the maximum allowed validity of certificates issued by PKI.
+
+        Return half the CA certificate validity.
+        """
+        if not certificate.expiry_time or not certificate.validity_start_time:
+            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
+        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
+        ca_validity_seconds = ca_validity_time.total_seconds()
+        max_validity = int(ca_validity_seconds / 2)
+        return f"{str(max_validity)}s"
 
     def _get_certificate_request(self) -> CertificateRequest | None:
         common_name = self._get_config_common_name()
@@ -894,7 +946,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: The backup key
         """
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
     def _set_kv_relation_data(
@@ -1446,10 +1498,22 @@ class VaultCharm(CharmBase):
         """Return the common name to use for the PKI backend."""
         return cast(str, self.config.get("common_name", ""))
 
-    def _common_name_config_is_valid(self) -> bool:
-        """Return whether the config value for the common name is valid."""
-        common_name = self._get_config_common_name()
-        return common_name != ""
+    def _parse_time_string(self, time_str: str) -> timedelta | None:
+        """Parse a time string into a timedelta object."""
+        if time_str.isnumeric():
+            return timedelta(days=int(time_str))
+        value, unit = int(time_str[:-1]), time_str[-1]
+        if unit == "s":
+            return timedelta(seconds=value)
+        if unit == "m":
+            return timedelta(minutes=value)
+        elif unit == "h":
+            return timedelta(hours=value)
+        elif unit == "d":
+            return timedelta(days=value)
+        else:
+            logger.warning('Time string "%s" is invalid.', time_str)
+            return None
 
     @property
     def _node_id(self) -> str:
