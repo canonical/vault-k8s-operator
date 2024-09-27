@@ -12,6 +12,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from io import IOBase
 from typing import List, Protocol
 
 import hvac
@@ -404,7 +405,7 @@ class Vault:
         """Create a snapshot of the Vault data."""
         return self._client.sys.take_raft_snapshot()
 
-    def restore_snapshot(self, snapshot: bytes) -> requests.Response:
+    def restore_snapshot(self, snapshot: IOBase) -> requests.Response:
         """Restore a snapshot of the Vault data.
 
         Uses force_restore_raft_snapshot to restore the snapshot
