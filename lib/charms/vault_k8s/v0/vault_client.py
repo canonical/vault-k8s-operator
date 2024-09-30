@@ -12,7 +12,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Protocol
+from typing import List, Optional, Protocol
 
 import hvac
 import requests
@@ -482,7 +482,7 @@ class Vault:
             logger.warning("Role does not exist on the specified path.")
             return False
 
-    def get_role_max_ttl(self, role: str, mount: str) -> str:
+    def get_role_max_ttl(self, role: str, mount: str) -> Optional[int]:
         """Get the max ttl for the specified PKI role."""
         try:
             return (
@@ -492,7 +492,7 @@ class Vault:
             )
         except InvalidPath:
             logger.warning("Role does not exist on the specified path.")
-            return ""
+            return None
 
     def make_latest_pki_issuer_default(self, mount: str) -> None:
         """Update the issuers config to always make the latest issuer created default issuer."""

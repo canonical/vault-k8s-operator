@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import IO, Dict, List, Tuple, cast
 
 import hcl
@@ -583,15 +583,12 @@ class VaultCharm(CharmBase):
             or not intermediate_ca_certificate.validity_start_time
         ):
             return False
-        if not (current_ttl_time := self._parse_time_string(current_ttl)):
-            return False
-        current_ttl_seconds = current_ttl_time.total_seconds()
         certificate_validity = (
             intermediate_ca_certificate.expiry_time
             - intermediate_ca_certificate.validity_start_time
         )
         certificate_validity_seconds = certificate_validity.total_seconds()
-        return certificate_validity_seconds > current_ttl_seconds
+        return certificate_validity_seconds > current_ttl
 
     def _calculate_pki_certificates_validity(self, certificate: Certificate) -> str:
         """Calculate the maximum allowed validity of certificates issued by PKI.
@@ -1497,23 +1494,6 @@ class VaultCharm(CharmBase):
     def _get_config_common_name(self) -> str:
         """Return the common name to use for the PKI backend."""
         return cast(str, self.config.get("common_name", ""))
-
-    def _parse_time_string(self, time_str: str) -> timedelta | None:
-        """Parse a time string into a timedelta object."""
-        if time_str.isnumeric():
-            return timedelta(days=int(time_str))
-        value, unit = int(time_str[:-1]), time_str[-1]
-        if unit == "s":
-            return timedelta(seconds=value)
-        if unit == "m":
-            return timedelta(minutes=value)
-        elif unit == "h":
-            return timedelta(hours=value)
-        elif unit == "d":
-            return timedelta(days=value)
-        else:
-            logger.warning('Time string "%s" is invalid.', time_str)
-            return None
 
     @property
     def _node_id(self) -> str:

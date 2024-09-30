@@ -266,7 +266,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             # Imitate ttl of issued certificates (by pki role) being longer than the CA validity
-            self.mock_vault.get_role_max_ttl.return_value = "25h"
+            self.mock_vault.get_role_max_ttl.return_value = 25 * 3600
             self.mock_vault.get_intermediate_ca.return_value = str(
                 provider_certificate.certificate
             )
