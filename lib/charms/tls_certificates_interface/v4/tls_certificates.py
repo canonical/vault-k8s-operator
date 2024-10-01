@@ -1057,24 +1057,24 @@ class TLSCertificatesRequiresV4(Object):
         try:
             csr_str = event.secret.get_content(refresh=True)["csr"]
         except ModelError:
-            logger.info("Failed to get CSR from secret - Skipping")
+            logger.error("Failed to get CSR from secret - Skipping")
             return
         csr = CertificateSigningRequest.from_string(csr_str)
         self._renew_certificate_request(csr)
         event.secret.remove_all_revisions()
 
-    def renew_certificate(self, csr: str) -> None:
-        """Request the renewal of the certificate matching the given certificate request."""
-        certificate_signing_request = CertificateSigningRequest.from_string(csr)
+    def renew_certificate(self, certificate: ProviderCertificate) -> None:
+        """Request the renewal of the provided certificate."""
+        certificate_signing_request = certificate.certificate_signing_request
         secret_label = self._get_csr_secret_label(certificate_signing_request)
         try:
             secret = self.model.get_secret(label=secret_label)
-            current_csr = secret.get_content(refresh=True)["csr"]
-            if current_csr != csr:
-                logger.info("No matching CSR found - Skipping")
-                return
         except SecretNotFoundError:
-            logger.info("Failed to get CSR from secret - Skipping renewal")
+            logger.warning("No matching secret found - Skipping renewal")
+            return
+        current_csr = secret.get_content(refresh=True).get("csr", "")
+        if current_csr != str(certificate_signing_request):
+            logger.warning("No matching CSR found - Skipping renewal")
             return
         self._renew_certificate_request(certificate_signing_request)
         secret.remove_all_revisions()

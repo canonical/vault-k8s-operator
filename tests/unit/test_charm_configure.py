@@ -273,7 +273,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.ctx.run(container.pebble_ready_event, state_in)
 
             self.mock_pki_requirer_renew_certificate.assert_called_once_with(
-                csr=str(provider_certificate.certificate_signing_request),
+                provider_certificate,
             )
 
     def test_given_vault_available_when_configure_then_certificate_is_provided(

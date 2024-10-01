@@ -535,7 +535,7 @@ class VaultCharm(CharmBase):
         if existing_cert and existing_cert == provider_certificate.certificate:
             if not self._intermediate_ca_is_active(vault, existing_cert):
                 self.tls_certificates_pki.renew_certificate(
-                    csr=str(provider_certificate.certificate_signing_request),
+                    provider_certificate,
                 )
                 logger.debug("Renewing CA certificate")
                 return
