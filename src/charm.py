@@ -561,7 +561,7 @@ class VaultCharm(CharmBase):
                 allowed_domains=config_common_name,
                 mount=PKI_MOUNT,
                 role=PKI_ROLE_NAME,
-                max_ttl=issued_certificates_validity,
+                max_ttl=f"{issued_certificates_validity}s",
             )
         # Can run only after the first issuer has been actually created.
         try:
@@ -592,7 +592,7 @@ class VaultCharm(CharmBase):
         certificate_validity_seconds = certificate_validity.total_seconds()
         return certificate_validity_seconds > current_ttl
 
-    def _calculate_pki_certificates_validity(self, certificate: Certificate) -> str:
+    def _calculate_pki_certificates_validity(self, certificate: Certificate) -> int:
         """Calculate the maximum allowed validity of certificates issued by PKI.
 
         Return half the CA certificate validity.
@@ -601,8 +601,7 @@ class VaultCharm(CharmBase):
             raise ValueError("Invalid CA certificate with no expiry time or validity start time")
         ca_validity_time = certificate.expiry_time - certificate.validity_start_time
         ca_validity_seconds = ca_validity_time.total_seconds()
-        max_validity = int(ca_validity_seconds / 2)
-        return f"{str(max_validity)}s"
+        return int(ca_validity_seconds / 2)
 
     def _get_certificate_request(self) -> CertificateRequest | None:
         common_name = self._get_config_common_name()

@@ -383,7 +383,7 @@ class Vault:
     def create_or_update_pki_charm_role(
         self, role: str, allowed_domains: str, max_ttl: str, mount: str
     ) -> None:
-        """Create a role for the PKI backend.
+        """Create a role for the PKI backend or update it if it already exists.
 
         Args:
             role: The name of the role to create or update.
@@ -403,7 +403,7 @@ class Vault:
                 "max_ttl": max_ttl,
             },
         )
-        logger.info("Created a role for the PKI backend")
+        logger.info("Created or updated PKI role %s", role)
 
     def is_pki_role_created(self, role: str, mount: str) -> bool:
         """Check if the role is created for the PKI backend."""
@@ -488,7 +488,7 @@ class Vault:
             return (
                 self._client.secrets.pki.read_role(name=role, mount_point=mount)
                 .get("data", {})
-                .get("max_ttl", [])
+                .get("max_ttl")
             )
         except InvalidPath:
             logger.warning("Role does not exist on the specified path.")
