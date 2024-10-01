@@ -547,14 +547,16 @@ class VaultCharm(CharmBase):
             private_key=str(private_key),
             mount=PKI_MOUNT,
         )
+        issued_certificates_validity = self._calculate_pki_certificates_validity(
+            provider_certificate.certificate
+        )
         if not vault.is_common_name_allowed_in_pki_role(
             role=PKI_ROLE_NAME,
             mount=PKI_MOUNT,
             common_name=config_common_name,
+        ) or issued_certificates_validity != vault.get_role_max_ttl(
+            role=PKI_ROLE_NAME, mount=PKI_MOUNT
         ):
-            issued_certificates_validity = self._calculate_pki_certificates_validity(
-                provider_certificate.certificate
-            )
             vault.create_or_update_pki_charm_role(
                 allowed_domains=config_common_name,
                 mount=PKI_MOUNT,
