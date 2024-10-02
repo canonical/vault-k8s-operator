@@ -490,11 +490,6 @@ class VaultCharm(CharmBase):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self._remove_juju_secret_by_label(label=label)
 
-    def _common_name_config_is_valid(self) -> bool:
-        """Return whether the config value for the common name is valid."""
-        common_name = self._get_config_common_name()
-        return common_name != ""
-
     def _configure_pki_secrets_engine(self) -> None:  # noqa: C901
         """Configure the PKI secrets engine."""
         if not self.unit.is_leader():
@@ -533,7 +528,7 @@ class VaultCharm(CharmBase):
             Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
         )
         if existing_cert and existing_cert == provider_certificate.certificate:
-            if not self._intermediate_ca_is_active(vault, existing_cert):
+            if not self._intermediate_ca_can_sign_certificates(vault, existing_cert):
                 self.tls_certificates_pki.renew_certificate(
                     provider_certificate,
                 )
@@ -547,7 +542,7 @@ class VaultCharm(CharmBase):
             private_key=str(private_key),
             mount=PKI_MOUNT,
         )
-        issued_certificates_validity = self._calculate_pki_certificates_validity(
+        issued_certificates_validity = self._calculate_pki_certificates_validity_period(
             provider_certificate.certificate
         )
         if not vault.is_common_name_allowed_in_pki_role(
@@ -569,7 +564,7 @@ class VaultCharm(CharmBase):
         except VaultClientError as e:
             logger.error("Failed to make latest issuer default: %s", e)
 
-    def _intermediate_ca_is_active(
+    def _intermediate_ca_can_sign_certificates(
         self, vault: Vault, intermediate_ca_certificate: Certificate
     ) -> bool:
         """Check if intermediate CA can sign certificates.
@@ -592,10 +587,10 @@ class VaultCharm(CharmBase):
         certificate_validity_seconds = certificate_validity.total_seconds()
         return certificate_validity_seconds > current_ttl
 
-    def _calculate_pki_certificates_validity(self, certificate: Certificate) -> int:
+    def _calculate_pki_certificates_validity_period(self, certificate: Certificate) -> int:
         """Calculate the maximum allowed validity of certificates issued by PKI.
 
-        Return half the CA certificate validity.
+        Return half the CA certificate validity in seconds.
         """
         if not certificate.expiry_time or not certificate.validity_start_time:
             raise ValueError("Invalid CA certificate with no expiry time or validity start time")
@@ -1112,6 +1107,11 @@ class VaultCharm(CharmBase):
         if binding is None:
             return None
         return f"https://{binding.network.ingress_address}:{self.VAULT_PORT}"
+
+    def _common_name_config_is_valid(self) -> bool:
+        """Return whether the config value for the common name is valid."""
+        common_name = self._get_config_common_name()
+        return common_name != ""
 
     @property
     def _api_address(self) -> str:

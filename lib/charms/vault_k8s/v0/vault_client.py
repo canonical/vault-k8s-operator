@@ -389,7 +389,7 @@ class Vault:
             role: The name of the role to create or update.
             allowed_domains: The list of allowed domains for the role.
             max_ttl: The maximum TTL for the role.
-                Will be used as validity for the certificates issued by this role.
+                It is also used by Vault as a maximum validity for the certificates issued by this role.
                 Should be a string in the format of a number with a unit such as
                 "120m", "10h" or "90d".
             mount: The mount point of the PKI backend for which the role will be created.
@@ -483,7 +483,7 @@ class Vault:
             return False
 
     def get_role_max_ttl(self, role: str, mount: str) -> Optional[int]:
-        """Get the max ttl for the specified PKI role."""
+        """Get the max ttl for the specified PKI role in seconds."""
         try:
             return (
                 self._client.secrets.pki.read_role(name=role, mount_point=mount)
