@@ -1392,7 +1392,7 @@ class VaultCharm(CharmBase):
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context
-            response = vault.restore_snapshot(snapshot)  # type: ignore[arg-type]
+            response = vault.restore_snapshot(snapshot)
         except VaultClientError as e:
             logger.error("Failed to restore snapshot: %s", e)
             return False

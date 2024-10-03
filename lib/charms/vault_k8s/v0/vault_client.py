@@ -12,6 +12,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from io import IOBase
 from typing import List, Optional, Protocol
 
 import hvac
@@ -27,7 +28,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 19
+LIBPATCH = 20
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -417,7 +418,7 @@ class Vault:
         """Create a snapshot of the Vault data."""
         return self._client.sys.take_raft_snapshot()
 
-    def restore_snapshot(self, snapshot: bytes) -> requests.Response:
+    def restore_snapshot(self, snapshot: IOBase) -> requests.Response:
         """Restore a snapshot of the Vault data.
 
         Uses force_restore_raft_snapshot to restore the snapshot
