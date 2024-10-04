@@ -24,6 +24,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequest,
     Mode,
+    PrivateKey,
     ProviderCertificate,
     RequirerCSR,
     TLSCertificatesProvidesV4,
@@ -509,18 +510,8 @@ class VaultCharm(CharmBase):
         if not config_common_name:
             logger.error("Common name is not set in the charm config")
             return
-        certificate_request = self._get_certificate_request()
-        if not certificate_request:
-            logger.error("Certificate request is not valid")
-            return
-        provider_certificate, private_key = self.tls_certificates_pki.get_assigned_certificate(
-            certificate_request=certificate_request
-        )
+        provider_certificate, private_key = self._get_pki_intermediate_ca()
         if not provider_certificate:
-            logger.debug("No certificate available")
-            return
-        if not private_key:
-            logger.debug("No private key available")
             return
         vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
         existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
@@ -597,6 +588,25 @@ class VaultCharm(CharmBase):
         ca_validity_time = certificate.expiry_time - certificate.validity_start_time
         ca_validity_seconds = ca_validity_time.total_seconds()
         return int(ca_validity_seconds / 2)
+
+    def _get_pki_intermediate_ca(
+        self,
+    ) -> Tuple[ProviderCertificate | None, PrivateKey | None]:
+        """Get the intermediate CA certificate."""
+        certificate_request = self._get_certificate_request()
+        if not certificate_request:
+            logger.error("Certificate request is not valid")
+            return None, None
+        provider_certificate, private_key = self.tls_certificates_pki.get_assigned_certificate(
+            certificate_request=certificate_request
+        )
+        if not provider_certificate:
+            logger.debug("No intermediate CA certificate available")
+            return None, None
+        if not private_key:
+            logger.debug("No private key available")
+            return None, None
+        return provider_certificate, private_key
 
     def _get_certificate_request(self) -> CertificateRequest | None:
         common_name = self._get_config_common_name()
@@ -688,11 +698,18 @@ class VaultCharm(CharmBase):
         if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
             return
+        provider_certificate, _ = self._get_pki_intermediate_ca()
+        if not provider_certificate:
+            return
+        allowed_cert_validity = self._calculate_pki_certificates_validity_period(
+            provider_certificate.certificate
+        )
         certificate = vault.sign_pki_certificate_signing_request(
             mount=PKI_MOUNT,
             role=PKI_ROLE_NAME,
             csr=str(requirer_csr.certificate_signing_request),
             common_name=requirer_csr.certificate_signing_request.common_name,
+            ttl=f"{allowed_cert_validity}s",
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")

@@ -352,6 +352,7 @@ class Vault:
         role: str,
         csr: str,
         common_name: str,
+        ttl: str,
     ) -> Certificate | None:
         """Sign a certificate signing request for the PKI backend.
 
@@ -360,6 +361,9 @@ class Vault:
             role: The role to use for signing the certificate.
             csr: The certificate signing request.
             common_name: The common name for the certificate.
+            ttl: The relative validity for the certificate.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
 
         Returns:
             Certificate: The signed certificate object
@@ -370,6 +374,7 @@ class Vault:
                 mount_point=mount,
                 common_name=common_name,
                 name=role,
+                extra_params={"ttl": ttl},
             )
             logger.info("Signed a PKI certificate for %s", common_name)
             return Certificate(

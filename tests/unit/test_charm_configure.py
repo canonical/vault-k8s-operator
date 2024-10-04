@@ -309,6 +309,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 generate_example_provider_certificate(
                     common_name="myhostname.com",
                     relation_id=pki_relation_provider.relation_id,
+                    validity=timedelta(hours=24),
                 )
             )
             requirer_csr = generate_example_requirer_csr(
@@ -359,11 +360,13 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             self.ctx.run(container.pebble_ready_event, state_in)
 
+            twelve_hours_in_seconds = 12 * 3600
             self.mock_vault.sign_pki_certificate_signing_request.assert_called_once_with(
                 mount="charm-pki",
                 role="charm",
                 csr=str(requirer_csr.certificate_signing_request),
                 common_name="subdomain.myhostname.com",
+                ttl=f"{twelve_hours_in_seconds}s",
             )
             self.mock_pki_provider_set_relation_certificate.assert_called_once_with(
                 provider_certificate=ProviderCertificate(
