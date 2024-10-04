@@ -519,7 +519,7 @@ class VaultCharm(CharmBase):
             Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
         )
         if existing_cert and existing_cert == provider_certificate.certificate:
-            if not self._intermediate_ca_can_sign_certificates(vault, existing_cert):
+            if not self._intermediate_ca_exceeds_role_ttl(vault, existing_cert):
                 self.tls_certificates_pki.renew_certificate(
                     provider_certificate,
                 )
@@ -533,7 +533,7 @@ class VaultCharm(CharmBase):
             private_key=str(private_key),
             mount=PKI_MOUNT,
         )
-        issued_certificates_validity = self._calculate_pki_certificates_validity_period(
+        issued_certificates_validity = self._calculate_pki_certificates_ttl(
             provider_certificate.certificate
         )
         if not vault.is_common_name_allowed_in_pki_role(
@@ -555,14 +555,14 @@ class VaultCharm(CharmBase):
         except VaultClientError as e:
             logger.error("Failed to make latest issuer default: %s", e)
 
-    def _intermediate_ca_can_sign_certificates(
+    def _intermediate_ca_exceeds_role_ttl(
         self, vault: Vault, intermediate_ca_certificate: Certificate
     ) -> bool:
-        """Check if intermediate CA can sign certificates.
+        """Check if the intermediate CA's remaining validity exceeds the role's max TTL.
 
-        Vault PKI doesn't allow signing certificates that would outlast the CA.
-        We check here that the time remaining for the CA to expire is longer than the
-        certificates we are about to issue.
+        Vault PKI enforces that issued certificates cannot outlast their signing CA.
+        This method ensures that the intermediate CA's remaining validity period
+        is longer than the maximum TTL allowed for certificates issued by this role.
         """
         current_ttl = vault.get_role_max_ttl(role=PKI_ROLE_NAME, mount=PKI_MOUNT)
         if (
@@ -578,7 +578,7 @@ class VaultCharm(CharmBase):
         certificate_validity_seconds = certificate_validity.total_seconds()
         return certificate_validity_seconds > current_ttl
 
-    def _calculate_pki_certificates_validity_period(self, certificate: Certificate) -> int:
+    def _calculate_pki_certificates_ttl(self, certificate: Certificate) -> int:
         """Calculate the maximum allowed validity of certificates issued by PKI.
 
         Return half the CA certificate validity in seconds.
@@ -701,7 +701,7 @@ class VaultCharm(CharmBase):
         provider_certificate, _ = self._get_pki_intermediate_ca()
         if not provider_certificate:
             return
-        allowed_cert_validity = self._calculate_pki_certificates_validity_period(
+        allowed_cert_validity = self._calculate_pki_certificates_ttl(
             provider_certificate.certificate
         )
         certificate = vault.sign_pki_certificate_signing_request(
