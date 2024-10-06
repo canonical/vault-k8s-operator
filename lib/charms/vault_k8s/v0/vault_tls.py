@@ -6,6 +6,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from enum import Enum, auto
 from typing import FrozenSet, List, TextIO, Tuple
 
@@ -470,7 +471,7 @@ def generate_vault_ca_certificate() -> Tuple[str, str]:
     ca_certificate = generate_ca(
         private_key=ca_private_key,
         common_name=VAULT_CA_SUBJECT,
-        validity=365 * 50,
+        validity=timedelta(days=365 * 50),
     )
     return str(ca_private_key), str(ca_certificate)
 
@@ -505,7 +506,7 @@ def generate_vault_unit_certificate(
         ca=Certificate.from_string(ca_certificate),
         ca_private_key=PrivateKey.from_string(ca_private_key),
         csr=csr,
-        validity=365 * 50,
+        validity=timedelta(days=365 * 50),
     )
     return str(vault_private_key), str(vault_certificate)
 

@@ -7,11 +7,11 @@
 For more information on Vault, please visit https://www.vaultproject.io/.
 """
 
-import datetime
 import json
 import logging
 import socket
 from dataclasses import dataclass
+from datetime import datetime
 from typing import IO, Dict, List, Tuple, cast
 
 import hcl
@@ -24,6 +24,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequest,
     Mode,
+    PrivateKey,
     ProviderCertificate,
     RequirerCSR,
     TLSCertificatesProvidesV4,
@@ -509,26 +510,21 @@ class VaultCharm(CharmBase):
         if not config_common_name:
             logger.error("Common name is not set in the charm config")
             return
-        certificate_request = self._get_certificate_request()
-        if not certificate_request:
-            logger.error("Certificate request is not valid")
-            return
-        provider_certificate, private_key = self.tls_certificates_pki.get_assigned_certificate(
-            certificate_request=certificate_request
-        )
+        provider_certificate, private_key = self._get_pki_intermediate_ca()
         if not provider_certificate:
-            logger.debug("No certificate available")
-            return
-        if not private_key:
-            logger.debug("No private key available")
             return
         vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
         existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        if (
-            existing_ca_certificate
-            and Certificate.from_string(existing_ca_certificate)
-            == provider_certificate.certificate
-        ):
+        existing_cert = (
+            Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
+        )
+        if existing_cert and existing_cert == provider_certificate.certificate:
+            if not self._intermediate_ca_exceeds_role_ttl(vault, existing_cert):
+                self.tls_certificates_pki.renew_certificate(
+                    provider_certificate,
+                )
+                logger.debug("Renewing CA certificate")
+                return
             logger.debug("CA certificate already set in the PKI secrets engine")
             return
         self.vault_pki.revoke_all_certificates()
@@ -537,21 +533,80 @@ class VaultCharm(CharmBase):
             private_key=str(private_key),
             mount=PKI_MOUNT,
         )
+        issued_certificates_validity = self._calculate_pki_certificates_ttl(
+            provider_certificate.certificate
+        )
         if not vault.is_common_name_allowed_in_pki_role(
             role=PKI_ROLE_NAME,
             mount=PKI_MOUNT,
             common_name=config_common_name,
+        ) or issued_certificates_validity != vault.get_role_max_ttl(
+            role=PKI_ROLE_NAME, mount=PKI_MOUNT
         ):
             vault.create_or_update_pki_charm_role(
                 allowed_domains=config_common_name,
                 mount=PKI_MOUNT,
                 role=PKI_ROLE_NAME,
+                max_ttl=f"{issued_certificates_validity}s",
             )
         # Can run only after the first issuer has been actually created.
         try:
             vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
         except VaultClientError as e:
             logger.error("Failed to make latest issuer default: %s", e)
+
+    def _intermediate_ca_exceeds_role_ttl(
+        self, vault: Vault, intermediate_ca_certificate: Certificate
+    ) -> bool:
+        """Check if the intermediate CA's remaining validity exceeds the role's max TTL.
+
+        Vault PKI enforces that issued certificates cannot outlast their signing CA.
+        This method ensures that the intermediate CA's remaining validity period
+        is longer than the maximum TTL allowed for certificates issued by this role.
+        """
+        current_ttl = vault.get_role_max_ttl(role=PKI_ROLE_NAME, mount=PKI_MOUNT)
+        if (
+            not current_ttl
+            or not intermediate_ca_certificate.expiry_time
+            or not intermediate_ca_certificate.validity_start_time
+        ):
+            return False
+        certificate_validity = (
+            intermediate_ca_certificate.expiry_time
+            - intermediate_ca_certificate.validity_start_time
+        )
+        certificate_validity_seconds = certificate_validity.total_seconds()
+        return certificate_validity_seconds > current_ttl
+
+    def _calculate_pki_certificates_ttl(self, certificate: Certificate) -> int:
+        """Calculate the maximum allowed validity of certificates issued by PKI.
+
+        Return half the CA certificate validity in seconds.
+        """
+        if not certificate.expiry_time or not certificate.validity_start_time:
+            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
+        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
+        ca_validity_seconds = ca_validity_time.total_seconds()
+        return int(ca_validity_seconds / 2)
+
+    def _get_pki_intermediate_ca(
+        self,
+    ) -> Tuple[ProviderCertificate | None, PrivateKey | None]:
+        """Get the intermediate CA certificate."""
+        certificate_request = self._get_certificate_request()
+        if not certificate_request:
+            logger.error("Certificate request is not valid")
+            return None, None
+        provider_certificate, private_key = self.tls_certificates_pki.get_assigned_certificate(
+            certificate_request=certificate_request
+        )
+        if not provider_certificate:
+            logger.debug("No intermediate CA certificate available")
+            return None, None
+        if not private_key:
+            logger.debug("No private key available")
+            return None, None
+        return provider_certificate, private_key
 
     def _get_certificate_request(self) -> CertificateRequest | None:
         common_name = self._get_config_common_name()
@@ -643,11 +698,18 @@ class VaultCharm(CharmBase):
         if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
             return
+        provider_certificate, _ = self._get_pki_intermediate_ca()
+        if not provider_certificate:
+            return
+        allowed_cert_validity = self._calculate_pki_certificates_ttl(
+            provider_certificate.certificate
+        )
         certificate = vault.sign_pki_certificate_signing_request(
             mount=PKI_MOUNT,
             role=PKI_ROLE_NAME,
             csr=str(requirer_csr.certificate_signing_request),
             common_name=requirer_csr.certificate_signing_request.common_name,
+            ttl=f"{allowed_cert_validity}s",
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")
@@ -894,7 +956,7 @@ class VaultCharm(CharmBase):
         Returns:
             str: The backup key
         """
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
     def _set_kv_relation_data(
@@ -1062,6 +1124,11 @@ class VaultCharm(CharmBase):
         if binding is None:
             return None
         return f"https://{binding.network.ingress_address}:{self.VAULT_PORT}"
+
+    def _common_name_config_is_valid(self) -> bool:
+        """Return whether the config value for the common name is valid."""
+        common_name = self._get_config_common_name()
+        return common_name != ""
 
     @property
     def _api_address(self) -> str:
@@ -1445,11 +1512,6 @@ class VaultCharm(CharmBase):
     def _get_config_common_name(self) -> str:
         """Return the common name to use for the PKI backend."""
         return cast(str, self.config.get("common_name", ""))
-
-    def _common_name_config_is_valid(self) -> bool:
-        """Return whether the config value for the common name is valid."""
-        common_name = self._get_config_common_name()
-        return common_name != ""
 
     @property
     def _node_id(self) -> str:
