@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -441,6 +441,26 @@ class Vault:
         response = self._client.adapter.get(RAFT_STATE_ENDPOINT)
         return response["data"]
 
+    def update_autopilot_config(self) -> None:
+        """Set Vault to clean up dead servers automatically.
+
+        Read more about it here: https://developer.hashicorp.com/vault/api-docs/system/storage/raftautopilot#set-configuration
+
+        """
+        params = {
+            "cleanup_dead_servers": True,
+            "dead_server_last_contact_threshold": "1m",
+            "min_quorum": 3,
+        }
+        api_path = "/v1/sys/storage/raft/autopilot/configuration"
+        try:
+            self._client.adapter.post(
+                url=api_path,
+                json=params,
+            )
+        except InvalidRequest as e:
+            raise VaultClientError(e) from e
+
     def is_raft_cluster_healthy(self) -> bool:
         """Check if raft cluster is healthy."""
         return self.get_raft_cluster_state()["healthy"]
@@ -470,7 +490,7 @@ class Vault:
                 name=role, mount_point=mount
             ).get("data", {}).get("allowed_domains", [])
         except InvalidPath:
-            logger.error("Role does not exist on the specified path.")
+            logger.warning("Role does not exist on the specified path.")
             return False
 
     def make_latest_pki_issuer_default(self, mount: str) -> None:
