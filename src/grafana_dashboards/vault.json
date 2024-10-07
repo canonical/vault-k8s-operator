@@ -16,7 +16,7 @@
         ]
     },
     "description": "Vault Metrics",
-    "editable": true,
+    "editable": false,
     "fiscalYearStartMonth": 0,
     "gnetId": 12904,
     "graphTooltip": 1,
