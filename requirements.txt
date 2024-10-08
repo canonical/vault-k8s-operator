@@ -6,21 +6,21 @@
 #
 annotated-types==0.7.0
     # via pydantic
-anyio==4.4.0
+anyio==4.6.0
     # via httpx
 attrs==24.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.34
+boto3==1.35.35
     # via -r requirements.in
-boto3-stubs[s3]==1.35.34
+boto3-stubs[s3]==1.35.35
     # via -r requirements.in
-botocore==1.35.34
+botocore==1.35.35
     # via
     #   boto3
     #   s3transfer
-botocore-stubs==1.35.15
+botocore-stubs==1.35.35
     # via boto3-stubs
 certifi==2024.8.30
     # via
@@ -33,19 +33,19 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via typer
-cosl==0.0.39
+cosl==0.0.40
     # via -r requirements.in
 cryptography==43.0.1
     # via -r requirements.in
 h11==0.14.0
     # via httpcore
-httpcore==1.0.5
+httpcore==1.0.6
     # via httpx
 httpx==0.27.2
     # via lightkube
 hvac==2.3.0
     # via -r requirements.in
-idna==3.8
+idna==3.10
     # via
     #   anyio
     #   httpx
@@ -60,7 +60,7 @@ jmespath==1.0.1
     #   botocore
 jsonschema==4.23.0
     # via -r requirements.in
-jsonschema-specifications==2023.12.1
+jsonschema-specifications==2024.10.1
     # via jsonschema
 lightkube==0.15.4
     # via
@@ -70,37 +70,35 @@ lightkube-models==1.31.1.8
     # via
     #   -r requirements.in
     #   lightkube
-markupsafe==2.1.5
+markupsafe==3.0.0
     # via jinja2
-mypy-boto3-s3==1.35.2
+mypy-boto3-s3==1.35.32
     # via boto3-stubs
-ops==2.16.0
+ops==2.16.1
     # via
     #   -r requirements.in
     #   cosl
     #   ops-scenario
-ops-scenario==6.1.7
-    # via
-    #   -r requirements.in
-    #   pytest-interface-tester
+ops-scenario==7.0.5
+    # via pytest-interface-tester
 packaging==24.1
     # via pytest
 pluggy==1.5.0
     # via pytest
 pycparser==2.22
     # via cffi
-pydantic==2.9.1
+pydantic==2.9.2
     # via
     #   -r requirements.in
     #   cosl
     #   pytest-interface-tester
-pydantic-core==2.23.3
+pydantic-core==2.23.4
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
 pytest==8.3.3
     # via pytest-interface-tester
-pytest-interface-tester==3.1.0
+pytest-interface-tester==3.2.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via botocore
@@ -135,7 +133,7 @@ tenacity==9.0.0
     # via cosl
 typer==0.7.0
     # via pytest-interface-tester
-types-awscrt==0.21.5
+types-awscrt==0.22.0
     # via botocore-stubs
 types-s3transfer==0.10.2
     # via boto3-stubs
@@ -146,7 +144,7 @@ typing-extensions==4.12.2
     #   mypy-boto3-s3
     #   pydantic
     #   pydantic-core
-urllib3==2.2.2
+urllib3==2.2.3
     # via
     #   botocore
     #   requests

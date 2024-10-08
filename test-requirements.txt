@@ -12,52 +12,70 @@ cachetools==5.5.0
     # via google-auth
 certifi==2024.8.30
     # via
+    #   -c requirements.txt
     #   kubernetes
     #   requests
 cffi==1.17.1
     # via
+    #   -c requirements.txt
     #   cryptography
     #   pynacl
 charset-normalizer==3.3.2
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   requests
 codespell==2.3.0
     # via -r test-requirements.in
 coverage[toml]==7.6.1
     # via -r test-requirements.in
 cryptography==43.0.1
-    # via paramiko
+    # via
+    #   -c requirements.txt
+    #   paramiko
 decorator==5.1.1
     # via
     #   ipdb
     #   ipython
+durationpy==0.9
+    # via kubernetes
 executing==2.1.0
     # via stack-data
-google-auth==2.34.0
+google-auth==2.35.0
     # via kubernetes
 hvac==2.3.0
-    # via juju
-idna==3.8
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   juju
+idna==3.10
+    # via
+    #   -c requirements.txt
+    #   requests
 iniconfig==2.0.0
-    # via pytest
+    # via
+    #   -c requirements.txt
+    #   pytest
 ipdb==0.13.13
     # via pytest-operator
-ipython==8.27.0
+ipython==8.28.0
     # via ipdb
 jedi==0.19.1
     # via ipython
 jinja2==3.1.4
-    # via pytest-operator
+    # via
+    #   -c requirements.txt
+    #   pytest-operator
 juju==3.5.2.0
     # via
     #   -r test-requirements.in
     #   pytest-operator
-kubernetes==30.1.0
+kubernetes==31.0.0
     # via juju
 macaroonbakery==1.3.4
     # via juju
-markupsafe==2.1.5
-    # via jinja2
+markupsafe==3.0.0
+    # via
+    #   -c requirements.txt
+    #   jinja2
 matplotlib-inline==0.1.7
     # via ipython
 mypy-extensions==1.0.0
@@ -68,39 +86,48 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-ops==2.16.0
-    # via ops-scenario
-ops-scenario==6.1.7
-    # via -r test-requirements.in
+ops==2.16.1
+    # via
+    #   -c requirements.txt
+    #   ops-scenario
+ops-scenario==7.0.5
+    # via
+    #   -c requirements.txt
+    #   -r test-requirements.in
 packaging==24.1
     # via
+    #   -c requirements.txt
     #   juju
     #   pytest
-paramiko==3.4.1
+paramiko==3.5.0
     # via juju
 parso==0.8.4
     # via jedi
 pexpect==4.9.0
     # via ipython
 pluggy==1.5.0
-    # via pytest
-prompt-toolkit==3.0.47
+    # via
+    #   -c requirements.txt
+    #   pytest
+prompt-toolkit==3.0.48
     # via ipython
-protobuf==5.28.0
+protobuf==5.28.2
     # via macaroonbakery
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
     # via stack-data
-pyasn1==0.6.0
+pyasn1==0.6.1
     # via
     #   juju
     #   pyasn1-modules
     #   rsa
-pyasn1-modules==0.4.0
+pyasn1-modules==0.4.1
     # via google-auth
 pycparser==2.22
-    # via cffi
+    # via
+    #   -c requirements.txt
+    #   cffi
 pygments==2.18.0
     # via ipython
 pymacaroons==0.13.0
@@ -118,6 +145,7 @@ pyright==1.1.383
     # via -r test-requirements.in
 pytest==8.3.3
     # via
+    #   -c requirements.txt
     #   -r test-requirements.in
     #   pytest-asyncio
     #   pytest-operator
@@ -128,11 +156,14 @@ pytest-asyncio==0.21.2
 pytest-operator==0.38.0
     # via -r test-requirements.in
 python-dateutil==2.9.0.post0
-    # via kubernetes
-pytz==2024.1
+    # via
+    #   -c requirements.txt
+    #   kubernetes
+pytz==2024.2
     # via pyrfc3339
 pyyaml==6.0.2
     # via
+    #   -c requirements.txt
     #   juju
     #   kubernetes
     #   ops
@@ -140,6 +171,7 @@ pyyaml==6.0.2
     #   pytest-operator
 requests==2.32.3
     # via
+    #   -c requirements.txt
     #   hvac
     #   kubernetes
     #   macaroonbakery
@@ -152,6 +184,7 @@ ruff==0.6.9
     # via -r test-requirements.in
 six==1.16.0
     # via
+    #   -c requirements.txt
     #   asttokens
     #   kubernetes
     #   macaroonbakery
@@ -167,17 +200,19 @@ traitlets==5.14.3
     #   matplotlib-inline
 types-hvac==2.3.0.20240621
     # via -r test-requirements.in
-types-requests==2.32.0.20240907
+types-requests==2.32.0.20240914
     # via types-hvac
 typing-extensions==4.12.2
     # via
+    #   -c requirements.txt
     #   ipython
     #   pyright
     #   typing-inspect
 typing-inspect==0.9.0
     # via juju
-urllib3==2.2.2
+urllib3==2.2.3
     # via
+    #   -c requirements.txt
     #   kubernetes
     #   requests
     #   types-requests
@@ -185,7 +220,8 @@ wcwidth==0.2.13
     # via prompt-toolkit
 websocket-client==1.8.0
     # via
+    #   -c requirements.txt
     #   kubernetes
     #   ops
-websockets==13.0.1
+websockets==13.1
     # via juju
