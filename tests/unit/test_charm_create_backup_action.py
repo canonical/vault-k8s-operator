@@ -3,8 +3,8 @@
 # See LICENSE file for licensing details.
 
 
+import ops.testing as testing
 import pytest
-import scenario
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -12,16 +12,16 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 class TestCharmCreateBackupAction(VaultCharmFixtures):
     def test_given_non_leader_when_create_backup_action_then_fails(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=False,
         )
 
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert (
             e.value.message
@@ -29,33 +29,33 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         )
 
     def test_given_s3_relation_not_created_when_create_backup_action_then_fails(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert e.value.message == "S3 pre-requisites not met. S3 relation not created."
 
     def test_given_missing_s3_parameters_when_create_backup_then_action_fails(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert (
             e.value.message
@@ -75,20 +75,20 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
             },
         )
         self.mock_s3.side_effect = S3Error()
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert e.value.message == "Failed to create S3 session."
 
@@ -109,20 +109,20 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
                 "create_bucket.return_value": None,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert e.value.message == "Failed to create S3 bucket."
 
@@ -138,20 +138,20 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
                 },
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert e.value.message == "Failed to initialize Vault client."
 
@@ -178,26 +178,25 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
                 "is_active_or_standby.return_value": True,
             },
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],
             secrets=[approle_secret],
         )
-        with pytest.raises(scenario.ActionFailed) as e:
+        with pytest.raises(testing.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         assert e.value.message == "Failed to upload backup to S3 bucket."
 
@@ -224,20 +223,19 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
                 "is_active_or_standby.return_value": True,
             },
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        s3_relation = scenario.Relation(
+        s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             relations=[s3_relation],

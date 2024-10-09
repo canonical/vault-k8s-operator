@@ -5,7 +5,7 @@
 import os
 import tempfile
 
-import scenario
+import ops.testing as testing
 
 from tests.unit.fixtures import VaultCharmFixtures
 
@@ -13,16 +13,16 @@ from tests.unit.fixtures import VaultCharmFixtures
 class TestCharmInstall(VaultCharmFixtures):
     def test_given_existing_data_exists_when_install_then_existing_data_is_removed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            vault_raft_mount = scenario.Mount(
+            vault_raft_mount = testing.Mount(
                 location="/vault/raft",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={"vault-raft": vault_raft_mount},
             )
-            state_in = scenario.State(containers=[container])
+            state_in = testing.State(containers=[container])
             with open(f"{temp_dir}/vault.db", "w") as f:
                 f.write("data")
             os.mkdir(f"{temp_dir}/raft")

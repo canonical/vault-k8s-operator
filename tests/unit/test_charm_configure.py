@@ -7,8 +7,7 @@ import tempfile
 from datetime import timedelta
 
 import hcl
-import pytest
-import scenario
+import ops.testing as testing
 from charms.tls_certificates_interface.v4.tls_certificates import ProviderCertificate
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
 from charms.vault_k8s.v0.vault_client import (
@@ -38,15 +37,15 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_socket_fqdn.return_value = "myhostname"
             self.mock_autounseal_requires_get_details.return_value = None
             model_name = "whatever"
-            vault_raft_mount = scenario.Mount(
+            vault_raft_mount = testing.Mount(
                 location="/vault/raft",
                 source=temp_dir,
             )
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -54,14 +53,14 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 relations=[peer_relation],
-                model=scenario.Model(name=model_name),
+                model=testing.Model(name=model_name),
             )
 
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
@@ -78,21 +77,21 @@ class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_pebble_layer_is_planned(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 relations=[peer_relation],
@@ -134,30 +133,29 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            pki_relation = scenario.Relation(
+            pki_relation = testing.Relation(
                 endpoint="tls-certificates-pki",
                 interface="tls-certificates",
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -213,30 +211,29 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            pki_relation = scenario.Relation(
+            pki_relation = testing.Relation(
                 endpoint="tls-certificates-pki",
                 interface="tls-certificates",
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -256,7 +253,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
 
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -281,26 +278,26 @@ class TestCharmConfigure(VaultCharmFixtures):
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            pki_relation_provider = scenario.Relation(
+            pki_relation_provider = testing.Relation(
                 endpoint="tls-certificates-pki",
                 interface="tls-certificates",
                 remote_app_name="tls-provider",
             )
-            pki_relation_requirer = scenario.Relation(
+            pki_relation_requirer = testing.Relation(
                 endpoint="vault-pki",
                 interface="tls-certificates",
                 remote_app_name="tls-requirer",
@@ -329,12 +326,11 @@ class TestCharmConfigure(VaultCharmFixtures):
                 ca_private_key=assigned_private_key,
                 csr=requirer_csr.certificate_signing_request,
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -412,21 +408,21 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = AutounsealDetails(
                 "1.2.3.4", "charm-autounseal", "key name", "role id", "secret id", "ca cert"
             )
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            vault_autounseal_relation = scenario.Relation(
+            vault_autounseal_relation = testing.Relation(
                 endpoint="vault-autounseal-provides",
                 interface="vault-autounseal",
                 remote_app_name="vault-autounseal-requirer",
@@ -437,12 +433,11 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             relation = MockRelation(id=vault_autounseal_relation.id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -491,21 +486,21 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            vault_autounseal_relation = scenario.Relation(
+            vault_autounseal_relation = testing.Relation(
                 endpoint="vault-autounseal-provides",
                 interface="vault-autounseal",
                 remote_app_name="vault-autounseal-requirer",
@@ -516,12 +511,11 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             relation = MockRelation(id=vault_autounseal_relation.id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 secrets=[approle_secret],
@@ -557,30 +551,29 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            kv_relation = scenario.Relation(
+            kv_relation = testing.Relation(
                 endpoint="vault-kv",
                 interface="vault-kv",
             )
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 relations=[peer_relation, kv_relation],
@@ -606,15 +599,10 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_kv_provides_set_ca_certificate.assert_called()
             self.mock_kv_provides_set_egress_subnets.assert_called()
             self.mock_kv_provides_set_vault_url.assert_called()
-            for secret in state_out.secrets:
-                if secret.label == "kv-creds-vault-kv-remote-0":
-                    assert secret.tracked_content == {
-                        "role-id": "kv role id",
-                        "role-secret-id": "kv role secret id",
-                    }
-                    break
-            else:
-                pytest.fail("Expected secret not found in state.")
+            assert state_out.get_secret(label="kv-creds-vault-kv-remote-0").tracked_content == {
+                "role-id": "kv role id",
+                "role-secret-id": "kv role secret id",
+            }
 
     def test_given_related_kv_client_unit_egress_is_updated_when_configure_then_secret_content_is_updated(
         self,
@@ -634,31 +622,29 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             self.mock_autounseal_requires_get_details.return_value = None
 
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
             )
-            kv_relation = scenario.Relation(
+            kv_relation = testing.Relation(
                 endpoint="vault-kv",
                 interface="vault-kv",
             )
-            vault_config_mount = scenario.Mount(
+            vault_config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "vault-config": vault_config_mount,
                 },
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            kv_secret = scenario.Secret(
-                id="1",
+            kv_secret = testing.Secret(
                 label="kv-creds-vault-kv-remote-0",
                 tracked_content={
                     "role-id": "kv role id",
@@ -666,7 +652,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
                 owner="app",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 leader=True,
                 relations=[peer_relation, kv_relation],
@@ -686,12 +672,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            for secret in state_out.secrets:
-                if secret.label == "kv-creds-vault-kv-remote-0":
-                    assert secret.latest_content == {
-                        "role-id": "kv role id",
-                        "role-secret-id": "new kv role secret id",
-                    }
-                    break
-            else:
-                pytest.fail("Expected secret not found in state.")
+            assert state_out.get_secret(label="kv-creds-vault-kv-remote-0").latest_content == {
+                "role-id": "kv role id",
+                "role-secret-id": "new kv role secret id",
+            }

@@ -6,7 +6,7 @@
 import os
 import tempfile
 
-import scenario
+import ops.testing as testing
 from ops.pebble import Layer, ServiceStatus
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -27,24 +27,23 @@ class TestCharmRemove(VaultCharmFixtures):
                 },
             )
             model_name = "model-name"
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
-            vault_raft_mount = scenario.Mount(
+            vault_raft_mount = testing.Mount(
                 location="/vault/raft",
                 source=temp_dir,
             )
-            container = scenario.Container(
+            container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={"vault-raft": vault_raft_mount},
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[container],
                 secrets=[approle_secret],
-                model=scenario.Model(name=model_name),
+                model=testing.Model(name=model_name),
             )
             with open(f"{temp_dir}/vault.db", "w") as f:
                 f.write("data")
@@ -60,18 +59,17 @@ class TestCharmRemove(VaultCharmFixtures):
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
 
     def test_given_service_is_running_when_remove_then_service_is_stopped(self):
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
             layers={"vault": Layer({"services": {"vault": {}}})},
             service_statuses={"vault": ServiceStatus.ACTIVE},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             secrets=[approle_secret],
         )

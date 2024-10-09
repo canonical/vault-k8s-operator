@@ -6,8 +6,8 @@ import json
 import unittest
 from dataclasses import asdict
 
+import ops.testing as testing
 import pytest
-import scenario
 from charms.vault_k8s.v0.vault_kv import (
     NewVaultKvClientAttachedEvent,
     VaultKvClientDetachedEvent,
@@ -126,7 +126,7 @@ class VaultKvRequirerCharm(CharmBase):
 class TestVaultKvProvides(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def context(self):
-        self.ctx = scenario.Context(
+        self.ctx = testing.Context(
             charm_type=VaultKvProviderCharm,
             meta={
                 "name": "vault-kv-provider",
@@ -189,13 +189,13 @@ class TestVaultKvProvides(unittest.TestCase):
         self,
     ):
         suffix = "dummy"
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={"mount_suffix": suffix},
             remote_units_data={0: {"nonce": "abcd", "egress_subnet": "10.0.0.1/32"}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
         )
 
@@ -210,13 +210,13 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_joined_when_missing_data_then_new_client_attached_is_never_fired(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
         )
 
@@ -227,14 +227,14 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_is_leader_when_setting_vault_url_then_relation_data_is_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
         vault_url = "https://vault.example.com"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -256,14 +256,14 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_is_not_leader_when_setting_vault_url_then_relation_data_is_not_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
         vault_url = "https://vault.example.com"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=False,
         )
@@ -283,14 +283,14 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_is_leader_when_setting_mount_then_relation_data_is_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
         mount = "charm-vault-kv-requires-dummy"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -310,14 +310,14 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_is_not_leader_when_setting_mount_then_relation_data_is_not_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
         mount = "charm-vault-kv-requires-dummy"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=False,
         )
@@ -336,15 +336,15 @@ class TestVaultKvProvides(unittest.TestCase):
     def test_given_unit_is_leader_when_setting_credentials_then_relation_data_is_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        secret = scenario.Secret(id="secret-id", tracked_content={})
+        secret = testing.Secret(tracked_content={})
         nonce = "abcd"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             secrets=[secret],
             leader=True,
@@ -362,21 +362,21 @@ class TestVaultKvProvides(unittest.TestCase):
         )
 
         assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
-            "credentials": json.dumps({nonce: f"secret:{secret.id}"})
+            "credentials": json.dumps({nonce: f"{secret.id}"})
         }
 
     def test_given_unit_is_not_leader_when_setting_credentials_then_relation_data_is_not_updated(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        secret = scenario.Secret(id="secret-id", tracked_content={})
+        secret = testing.Secret(tracked_content={})
         nonce = "abcd"
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             secrets=[secret],
             leader=False,
@@ -396,18 +396,19 @@ class TestVaultKvProvides(unittest.TestCase):
         assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
     def test_given_no_request_when_get_outstanding_kv_requests_then_empty_list_is_returned(self):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
 
         self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
+
         assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(
@@ -416,14 +417,14 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce = "abcd"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
             remote_app_data={"mount_suffix": suffix},
             remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -451,7 +452,7 @@ class TestVaultKvProvides(unittest.TestCase):
         nonce_1 = "abcd"
         nonce_2 = "efgh"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
@@ -462,7 +463,7 @@ class TestVaultKvProvides(unittest.TestCase):
             },
             local_app_data={"credentials": json.dumps({nonce_1: "whatever secret id"})},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -490,21 +491,21 @@ class TestVaultKvProvides(unittest.TestCase):
         nonce_1 = "abcd"
         nonce_2 = "efgh"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation_1 = scenario.Relation(
+        vault_kv_relation_1 = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
             remote_app_data={"mount_suffix": suffix},
             remote_units_data={0: {"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)}},
         )
-        vault_kv_relation_2 = scenario.Relation(
+        vault_kv_relation_2 = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
             remote_app_data={"mount_suffix": suffix},
             remote_units_data={0: {"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation_1, vault_kv_relation_2],
             leader=True,
         )
@@ -539,7 +540,7 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce = "abcd"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
@@ -547,7 +548,7 @@ class TestVaultKvProvides(unittest.TestCase):
             remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
             local_app_data={"credentials": json.dumps({nonce: "whatever secret id"})},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -556,13 +557,13 @@ class TestVaultKvProvides(unittest.TestCase):
         assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_no_request_when_get_kv_requests_then_empty_list_is_returned(self):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -575,7 +576,7 @@ class TestVaultKvProvides(unittest.TestCase):
         nonce1 = "abcd"
         nonce2 = "efgh"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
@@ -585,7 +586,7 @@ class TestVaultKvProvides(unittest.TestCase):
                 1: {"nonce": nonce2, "egress_subnet": ",".join(egress_subnets)},
             },
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -615,14 +616,14 @@ class TestVaultKvProvides(unittest.TestCase):
         suffix = "dummy"
         nonce = "abcd"
         egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-requirer",
             remote_app_data={"mount_suffix": suffix},
             remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -637,7 +638,7 @@ class TestVaultKvProvides(unittest.TestCase):
 class TestVaultKvRequires:
     @pytest.fixture(autouse=True)
     def context(self):
-        self.ctx = scenario.Context(
+        self.ctx = testing.Context(
             charm_type=VaultKvRequirerCharm,
             meta={
                 "name": "vault-kv-requirer",
@@ -648,12 +649,12 @@ class TestVaultKvRequires:
     def test_given_unit_leader_when_unit_joined_then_connected_event_fired_and_all_relation_data_is_updated(  # noqa: E501
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -669,12 +670,12 @@ class TestVaultKvRequires:
         }
 
     def test_given_unit_leader_when_config_changed_then_connected_event_fired(self):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -692,12 +693,12 @@ class TestVaultKvRequires:
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=False,
         )
@@ -713,12 +714,12 @@ class TestVaultKvRequires:
     def test_given_all_units_departed_when_relation_broken_then_gone_away_event_fired(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -729,7 +730,7 @@ class TestVaultKvRequires:
         assert isinstance(self.ctx.emitted_events[1], VaultKvGoneAwayEvent)
 
     def test_given_relation_changed_when_all_data_present_then_ready_event_fired(self):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
@@ -744,7 +745,7 @@ class TestVaultKvRequires:
                 "credentials": json.dumps({"abcd": "dummy"}),
             },
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )
@@ -759,7 +760,7 @@ class TestVaultKvRequires:
     def test_given_relation_changed_when_data_missing_then_ready_event_never_fired(
         self,
     ):
-        vault_kv_relation = scenario.Relation(
+        vault_kv_relation = testing.Relation(
             endpoint="vault-kv",
             interface="vault-kv",
             remote_app_name="vault-kv-provides",
@@ -768,7 +769,7 @@ class TestVaultKvRequires:
             },
             remote_app_data={},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             relations=[vault_kv_relation],
             leader=True,
         )

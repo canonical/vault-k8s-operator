@@ -7,8 +7,8 @@ import tempfile
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
+import ops.testing as testing
 import pytest
-import scenario
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequest,
     ProviderCertificate,
@@ -44,23 +44,23 @@ class TestCharmTLS:
 
     @pytest.fixture(autouse=True)
     def context(self):
-        self.ctx = scenario.Context(
+        self.ctx = testing.Context(
             charm_type=VaultCharm,
         )
 
     def test_given_not_leader_and_ca_not_set_when_evaluate_status_then_status_is_waiting(self):
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
             interface="vault-peer",
             peers_data={
                 0: {"node_api_address": "http://5.2.1.9:8200"},
             },
         )
-        vault_container = scenario.Container(
+        vault_container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[vault_container],
             leader=False,
             relations=[peer_relation],
@@ -82,7 +82,7 @@ class TestCharmTLS:
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -91,15 +91,15 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -107,13 +107,13 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 leader=True,
@@ -123,17 +123,11 @@ class TestCharmTLS:
             state_out = self.ctx.run(self.ctx.on.update_status(), state_in)
 
             # Assert the secret is created
-            for secret in state_out.secrets:
-                if secret.label == CA_CERTIFICATE_JUJU_SECRET_LABEL:
-                    assert secret.tracked_content["privatekey"].startswith(
-                        "-----BEGIN RSA PRIVATE KEY-----"
-                    )
-                    assert secret.tracked_content["certificate"].startswith(
-                        "-----BEGIN CERTIFICATE-----"
-                    )
-                    break
-            else:
-                pytest.fail("Expected secret not found in state.")
+            secret_content = state_out.get_secret(
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL
+            ).tracked_content
+            assert secret_content["privatekey"].startswith("-----BEGIN RSA PRIVATE KEY-----")
+            assert secret_content["certificate"].startswith("-----BEGIN CERTIFICATE-----")
 
             # Assert the files are written to the correct location
             ca_cert_path = temp_dir + "/ca.pem"
@@ -158,12 +152,12 @@ class TestCharmTLS:
         self.mock_get_assigned_certificate.return_value = None, None
         ingress_address = "1.2.3.4"
         with tempfile.TemporaryDirectory() as temp_dir:
-            certificates_relation = scenario.Relation(
+            certificates_relation = testing.Relation(
                 endpoint="tls-certificates-access",
                 interface="tls-certificates",
                 remote_app_name="some-tls-provider",
             )
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -172,15 +166,15 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -188,21 +182,21 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 relations=[certificates_relation, peer_relation],
                 storages=[certs_storage, config_storage],
                 leader=True,
                 networks={
-                    scenario.Network(
+                    testing.Network(
                         "vault-peers",
-                        bind_addresses=[scenario.BindAddress([scenario.Address("192.0.2.1")])],
+                        bind_addresses=[testing.BindAddress([testing.Address("192.0.2.1")])],
                         ingress_addresses=[ingress_address],
                     )
                 },
@@ -236,7 +230,7 @@ class TestCharmTLS:
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -245,7 +239,7 @@ class TestCharmTLS:
                     },
                 },
             )
-            certificates_relation = scenario.Relation(
+            certificates_relation = testing.Relation(
                 endpoint="tls-certificates-access",
                 interface="tls-certificates",
                 remote_app_name="some-tls-provider",
@@ -276,15 +270,15 @@ class TestCharmTLS:
                 revoked=False,
             )
             self.mock_get_assigned_certificate.return_value = provider_certificate, private_key
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -292,13 +286,13 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 leader=True,
@@ -344,7 +338,7 @@ class TestCharmTLS:
         )
         patch_generate_certificate.return_value = certificate
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -353,20 +347,20 @@ class TestCharmTLS:
                     },
                 },
             )
-            certificates_relation = scenario.Relation(
+            certificates_relation = testing.Relation(
                 endpoint="tls-certificates-access",
                 interface="tls-certificates",
                 remote_app_name="some-tls-provider",
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -374,13 +368,13 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 leader=True,
@@ -404,7 +398,7 @@ class TestCharmTLS:
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -413,15 +407,15 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -429,19 +423,18 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            ca_certificate_secret = scenario.Secret(
-                id="1",
+            ca_certificate_secret = testing.Secret(
                 label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
                 tracked_content={"privatekey": "some private key", "certificate": "some cert"},
                 owner="app",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 secrets=[ca_certificate_secret],
@@ -514,7 +507,7 @@ class TestCharmTLS:
         patch_generate_certificate.return_value = self_signed_certificate
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
@@ -523,15 +516,15 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -539,14 +532,14 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
 
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 secrets=[],
@@ -604,27 +597,27 @@ class TestCharmTLS:
                 f.write("some ca")
             with open(cert_path, "w") as f:
                 f.write("some cert")
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
                     0: {"node_api_address": "http://1.2.3.4"},
                 },
             )
-            cert_transfer_relation = scenario.Relation(
+            cert_transfer_relation = testing.Relation(
                 endpoint="send-ca-cert",
                 interface="certificate_transfer",
                 remote_app_name="whatever",
             )
-            certs_mount = scenario.Mount(
+            certs_mount = testing.Mount(
                 location="/vault/certs",
                 source=temp_dir,
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
@@ -632,25 +625,23 @@ class TestCharmTLS:
                     "config": config_mount,
                 },
             )
-            certs_storage = scenario.Storage(
+            certs_storage = testing.Storage(
                 name="certs",
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
                 tracked_content={"role-id": "some role id", "secret-id": "some secret"},
                 owner="app",
             )
-            ca_certificate_secret = scenario.Secret(
-                id="1",
+            ca_certificate_secret = testing.Secret(
                 label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
                 tracked_content={"privatekey": "some private key", "certificate": "some cert"},
                 owner="app",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 secrets=[approle_secret, ca_certificate_secret],
@@ -682,39 +673,38 @@ class TestCharmTLS:
         is_api_available.return_value = True
         is_sealed.return_value = False
         with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = scenario.PeerRelation(
+            peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
                 peers_data={
                     0: {"node_api_address": "http://1.2.3.4"},
                 },
             )
-            cert_transfer_relation = scenario.Relation(
+            cert_transfer_relation = testing.Relation(
                 endpoint="send-ca-cert",
                 interface="certificate_transfer",
                 remote_app_name="whatever",
             )
-            config_mount = scenario.Mount(
+            config_mount = testing.Mount(
                 location="/vault/config",
                 source=temp_dir,
             )
-            vault_container = scenario.Container(
+            vault_container = testing.Container(
                 name="vault",
                 can_connect=True,
                 mounts={
                     "config": config_mount,
                 },
             )
-            config_storage = scenario.Storage(
+            config_storage = testing.Storage(
                 name="config",
             )
-            approle_secret = scenario.Secret(
-                id="0",
+            approle_secret = testing.Secret(
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
                 tracked_content={"role-id": "some role id", "secret-id": "some secret"},
                 owner="app",
             )
-            state_in = scenario.State(
+            state_in = testing.State(
                 containers=[vault_container],
                 storages=[config_storage],
                 secrets=[approle_secret],
