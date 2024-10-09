@@ -66,7 +66,7 @@ class TestCharmTLS:
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for CA certificate to be accessible in the charm"
@@ -91,8 +91,14 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -109,18 +115,21 @@ class TestCharmTLS:
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 leader=True,
                 relations=[peer_relation],
             )
 
-            state_out = self.ctx.run("update_status", state_in)
+            state_out = self.ctx.run(self.ctx.on.update_status(), state_in)
 
             # Assert the secret is created
-            assert state_out.secrets[0].label == CA_CERTIFICATE_JUJU_SECRET_LABEL
-            secret_content = state_out.secrets[0].contents[0]
-            assert secret_content["privatekey"].startswith("-----BEGIN RSA PRIVATE KEY-----")
-            assert secret_content["certificate"].startswith("-----BEGIN CERTIFICATE-----")
+            for secret in state_out.secrets:    
+                if secret.label == CA_CERTIFICATE_JUJU_SECRET_LABEL:
+                    assert secret.tracked_content["privatekey"].startswith("-----BEGIN RSA PRIVATE KEY-----")
+                    assert secret.tracked_content["certificate"].startswith("-----BEGIN CERTIFICATE-----")
+                    break
+            else:
+                pytest.fail("Expected secret not found in state.")
 
             # Assert the files are written to the correct location
             ca_cert_path = temp_dir + "/ca.pem"
@@ -159,8 +168,14 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -178,17 +193,18 @@ class TestCharmTLS:
             state_in = scenario.State(
                 containers=[vault_container],
                 relations=[certificates_relation, peer_relation],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 leader=True,
                 networks={
-                    "vault-peers": scenario.Network.default(
-                        private_address="192.0.2.1",
+                    scenario.Network(
+                        "vault-peers",
+                        bind_addresses=[scenario.BindAddress([scenario.Address('192.0.2.1')])],
                         ingress_addresses=[ingress_address],
                     )
                 },
             )
 
-            self.ctx.run(certificates_relation.changed_event, state_in)
+            self.ctx.run(self.ctx.on.relation_changed(certificates_relation), state_in)
 
             self.mock_get_assigned_certificate.assert_called_once_with(
                 certificate_request=CertificateRequest(
@@ -249,15 +265,21 @@ class TestCharmTLS:
             )
             provider_certificate = ProviderCertificate(
                 certificate_signing_request=csr,
-                relation_id=certificates_relation.relation_id,
+                relation_id=certificates_relation.id,
                 certificate=certificate,
                 ca=ca_certificate,
                 chain=[ca_certificate],
                 revoked=False,
             )
             self.mock_get_assigned_certificate.return_value = provider_certificate, private_key
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -274,12 +296,12 @@ class TestCharmTLS:
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 leader=True,
                 relations=[peer_relation, certificates_relation],
             )
 
-            self.ctx.run(certificates_relation.changed_event, state_in)
+            self.ctx.run(self.ctx.on.relation_changed(certificates_relation), state_in)
 
             # Assert the file is created
             ca_cert_path = temp_dir + "/ca.pem"
@@ -332,8 +354,14 @@ class TestCharmTLS:
                 interface="tls-certificates",
                 remote_app_name="some-tls-provider",
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -350,12 +378,12 @@ class TestCharmTLS:
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 leader=True,
                 relations=[peer_relation, certificates_relation],
             )
 
-            self.ctx.run(certificates_relation.broken_event, state_in)
+            self.ctx.run(self.ctx.on.relation_broken(certificates_relation), state_in)
 
             # Assert the file is created
             ca_cert_path = temp_dir + "/cert.pem"
@@ -381,8 +409,14 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -400,12 +434,12 @@ class TestCharmTLS:
             ca_certificate_secret = scenario.Secret(
                 id="1",
                 label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-                contents={0: {"privatekey": "some private key", "certificate": "some cert"}},
+                tracked_content={"privatekey": "some private key", "certificate": "some cert"},
                 owner="app",
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 secrets=[ca_certificate_secret],
                 leader=True,
                 relations=[peer_relation],
@@ -433,7 +467,7 @@ class TestCharmTLS:
             with open(temp_dir + "/cert.pem", "w") as f:
                 f.write(str(certificate))
 
-            self.ctx.run("update_status", state_in)
+            self.ctx.run(self.ctx.on.update_status(), state_in)
 
             with open(temp_dir + "/ca.pem", "r") as f:
                 assert f.read() == str(ca_certificate)
@@ -485,8 +519,14 @@ class TestCharmTLS:
                     },
                 },
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -504,7 +544,7 @@ class TestCharmTLS:
 
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 secrets=[],
                 leader=True,
                 relations=[peer_relation],
@@ -531,7 +571,7 @@ class TestCharmTLS:
             with open(temp_dir + "/cert.pem", "w") as f:
                 f.write(str(tls_integration_certificate))
 
-            self.ctx.run("update_status", state_in)
+            self.ctx.run(self.ctx.on.update_status(), state_in)
 
             with open(temp_dir + "/ca.pem", "r") as f:
                 assert f.read() == str(self_signed_ca_certificate)
@@ -572,8 +612,14 @@ class TestCharmTLS:
                 interface="certificate_transfer",
                 remote_app_name="whatever",
             )
-            certs_mount = scenario.Mount("/vault/certs", temp_dir)
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            certs_mount = scenario.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -591,30 +637,30 @@ class TestCharmTLS:
             approle_secret = scenario.Secret(
                 id="0",
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-                contents={0: {"role-id": "some role id", "secret-id": "some secret"}},
+                tracked_content={"role-id": "some role id", "secret-id": "some secret"},
                 owner="app",
             )
             ca_certificate_secret = scenario.Secret(
                 id="1",
                 label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-                contents={0: {"privatekey": "some private key", "certificate": "some cert"}},
+                tracked_content={"privatekey": "some private key", "certificate": "some cert"},
                 owner="app",
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[certs_storage, config_storage],
+                storages=[certs_storage, config_storage],
                 secrets=[approle_secret, ca_certificate_secret],
                 leader=True,
                 relations=[peer_relation, cert_transfer_relation],
             )
 
-            self.ctx.run(cert_transfer_relation.joined_event, state_in)
+            self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             set_certificate.assert_called_once_with(
                 certificate="",
                 ca="some ca",
                 chain=[],
-                relation_id=cert_transfer_relation.relation_id,
+                relation_id=cert_transfer_relation.id,
             )
 
     @patch("charms.vault_k8s.v0.vault_client.Vault.enable_audit_device", new=Mock)
@@ -644,7 +690,10 @@ class TestCharmTLS:
                 interface="certificate_transfer",
                 remote_app_name="whatever",
             )
-            config_mount = scenario.Mount("/vault/config", temp_dir)
+            config_mount = scenario.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
             vault_container = scenario.Container(
                 name="vault",
                 can_connect=True,
@@ -658,17 +707,17 @@ class TestCharmTLS:
             approle_secret = scenario.Secret(
                 id="0",
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-                contents={0: {"role-id": "some role id", "secret-id": "some secret"}},
+                tracked_content={"role-id": "some role id", "secret-id": "some secret"},
                 owner="app",
             )
             state_in = scenario.State(
                 containers=[vault_container],
-                storage=[config_storage],
+                storages=[config_storage],
                 secrets=[approle_secret],
                 leader=True,
                 relations=[peer_relation, cert_transfer_relation],
             )
 
-            self.ctx.run(cert_transfer_relation.joined_event, state_in)
+            self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             set_certificate.assert_not_called()
