@@ -6,6 +6,7 @@
 import json
 
 import scenario
+import pytest
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -21,15 +22,10 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             containers=[container],
             leader=False,
         )
-        action = scenario.Action(
-            name="list-backups",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("list-backups"), state_in)
         assert (
-            action_output.failure
+            e.value.message
             == "S3 pre-requisites not met. Only leader unit can perform backup operations."
         )
 
@@ -42,14 +38,12 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             containers=[container],
             leader=True,
         )
-        action = scenario.Action(
-            name="list-backups",
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("list-backups"), state_in)
+        assert (
+            e.value.message
+            == "S3 pre-requisites not met. S3 relation not created."
         )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "S3 pre-requisites not met. S3 relation not created."
 
     def test_given_missing_s3_parameters_when_list_backups_then_action_fails(self):
         container = scenario.Container(
@@ -65,16 +59,12 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="list-backups",
-        )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("list-backups"), state_in)
         assert (
-            action_output.failure
-            == "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):."
+            e.value.message
+            == "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint)."
         )
 
     def test_given_s3_error_during_instantiation_when_list_backups_then_action_fails(self):
@@ -103,14 +93,12 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="list-backups",
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("list-backups"), state_in)
+        assert (
+            e.value.message
+            == "Failed to create S3 session."
         )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "Failed to create S3 session."
 
     def test_given_s3_error_during_get_object_key_when_list_backups_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
@@ -142,15 +130,11 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="list-backups",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("list-backups"), state_in)
         assert (
-            action_output.failure == "Failed to run list-backups action - Failed to list backups."
+            e.value.message
+            == "Failed to run list-backups action - Failed to list backups."
         )
 
     def test_given_s3_available_when_list_backups_then_backup_listed(self):
@@ -178,7 +162,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
         approle_secret = scenario.Secret(
             id="0",
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
         container = scenario.Container(
             name="vault",
@@ -194,12 +178,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
             relations=[s3_relation],
             secrets=[approle_secret],
         )
-        action = scenario.Action(
-            name="list-backups",
-        )
 
-        action_output = self.ctx.run_action(action, state_in)
+        self.ctx.run(self.ctx.on.action("list-backups"), state_in)
 
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results == {"backup-ids": json.dumps(["my-backup-id"])}
+        assert self.ctx.action_results == {"backup-ids": json.dumps(["my-backup-id"])}
