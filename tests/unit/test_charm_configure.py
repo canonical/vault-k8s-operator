@@ -6,6 +6,7 @@
 import tempfile
 from datetime import timedelta
 
+import pytest
 import hcl
 import scenario
 from charms.tls_certificates_interface.v4.tls_certificates import ProviderCertificate
@@ -39,11 +40,11 @@ class TestCharmConfigure(VaultCharmFixtures):
             model_name = "whatever"
             vault_raft_mount = scenario.Mount(
                 location="/vault/raft",
-                src=temp_dir,
+                source=temp_dir,
             )
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -63,7 +64,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 model=scenario.Model(name=model_name),
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             with open(f"{temp_dir}/vault.hcl", "r") as f:
                 actual_config = f.read()
@@ -79,7 +80,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -97,9 +98,8 @@ class TestCharmConfigure(VaultCharmFixtures):
                 relations=[peer_relation],
             )
 
-            state_out = self.ctx.run(container.pebble_ready_event, state_in)
-
-            assert state_out.containers[0].layers == {
+            state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+            assert list(state_out.containers)[0].layers == {
                 "vault": Layer(
                     {
                         "summary": "vault layer",
@@ -136,7 +136,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -155,7 +155,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -168,7 +168,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             provider_certificate, private_key = generate_example_provider_certificate(
                 common_name="myhostname.com",
-                relation_id=pki_relation.relation_id,
+                relation_id=pki_relation.id,
                 validity=timedelta(hours=24),
             )
             self.mock_pki_requirer_get_assigned_certificate.return_value = (
@@ -176,7 +176,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 private_key,
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_vault.enable_secrets_engine.assert_called_once_with(
                 SecretsBackend.PKI, "charm-pki"
@@ -215,7 +215,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -234,7 +234,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -247,7 +247,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             provider_certificate, private_key = generate_example_provider_certificate(
                 common_name="myhostname.com",
-                relation_id=pki_relation.relation_id,
+                relation_id=pki_relation.id,
                 validity=timedelta(hours=24),
             )
             self.mock_pki_requirer_get_assigned_certificate.return_value = (
@@ -255,7 +255,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 private_key,
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
             state_in = scenario.State(
                 containers=[container],
                 leader=True,
@@ -270,7 +270,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_vault.get_intermediate_ca.return_value = str(
                 provider_certificate.certificate
             )
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_pki_requirer_renew_certificate.assert_called_once_with(
                 provider_certificate,
@@ -283,7 +283,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -308,13 +308,13 @@ class TestCharmConfigure(VaultCharmFixtures):
             assigned_provider_certificate, assigned_private_key = (
                 generate_example_provider_certificate(
                     common_name="myhostname.com",
-                    relation_id=pki_relation_provider.relation_id,
+                    relation_id=pki_relation_provider.id,
                     validity=timedelta(hours=24),
                 )
             )
             requirer_csr = generate_example_requirer_csr(
                 common_name="subdomain.myhostname.com",
-                relation_id=pki_relation_requirer.relation_id,
+                relation_id=pki_relation_requirer.id,
             )
 
             self.mock_pki_requirer_get_assigned_certificate.return_value = (
@@ -332,7 +332,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -358,7 +358,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 },
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             twelve_hours_in_seconds = 12 * 3600
             self.mock_vault.sign_pki_certificate_signing_request.assert_called_once_with(
@@ -370,7 +370,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             self.mock_pki_provider_set_relation_certificate.assert_called_once_with(
                 provider_certificate=ProviderCertificate(
-                    relation_id=pki_relation_requirer.relation_id,
+                    relation_id=pki_relation_requirer.id,
                     certificate=vault_generated_certificate,
                     ca=assigned_provider_certificate.certificate,
                     chain=[assigned_provider_certificate.certificate],
@@ -414,7 +414,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -435,12 +435,12 @@ class TestCharmConfigure(VaultCharmFixtures):
                 bind_address="myhostname",
                 ingress_address="myhostname",
             )
-            relation = MockRelation(id=vault_autounseal_relation.relation_id)
+            relation = MockRelation(id=vault_autounseal_relation.id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -450,7 +450,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 config={"common_name": "myhostname.com"},
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             with open(f"{temp_dir}/vault.hcl", "r") as f:
                 actual_config = f.read()
@@ -493,7 +493,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_autounseal_requires_get_details.return_value = None
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -514,12 +514,12 @@ class TestCharmConfigure(VaultCharmFixtures):
                 bind_address="myhostname",
                 ingress_address="myhostname",
             )
-            relation = MockRelation(id=vault_autounseal_relation.relation_id)
+            relation = MockRelation(id=vault_autounseal_relation.id)
             self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -529,7 +529,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 config={"common_name": "myhostname.com"},
             )
 
-            self.ctx.run(container.pebble_ready_event, state_in)
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_autounseal_provides_set_data.assert_called_with(
                 relation,
@@ -566,7 +566,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -578,7 +578,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             state_in = scenario.State(
                 containers=[container],
@@ -588,7 +588,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             self.mock_kv_provides_get_outstanding_kv_requests.return_value = [
                 KVRequest(
-                    relation_id=kv_relation.relation_id,
+                    relation_id=kv_relation.id,
                     app_name="vault-kv-remote",
                     unit_name="vault-kv-remote/0",
                     mount_suffix="suffix",
@@ -598,7 +598,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             ]
             self.mock_kv_provides_get_credentials.return_value = {}
 
-            state_out = self.ctx.run(container.pebble_ready_event, state_in)
+            state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_vault.enable_secrets_engine.assert_called_once_with(
                 SecretsBackend.KV_V2, "charm-vault-kv-remote-suffix"
@@ -606,10 +606,15 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_kv_provides_set_ca_certificate.assert_called()
             self.mock_kv_provides_set_egress_subnets.assert_called()
             self.mock_kv_provides_set_vault_url.assert_called()
-            assert state_out.secrets[1].label == "kv-creds-vault-kv-remote-0"
-            assert state_out.secrets[1].contents == {
-                0: {"role-id": "kv role id", "role-secret-id": "kv role secret id"}
-            }
+            for secret in state_out.secrets:
+                if secret.label == "kv-creds-vault-kv-remote-0":
+                    assert secret.tracked_content == {
+                        "role-id": "kv role id",
+                        "role-secret-id": "kv role secret id",
+                    }
+                    break
+            else:
+                pytest.fail("Expected secret not found in state.")
 
     def test_given_related_kv_client_unit_egress_is_updated_when_configure_then_secret_content_is_updated(
         self,
@@ -638,7 +643,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             vault_config_mount = scenario.Mount(
                 location="/vault/config",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -650,13 +655,14 @@ class TestCharmConfigure(VaultCharmFixtures):
             approle_secret = scenario.Secret(
                 id="0",
                 label="vault-approle-auth-details",
-                contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
             )
             kv_secret = scenario.Secret(
                 id="1",
                 label="kv-creds-vault-kv-remote-0",
-                contents={
-                    0: {"role-id": "kv role id", "role-secret-id": "initial kv role secret id"}
+                tracked_content={
+                    "role-id": "kv role id",
+                    "role-secret-id": "initial kv role secret id",
                 },
                 owner="app",
             )
@@ -668,7 +674,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             self.mock_kv_provides_get_outstanding_kv_requests.return_value = [
                 KVRequest(
-                    relation_id=kv_relation.relation_id,
+                    relation_id=kv_relation.id,
                     app_name="vault-kv-remote",
                     unit_name="vault-kv-remote/0",
                     mount_suffix="suffix",
@@ -678,10 +684,15 @@ class TestCharmConfigure(VaultCharmFixtures):
             ]
             self.mock_kv_provides_get_credentials.return_value = {nonce: kv_secret.id}
 
-            state_out = self.ctx.run(container.pebble_ready_event, state_in)
+            state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            assert state_out.secrets[1].label == "kv-creds-vault-kv-remote-0"
-            assert state_out.secrets[1].contents == {
-                0: {"role-id": "kv role id", "role-secret-id": "initial kv role secret id"},
-                1: {"role-id": "kv role id", "role-secret-id": "new kv role secret id"},
-            }
+            for secret in state_out.secrets:
+                if secret.label == "kv-creds-vault-kv-remote-0":
+                    assert secret.latest_content == {
+                        "role-id": "kv role id",
+                        "role-secret-id": "new kv role secret id",
+                    }
+                    break
+            else:
+                pytest.fail("Expected secret not found in state.")
+
