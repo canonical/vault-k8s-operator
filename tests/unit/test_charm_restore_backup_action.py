@@ -3,9 +3,9 @@
 # See LICENSE file for licensing details.
 
 
+import pytest
 import requests
 import scenario
-import pytest
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -39,10 +39,7 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         )
         with pytest.raises(scenario.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
-        assert (
-            e.value.message
-            == "S3 pre-requisites not met. S3 relation not created."
-        )
+        assert e.value.message == "S3 pre-requisites not met. S3 relation not created."
 
     def test_given_missing_s3_parameters_when_restore_backup_then_action_fails(self):
         container = scenario.Container(

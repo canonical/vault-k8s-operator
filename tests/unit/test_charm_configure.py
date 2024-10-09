@@ -6,8 +6,8 @@
 import tempfile
 from datetime import timedelta
 
-import pytest
 import hcl
+import pytest
 import scenario
 from charms.tls_certificates_interface.v4.tls_certificates import ProviderCertificate
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
@@ -695,4 +695,3 @@ class TestCharmConfigure(VaultCharmFixtures):
                     break
             else:
                 pytest.fail("Expected secret not found in state.")
-

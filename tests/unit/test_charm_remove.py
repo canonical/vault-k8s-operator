@@ -77,7 +77,4 @@ class TestCharmRemove(VaultCharmFixtures):
         )
 
         state_out = self.ctx.run(self.ctx.on.remove(), state_in)
-        assert (
-            list(state_out.containers)[0].service_statuses["vault"]
-            == ServiceStatus.INACTIVE
-        )
+        assert list(state_out.containers)[0].service_statuses["vault"] == ServiceStatus.INACTIVE

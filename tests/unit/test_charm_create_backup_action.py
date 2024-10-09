@@ -3,8 +3,8 @@
 # See LICENSE file for licensing details.
 
 
-import scenario
 import pytest
+import scenario
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures

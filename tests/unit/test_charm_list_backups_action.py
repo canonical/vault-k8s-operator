@@ -5,8 +5,8 @@
 
 import json
 
-import scenario
 import pytest
+import scenario
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -40,10 +40,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
         )
         with pytest.raises(scenario.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("list-backups"), state_in)
-        assert (
-            e.value.message
-            == "S3 pre-requisites not met. S3 relation not created."
-        )
+        assert e.value.message == "S3 pre-requisites not met. S3 relation not created."
 
     def test_given_missing_s3_parameters_when_list_backups_then_action_fails(self):
         container = scenario.Container(
@@ -95,10 +92,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
         )
         with pytest.raises(scenario.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("list-backups"), state_in)
-        assert (
-            e.value.message
-            == "Failed to create S3 session."
-        )
+        assert e.value.message == "Failed to create S3 session."
 
     def test_given_s3_error_during_get_object_key_when_list_backups_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
@@ -132,10 +126,7 @@ class TestCharmListBackupAction(VaultCharmFixtures):
         )
         with pytest.raises(scenario.ActionFailed) as e:
             self.ctx.run(self.ctx.on.action("list-backups"), state_in)
-        assert (
-            e.value.message
-            == "Failed to run list-backups action - Failed to list backups."
-        )
+        assert e.value.message == "Failed to run list-backups action - Failed to list backups."
 
     def test_given_s3_available_when_list_backups_then_backup_listed(self):
         self.mock_s3_requirer.configure_mock(

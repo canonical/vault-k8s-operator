@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 
 import pytest
-
 import scenario
 from charms.vault_k8s.v0.vault_client import AuditDeviceType, VaultClientError
 
