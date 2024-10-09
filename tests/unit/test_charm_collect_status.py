@@ -169,6 +169,42 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == WaitingStatus("Waiting for vault to be available")
 
+    def test_given_tls_certificates_pki_relation_and_common_name_not_set_when_collect_unit_status_then_status_is_blocked(  # noqa: E501
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+            },
+        )
+        container = scenario.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = scenario.PeerRelation(
+            endpoint="vault-peers",
+        )
+        pki_relation = scenario.Relation(
+            endpoint="tls-certificates-pki",
+        )
+        state_in = scenario.State(
+            containers=[container],
+            relations=[peer_relation, pki_relation],
+        )
+
+        state_out = self.ctx.run("collect_unit_status", state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Common name is not set in the charm config, cannot configure PKI secrets engine"
+        )
+
     def test_given_vault_uninitialized_when_collect_unit_status_then_status_is_blocked(self):
         self.mock_tls.configure_mock(
             **{

@@ -12,7 +12,8 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Protocol
+from io import IOBase
+from typing import List, Optional, Protocol
 
 import hvac
 import requests
@@ -27,7 +28,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 18
+LIBPATCH = 19
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -351,6 +352,7 @@ class Vault:
         role: str,
         csr: str,
         common_name: str,
+        ttl: str,
     ) -> Certificate | None:
         """Sign a certificate signing request for the PKI backend.
 
@@ -359,6 +361,9 @@ class Vault:
             role: The role to use for signing the certificate.
             csr: The certificate signing request.
             common_name: The common name for the certificate.
+            ttl: The relative validity for the certificate.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
 
         Returns:
             Certificate: The signed certificate object
@@ -369,6 +374,7 @@ class Vault:
                 mount_point=mount,
                 common_name=common_name,
                 name=role,
+                extra_params={"ttl": ttl},
             )
             logger.info("Signed a PKI certificate for %s", common_name)
             return Certificate(
@@ -380,17 +386,30 @@ class Vault:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
 
-    def create_or_update_pki_charm_role(self, role: str, allowed_domains: str, mount: str) -> None:
-        """Create a role for the PKI backend."""
+    def create_or_update_pki_charm_role(
+        self, role: str, allowed_domains: str, max_ttl: str, mount: str
+    ) -> None:
+        """Create a role for the PKI backend or update it if it already exists.
+
+        Args:
+            role: The name of the role to create or update.
+            allowed_domains: The list of allowed domains for the role.
+            max_ttl: The maximum TTL for the role.
+                It is also used by Vault as a maximum validity for the certificates issued by this role.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
+            mount: The mount point of the PKI backend for which the role will be created.
+        """
         self._client.secrets.pki.create_or_update_role(
             name=role,
             mount_point=mount,
             extra_params={
                 "allowed_domains": allowed_domains,
                 "allow_subdomains": True,
+                "max_ttl": max_ttl,
             },
         )
-        logger.info("Created a role for the PKI backend")
+        logger.info("Created or updated PKI role %s", role)
 
     def is_pki_role_created(self, role: str, mount: str) -> bool:
         """Check if the role is created for the PKI backend."""
@@ -404,7 +423,7 @@ class Vault:
         """Create a snapshot of the Vault data."""
         return self._client.sys.take_raft_snapshot()
 
-    def restore_snapshot(self, snapshot: bytes) -> requests.Response:
+    def restore_snapshot(self, snapshot: IOBase) -> requests.Response:
         """Restore a snapshot of the Vault data.
 
         Uses force_restore_raft_snapshot to restore the snapshot
@@ -480,6 +499,18 @@ class Vault:
         except InvalidPath:
             logger.warning("Role does not exist on the specified path.")
             return False
+
+    def get_role_max_ttl(self, role: str, mount: str) -> Optional[int]:
+        """Get the max ttl for the specified PKI role in seconds."""
+        try:
+            return (
+                self._client.secrets.pki.read_role(name=role, mount_point=mount)
+                .get("data", {})
+                .get("max_ttl")
+            )
+        except InvalidPath:
+            logger.warning("Role does not exist on the specified path.")
+            return None
 
     def make_latest_pki_issuer_default(self, mount: str) -> None:
         """Update the issuers config to always make the latest issuer created default issuer."""
