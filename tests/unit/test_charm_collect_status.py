@@ -20,7 +20,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             containers=[container],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting to be able to connect to vault unit"
@@ -35,7 +35,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             containers=[container],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for peer relation")
 
@@ -55,7 +55,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for bind and ingress addresses to be available"
@@ -82,7 +82,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for CA certificate to be accessible in the charm"
@@ -110,7 +110,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for CA certificate secret")
 
@@ -136,7 +136,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for CA certificate to be shared")
 
@@ -165,7 +165,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for vault to be available")
 
@@ -199,7 +199,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation, pki_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Common name is not set in the charm config, cannot configure PKI secrets engine"
@@ -232,7 +232,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please initialize Vault")
 
@@ -263,7 +263,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Please initialize Vault or integrate with an auto-unseal provider"
@@ -297,7 +297,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please migrate Vault")
 
@@ -329,7 +329,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please unseal Vault")
 
@@ -361,7 +361,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == MaintenanceStatus(
             "Seal check failed, waiting for Vault to recover"
@@ -397,7 +397,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Please authorize charm (see `authorize-charm` action)"
@@ -423,7 +423,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         approle_secret = scenario.Secret(
             id="0",
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
         container = scenario.Container(
             name="vault",
@@ -438,7 +438,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             secrets=[approle_secret],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for vault to finish raft leader election"
@@ -464,7 +464,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         approle_secret = scenario.Secret(
             id="0",
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
         container = scenario.Container(
             name="vault",
@@ -479,6 +479,6 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             secrets=[approle_secret],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == ActiveStatus()
