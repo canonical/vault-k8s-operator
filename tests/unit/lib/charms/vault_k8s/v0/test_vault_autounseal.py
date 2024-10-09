@@ -138,9 +138,7 @@ class TestVaultAutounsealProvides:
         relation_data = state_out.get_relation(vault_autounseal_relation.id).local_app_data
         assert relation_data["ca_certificate"] == "my ca certificate"
         assert relation_data["address"] == "https://vault.example.com"
-        assert (
-            relation_data["address"] == "https://vault.example.com"
-        )
+        assert relation_data["address"] == "https://vault.example.com"
         assert relation_data["mount_path"] == "charm-autounseal"
         assert relation_data["key_name"] == "some key name"
         assert "credentials_secret_id" in relation_data
@@ -167,7 +165,7 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation],
             leader=False,
         )
-        params={
+        params = {
             "ca-certificate": "my ca certificate",
             "relation-id": str(vault_autounseal_relation.id),
             "vault-address": "https://vault.example.com",
@@ -181,7 +179,7 @@ class TestVaultAutounsealProvides:
         )
 
         assert state_out.get_relation(vault_autounseal_relation.id).local_app_data == {}
-        assert len(state_out.secrets) == 0
+        assert len(list(state_out.secrets)) == 0
 
     def test_given_no_request_when_get_outstanding_requests_then_empty_list_is_returned(self):
         state_in = scenario.State(
@@ -189,6 +187,7 @@ class TestVaultAutounsealProvides:
             leader=True,
         )
         self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == []
 
     def test_given_1_outstanding_request_when_get_outstanding_requests_then_request_is_returned(
@@ -204,6 +203,7 @@ class TestVaultAutounsealProvides:
             leader=True,
         )
         self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == [vault_autounseal_relation.id]
 
     def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_requests_then_outstanding_request_is_returned(
@@ -231,7 +231,7 @@ class TestVaultAutounsealProvides:
             leader=True,
         )
         self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
-
+        assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == [vault_autounseal_relation_2.id]
 
     def test_given_satisfied_request_when_get_outstanding_requests_then_request_is_not_returned(
@@ -255,6 +255,7 @@ class TestVaultAutounsealProvides:
             leader=True,
         )
         self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == []
 
     def test_given_2_requests_when_get_outstanding_requests_then_requests_are_returned(self):
@@ -271,7 +272,7 @@ class TestVaultAutounsealProvides:
             leader=True,
         )
         self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
-
+        assert self.ctx.action_results
         assert set(self.ctx.action_results["relations"]) == {
             vault_autounseal_relation_1.id,
             vault_autounseal_relation_2.id,
@@ -401,6 +402,7 @@ class TestVaultAutounsealRequires:
 
         self.ctx.run(self.ctx.on.action("get-details"), state_in)
 
+        assert self.ctx.action_results
         assert self.ctx.action_results["details"] == {
             "address": "https://vault.example.com",
             "mount-path": "charm-autounseal",

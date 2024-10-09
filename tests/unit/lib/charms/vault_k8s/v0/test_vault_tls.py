@@ -123,10 +123,14 @@ class TestCharmTLS:
             state_out = self.ctx.run(self.ctx.on.update_status(), state_in)
 
             # Assert the secret is created
-            for secret in state_out.secrets:    
+            for secret in state_out.secrets:
                 if secret.label == CA_CERTIFICATE_JUJU_SECRET_LABEL:
-                    assert secret.tracked_content["privatekey"].startswith("-----BEGIN RSA PRIVATE KEY-----")
-                    assert secret.tracked_content["certificate"].startswith("-----BEGIN CERTIFICATE-----")
+                    assert secret.tracked_content["privatekey"].startswith(
+                        "-----BEGIN RSA PRIVATE KEY-----"
+                    )
+                    assert secret.tracked_content["certificate"].startswith(
+                        "-----BEGIN CERTIFICATE-----"
+                    )
                     break
             else:
                 pytest.fail("Expected secret not found in state.")
@@ -198,7 +202,7 @@ class TestCharmTLS:
                 networks={
                     scenario.Network(
                         "vault-peers",
-                        bind_addresses=[scenario.BindAddress([scenario.Address('192.0.2.1')])],
+                        bind_addresses=[scenario.BindAddress([scenario.Address("192.0.2.1")])],
                         ingress_addresses=[ingress_address],
                     )
                 },

@@ -247,4 +247,5 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         self.mock_s3.return_value.create_bucket.assert_called_with(bucket_name="my bucket")
         self.mock_vault.create_snapshot.assert_called()
         self.mock_s3.return_value.upload_content.assert_called()
-        assert "backup-id" in self.ctx.action_results
+        assert self.ctx.action_results
+        assert "backup-id" in self.ctx.action_results.keys()

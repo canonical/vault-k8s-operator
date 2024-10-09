@@ -244,12 +244,14 @@ class TestVaultKvProvides(unittest.TestCase):
                 params={
                     "url": vault_url,
                     "relation-id": str(vault_kv_relation.id),
-                }
+                },
             ),
-            state_in
+            state_in,
         )
 
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"vault_url": vault_url}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
+            "vault_url": vault_url
+        }
 
     def test_given_unit_is_not_leader_when_setting_vault_url_then_relation_data_is_not_updated(
         self,
@@ -269,11 +271,11 @@ class TestVaultKvProvides(unittest.TestCase):
             self.ctx.on.action(
                 "set-vault-url",
                 params={
-                "url": vault_url,
-                "relation-id": str(vault_kv_relation.id),
+                    "url": vault_url,
+                    "relation-id": str(vault_kv_relation.id),
                 },
             ),
-            state_in
+            state_in,
         )
 
         assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
@@ -297,7 +299,7 @@ class TestVaultKvProvides(unittest.TestCase):
                 "set-mount",
                 params={
                     "mount": mount,
-                "relation-id": str(vault_kv_relation.id),
+                    "relation-id": str(vault_kv_relation.id),
                 },
             ),
             state_in,
@@ -321,10 +323,11 @@ class TestVaultKvProvides(unittest.TestCase):
         )
         state_out = self.ctx.run(
             self.ctx.on.action(
-                "set-mount", params={
+                "set-mount",
+                params={
                     "mount": mount,
                     "relation-id": str(vault_kv_relation.id),
-                }
+                },
             ),
             state_in,
         )
@@ -353,9 +356,9 @@ class TestVaultKvProvides(unittest.TestCase):
                     "nonce": nonce,
                     "secret-id": secret.id,
                     "relation-id": str(vault_kv_relation.id),
-                }
+                },
             ),
-            state_in
+            state_in,
         )
 
         assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
@@ -382,9 +385,9 @@ class TestVaultKvProvides(unittest.TestCase):
             self.ctx.on.action(
                 "set-unit-credentials",
                 params={
-                "nonce": nonce,
-                "secret-id": secret.id,
-                "relation-id": str(vault_kv_relation.id),
+                    "nonce": nonce,
+                    "secret-id": secret.id,
+                    "relation-id": str(vault_kv_relation.id),
                 },
             ),
             state_in,
@@ -403,7 +406,7 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        
+
         self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
         assert self.ctx.action_results == {"kv-requests": "[]"}
 
@@ -588,6 +591,7 @@ class TestVaultKvProvides(unittest.TestCase):
         )
         self.ctx.run(self.ctx.on.action("get-kv-requests"), state_in)
 
+        assert self.ctx.action_results
         assert {
             "relation_id": vault_kv_relation.id,
             "app_name": vault_kv_relation.remote_app_name,
@@ -660,7 +664,9 @@ class TestVaultKvRequires:
         assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
         assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount_suffix": "dummy"}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
+            "mount_suffix": "dummy"
+        }
 
     def test_given_unit_leader_when_config_changed_then_connected_event_fired(self):
         vault_kv_relation = scenario.Relation(
@@ -679,7 +685,9 @@ class TestVaultKvRequires:
         assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
         assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount_suffix": "dummy"}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
+            "mount_suffix": "dummy"
+        }
 
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
         self,
