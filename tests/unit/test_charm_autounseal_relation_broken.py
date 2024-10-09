@@ -24,7 +24,7 @@ class TestCharmAutounsealRelationBroken(VaultCharmFixtures):
         approle_secret = scenario.Secret(
             id="0",
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
         container = scenario.Container(
             name="vault",
@@ -37,8 +37,8 @@ class TestCharmAutounsealRelationBroken(VaultCharmFixtures):
             secrets=[approle_secret],
         )
 
-        self.ctx.run(autounseal_relation.broken_event, state_in)
+        self.ctx.run(self.ctx.on.relation_broken(autounseal_relation), state_in)
 
         self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
-            autounseal_relation.relation_id, "charm-autounseal"
+            autounseal_relation.id, "charm-autounseal"
         )
