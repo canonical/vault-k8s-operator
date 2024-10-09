@@ -199,7 +199,7 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
         )
 
-        self.ctx.run(vault_kv_relation.changed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_changed(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], NewVaultKvClientAttachedEvent)
@@ -220,7 +220,7 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
         )
 
-        self.ctx.run(vault_kv_relation.changed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_changed(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 1
 
@@ -238,18 +238,18 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action(
-            "set-vault-url",
-            params={
-                "url": vault_url,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-vault-url",
+                params={
+                    "url": vault_url,
+                    "relation-id": str(vault_kv_relation.id),
+                }
+            ),
+            state_in
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {"vault_url": vault_url}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"vault_url": vault_url}
 
     def test_given_unit_is_not_leader_when_setting_vault_url_then_relation_data_is_not_updated(
         self,
@@ -265,18 +265,18 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=False,
         )
-        action = scenario.Action(
-            "set-vault-url",
-            params={
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-vault-url",
+                params={
                 "url": vault_url,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+                "relation-id": str(vault_kv_relation.id),
+                },
+            ),
+            state_in
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
     def test_given_unit_is_leader_when_setting_mount_then_relation_data_is_updated(
         self,
@@ -292,18 +292,18 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action(
-            "set-mount",
-            params={
-                "mount": mount,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-mount",
+                params={
+                    "mount": mount,
+                "relation-id": str(vault_kv_relation.id),
+                },
+            ),
+            state_in,
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {"mount": mount}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount": mount}
 
     def test_given_unit_is_not_leader_when_setting_mount_then_relation_data_is_not_updated(
         self,
@@ -319,18 +319,16 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=False,
         )
-        action = scenario.Action(
-            "set-mount",
-            params={
-                "mount": mount,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-mount", params={
+                    "mount": mount,
+                    "relation-id": str(vault_kv_relation.id),
+                }
+            ),
+            state_in,
         )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
     def test_given_unit_is_leader_when_setting_credentials_then_relation_data_is_updated(
         self,
@@ -341,26 +339,26 @@ class TestVaultKvProvides(unittest.TestCase):
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        secret = scenario.Secret(id="secret-id", contents={0: {}})
+        secret = scenario.Secret(id="secret-id", tracked_content={})
         nonce = "abcd"
         state_in = scenario.State(
             relations=[vault_kv_relation],
             secrets=[secret],
             leader=True,
         )
-        action = scenario.Action(
-            "set-unit-credentials",
-            params={
-                "nonce": nonce,
-                "secret-id": secret.id,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-unit-credentials",
+                params={
+                    "nonce": nonce,
+                    "secret-id": secret.id,
+                    "relation-id": str(vault_kv_relation.id),
+                }
+            ),
+            state_in
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
             "credentials": json.dumps({nonce: f"secret:{secret.id}"})
         }
 
@@ -373,26 +371,26 @@ class TestVaultKvProvides(unittest.TestCase):
             remote_app_data={},
             remote_units_data={0: {}},
         )
-        secret = scenario.Secret(id="secret-id", contents={0: {}})
+        secret = scenario.Secret(id="secret-id", tracked_content={})
         nonce = "abcd"
         state_in = scenario.State(
             relations=[vault_kv_relation],
             secrets=[secret],
             leader=False,
         )
-        action = scenario.Action(
-            "set-unit-credentials",
-            params={
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-unit-credentials",
+                params={
                 "nonce": nonce,
                 "secret-id": secret.id,
-                "relation-id": str(vault_kv_relation.relation_id),
-            },
+                "relation-id": str(vault_kv_relation.id),
+                },
+            ),
+            state_in,
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
     def test_given_no_request_when_get_outstanding_kv_requests_then_empty_list_is_returned(self):
         vault_kv_relation = scenario.Relation(
@@ -405,12 +403,9 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-outstanding-kv-requests")
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {"kv-requests": "[]"}
+        
+        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
+        assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(
         self,
@@ -429,16 +424,13 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-outstanding-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {
+        assert self.ctx.action_results == {
             "kv-requests": json.dumps(
                 [
                     {
-                        "relation_id": vault_kv_relation.relation_id,
+                        "relation_id": vault_kv_relation.id,
                         "app_name": vault_kv_relation.remote_app_name,
                         "unit_name": f"{vault_kv_relation.remote_app_name}/0",
                         "mount_suffix": suffix,
@@ -471,16 +463,13 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-outstanding-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {
+        assert self.ctx.action_results == {
             "kv-requests": json.dumps(
                 [
                     {
-                        "relation_id": vault_kv_relation.relation_id,
+                        "relation_id": vault_kv_relation.id,
                         "app_name": vault_kv_relation.remote_app_name,
                         "unit_name": f"{vault_kv_relation.remote_app_name}/1",
                         "mount_suffix": suffix,
@@ -516,16 +505,13 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation_1, vault_kv_relation_2],
             leader=True,
         )
-        action = scenario.Action("get-outstanding-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {
+        assert self.ctx.action_results == {
             "kv-requests": json.dumps(
                 [
                     {
-                        "relation_id": vault_kv_relation_1.relation_id,
+                        "relation_id": vault_kv_relation_1.id,
                         "app_name": vault_kv_relation_1.remote_app_name,
                         "unit_name": f"{vault_kv_relation_1.remote_app_name}/0",
                         "mount_suffix": suffix,
@@ -533,7 +519,7 @@ class TestVaultKvProvides(unittest.TestCase):
                         "nonce": nonce_1,
                     },
                     {
-                        "relation_id": vault_kv_relation_2.relation_id,
+                        "relation_id": vault_kv_relation_2.id,
                         "app_name": vault_kv_relation_2.remote_app_name,
                         "unit_name": f"{vault_kv_relation_2.remote_app_name}/0",
                         "mount_suffix": suffix,
@@ -562,12 +548,9 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-outstanding-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {"kv-requests": "[]"}
+        assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_no_request_when_get_kv_requests_then_empty_list_is_returned(self):
         vault_kv_relation = scenario.Relation(
@@ -580,12 +563,9 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results == {"kv-requests": "[]"}
+        assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_2_requests_when_get_kv_requests_then_requests_are_returned(self):
         suffix = "dummy"
@@ -606,28 +586,24 @@ class TestVaultKvProvides(unittest.TestCase):
             relations=[vault_kv_relation],
             leader=True,
         )
-        action = scenario.Action("get-kv-requests")
+        self.ctx.run(self.ctx.on.action("get-kv-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
         assert {
-            "relation_id": vault_kv_relation.relation_id,
+            "relation_id": vault_kv_relation.id,
             "app_name": vault_kv_relation.remote_app_name,
             "unit_name": f"{vault_kv_relation.remote_app_name}/0",
             "mount_suffix": suffix,
             "egress_subnets": egress_subnets,
             "nonce": nonce1,
-        } in json.loads(action_output.results["kv-requests"])
+        } in json.loads(self.ctx.action_results["kv-requests"])
         assert {
-            "relation_id": vault_kv_relation.relation_id,
+            "relation_id": vault_kv_relation.id,
             "app_name": vault_kv_relation.remote_app_name,
             "unit_name": f"{vault_kv_relation.remote_app_name}/1",
             "mount_suffix": suffix,
             "egress_subnets": egress_subnets,
             "nonce": nonce2,
-        } in json.loads(action_output.results["kv-requests"])
+        } in json.loads(self.ctx.action_results["kv-requests"])
 
     def test_given_vault_kv_relation_when_relation_departed_then_vault_kv_client_detached_event_fired(
         self,
@@ -647,7 +623,7 @@ class TestVaultKvProvides(unittest.TestCase):
             leader=True,
         )
 
-        self.ctx.run(vault_kv_relation.departed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_departed(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvClientDetachedEvent)
@@ -678,13 +654,13 @@ class TestVaultKvRequires:
             leader=True,
         )
 
-        state_out = self.ctx.run(vault_kv_relation.joined_event, state_in)
+        state_out = self.ctx.run(self.ctx.on.relation_joined(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
-        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
-        assert state_out.relations[0].local_app_data == {"mount_suffix": "dummy"}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount_suffix": "dummy"}
 
     def test_given_unit_leader_when_config_changed_then_connected_event_fired(self):
         vault_kv_relation = scenario.Relation(
@@ -697,13 +673,13 @@ class TestVaultKvRequires:
             leader=True,
         )
 
-        state_out = self.ctx.run("config-changed", state_in)
+        state_out = self.ctx.run(self.ctx.on.config_changed(), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
-        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
-        assert state_out.relations[0].local_app_data == {"mount_suffix": "dummy"}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount_suffix": "dummy"}
 
     def test_given_unit_joined_is_not_leader_when_relation_joined_then_connected_is_fired_and_mount_suffix_is_not_updated(  # noqa: E501
         self,
@@ -718,13 +694,13 @@ class TestVaultKvRequires:
             leader=False,
         )
 
-        state_out = self.ctx.run(vault_kv_relation.joined_event, state_in)
+        state_out = self.ctx.run(self.ctx.on.relation_joined(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvConnectedEvent)
-        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
-        assert state_out.relations[0].local_app_data == {}
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
     def test_given_all_units_departed_when_relation_broken_then_gone_away_event_fired(
         self,
@@ -739,7 +715,7 @@ class TestVaultKvRequires:
             leader=True,
         )
 
-        self.ctx.run(vault_kv_relation.broken_event, state_in)
+        self.ctx.run(self.ctx.on.relation_broken(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvGoneAwayEvent)
@@ -765,11 +741,11 @@ class TestVaultKvRequires:
             leader=True,
         )
 
-        self.ctx.run(vault_kv_relation.changed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_changed(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultKvReadyEvent)
-        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.relation_id
+        assert self.ctx.emitted_events[1].relation_id == vault_kv_relation.id
         assert self.ctx.emitted_events[1].relation_name == vault_kv_relation.endpoint
 
     def test_given_relation_changed_when_data_missing_then_ready_event_never_fired(
@@ -789,7 +765,7 @@ class TestVaultKvRequires:
             leader=True,
         )
 
-        self.ctx.run(vault_kv_relation.changed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_changed(vault_kv_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 1
 
