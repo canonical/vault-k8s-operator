@@ -5,6 +5,7 @@
 
 import requests
 import scenario
+import pytest
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from tests.unit.fixtures import VaultCharmFixtures
@@ -20,15 +21,10 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             containers=[container],
             leader=False,
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
         assert (
-            action_output.failure
+            e.value.message
             == "S3 pre-requisites not met. Only leader unit can perform backup operations."
         )
 
@@ -41,14 +37,12 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             containers=[container],
             leader=True,
         )
-        action = scenario.Action(
-            name="restore-backup",
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
+        assert (
+            e.value.message
+            == "S3 pre-requisites not met. S3 relation not created."
         )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "S3 pre-requisites not met. S3 relation not created."
 
     def test_given_missing_s3_parameters_when_restore_backup_then_action_fails(self):
         container = scenario.Container(
@@ -64,16 +58,11 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
         assert (
-            action_output.failure
-            == "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint):."
+            e.value.message
+            == "S3 pre-requisites not met. S3 parameters missing (bucket, access-key, secret-key, endpoint)."
         )
 
     def test_given_s3_error_during_instantiation_when_restore_backup_then_action_fails(self):
@@ -102,14 +91,9 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "Failed to create S3 session."
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
+        assert e.value.message == "Failed to create S3 session."
 
     def test_given_s3_error_during_get_content_when_restore_backup_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
@@ -141,14 +125,9 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "Failed to retrieve snapshot from S3 storage."
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
+        assert e.value.message == "Failed to retrieve snapshot from S3 storage."
 
     def test_given_no_snapshot_when_restore_backup_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
@@ -180,14 +159,9 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "Backup not found in S3 bucket."
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
+        assert e.value.message == "Backup not found in S3 bucket."
 
     def test_given_failed_to_restore_vault_when_restore_backup_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
@@ -219,14 +193,9 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             leader=True,
             relations=[s3_relation],
         )
-        action = scenario.Action(
-            name="restore-backup",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "Failed to restore vault."
+        with pytest.raises(scenario.ActionFailed) as e:
+            self.ctx.run(self.ctx.on.action("restore-backup"), state_in)
+        assert e.value.message == "Failed to restore vault."
 
     def test_given_200_response_when_restore_backup_then_action_success(self):
         self.mock_s3_requirer.configure_mock(
@@ -255,7 +224,7 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         approle_secret = scenario.Secret(
             id="0",
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
         container = scenario.Container(
             name="vault",
@@ -271,14 +240,10 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             relations=[s3_relation],
             secrets=[approle_secret],
         )
-        action = scenario.Action(
-            name="restore-backup",
-            params={"backup-id": "my-backup-id"},
+        self.ctx.run(
+            self.ctx.on.action("restore-backup", params={"backup-id": "my-backup-id"}),
+            state_in,
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results == {"restored": "my-backup-id"}
+        assert self.ctx.action_results == {"restored": "my-backup-id"}
         self.mock_vault.restore_snapshot.assert_called_with("my snapshot content")
