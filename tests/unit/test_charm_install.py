@@ -15,7 +15,7 @@ class TestCharmInstall(VaultCharmFixtures):
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_raft_mount = scenario.Mount(
                 location="/vault/raft",
-                src=temp_dir,
+                source=temp_dir,
             )
             container = scenario.Container(
                 name="vault",
@@ -29,7 +29,7 @@ class TestCharmInstall(VaultCharmFixtures):
             with open(f"{temp_dir}/raft/raft.db", "w") as f:
                 f.write("data")
 
-            self.ctx.run("install", state_in)
+            self.ctx.run(self.ctx.on.install(), state_in)
 
             assert not os.path.exists(f"{temp_dir}/vault.db")
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
