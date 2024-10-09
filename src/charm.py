@@ -947,7 +947,7 @@ class VaultCharm(CharmBase):
         if not self._is_relation_created(S3_RELATION_NAME):
             return "S3 relation not created"
         if missing_parameters := self._get_missing_s3_parameters():
-            return "S3 parameters missing ({}):".format(", ".join(missing_parameters))
+            return "S3 parameters missing ({})".format(", ".join(missing_parameters))
         return None
 
     def _get_backup_key(self) -> str:

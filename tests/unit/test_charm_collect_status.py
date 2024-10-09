@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 
-import scenario
+import ops.testing as testing
 from charms.vault_k8s.v0.vault_client import VaultClientError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
@@ -12,50 +12,50 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=False,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting to be able to connect to vault unit"
         )
 
     def test_given_peer_relation_not_created_when_collect_unit_status_then_status_is_waiting(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for peer relation")
 
     def test_given_bind_address_not_available_when_collect_unit_status_then_status_is_waiting(
         self,
     ):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
         self.mock_get_binding.return_value = None
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for bind and ingress addresses to be available"
@@ -69,20 +69,20 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "tls_file_available_in_charm.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
 
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for CA certificate to be accessible in the charm"
@@ -98,19 +98,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "tls_file_pushed_to_workload.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for CA certificate secret")
 
@@ -124,19 +124,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "tls_file_pushed_to_workload.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for CA certificate to be shared")
 
@@ -153,19 +153,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_api_available.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus("Waiting for vault to be available")
 
@@ -184,22 +184,22 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_api_available.return_value": True,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        pki_relation = scenario.Relation(
+        pki_relation = testing.Relation(
             endpoint="tls-certificates-pki",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation, pki_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Common name is not set in the charm config, cannot configure PKI secrets engine"
@@ -220,19 +220,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_seal_type_transit.return_value": True,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please initialize Vault")
 
@@ -251,19 +251,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_seal_type_transit.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Please initialize Vault or integrate with an auto-unseal provider"
@@ -285,19 +285,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "needs_migration.return_value": True,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please migrate Vault")
 
@@ -317,19 +317,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "needs_migration.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please unseal Vault")
 
@@ -349,19 +349,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "needs_migration.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == MaintenanceStatus(
             "Seal check failed, waiting for Vault to recover"
@@ -385,19 +385,19 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "needs_migration.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
             "Please authorize charm (see `authorize-charm` action)"
@@ -420,25 +420,24 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_active_or_standby.return_value": False,
             },
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
             secrets=[approle_secret],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == WaitingStatus(
             "Waiting for vault to finish raft leader election"
@@ -461,24 +460,23 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_active_or_standby.return_value": True,
             },
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             relations=[peer_relation],
             secrets=[approle_secret],
         )
 
-        state_out = self.ctx.run("collect_unit_status", state_in)
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == ActiveStatus()
