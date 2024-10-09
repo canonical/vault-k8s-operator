@@ -118,41 +118,43 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation],
             leader=True,
         )
-        action = scenario.Action(
-            "set-autounseal-data",
-            params={
-                "ca-certificate": "my ca certificate",
-                "relation-id": str(vault_autounseal_relation.relation_id),
-                "vault-address": "https://vault.example.com",
-                "mount-path": "charm-autounseal",
-                "key-name": "some key name",
-                "approle-role-id": "some approle id",
-                "approle-secret-id": "some approle secret id",
-            },
+
+        state_out = self.ctx.run(
+            self.ctx.on.action(
+                "set-autounseal-data",
+                params={
+                    "ca-certificate": "my ca certificate",
+                    "relation-id": str(vault_autounseal_relation.id),
+                    "vault-address": "https://vault.example.com",
+                    "mount-path": "charm-autounseal",
+                    "key-name": "some key name",
+                    "approle-role-id": "some approle id",
+                    "approle-secret-id": "some approle secret id",
+                },
+            ),
+            state_in,
         )
 
-        action_output = self.ctx.run_action(action, state_in)
+        relation_data = state_out.get_relation(vault_autounseal_relation.id).local_app_data
+        assert relation_data["ca_certificate"] == "my ca certificate"
+        assert relation_data["address"] == "https://vault.example.com"
+        assert (
+            relation_data["address"] == "https://vault.example.com"
+        )
+        assert relation_data["mount_path"] == "charm-autounseal"
+        assert relation_data["key_name"] == "some key name"
+        assert "credentials_secret_id" in relation_data
+        credentials_secret_id = relation_data["credentials_secret_id"]
 
-        assert action_output.success is True
-        assert (
-            action_output.state.relations[0].local_app_data["ca_certificate"]
-            == "my ca certificate"
-        )
-        assert (
-            action_output.state.relations[0].local_app_data["address"]
-            == "https://vault.example.com"
-        )
-        assert action_output.state.relations[0].local_app_data["mount_path"] == "charm-autounseal"
-        assert action_output.state.relations[0].local_app_data["key_name"] == "some key name"
-        assert "credentials_secret_id" in action_output.state.relations[0].local_app_data
-        credentials_secret_id = action_output.state.relations[0].local_app_data[
-            "credentials_secret_id"
-        ]
-        juju_secret = action_output.state.secrets[0]
-        assert juju_secret.contents == {
-            0: {"role-id": "some approle id", "secret-id": "some approle secret id"}
-        }
-        assert juju_secret.id == credentials_secret_id
+        for secret in state_out.secrets:
+            if secret.id == credentials_secret_id:
+                assert secret.tracked_content == {
+                    "role-id": "some approle id",
+                    "secret-id": "some approle secret id",
+                }
+                break
+        else:
+            pytest.fail(f"Secret with id {credentials_secret_id} not found")
 
     def test_given_unit_is_not_leader_when_set_autounseal_data_then_relation_data_not_updated(
         self,
@@ -165,39 +167,29 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation],
             leader=False,
         )
-        action = scenario.Action(
-            "set-autounseal-data",
-            params={
-                "ca-certificate": "my ca certificate",
-                "relation-id": str(vault_autounseal_relation.relation_id),
-                "vault-address": "https://vault.example.com",
-                "mount-path": "charm-autounseal",
-                "key-name": "some key name",
-                "approle-role-id": "some approle id",
-                "approle-secret-id": "some approle secret id",
-            },
+        params={
+            "ca-certificate": "my ca certificate",
+            "relation-id": str(vault_autounseal_relation.id),
+            "vault-address": "https://vault.example.com",
+            "mount-path": "charm-autounseal",
+            "key-name": "some key name",
+            "approle-role-id": "some approle id",
+            "approle-secret-id": "some approle secret id",
+        }
+        state_out = self.ctx.run(
+            self.ctx.on.action("set-autounseal-data", params=params), state_in
         )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.state.relations[0].local_app_data == {}
-        assert len(action_output.state.secrets) == 0
+        assert state_out.get_relation(vault_autounseal_relation.id).local_app_data == {}
+        assert len(state_out.secrets) == 0
 
     def test_given_no_request_when_get_outstanding_requests_then_empty_list_is_returned(self):
         state_in = scenario.State(
             relations=[],
             leader=True,
         )
-        action = scenario.Action(
-            "get-outstanding-requests",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["relations"] == []
+        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results["relations"] == []
 
     def test_given_1_outstanding_request_when_get_outstanding_requests_then_request_is_returned(
         self,
@@ -211,22 +203,15 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation],
             leader=True,
         )
-        action = scenario.Action(
-            "get-outstanding-requests",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["relations"] == [vault_autounseal_relation.relation_id]
+        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results["relations"] == [vault_autounseal_relation.id]
 
     def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_requests_then_outstanding_request_is_returned(
         self,
     ):
         vault_autounseal_relation_1_credentials_secret = scenario.Secret(
             id="0",
-            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
             owner="app",
         )
         vault_autounseal_relation_1 = scenario.Relation(
@@ -245,22 +230,16 @@ class TestVaultAutounsealProvides:
             secrets=[vault_autounseal_relation_1_credentials_secret],
             leader=True,
         )
-        action = scenario.Action(
-            "get-outstanding-requests",
-        )
+        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["relations"] == [vault_autounseal_relation_2.relation_id]
+        assert self.ctx.action_results["relations"] == [vault_autounseal_relation_2.id]
 
     def test_given_satisfied_request_when_get_outstanding_requests_then_request_is_not_returned(
         self,
     ):
         vault_autounseal_relation_credentials_secret = scenario.Secret(
             id="0",
-            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
             owner="app",
         )
         vault_autounseal_relation = scenario.Relation(
@@ -275,15 +254,8 @@ class TestVaultAutounsealProvides:
             secrets=[vault_autounseal_relation_credentials_secret],
             leader=True,
         )
-        action = scenario.Action(
-            "get-outstanding-requests",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["relations"] == []
+        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        assert self.ctx.action_results["relations"] == []
 
     def test_given_2_requests_when_get_outstanding_requests_then_requests_are_returned(self):
         vault_autounseal_relation_1 = scenario.Relation(
@@ -298,18 +270,12 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
             leader=True,
         )
-        action = scenario.Action(
-            "get-outstanding-requests",
-        )
+        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["relations"] == [
-            vault_autounseal_relation_1.relation_id,
-            vault_autounseal_relation_2.relation_id,
-        ]
+        assert set(self.ctx.action_results["relations"]) == {
+            vault_autounseal_relation_1.id,
+            vault_autounseal_relation_2.id,
+        }
 
 
 class VaultAutounsealRequirerCharm(CharmBase):
@@ -358,7 +324,7 @@ class TestVaultAutounsealRequires:
     ):
         vault_autounseal_credentials_secret = scenario.Secret(
             id="0",
-            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
         )
 
         vault_autounseal_relation = scenario.Relation(
@@ -378,7 +344,7 @@ class TestVaultAutounsealRequires:
             leader=True,
         )
 
-        self.ctx.run(vault_autounseal_relation.changed_event, state_in)
+        self.ctx.run(self.ctx.on.relation_changed(vault_autounseal_relation), state_in)
 
         assert len(self.ctx.emitted_events) == 2
         assert isinstance(self.ctx.emitted_events[1], VaultAutounsealDetailsReadyEvent)
@@ -408,8 +374,7 @@ class TestVaultAutounsealRequires:
             leader=True,
         )
 
-        self.ctx.run(vault_autounseal_relation.changed_event, state_in)
-
+        self.ctx.run(self.ctx.on.relation_changed(vault_autounseal_relation), state_in)
         assert len(self.ctx.emitted_events) == 1
 
     def test_given_all_details_present_when_get_details_then_details_are_returned(self):
@@ -426,22 +391,17 @@ class TestVaultAutounsealRequires:
         )
         vault_autounseal_credentials_secret = scenario.Secret(
             id="0",
-            contents={0: {"role-id": "some role id", "secret-id": "some secret id"}},
+            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
         )
         state_in = scenario.State(
             relations=[vault_autounseal_relation],
             secrets=[vault_autounseal_credentials_secret],
             leader=True,
         )
-        action = scenario.Action(
-            "get-details",
-        )
 
-        action_output = self.ctx.run_action(action, state_in)
+        self.ctx.run(self.ctx.on.action("get-details"), state_in)
 
-        assert action_output.success is True
-        assert action_output.results
-        assert action_output.results["details"] == {
+        assert self.ctx.action_results["details"] == {
             "address": "https://vault.example.com",
             "mount-path": "charm-autounseal",
             "key-name": "some key name",
@@ -459,10 +419,5 @@ class TestVaultAutounsealRequires:
             relations=[vault_autounseal_relation],
             leader=True,
         )
-        action = scenario.Action(
-            "get-details",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(scenario.ActionFailed):
+            self.ctx.run(self.ctx.on.action("get-details"), state_in)
