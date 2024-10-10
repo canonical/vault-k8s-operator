@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 import scenario
 from charms.tls_certificates_interface.v4.tls_certificates import (
-    CertificateRequest,
+    CertificateRequestAttributes,
     ProviderCertificate,
     generate_ca,
     generate_certificate,
@@ -191,7 +191,7 @@ class TestCharmTLS:
             self.ctx.run(certificates_relation.changed_event, state_in)
 
             self.mock_get_assigned_certificate.assert_called_once_with(
-                certificate_request=CertificateRequest(
+                certificate_request=CertificateRequestAttributes(
                     common_name=ingress_address,
                     sans_dns=frozenset({self.fqdn}),
                     sans_ip=frozenset({ingress_address}),
