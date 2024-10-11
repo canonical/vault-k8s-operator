@@ -3,8 +3,8 @@
 
 from unittest.mock import patch
 
+import ops.testing as testing
 import pytest
-import scenario
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_client import Vault
 from charms.vault_k8s.v0.vault_s3 import S3
@@ -97,7 +97,7 @@ class VaultCharmFixtures:
 
     @pytest.fixture(autouse=True)
     def context(self):
-        self.ctx = scenario.Context(
+        self.ctx = testing.Context(
             charm_type=VaultCharm,
         )
 
