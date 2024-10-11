@@ -53,7 +53,7 @@ from charms.vault_k8s.v0.vault_kv import (
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from jinja2 import Environment, FileSystemLoader
-from ops import CharmBase, MaintenanceStatus
+from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
@@ -61,7 +61,6 @@ from ops.charm import (
     RemoveEvent,
 )
 from ops.framework import EventBase
-from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,

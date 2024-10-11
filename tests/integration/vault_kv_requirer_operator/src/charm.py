@@ -11,9 +11,9 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvReadyEvent,
     VaultKvRequires,
 )
+from ops import main
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
-from ops.main import main
 from ops.model import ActiveStatus, SecretNotFoundError
 from vault_client import Vault  # type: ignore[import-not-found]
 
