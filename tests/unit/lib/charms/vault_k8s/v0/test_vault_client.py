@@ -2,6 +2,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from contextlib import nullcontext as does_not_raise
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +15,7 @@ from charms.vault_k8s.v0.vault_client import (
     Vault,
     VaultClientError,
 )
-from hvac.exceptions import Forbidden, InvalidPath
+from hvac.exceptions import Forbidden, InternalServerError, InvalidPath
 
 from charm import AUTOUNSEAL_POLICY_PATH
 
@@ -367,3 +368,66 @@ def test_given_issuers_config_already_updated_when_make_latest_pki_issuer_defaul
     mount = "test"
     vault.make_latest_pki_issuer_default(mount=mount)
     patch_write.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "exception_raised, expectation",
+    [
+        (InternalServerError(), does_not_raise()),
+        (requests.exceptions.ConnectionError(), does_not_raise()),
+        (ValueError(), pytest.raises(ValueError)),
+        (TypeError(), pytest.raises(TypeError)),
+    ],
+)
+def test_when_remove_raft_node_is_called_and_exception_raised_then_exception_is_surpressed_or_bubbled_up(
+    exception_raised, expectation, monkeypatch
+):
+    monkeypatch.setattr(
+        "hvac.api.system_backend.raft.Raft.remove_raft_node",
+        MagicMock(side_effect=exception_raised),
+    )
+    vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+    with expectation:
+        vault.remove_raft_node("node_id")
+
+
+@pytest.mark.parametrize(
+    "exception_raised, expectation",
+    [
+        (InternalServerError(), does_not_raise()),
+        (requests.exceptions.ConnectionError(), does_not_raise()),
+        (ValueError(), pytest.raises(ValueError)),
+        (TypeError(), pytest.raises(TypeError)),
+    ],
+)
+def test_when_is_node_in_raft_peers_called_and_exception_raised_then_exception_is_surpressed_or_bubbled_up(
+    exception_raised, expectation, monkeypatch
+):
+    monkeypatch.setattr(
+        "hvac.api.system_backend.raft.Raft.read_raft_config",
+        MagicMock(side_effect=exception_raised),
+    )
+    vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+    with expectation:
+        vault.is_node_in_raft_peers("node_id")
+
+
+@pytest.mark.parametrize(
+    "exception_raised, expectation",
+    [
+        (InternalServerError(), does_not_raise()),
+        (requests.exceptions.ConnectionError(), does_not_raise()),
+        (ValueError(), pytest.raises(ValueError)),
+        (TypeError(), pytest.raises(TypeError)),
+    ],
+)
+def test_when_get_num_raft_peers_called_andexception_raised_then_exception_is_surpressed_or_bubbled_up(
+    exception_raised, expectation, monkeypatch
+):
+    monkeypatch.setattr(
+        "hvac.api.system_backend.raft.Raft.read_raft_config",
+        MagicMock(side_effect=exception_raised),
+    )
+    vault = Vault(url="http://whatever-url", ca_cert_path="whatever path")
+    with expectation:
+        vault.get_num_raft_peers()

@@ -17,7 +17,7 @@ from typing import List, Optional, Protocol
 
 import hvac
 import requests
-from hvac.exceptions import Forbidden, InvalidPath, InvalidRequest, VaultError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import ConnectionError, RequestException
 
 # The unique Charmhub library identifier, never change it
@@ -28,7 +28,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 19
+LIBPATCH = 20
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -462,12 +462,20 @@ class Vault:
 
     def remove_raft_node(self, node_id: str) -> None:
         """Remove raft peer."""
-        self._client.sys.remove_raft_node(server_id=node_id)
+        try:
+            self._client.sys.remove_raft_node(server_id=node_id)
+        except (InternalServerError, ConnectionError) as e:
+            logger.warning("Error while removing raft node: %s", e)
+            return
         logger.info("Removed raft node %s", node_id)
 
     def is_node_in_raft_peers(self, node_id: str) -> bool:
         """Check if node is in raft peers."""
-        raft_config = self._client.sys.read_raft_config()
+        try:
+            raft_config = self._client.sys.read_raft_config()
+        except (InternalServerError, ConnectionError) as e:
+            logger.warning("Error while reading raft config: %s", e)
+            return False
         for peer in raft_config["data"]["config"]["servers"]:
             if peer["node_id"] == node_id:
                 return True
@@ -475,7 +483,11 @@ class Vault:
 
     def get_num_raft_peers(self) -> int:
         """Return the number of raft peers."""
-        raft_config = self._client.sys.read_raft_config()
+        try:
+            raft_config = self._client.sys.read_raft_config()
+        except (InternalServerError, ConnectionError) as e:
+            logger.warning("Error while reading raft config: %s", e)
+            return 0
         return len(raft_config["data"]["config"]["servers"])
 
     def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
