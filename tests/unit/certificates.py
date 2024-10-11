@@ -9,7 +9,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateSigningRequest,
     PrivateKey,
     ProviderCertificate,
-    RequirerCSR,
+    RequirerCertificateRequest,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -51,13 +51,15 @@ def generate_example_provider_certificate(
     return provider_certificate, private_key
 
 
-def generate_example_requirer_csr(common_name: str, relation_id: int) -> RequirerCSR:
+def generate_example_requirer_csr(
+    common_name: str, relation_id: int
+) -> RequirerCertificateRequest:
     private_key = generate_private_key()
     csr = generate_csr(
         private_key=private_key,
         common_name=common_name,
     )
-    return RequirerCSR(
+    return RequirerCertificateRequest(
         relation_id=relation_id,
         certificate_signing_request=csr,
         is_ca=False,
