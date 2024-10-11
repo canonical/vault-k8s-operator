@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 
-import scenario
+import ops.testing as testing
 
 from tests.unit.fixtures import VaultCharmFixtures
 
@@ -17,28 +17,27 @@ class TestCharmAutounsealRelationBroken(VaultCharmFixtures):
                 "is_active_or_standby.return_value": True,
             },
         )
-        autounseal_relation = scenario.Relation(
+        autounseal_relation = testing.Relation(
             endpoint="vault-autounseal-provides",
             interface="vault-autounseal",
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             leader=True,
             containers=[container],
             relations=[autounseal_relation],
             secrets=[approle_secret],
         )
 
-        self.ctx.run(autounseal_relation.broken_event, state_in)
+        self.ctx.run(self.ctx.on.relation_broken(autounseal_relation), state_in)
 
         self.mock_vault.destroy_autounseal_credentials.assert_called_once_with(
-            autounseal_relation.relation_id, "charm-autounseal"
+            autounseal_relation.id, "charm-autounseal"
         )

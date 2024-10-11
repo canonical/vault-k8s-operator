@@ -22,11 +22,11 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
-    CertificateRequest,
+    CertificateRequestAttributes,
     Mode,
     PrivateKey,
     ProviderCertificate,
-    RequirerCSR,
+    RequirerCertificateRequest,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
 )
@@ -53,7 +53,7 @@ from charms.vault_k8s.v0.vault_kv import (
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager
 from jinja2 import Environment, FileSystemLoader
-from ops import CharmBase, MaintenanceStatus
+from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
@@ -61,7 +61,6 @@ from ops.charm import (
     RemoveEvent,
 )
 from ops.framework import EventBase
-from ops.main import main
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
@@ -608,11 +607,11 @@ class VaultCharm(CharmBase):
             return None, None
         return provider_certificate, private_key
 
-    def _get_certificate_request(self) -> CertificateRequest | None:
+    def _get_certificate_request(self) -> CertificateRequestAttributes | None:
         common_name = self._get_config_common_name()
         if not common_name:
             return None
-        return CertificateRequest(
+        return CertificateRequestAttributes(
             common_name=common_name,
             is_ca=True,
         )
@@ -679,7 +678,7 @@ class VaultCharm(CharmBase):
         self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnets)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
-    def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCSR):
+    def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCertificateRequest):
         """Generate a PKI certificate for a TLS requirer."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki request")
@@ -947,7 +946,7 @@ class VaultCharm(CharmBase):
         if not self._is_relation_created(S3_RELATION_NAME):
             return "S3 relation not created"
         if missing_parameters := self._get_missing_s3_parameters():
-            return "S3 parameters missing ({}):".format(", ".join(missing_parameters))
+            return "S3 parameters missing ({})".format(", ".join(missing_parameters))
         return None
 
     def _get_backup_key(self) -> str:

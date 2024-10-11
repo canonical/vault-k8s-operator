@@ -5,7 +5,7 @@ jinja2
 jsonschema
 lightkube
 lightkube-models
-pydantic==2.9.1
+pydantic==2.9.2
 pytest-interface-tester
 pyhcl
 requests
@@ -13,5 +13,5 @@ jsonschema
 cryptography
 boto3
 boto3-stubs[s3] # required by vault_s3
-ops-scenario==6.1.7
 rpds-py==0.18.0
+ops

@@ -15,7 +15,7 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
 )
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
-    CertificateRequest,
+    CertificateRequestAttributes,
     PrivateKey,
     TLSCertificatesRequiresV4,
     generate_ca,
@@ -200,11 +200,11 @@ class VaultTLSManager(Object):
         """Send the CA certificate to the relation."""
         self.send_ca_cert()
 
-    def _get_certificate_requests(self) -> List[CertificateRequest]:
+    def _get_certificate_requests(self) -> List[CertificateRequestAttributes]:
         if not self.common_name:
             return []
         return [
-            CertificateRequest(
+            CertificateRequestAttributes(
                 common_name=self.common_name, sans_dns=self.sans_dns, sans_ip=self.sans_ip
             )
         ]

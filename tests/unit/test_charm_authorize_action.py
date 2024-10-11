@@ -2,8 +2,8 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-
-import scenario
+import ops.testing as testing
+import pytest
 from charms.vault_k8s.v0.vault_client import AuditDeviceType, VaultClientError
 
 from tests.unit.fixtures import MockBinding, VaultCharmFixtures
@@ -11,43 +11,36 @@ from tests.unit.fixtures import MockBinding, VaultCharmFixtures
 
 class TestCharmAuthorizeAction(VaultCharmFixtures):
     def test_given_unit_not_leader_when_authorize_charm_then_action_fails(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=False,
         )
-        action = scenario.Action(
-            name="authorize-charm",
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
-        assert action_output.failure == "This action must be run on the leader unit."
+        with pytest.raises(testing.ActionFailed) as exc:
+            self.ctx.run(self.ctx.on.action("authorize-charm"), state=state_in)
+        assert "This action must be run on the leader unit." in exc.value.message
 
     def test_given_secret_id_not_found_when_authorize_charm_then_action_fails(self):
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
         )
-        action = scenario.Action(
-            name="authorize-charm",
-            params={"secret-id": "my secret id"},
-        )
 
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(testing.ActionFailed) as exc:
+            self.ctx.run(
+                self.ctx.on.action("authorize-charm", params={"secret-id": "my secret id"}),
+                state=state_in,
+            )
         assert (
-            action_output.failure
-            == "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
+            "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
+            == exc.value.message
         )
 
     def test_given_invalid_token_when_authorize_charm_then_action_fails(self):
@@ -56,31 +49,27 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
                 "authenticate.return_value": False,
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             secrets=[approle_secret],
         )
-        action = scenario.Action(
-            name="authorize-charm",
-            params={"secret-id": approle_secret.id},
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(testing.ActionFailed) as exc:
+            self.ctx.run(
+                self.ctx.on.action("authorize-charm", params={"secret-id": approle_secret.id}),
+                state=state_in,
+            )
         assert (
-            action_output.failure
-            == "The token provided is not valid. Please use a Vault token with the appropriate permissions."
+            "The token provided is not valid. Please use a Vault token with the appropriate permissions."
+            == exc.value.message
         )
 
     def test_given_vault_client_error_when_authorize_charm_then_action_fails(self):
@@ -91,31 +80,27 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
                 "enable_audit_device.side_effect": VaultClientError(my_error_message),
             },
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        approle_secret = scenario.Secret(
-            id="0",
+        approle_secret = testing.Secret(
             label="vault-approle-auth-details",
-            contents={0: {"role-id": "role id", "secret-id": "secret id"}},
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             secrets=[approle_secret],
         )
-        action = scenario.Action(
-            name="authorize-charm",
-            params={"secret-id": approle_secret.id},
-        )
-
-        action_output = self.ctx.run_action(action, state_in)
-
-        assert action_output.success is False
+        with pytest.raises(testing.ActionFailed) as exc:
+            self.ctx.run(
+                self.ctx.on.action("authorize-charm", params={"secret-id": approle_secret.id}),
+                state=state_in,
+            )
         assert (
-            action_output.failure
-            == f"Vault returned an error while authorizing the charm: {my_error_message}"
+            f"Vault returned an error while authorizing the charm: {my_error_message}"
+            == exc.value.message
         )
 
     def test_given_when_authorize_charm_then_charm_is_authorized(self):
@@ -130,29 +115,26 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             bind_address="1.2.3.4",
             ingress_address="1.2.3.4",
         )
-        container = scenario.Container(
+        container = testing.Container(
             name="vault",
             can_connect=True,
         )
-        user_provided_secret = scenario.Secret(
-            id="0",
-            contents={0: {"token": "my token"}},
+        user_provided_secret = testing.Secret(
+            tracked_content={"token": "my token"},
         )
-        peer_relation = scenario.PeerRelation(
+        peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
-        state_in = scenario.State(
+        state_in = testing.State(
             containers=[container],
             leader=True,
             secrets=[user_provided_secret],
             relations=[peer_relation],
         )
-        action = scenario.Action(
-            name="authorize-charm",
-            params={"secret-id": user_provided_secret.id},
+        state_out = self.ctx.run(
+            self.ctx.on.action("authorize-charm", params={"secret-id": user_provided_secret.id}),
+            state=state_in,
         )
-
-        action_output = self.ctx.run_action(action, state_in)
 
         self.mock_vault.enable_audit_device.assert_called_once_with(
             device_type=AuditDeviceType.FILE, path="stdout"
@@ -170,14 +152,10 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             token_ttl="1h",
             token_max_ttl="1h",
         )
-        assert action_output.success is True
-        assert action_output.results == {
+        assert self.ctx.action_results == {
             "result": "Charm authorized successfully. You may now remove the secret."
         }
-        assert action_output.state.secrets[1].label == "vault-approle-auth-details"
-        assert action_output.state.secrets[1].contents == {
-            0: {
-                "role-id": "my-role-id",
-                "secret-id": "my-secret-id",
-            }
+        assert state_out.get_secret(label="vault-approle-auth-details").tracked_content == {
+            "role-id": "my-role-id",
+            "secret-id": "my-secret-id",
         }
