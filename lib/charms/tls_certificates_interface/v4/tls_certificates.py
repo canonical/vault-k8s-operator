@@ -52,7 +52,7 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 0
+LIBPATCH = 1
 
 PYDEPS = ["cryptography", "pydantic"]
 
@@ -1299,8 +1299,16 @@ class TLSCertificatesRequiresV4(Object):
                         logger.debug("Certificate requested for different attributes - Skipping")
                         continue
                     try:
-                        logger.debug("Setting secret with label %s", secret_label)
                         secret = self.model.get_secret(label=secret_label)
+                        logger.debug("Setting secret with label %s", secret_label)
+                        # Juju < 3.6 will create a new revision even if the content is the same
+                        if secret.get_content(refresh=True).get("certificate", "") == str(
+                            provider_certificate.certificate
+                        ):
+                            logger.debug(
+                                "Secret %s with correct certificate already exists", secret_label
+                            )
+                            return
                         secret.set_content(
                             content={
                                 "certificate": str(provider_certificate.certificate),
