@@ -22,9 +22,9 @@ charset-normalizer==3.4.0
     # via requests
 codespell==2.3.0
     # via -r test-requirements.in
-coverage[toml]==7.6.3
+coverage[toml]==7.6.4
     # via -r test-requirements.in
-cryptography==43.0.1
+cryptography==43.0.3
     # via paramiko
 decorator==5.1.1
     # via
@@ -112,7 +112,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.384
+pyright==1.1.385
     # via -r test-requirements.in
 pytest==8.3.3
     # via
@@ -144,7 +144,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.6.9
+ruff==0.7.0
     # via -r test-requirements.in
 six==1.16.0
     # via
