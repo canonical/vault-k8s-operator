@@ -20,6 +20,8 @@ from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -118,6 +120,11 @@ class AutounsealConfigurationDetails:
     ca_cert_path: str
 
 
+@trace_charm(
+    tracing_endpoint="_tracing_endpoint",
+    server_cert="_tracing_server_cert",
+    extra_types=(TLSCertificatesProvidesV4,),
+)
 class VaultCharm(CharmBase):
     """Main class to handle Juju events for the vault-k8s charm."""
 
@@ -141,6 +148,10 @@ class VaultCharm(CharmBase):
             certificate_requests=[certificate_request] if certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
+        )
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
+        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
+            self.tracing, cert_path=None
         )
         self.vault_autounseal_provides = VaultAutounsealProvides(
             self, AUTOUNSEAL_PROVIDES_RELATION_NAME

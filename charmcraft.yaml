@@ -103,6 +103,9 @@ requires:
     interface: loki_push_api
   s3-parameters:
     interface: s3
+  tracing:
+    interface: tracing
+    limit: 1
 
 type: "charm"
 bases:
