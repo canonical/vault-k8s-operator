@@ -40,7 +40,7 @@ durationpy==0.9
     # via kubernetes
 executing==2.1.0
     # via stack-data
-google-auth==2.35.0
+google-auth==2.36.0
     # via kubernetes
 hvac==2.3.0
     # via
@@ -103,7 +103,7 @@ pluggy==1.5.0
     #   pytest
 prompt-toolkit==3.0.48
     # via ipython
-protobuf==4.25.5
+protobuf==5.28.3
     # via
     #   -c requirements.txt
     #   macaroonbakery
@@ -135,7 +135,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.386
+pyright==1.1.388
     # via -r test-requirements.in
 pytest==8.3.3
     # via
@@ -172,7 +172,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.7.1
+ruff==0.7.2
     # via -r test-requirements.in
 six==1.16.0
     # via
