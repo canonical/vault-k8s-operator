@@ -671,7 +671,7 @@ class TestVaultK8sIntegrationsPart2:
             application_name=MINIO_APPLICATION_NAME,
             trust=True,
             config=MINIO_CONFIG,
-            channel="stable",
+            channel="ckf-1.9/stable",
         )
         await asyncio.gather(
             deploy_prometheus,
