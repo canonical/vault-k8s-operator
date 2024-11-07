@@ -12,15 +12,15 @@ attrs==24.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.49
+boto3==1.35.55
     # via -r requirements.in
-boto3-stubs[s3]==1.35.49
+boto3-stubs[s3]==1.35.55
     # via -r requirements.in
-botocore==1.35.49
+botocore==1.35.55
     # via
     #   boto3
     #   s3transfer
-botocore-stubs==1.35.49
+botocore-stubs==1.35.54
     # via boto3-stubs
 certifi==2024.8.30
     # via
@@ -57,7 +57,7 @@ idna==3.10
     #   anyio
     #   httpx
     #   requests
-importlib-metadata==8.4.0
+importlib-metadata==8.5.0
     # via opentelemetry-api
 iniconfig==2.0.0
     # via pytest
@@ -71,7 +71,7 @@ jsonschema==4.23.0
     # via -r requirements.in
 jsonschema-specifications==2024.10.1
     # via jsonschema
-lightkube==0.15.4
+lightkube==0.15.5
     # via
     #   -r requirements.in
     #   cosl
@@ -83,22 +83,22 @@ markupsafe==3.0.2
     # via jinja2
 mypy-boto3-s3==1.35.46
     # via boto3-stubs
-opentelemetry-api==1.27.0
+opentelemetry-api==1.28.0
     # via
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-otlp-proto-common==1.27.0
+opentelemetry-exporter-otlp-proto-common==1.28.0
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.27.0
+opentelemetry-exporter-otlp-proto-http==1.28.0
     # via -r requirements.in
-opentelemetry-proto==1.27.0
+opentelemetry-proto==1.28.0
     # via
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-sdk==1.27.0
+opentelemetry-sdk==1.28.0
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-semantic-conventions==0.48b0
+opentelemetry-semantic-conventions==0.49b0
     # via opentelemetry-sdk
 ops==2.17.0
     # via
@@ -111,7 +111,7 @@ packaging==24.1
     # via pytest
 pluggy==1.5.0
     # via pytest
-protobuf==4.25.5
+protobuf==5.28.3
     # via
     #   googleapis-common-protos
     #   opentelemetry-proto
