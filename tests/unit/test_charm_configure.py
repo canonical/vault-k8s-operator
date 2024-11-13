@@ -12,6 +12,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import ProviderCertif
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
+    AutounsealConfigurationDetails,
     Certificate,
     SecretsBackend,
 )
@@ -35,7 +36,11 @@ class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_config_file_is_pushed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_socket_fqdn.return_value = "myhostname"
-            self.mock_autounseal_requires_get_details.return_value = None
+            self.mock_vault_autounseal_requirer_manager.configure_mock(
+                **{
+                    "vault_configuration_details.return_value": None,
+                }
+            )
             model_name = "whatever"
             vault_raft_mount = testing.Mount(
                 location="/vault/raft",
@@ -176,7 +181,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            self.mock_vault.enable_secrets_engine.assert_called_once_with(
+            self.mock_vault.ensure_secrets_engine.assert_called_once_with(
                 SecretsBackend.PKI, "charm-pki"
             )
             self.mock_vault.import_ca_certificate_and_key.assert_called_once_with(
@@ -393,12 +398,23 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_active_or_standby.return_value": True,
                     "get_intermediate_ca.return_value": "",
                     "is_common_name_allowed_in_pki_role.return_value": False,
-                    "create_autounseal_credentials.return_value": (
-                        key_name,
-                        approle_id,
-                        approle_secret_id,
-                    ),
                 },
+            )
+            self.mock_vault_autounseal_manager.configure_mock(
+                **{
+                    "create_credentials.return_value": (key_name, approle_id, approle_secret_id),
+                }
+            )
+            self.mock_vault_autounseal_requirer_manager.configure_mock(
+                **{
+                    "vault_configuration_details.return_value": AutounsealConfigurationDetails(
+                        "1.2.3.4",
+                        "charm-autounseal",
+                        "key name",
+                        "some token",
+                        "ca cert",
+                    ),
+                }
             )
             self.mock_tls.configure_mock(
                 **{
@@ -455,85 +471,8 @@ class TestCharmConfigure(VaultCharmFixtures):
             assert actual_config_hcl["seal"]["transit"]["token"] == "some token"
             assert actual_config_hcl["seal"]["transit"]["key_name"] == "key name"
             self.mock_vault.authenticate.assert_called_with(AppRole("role id", "secret id"))
-            self.mock_tls.push_autounseal_ca_cert.assert_called_with("ca cert")
 
-    def test_given_outstanding_autounseal_requests_when_configure_then_credentials_are_set(
-        self,
-    ):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_name = "my key"
-            approle_id = "my approle id"
-            approle_secret_id = "my approle secret id"
-            self.mock_vault.configure_mock(
-                **{
-                    "is_api_available.return_value": True,
-                    "authenticate.return_value": True,
-                    "is_initialized.return_value": True,
-                    "is_sealed.return_value": False,
-                    "is_active_or_standby.return_value": True,
-                    "is_common_name_allowed_in_pki_role.return_value": False,
-                    "get_intermediate_ca.return_value": "",
-                    "create_autounseal_credentials.return_value": (
-                        key_name,
-                        approle_id,
-                        approle_secret_id,
-                    ),
-                },
-            )
-            self.mock_tls.configure_mock(
-                **{
-                    "pull_tls_file_from_workload.return_value": "my ca",
-                },
-            )
-            self.mock_autounseal_requires_get_details.return_value = None
-            vault_config_mount = testing.Mount(
-                location="/vault/config",
-                source=temp_dir,
-            )
-            container = testing.Container(
-                name="vault",
-                can_connect=True,
-                mounts={
-                    "vault-config": vault_config_mount,
-                },
-            )
-            peer_relation = testing.PeerRelation(
-                endpoint="vault-peers",
-            )
-            vault_autounseal_relation = testing.Relation(
-                endpoint="vault-autounseal-provides",
-                interface="vault-autounseal",
-                remote_app_name="vault-autounseal-requirer",
-            )
-            self.mock_get_binding.return_value = MockBinding(
-                bind_address="myhostname",
-                ingress_address="myhostname",
-            )
-            relation = MockRelation(id=vault_autounseal_relation.id)
-            self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
-            approle_secret = testing.Secret(
-                label="vault-approle-auth-details",
-                tracked_content={"role-id": "role id", "secret-id": "secret id"},
-            )
-            state_in = testing.State(
-                containers=[container],
-                leader=True,
-                secrets=[approle_secret],
-                relations=[peer_relation, vault_autounseal_relation],
-                config={"common_name": "myhostname.com"},
-            )
-
-            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
-
-            self.mock_autounseal_provides_set_data.assert_called_with(
-                relation,
-                "https://myhostname:8200",
-                "charm-autounseal",
-                key_name,
-                approle_id,
-                approle_secret_id,
-                "my ca",
-            )
+    # Test KV
 
     def test_given_outstanding_kv_request_when_configure_then_kv_relation_data_is_set(
         self,
@@ -547,7 +486,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_initialized.return_value": True,
                     "is_sealed.return_value": False,
                     "generate_role_secret_id.return_value": "kv role secret id",
-                    "configure_approle.return_value": "kv role id",
+                    "create_or_update_approle.return_value": "kv role id",
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
@@ -593,7 +532,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            self.mock_vault.enable_secrets_engine.assert_called_once_with(
+            self.mock_vault.ensure_secrets_engine.assert_called_once_with(
                 SecretsBackend.KV_V2, "charm-vault-kv-remote-suffix"
             )
             self.mock_kv_provides_set_ca_certificate.assert_called()
@@ -617,7 +556,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_initialized.return_value": True,
                     "is_sealed.return_value": False,
                     "generate_role_secret_id.return_value": "new kv role secret id",
-                    "configure_approle.return_value": "kv role id",
+                    "create_or_update_approle.return_value": "kv role id",
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None

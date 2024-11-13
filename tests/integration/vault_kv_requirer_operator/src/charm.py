@@ -15,7 +15,7 @@ from ops import main
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.model import ActiveStatus, SecretNotFoundError
-from vault_client import Vault  # type: ignore[import-not-found]
+from vault_client import VaultClient
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
 VAULT_KV_SECRET_LABEL = "vault-kv"
@@ -118,7 +118,7 @@ class VaultKVRequirerCharm(CharmBase):
         if not secret_key or not secret_value:
             event.fail("Missing key or value")
             return
-        vault = Vault(
+        vault = VaultClient(
             url=secret_content["vault-url"],
             approle_role_id=secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
@@ -144,7 +144,7 @@ class VaultKVRequirerCharm(CharmBase):
         if not secret_key:
             event.fail("Missing key or value")
             return
-        vault = Vault(
+        vault = VaultClient(
             url=secret_content["vault-url"],
             approle_role_id=secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",

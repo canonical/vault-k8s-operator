@@ -107,7 +107,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         self.mock_vault.configure_mock(
             **{
                 "authenticate.return_value": True,
-                "configure_approle.return_value": "my-role-id",
+                "create_or_update_approle.return_value": "my-role-id",
                 "generate_role_secret_id.return_value": "my-secret-id",
             },
         )
@@ -144,7 +144,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             policy_name="charm-access",
             policy_path="src/templates/charm_policy.hcl",
         )
-        self.mock_vault.configure_approle.assert_called_once_with(
+        self.mock_vault.create_or_update_approle.assert_called_once_with(
             role_name="charm",
             cidrs=["1.2.3.4/24"],
             policies=["charm-access", "default"],
