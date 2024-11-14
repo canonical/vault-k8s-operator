@@ -23,7 +23,8 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from ops import EventBase, ModelError, Object, SecretNotFoundError
+from charms.vault_k8s.v0.juju_facade import JujuFacade, NoSuchStorageError, TransientJujuError
+from ops import EventBase, Object
 from ops.charm import CharmBase
 from ops.pebble import PathError
 
@@ -157,6 +158,7 @@ class VaultTLSManager(Object):
         """
         super().__init__(charm, "tls")
         self.charm = charm
+        self.juju_facade = JujuFacade(charm)
         self.workload = workload
         self._service_name = service_name
         self.tls_directory_path = tls_directory_path
@@ -211,15 +213,21 @@ class VaultTLSManager(Object):
 
     def _get_mode(self) -> TLSMode:
         """Determine the TLS mode of the charm."""
-        if self.charm.model.get_relation(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+        if self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             return TLSMode.TLS_INTEGRATION
         return TLSMode.SELF_SIGNED
 
     def _configure_self_signed_certificates(self, _: EventBase) -> None:
         """Configure the charm with self signed certificates."""
-        if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
+        if self.charm.unit.is_leader() and not self.juju_facade.secret_exists_with_fields(
+            fields=("privatekey", "certificate"),
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        ):
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self._set_ca_certificate_secret(ca_private_key, ca_certificate)
+            self.juju_facade.set_app_secret_content(
+                {"privatekey": ca_private_key, "certificate": ca_certificate},
+                CA_CERTIFICATE_JUJU_SECRET_LABEL,
+            )
             logger.info("Saved the Vault generated CA cert in juju secrets.")
         existing_ca_certificate = self.pull_tls_file_from_workload(File.CA)
         if existing_ca_certificate and existing_certificate_is_self_signed(
@@ -227,12 +235,22 @@ class VaultTLSManager(Object):
         ):
             logger.debug("Found existing self signed certificate in workload.")
             return
-        if not self.ca_certificate_secret_exists():
+        if not self.juju_facade.secret_exists_with_fields(
+            fields=("privatekey", "certificate"),
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        ):
             logger.debug("No CA certificate found.")
             return
-        ca_private_key, ca_certificate = self._get_ca_certificate_secret()
+        ca_private_key, ca_certificate = self.juju_facade.get_secret_content_values(
+            "privatekey",
+            "certificate",
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        ) or (None, None)
         if not ca_certificate:
             logger.debug("No CA certificate found.")
+            return
+        if not ca_private_key:
+            logger.debug("No CA private key found.")
             return
         unit_private_key, unit_certificate = generate_vault_unit_certificate(
             common_name=self.common_name,
@@ -246,7 +264,7 @@ class VaultTLSManager(Object):
         self._push_tls_file_to_workload(File.CA, ca_certificate)
         logger.info(
             "Saved Vault generated CA and self signed certificate to %s.",
-            self.charm.unit.name,
+            self.juju_facade.unit_name,
         )
         self._restart_vault()
 
@@ -295,13 +313,13 @@ class VaultTLSManager(Object):
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
         if ca := self.pull_tls_file_from_workload(File.CA):
-            for relation in self.charm.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+            for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.set_certificate(
                     certificate="", ca=ca, chain=[], relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
         else:
-            for relation in self.charm.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+            for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.remove_certificate(relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
 
@@ -327,18 +345,12 @@ class VaultTLSManager(Object):
         Raises:
             VaultCertsError: If the CA certificate is not found
         """
-        storage = self.charm.model.storages
-        if "certs" not in storage:
-            raise VaultCertsError()
-        if not storage["certs"]:
-            raise VaultCertsError()
-        cert_storage = storage["certs"][0]
         try:
-            storage_location = cert_storage.location
-        except ModelError as e:
-            # Seems to happen when the storage is still being set up
-            logging.warning("Could not get storage location: %s", e)
+            storage_location = self.juju_facade.get_storage_location("certs")
+        except NoSuchStorageError:
             raise VaultCertsError()
+        except TransientJujuError:
+            raise
         return f"{storage_location}/{file.name.lower()}.pem"
 
     def tls_file_available_in_charm(self, file: File) -> bool:
@@ -354,44 +366,15 @@ class VaultTLSManager(Object):
             return os.path.exists(file_path)
         except VaultCertsError:
             return False
-
-    def _get_ca_certificate_secret(self) -> Tuple[str, str]:
-        """Get the vault CA certificate secret.
-
-        Returns:
-            The CA private key and certificate as a tuple
-        """
-        juju_secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-        content = juju_secret.get_content(refresh=True)
-        return content["privatekey"], content["certificate"]
-
-    def _set_ca_certificate_secret(
-        self,
-        private_key: str,
-        certificate: str,
-    ) -> None:
-        juju_secret_content = {
-            "privatekey": private_key,
-            "certificate": certificate,
-        }
-        if not self.ca_certificate_secret_exists():
-            self.charm.app.add_secret(juju_secret_content, label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-            logger.debug("Vault CA certificate secret set")
-            return
-        secret = self.charm.model.get_secret(label=CA_CERTIFICATE_JUJU_SECRET_LABEL)
-        secret.set_content(juju_secret_content)
-
-    def ca_certificate_secret_exists(self) -> bool:
-        """Return whether CA certificate is stored in secret."""
-        try:
-            ca_private_key, ca_certificate = self._get_ca_certificate_secret()
-            return bool(ca_private_key and ca_certificate)
-        except SecretNotFoundError:
-            return False
+        except TransientJujuError:
+            raise
 
     def ca_certificate_is_saved(self) -> bool:
-        """Return wether a CA cert is saved in the charm."""
-        return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
+        """Return wether a CA cert and its private key are saved in the charm."""
+        return self.juju_facade.secret_exists_with_fields(
+            fields=("privatekey", "certificate"),
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        ) or self.tls_file_pushed_to_workload(File.CA)
 
     def _restart_vault(self) -> None:
         """Attempt to restart the Vault server."""
@@ -418,6 +401,13 @@ class VaultTLSManager(Object):
                 return file_content.read().strip()
         except (PathError, FileNotFoundError):
             return ""
+
+    def ca_certificate_secret_exists(self) -> bool:
+        """Return whether CA certificate is stored in secret."""
+        return self.juju_facade.secret_exists_with_fields(
+            fields=("privatekey", "certificate"),
+            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        )
 
     def _push_tls_file_to_workload(self, file: File, data: str) -> None:
         """Push one of the given file types to the workload.
