@@ -67,6 +67,10 @@ class NoSuchStorageError(FacadeError):
     """Exception raised when a storage does not exist."""
 
 
+class SecretAccessDeniedError(FacadeError):
+    """Exception raised if the charm does not have permission to access the secret."""
+
+
 class JujuFacade(Object):
     """Juju API wrapper class."""
 
@@ -146,7 +150,7 @@ class JujuFacade(Object):
             raise SecretRemovedError(e) from e
         except ModelError as e:
             logger.error("Error getting secret content for %s: %s", label, e)
-            raise TransientJujuError(e) from e
+            raise SecretAccessDeniedError(e) from e
 
     def get_current_secret_content(self, label: str, id: str | None = None) -> dict[str, str]:
         """Get secret content if the secret exists and return currently tracked revision.

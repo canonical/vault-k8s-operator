@@ -23,7 +23,12 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from charms.vault_k8s.v0.juju_facade import JujuFacade, NoSuchStorageError, TransientJujuError
+from charms.vault_k8s.v0.juju_facade import (
+    JujuFacade,
+    NoSuchSecretError,
+    NoSuchStorageError,
+    TransientJujuError,
+)
 from ops import EventBase, Object
 from ops.charm import CharmBase
 from ops.pebble import PathError
@@ -36,7 +41,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 13
+LIBPATCH = 14
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -219,10 +224,7 @@ class VaultTLSManager(Object):
 
     def _configure_self_signed_certificates(self, _: EventBase) -> None:
         """Configure the charm with self signed certificates."""
-        if self.charm.unit.is_leader() and not self.juju_facade.secret_exists_with_fields(
-            fields=("privatekey", "certificate"),
-            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-        ):
+        if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
             self.juju_facade.set_app_secret_content(
                 {"privatekey": ca_private_key, "certificate": ca_certificate},
@@ -235,17 +237,18 @@ class VaultTLSManager(Object):
         ):
             logger.debug("Found existing self signed certificate in workload.")
             return
-        if not self.juju_facade.secret_exists_with_fields(
-            fields=("privatekey", "certificate"),
-            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-        ):
+        if not self.ca_certificate_secret_exists():
             logger.debug("No CA certificate found.")
             return
-        ca_private_key, ca_certificate = self.juju_facade.get_secret_content_values(
-            "privatekey",
-            "certificate",
-            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-        ) or (None, None)
+        try:
+            ca_private_key, ca_certificate = self.juju_facade.get_secret_content_values(
+                "privatekey",
+                "certificate",
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+            )
+        except NoSuchSecretError:
+            logger.error("Charm does not have permission to access the CA certificate secret.")
+            return
         if not ca_certificate:
             logger.debug("No CA certificate found.")
             return
@@ -371,10 +374,7 @@ class VaultTLSManager(Object):
 
     def ca_certificate_is_saved(self) -> bool:
         """Return wether a CA cert and its private key are saved in the charm."""
-        return self.juju_facade.secret_exists_with_fields(
-            fields=("privatekey", "certificate"),
-            label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-        ) or self.tls_file_pushed_to_workload(File.CA)
+        return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _restart_vault(self) -> None:
         """Attempt to restart the Vault server."""
