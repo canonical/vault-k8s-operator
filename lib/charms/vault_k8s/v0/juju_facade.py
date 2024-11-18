@@ -76,7 +76,12 @@ class JujuFacade(Object):
 
     # Secret related methods
     def get_secret(self, label: str, id: str | None = None) -> Secret:
-        """Retrieve a secret and handle SecretNotFound error."""
+        """Retrieve a secret and handles error.
+
+        Raises:
+            NoSuchSecretError: if the secret does not exist
+            TransientJujuError: if there is a Juju ModelError
+        """
         try:
             return (
                 self.charm.model.get_secret(label=label, id=id)
@@ -91,25 +96,41 @@ class JujuFacade(Object):
             raise TransientJujuError(e) from e
 
     def secret_exists(self, label: str, id: str | None = None) -> bool:
-        """Check if the secret exists."""
+        """Check if the secret exists.
+
+        Raises:
+            TransientJujuError
+        """
         try:
             self.get_secret(label=label, id=id)
             return True
         except NoSuchSecretError:
             return False
-        except FacadeError:
+        except TransientJujuError:
             raise
 
     def secret_exists_with_fields(
         self, fields: tuple[str, ...], label: str, id: str | None = None
     ) -> bool:
-        """Check if the secret exists and has the right fields."""
+        """Check if the secret exists and has the required fields.
+
+        Args:
+            fields: The requested fields
+            label: The secret label
+            id: The secret id
+
+        Returns:
+            True if the secret exists and has the required fields, False otherwise
+
+        Raises:
+            TransientJujuError
+        """
         try:
             secret_content = self._get_secret_content(label=label, id=id)
             return all(secret_content.get(field) for field in fields)
-        except NoSuchSecretError:
+        except (NoSuchSecretError, SecretRemovedError):
             return False
-        except FacadeError:
+        except TransientJujuError:
             raise
 
     def _get_secret_content(
@@ -128,32 +149,57 @@ class JujuFacade(Object):
             raise TransientJujuError(e) from e
 
     def get_current_secret_content(self, label: str, id: str | None = None) -> dict[str, str]:
-        """Get secret content if the secret exists and returns currently tracked revision."""
+        """Get secret content if the secret exists and return currently tracked revision.
+
+        Raises:
+            TransientJujuError
+            NoSuchSecretError
+            SecretRemovedError
+        """
         try:
             return self._get_secret_content(label=label, id=id)
-        except FacadeError:
+        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
             raise
 
     def get_latest_secret_content(self, label: str, id: str | None = None) -> dict[str, str]:
-        """Get secret content if the secret exists and returns latest revision."""
+        """Get secret content if the secret exists and return latest revision.
+
+        Raises:
+            TransientJujuError
+            NoSuchSecretError
+            SecretRemovedError
+        """
         try:
             return self._get_secret_content(label=label, id=id, refresh=True)
-        except FacadeError:
+        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
             raise
 
     def get_secret_content_values(
         self, *keys: str, label: str, id: str | None = None
-    ) -> tuple[str | None, ...] | None:
-        """Get secret content values by keys."""
+    ) -> tuple[str | None, ...]:
+        """Get secret content values by keys.
+
+        Args:
+            keys: Keys of the requested values
+            label: The secret label
+            id: The secret id
+
+        Returns:
+            tuple[str | None, ...]: The secret content values,
+            if a key is not found, None is returned for its value
+
+        Raises:
+            TransientJujuError
+            NoSuchSecretError
+            SecretRemovedError
+        """
         try:
             secret_content = self._get_secret_content(label=label, id=id)
-            if not secret_content:
-                return None
             for key in keys:
                 if key not in secret_content:
                     logger.warning("Secret %s does not have key %s", label, key)
             return tuple(secret_content.get(key, None) for key in keys)
-        except FacadeError:
+        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
             raise
 
     def _add_app_secret(self, content: dict[str, str], label: str) -> Secret:
@@ -202,58 +248,90 @@ class JujuFacade(Object):
         except ModelError as e:
             logger.error("Error setting secret content for %s: %s", label, e)
             raise TransientJujuError(e) from e
+        except ValueError as e:
+            logger.error("Invalid secret content %s: %s", content, e)
+            raise SecretValidationError(e) from e
 
     def set_app_secret_content(
         self, content: dict[str, str], label: str, id: str | None = None
     ) -> Secret:
         """Set the secret content if the secret exists.
 
-        Creates new secret revision
+        Creates new secret revision if secret exists, otherwise creates a new secret.
+
+        Raises:
+            TransientJujuError
+            SecretValidationError
         """
         try:
             return self._set_secret_content(content=content, label=label, id=id, unit_or_app="app")
-        except FacadeError:
+        except (TransientJujuError, SecretValidationError):
             raise
 
     def set_unit_secret_content(
         self, content: dict[str, str], label: str, id: str | None = None
     ) -> Secret:
-        """Set the secret content if the secret exists."""
+        """Set the secret content if the secret exists.
+
+        Creates new secret revision if secret exists, otherwise creates a new secret.
+
+        Raises:
+            TransientJujuError
+            SecretValidationError
+        """
         try:
             return self._set_secret_content(
                 content=content, label=label, id=id, unit_or_app="unit"
             )
-        except FacadeError:
+        except (TransientJujuError, SecretValidationError):
             raise
 
     def set_secret_label(self, new_label: str, label: str, id: str | None = None) -> None:
-        """Set a new label for the secret if the secret exists."""
+        """Set a new label for the secret if the secret exists.
+
+        Raises:
+            TransientJujuError
+        """
         try:
             secret = self.get_secret(label=label, id=id)
             secret.set_info(label=new_label)
-        except FacadeError:
+        except TransientJujuError:
             raise
 
     def set_secret_expiry(self, expiry: datetime, label: str, id: str | None = None) -> None:
-        """Set a new expiry date for the secret if the secret exists."""
+        """Set a new expiry date for the secret if the secret exists.
+
+        Raises:
+            TransientJujuError
+        """
         try:
             secret = self.get_secret(label=label, id=id)
             secret.set_info(expire=expiry)
-        except FacadeError:
+        except TransientJujuError:
             raise
 
     # Relation related methods
-    # is it possible not to know the name?
-    def get_relation_by_id(self, relation_name: str, relation_id: int) -> Relation | None:
-        """Get the relation object by name and id."""
+    def get_relation_by_id(self, relation_name: str, relation_id: int) -> Relation:
+        """Get the relation object by name and id.
+
+        Returns:
+            The relation object
+
+        Raises:
+            NoSuchRelationError: if the relation does not exist
+        """
         relation = self.charm.model.get_relation(relation_name, relation_id)
         if not relation:
             logger.error("Relation %s:%d not found", relation_name, relation_id)
-            return None
+            raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
         return relation
 
     def get_relations(self, relation_name: str) -> List[Relation]:
-        """Get all relation objects with the given name."""
+        """Get all relation objects with the given name.
+
+        Returns:
+            A list of relation objects, the list is empty if no relations are found
+        """
         relations = self.charm.model.relations.get(relation_name, [])
         if not relations:
             logger.error("No relations found for %s", relation_name)
@@ -274,25 +352,56 @@ class JujuFacade(Object):
     def get_app_relation_data(
         self, relation_name: str, relation_id: int
     ) -> RelationDataContent | dict[str, str]:
-        """Get relation data from the caller's application databag."""
-        return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
+        """Get relation data from the caller's application databag.
+
+        Returns:
+            The relation data as a dict
+
+        Raises:
+            NoSuchRelationError: if the relation is not found
+        """
+        try:
+            return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
+        except NoSuchRelationError:
+            raise
 
     def get_remote_app_relation_data(
         self, relation_name: str, relation_id: int
     ) -> RelationDataContent | dict[str, str]:
-        """Get relation data from the remote application databag."""
-        return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
+        """Get relation data from the remote application databag.
+
+        Returns:
+            The relation data as a dict
+
+        Raises:
+            NoSuchRelationError: if the relation is not found
+        """
+        try:
+            return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
+        except NoSuchRelationError:
+            raise
 
     def get_unit_relation_data(
         self, relation_name: str, relation_id: int
     ) -> RelationDataContent | dict[str, str]:
-        """Get relation data from the remote unit databag."""
-        return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
+        """Get relation data from the remote unit databag.
+
+        Raises:
+            NoSuchRelationError: if the relation is not found
+        """
+        try:
+            return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
+        except NoSuchRelationError:
+            raise
 
     def get_remote_units_relation_data(
         self, relation_name: str, relation_id: int
     ) -> List[RelationDataContent | dict[str, str]]:
-        """Get relation data from the remote units databags."""
+        """Get relation data from the remote units databags.
+
+        Raises:
+            NoSuchRelationError: if the relation is not found
+        """
         relation = self.get_relation_by_id(relation_name, relation_id)
         if not relation:
             raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
@@ -324,7 +433,13 @@ class JujuFacade(Object):
     def set_app_relation_data(
         self, data: dict[str, str], relation_name: str, relation_id: int
     ) -> None:
-        """Set relation data in the caller's application databag."""
+        """Set relation data in the caller's application databag.
+
+        Raises:
+            NotLeaderError: if the unit is not leader
+            InvalidRelationDataError: if the relation data is invalid
+            NoSuchRelationError: if the relation is not found
+        """
         if not self.charm.model.unit.is_leader():
             raise NotLeaderError("Action not allowed for non-leader units")
         try:
@@ -334,13 +449,18 @@ class JujuFacade(Object):
                 relation_id=relation_id,
                 entity=self.charm.model.app,
             )
-        except FacadeError:
+        except (InvalidRelationDataError, NoSuchRelationError):
             raise
 
     def set_unit_relation_data(
         self, data: dict[str, str], relation_name: str, relation_id: int
     ) -> None:
-        """Set relation data in the caller's unit databag."""
+        """Set relation data in the caller's unit databag.
+
+        Raises:
+            InvalidRelationDataError: if the relation data is invalid
+            NoSuchRelationError: if the relation is not found
+        """
         try:
             self._set_relation_data(
                 data=data,
@@ -348,7 +468,7 @@ class JujuFacade(Object):
                 relation_id=relation_id,
                 entity=self.charm.model.unit,
             )
-        except FacadeError:
+        except (InvalidRelationDataError, NoSuchRelationError):
             raise
 
     # Charm config related methods
