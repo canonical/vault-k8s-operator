@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 from typing import List, Literal, cast
 
@@ -421,9 +422,8 @@ class JujuFacade(Object):
         relation = self.get_relation_by_id(relation_name, relation_id)
         if not relation:
             raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
-        if not all(isinstance(value, str) for value in data.values()) or not all(
-            isinstance(key, str) for key in data.keys()
-        ):
+
+        if not all(isinstance(value, str) for value in chain(data.values(), data.keys())):
             raise InvalidRelationDataError("Invalid relation data")
         try:
             logger.info("Setting relation data for %s:%d", relation_name, relation_id)
