@@ -337,8 +337,21 @@ class JujuFacade:
         except TransientJujuError:
             raise
 
-    def grant_secret_to_relation(self, secret: Secret, relation: Relation) -> None:
+    def grant_secret_to_relation(
+        self,
+        relation: Relation,
+        secret: Secret | None = None,
+        secret_id: int | None = None,
+        secret_label: str | None = None,
+    ) -> None:
         """Grant the secret to the relation."""
+        if secret:
+            secret.grant(relation)
+            return
+        try:
+            secret = self.get_secret(id=secret_id, label=secret_label)
+        except (NoSuchSecretError, SecretRemovedError):
+            raise
         secret.grant(relation)
 
     # Relation related methods

@@ -337,7 +337,7 @@ class VaultAutounsealProvides(Object):
             )
         except (TransientJujuError, SecretValidationError):
             raise
-        self.juju_facade.grant_secret_to_relation(secret, relation)
+        self.juju_facade.grant_secret_to_relation(secret=secret, relation=relation)
         if secret.id is None:
             raise ValueError("Secret id is None")
         return secret.id
