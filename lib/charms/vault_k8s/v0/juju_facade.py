@@ -337,7 +337,6 @@ class JujuFacade:
         except TransientJujuError:
             raise
 
-    # TODO
     def grant_secret_to_relation(self, secret: Secret, relation: Relation) -> None:
         """Grant the secret to the relation."""
         secret.grant(relation)
@@ -389,6 +388,17 @@ class JujuFacade:
         if not relations:
             logger.error("No relations found for %s", relation_name)
         return relations
+
+    def get_active_relations(
+        self, relation_name: str, relation_id: int | None = None
+    ) -> List[Relation]:
+        """Get all relations with the given name or ID that are active.
+
+        Returns:
+            A list of active relations.
+        """
+        relations = self.get_relations(relation_name, relation_id)
+        return [relation for relation in relations if relation.active]
 
     def relation_exists(self, relation_name: str) -> bool:
         """Check if there are any relations with the given name."""

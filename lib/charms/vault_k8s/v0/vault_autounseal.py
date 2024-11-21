@@ -338,7 +338,6 @@ class VaultAutounsealProvides(Object):
         except (TransientJujuError, SecretValidationError):
             raise
         self.juju_facade.grant_secret_to_relation(secret, relation)
-        # TODO: This can be true when get_secret(label)
         if secret.id is None:
             raise ValueError("Secret id is None")
         return secret.id
@@ -393,26 +392,13 @@ class VaultAutounsealProvides(Object):
         credentials issued for them.
         """
         outstanding_requests: List[Relation] = []
-        requirer_requests = self.get_active_relations(relation_id=relation_id)
+        requirer_requests = self.juju_facade.get_active_relations(self.relation_name, relation_id)
         outstanding_requests = [
             relation
             for relation in requirer_requests
             if not self._credentials_issued_for_request(relation_id=relation.id)
         ]
         return outstanding_requests
-
-    # TODO move to facade
-    def get_active_relations(self, relation_id: int | None = None) -> List[Relation]:
-        """Get all active relations on the relation name this class was initialized with.
-
-        Args:
-            relation_id: The relation ID to filter by. If None, all active relations are returned.
-
-        Returns:
-            A list of active relations.
-        """
-        relations = self.juju_facade.get_relations(self.relation_name, relation_id)
-        return [relation for relation in relations if relation.active]
 
     def _credentials_issued_for_request(self, relation_id: int) -> bool:
         try:
@@ -517,7 +503,6 @@ class VaultAutounsealRequires(Object):
         if not credentials_secret_id:
             return None
         try:
-            # TODO label
             role_id, secret_id = self.juju_facade.get_secret_content_values(
                 "role-id",
                 "secret-id",
@@ -528,8 +513,3 @@ class VaultAutounsealRequires(Object):
         except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
             return None
         return ApproleDetails(role_id, secret_id)
-
-
-# TODO what to do with relation.active? We shouldn't care unless we are in a relation broken event, this can be used to check that instead of checking event type
-# TODO what to do with the secret label? Can we have a secret with no label?
-# TODO think of secret.grant()

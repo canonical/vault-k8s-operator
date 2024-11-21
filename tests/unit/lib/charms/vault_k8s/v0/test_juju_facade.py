@@ -283,6 +283,17 @@ class TestJujuFacade:
         with pytest.raises(MultipleRelationsFoundError):
             self.facade.get_relation_by_name("test-relation")
 
+    def test_given_multiple_relations_when_get_active_relations_then_returns_only_active_relations(
+        self,
+    ):
+        relation_1 = Mock(active=True)
+        relation_2 = Mock(active=False)
+        charm = Mock()
+        charm.model = Mock(relations={"test-relation": [relation_1, relation_2]})
+        self.facade.charm = charm
+
+        assert self.facade.get_active_relations("test-relation") == [relation_1]
+
     # Tests for Storage methods
 
     def test_given_storage_not_exists_when_get_storage_location_then_raises_no_such_storage(
