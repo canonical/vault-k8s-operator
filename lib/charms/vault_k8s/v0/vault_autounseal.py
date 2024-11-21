@@ -66,9 +66,31 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-import ops
+from charms.vault_k8s.v0.juju_facade import (
+    JujuFacade,
+    MultipleRelationsFoundError,
+    NoRemoteAppError,
+    NoSuchRelationError,
+    NoSuchSecretError,
+    NotLeaderError,
+    SecretRemovedError,
+    SecretValidationError,
+    TransientJujuError,
+)
 from interface_tester import DataBagSchema
-from ops import Relation, RelationDataContent, SecretNotFoundError, model
+from ops import (
+    CharmBase,
+    EventBase,
+    EventSource,
+    Handle,
+    Object,
+    ObjectEvents,
+    Relation,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationCreatedEvent,
+    RelationDataContent,
+)
 from pydantic import BaseModel, Field, ValidationError
 
 # The unique Charmhub library identifier, never change it
@@ -79,7 +101,10 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
+
+
+AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX = "vault-autounseal-credentials-"
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -119,11 +144,11 @@ class ProviderSchema(DataBagSchema):
     app: VaultAutounsealProviderSchema  # pyright: ignore[reportIncompatibleVariableOverride, reportGeneralTypeIssues]
 
 
-class VaultAutounsealDetailsReadyEvent(ops.EventBase):
+class VaultAutounsealDetailsReadyEvent(EventBase):
     """Event emitted on the requirer when Vault autounseal details are ready in the databag."""
 
     def __init__(
-        self, handle: ops.Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
+        self, handle: Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
     ):
         """VaultAutounsealDetailsReadyEvent.
 
@@ -167,14 +192,14 @@ class VaultAutounsealDetailsReadyEvent(ops.EventBase):
         self.ca_certificate = snapshot["ca_certificate"]
 
 
-class VaultAutounsealProviderRemoved(ops.EventBase):
+class VaultAutounsealProviderRemoved(EventBase):
     """Event emitted when the vault that provided autounseal capabilities is removed."""
 
 
-class VaultAutounsealRequirerRelationCreated(ops.EventBase):
+class VaultAutounsealRequirerRelationCreated(EventBase):
     """Event emitted when Vault autounseal should be initialized for a new application."""
 
-    def __init__(self, handle: ops.Handle, relation: model.Relation):
+    def __init__(self, handle: Handle, relation: Relation):
         super().__init__(handle)
         self.relation = relation
 
@@ -199,10 +224,10 @@ class VaultAutounsealRequirerRelationCreated(ops.EventBase):
         self.relation = relation
 
 
-class VaultAutounsealRequirerRelationBroken(ops.EventBase):
+class VaultAutounsealRequirerRelationBroken(EventBase):
     """Event emitted on the Provider when a relation to a Requirer is broken."""
 
-    def __init__(self, handle: ops.Handle, relation: model.Relation):
+    def __init__(self, handle: Handle, relation: Relation):
         super().__init__(handle)
         self.relation = relation
 
@@ -227,22 +252,20 @@ class VaultAutounsealRequirerRelationBroken(ops.EventBase):
         self.relation = relation
 
 
-class VaultAutounsealProvidesEvents(ops.ObjectEvents):
+class VaultAutounsealProvidesEvents(ObjectEvents):
     """Events raised by the vault-autounseal relation on the provider side."""
 
-    vault_autounseal_requirer_relation_created = ops.EventSource(
+    vault_autounseal_requirer_relation_created = EventSource(
         VaultAutounsealRequirerRelationCreated
     )
-    vault_autounseal_requirer_relation_broken = ops.EventSource(
-        VaultAutounsealRequirerRelationBroken
-    )
+    vault_autounseal_requirer_relation_broken = EventSource(VaultAutounsealRequirerRelationBroken)
 
 
-class VaultAutounsealRequireEvents(ops.ObjectEvents):
+class VaultAutounsealRequireEvents(ObjectEvents):
     """Events raised by the vault-autounseal relation on the requirer side."""
 
-    vault_autounseal_details_ready = ops.EventSource(VaultAutounsealDetailsReadyEvent)
-    vault_autounseal_provider_relation_broken = ops.EventSource(VaultAutounsealProviderRemoved)
+    vault_autounseal_details_ready = EventSource(VaultAutounsealDetailsReadyEvent)
+    vault_autounseal_provider_relation_broken = EventSource(VaultAutounsealProviderRemoved)
 
 
 @dataclass
@@ -265,15 +288,16 @@ class ApproleDetails:
     secret_id: str
 
 
-class VaultAutounsealProvides(ops.Object):
+class VaultAutounsealProvides(Object):
     """Manages the vault-autounseal relation from the provider side."""
 
     on: VaultAutounsealProvidesEvents = VaultAutounsealProvidesEvents()  # type: ignore
 
-    def __init__(self, charm: ops.CharmBase, relation_name: str):
+    def __init__(self, charm: CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation_name = relation_name
+        self.juju_facade = JujuFacade(charm)
 
         self.framework.observe(
             self.charm.on[relation_name].relation_created, self._on_relation_created
@@ -282,16 +306,16 @@ class VaultAutounsealProvides(ops.Object):
             self.charm.on[relation_name].relation_broken, self._on_relation_broken
         )
 
-    def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
+    def _on_relation_created(self, event: RelationCreatedEvent) -> None:
         """Handle the relation created event and emit a custom event."""
         self.on.vault_autounseal_requirer_relation_created.emit(relation=event.relation)
 
-    def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
+    def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Handle the relation broken event and emit a custom event."""
         self.on.vault_autounseal_requirer_relation_broken.emit(relation=event.relation)
 
     def _create_autounseal_credentials_secret(
-        self, relation: ops.Relation, role_id: str, secret_id: str
+        self, relation: Relation, role_id: str, secret_id: str
     ) -> str:
         """Create a Juju secret with the autounseal credentials.
 
@@ -303,20 +327,25 @@ class VaultAutounsealProvides(ops.Object):
         Returns:
             The secret id of the created secret.
         """
-        secret = self.charm.app.add_secret(
-            {
-                "role-id": role_id,
-                "secret-id": secret_id,
-            },
-        )
-        secret.grant(relation)
+        try:
+            secret = self.juju_facade.set_app_secret_content(
+                label=f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation.id}",
+                content={
+                    "role-id": role_id,
+                    "secret-id": secret_id,
+                },
+            )
+        except (TransientJujuError, SecretValidationError):
+            raise
+        self.juju_facade.grant_secret_to_relation(secret, relation)
+        # TODO: This can be true when get_secret(label)
         if secret.id is None:
             raise ValueError("Secret id is None")
         return secret.id
 
     def set_autounseal_data(
         self,
-        relation: ops.Relation,
+        relation: Relation,
         vault_address: str,
         mount_path: str,
         key_name: str,
@@ -335,29 +364,27 @@ class VaultAutounsealProvides(ops.Object):
             approle_secret_id: The AppRole Secret ID to use when authenticating with the external Vault server.
             ca_certificate: The CA certificate to use when validating the external Vault server's certificate.
         """
-        if not self.charm.unit.is_leader():
-            logger.warning(
-                "Attempting to set the auto-unseal data without being the leader. Ignoring the request."
-            )
-            return
-        if relation is None:
-            logger.warning("No relation found")
-            return
-        if not relation.active:
-            logger.warning("Relation is not active")
+        if not self.juju_facade.is_leader:
             return
         credentials_secret_id = self._create_autounseal_credentials_secret(
             relation, approle_role_id, approle_secret_id
         )
-        relation.data[self.charm.app].update(
-            {
-                "address": vault_address,
-                "mount_path": mount_path,
-                "key_name": key_name,
-                "credentials_secret_id": credentials_secret_id,
-                "ca_certificate": ca_certificate,
-            }
-        )
+        try:
+            self.juju_facade.set_app_relation_data(
+                relation_name=self.relation_name,
+                relation_id=relation.id,
+                data={
+                    "address": vault_address,
+                    "mount_path": mount_path,
+                    "key_name": key_name,
+                    "credentials_secret_id": credentials_secret_id,
+                    "ca_certificate": ca_certificate,
+                },
+            )
+        except (TransientJujuError, SecretValidationError):
+            raise
+        except NotLeaderError:
+            return
 
     def get_outstanding_requests(self, relation_id: int | None = None) -> List[Relation]:
         """Get the outstanding requests for the relation.
@@ -374,6 +401,7 @@ class VaultAutounsealProvides(ops.Object):
         ]
         return outstanding_requests
 
+    # TODO move to facade
     def get_active_relations(self, relation_id: int | None = None) -> List[Relation]:
         """Get all active relations on the relation name this class was initialized with.
 
@@ -383,45 +411,26 @@ class VaultAutounsealProvides(ops.Object):
         Returns:
             A list of active relations.
         """
-        relations = (
-            [
-                relation
-                for relation in self.model.relations.get(self.relation_name, [])
-                if relation.id == relation_id
-            ]
-            if relation_id is not None
-            else self.model.relations.get(self.relation_name, [])
-        )
+        relations = self.juju_facade.get_relations(self.relation_name, relation_id)
         return [relation for relation in relations if relation.active]
 
     def _credentials_issued_for_request(self, relation_id: int) -> bool:
-        # If Id is none and more than on relation is present we get an error
-        relation = self.model.get_relation(self.relation_name, relation_id)
-        if not relation:
+        try:
+            if not (
+                credentials_secret_id := self.juju_facade.get_app_relation_data(
+                    self.relation_name, relation_id
+                ).get("credentials_secret_id")
+            ):
+                return False
+            role_id, secret_id = self.juju_facade.get_secret_content_values(
+                "role-id",
+                "secret-id",
+                label=f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation_id}",
+                id=credentials_secret_id,
+            )
+            return bool(role_id and secret_id)
+        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
             return False
-        credentials = self._get_credentials(relation)
-        return credentials is not None
-
-    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
-        """Retrieve the credentials from the Juju secret.
-
-        Args:
-            relation: The relation to get the credentials for.
-
-        Returns:
-            An ApproleDetails object if the credentials are found, None otherwise.
-        """
-        if not relation.active:
-            logger.warning("Relation is not active")
-            return None
-        if relation.app is None:
-            logger.warning("No remote application yet")
-            return None
-        credentials_secret_id = relation.data[self.charm.app].get("credentials_secret_id")
-        if credentials_secret_id is None:
-            return None
-        secret = self.model.get_secret(id=credentials_secret_id)
-        return _get_credentials_from_secret(secret)
 
 
 def _is_provider_data_valid(data: RelationDataContent) -> bool:
@@ -434,19 +443,20 @@ def _is_provider_data_valid(data: RelationDataContent) -> bool:
         return False
 
 
-class VaultAutounsealRequires(ops.Object):
+class VaultAutounsealRequires(Object):
     """Manages the vault-autounseal relation from the requirer side."""
 
     on: VaultAutounsealRequireEvents = VaultAutounsealRequireEvents()  # type: ignore
 
-    def __init__(self, charm: ops.CharmBase, relation_name: str):
+    def __init__(self, charm: CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
+        self.juju_facade = JujuFacade(charm)
         self.relation_name = relation_name
 
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
         self.framework.observe(charm.on[relation_name].relation_broken, self._on_relation_broken)
 
-    def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         data = event.relation.data[event.app]
         if _is_provider_data_valid(data):
             details = self.get_details()
@@ -462,7 +472,7 @@ class VaultAutounsealRequires(ops.Object):
                 details.ca_certificate,
             )
 
-    def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
+    def _on_relation_broken(self, _: RelationBrokenEvent) -> None:
         self.on.vault_autounseal_provider_relation_broken.emit()
 
     def get_details(self) -> AutounsealDetails | None:
@@ -471,20 +481,22 @@ class VaultAutounsealRequires(ops.Object):
         Returns:
             An AutounsealDetails object if the data is valid, None otherwise.
         """
-        relation = self.framework.model.get_relation(self.relation_name)
-        if not relation:
+        try:
+            relation_data = self.juju_facade.get_remote_app_relation_data(self.relation_name)
+        except (TransientJujuError, NoSuchRelationError, NoRemoteAppError):
             return None
-        if not relation.active:
+        except MultipleRelationsFoundError:
+            raise MultipleRelationsFoundError(
+                "Autounseal requirer can't be related to more than one provider"
+            )
+        address = relation_data.get("address")
+        mount_path = relation_data.get("mount_path")
+        key_name = relation_data.get("key_name")
+        ca_certificate = relation_data.get("ca_certificate")
+        credentials_secret_id = relation_data.get("credentials_secret_id")
+        if not credentials_secret_id:
             return None
-        if relation.app is None:
-            logger.warning("No remote application yet")
-            return None
-        data = relation.data[relation.app]
-        address = data.get("address")
-        mount_path = data.get("mount_path")
-        key_name = data.get("key_name")
-        ca_certificate = data.get("ca_certificate")
-        credentials = self._get_credentials(relation)
+        credentials = self._get_credentials(credentials_secret_id)
         if not (address and mount_path and key_name and ca_certificate and credentials):
             return None
         return AutounsealDetails(
@@ -496,39 +508,28 @@ class VaultAutounsealRequires(ops.Object):
             ca_certificate,
         )
 
-    def _get_credentials(self, relation: ops.Relation) -> ApproleDetails | None:
+    def _get_credentials(self, credentials_secret_id: str) -> ApproleDetails | None:
         """Return the token from the Juju secret.
 
         Returns:
-            A tuple containing the role id and secret id
+            An ApproleDetails object if the credentials are found, None otherwise.
         """
-        if not relation.active:
-            logger.warning("Relation is not active")
-            return None
-        if relation.app is None:
-            logger.warning("No remote application yet")
-            return None
-        credentials_secret_id = relation.data[relation.app].get("credentials_secret_id")
         if not credentials_secret_id:
             return None
-        secret = self.model.get_secret(id=credentials_secret_id)
-        return _get_credentials_from_secret(secret)
+        try:
+            # TODO label
+            role_id, secret_id = self.juju_facade.get_secret_content_values(
+                "role-id",
+                "secret-id",
+                id=credentials_secret_id,
+            )
+            if not role_id or not secret_id:
+                return None
+        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
+            return None
+        return ApproleDetails(role_id, secret_id)
 
 
-def _get_credentials_from_secret(secret: ops.Secret) -> ApproleDetails | None:
-    """Retrieve the Approle credentials from the Juju secret.
-
-    Args:
-        secret: The secret to get the credentials for.
-
-    Returns:
-        An ApproleDetails object if the credentials are found, None otherwise.
-    """
-    try:
-        secret_content = secret.get_content(refresh=True)
-    except SecretNotFoundError:
-        logger.warning("Secret not found")
-        return None
-    role_id = secret_content.get("role-id")
-    secret_id = secret_content.get("secret-id")
-    return ApproleDetails(role_id, secret_id) if role_id and secret_id else None
+# TODO what to do with relation.active? We shouldn't care unless we are in a relation broken event, this can be used to check that instead of checking event type
+# TODO what to do with the secret label? Can we have a secret with no label?
+# TODO think of secret.grant()
