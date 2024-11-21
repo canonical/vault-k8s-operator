@@ -722,8 +722,8 @@ class TestVaultK8sIntegrationsPart2:
         status = await ops_test.model.get_status()
         minio_ip = (
             status.applications[MINIO_APPLICATION_NAME]
-            .units[f"{MINIO_APPLICATION_NAME}/0"]
-            .address
+            .units[f"{MINIO_APPLICATION_NAME}/0"]  # type: ignore[reportOptionalMemberAccess]
+            .address  # type: ignore[reportOptionalMemberAccess]
         )
         endpoint = f"http://{minio_ip}:9000"
         s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
