@@ -344,7 +344,14 @@ class JujuFacade:
         secret_id: int | None = None,
         secret_label: str | None = None,
     ) -> None:
-        """Grant the secret to the relation."""
+        """Grant the secret to the relation.
+
+        If secret ID or label is provided, it retrieves the secret and grants it to the relation.
+
+        Raises:
+            NoSuchSecretError
+            SecretRemovedError
+        """
         if secret:
             secret.grant(relation)
             return
@@ -374,7 +381,8 @@ class JujuFacade:
         """Get the relation object by name.
 
         Raises:
-            NoSuchRelationError: if the relation does not exist
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         relations = self.charm.model.relations.get(relation_name, [])
         if not relations:
@@ -405,11 +413,7 @@ class JujuFacade:
     def get_active_relations(
         self, relation_name: str, relation_id: int | None = None
     ) -> List[Relation]:
-        """Get all relations with the given name or ID that are active.
-
-        Returns:
-            A list of active relations.
-        """
+        """Get all relations with the given name or ID that are active."""
         relations = self.get_relations(relation_name, relation_id)
         return [relation for relation in relations if relation.active]
 
@@ -439,7 +443,8 @@ class JujuFacade:
             The relation data as a dict
 
         Raises:
-            NoSuchRelationError: if the relation is not found
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         try:
             return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
@@ -455,7 +460,8 @@ class JujuFacade:
             The relation data as a dict
 
         Raises:
-            NoSuchRelationError: if the relation is not found
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         try:
             relation = (
@@ -480,7 +486,8 @@ class JujuFacade:
         """Get relation data from the remote unit databag.
 
         Raises:
-            NoSuchRelationError: if the relation is not found
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         try:
             return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
@@ -493,7 +500,8 @@ class JujuFacade:
         """Get relation data from the remote units databags.
 
         Raises:
-            NoSuchRelationError: if the relation is not found
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         try:
             relation = (
@@ -538,9 +546,10 @@ class JujuFacade:
         """Set relation data in the caller's application databag.
 
         Raises:
-            NotLeaderError: if the unit is not leader
-            InvalidRelationDataError: if the relation data is invalid
-            NoSuchRelationError: if the relation is not found
+            NotLeaderError
+            InvalidRelationDataError
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         if not self.charm.model.unit.is_leader():
             raise NotLeaderError("Action not allowed for non-leader units")
@@ -560,8 +569,9 @@ class JujuFacade:
         """Set relation data in the caller's unit databag.
 
         Raises:
-            InvalidRelationDataError: if the relation data is invalid
-            NoSuchRelationError: if the relation is not found
+            InvalidRelationDataError
+            NoSuchRelationError
+            MultipleRelationsFoundError
         """
         try:
             self._set_relation_data(
