@@ -237,7 +237,7 @@ class JujuFacade:
             logger.error("Invalid secret content %s: %s", content, e)
             raise SecretValidationError(e) from e
 
-    def _create_new_secret(
+    def _create_secret(
         self,
         content: dict[str, str],
         label: str | None = None,
@@ -255,14 +255,14 @@ class JujuFacade:
         unit_or_app: Literal["unit", "app"] = "app",
     ) -> Secret:
         if not label and not id:
-            return self._create_new_secret(content, label, unit_or_app)
+            return self._create_secret(content, label, unit_or_app)
         try:
             secret = self.get_secret(label=label, id=id)
             latest_content = self.get_latest_secret_content(label=label, id=id)
         except TransientJujuError:
             raise
         except (NoSuchSecretError, SecretRemovedError):
-            return self._create_new_secret(content, label, unit_or_app)
+            return self._create_secret(content, label, unit_or_app)
         try:
             if latest_content == content:
                 logger.info(
@@ -337,14 +337,14 @@ class JujuFacade:
         except TransientJujuError:
             raise
 
-    def grant_secret_to_relation(
+    def grant_secret(
         self,
         relation: Relation,
         secret: Secret | None = None,
-        secret_id: int | None = None,
+        secret_id: str | None = None,
         secret_label: str | None = None,
     ) -> None:
-        """Grant the secret to the relation.
+        """Grant read access to the secret to the application related.
 
         If secret ID or label is provided, it retrieves the secret and grants it to the relation.
 
