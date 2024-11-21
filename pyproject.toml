@@ -1,3 +1,43 @@
+[project]
+name = "vault-k8s-operator"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "boto3",
+    "boto3-stubs[s3]",
+    "cosl",
+    "cryptography",
+    "hvac",
+    "jinja2",
+    "jsonschema",
+    "lightkube",
+    "lightkube-models",
+    "ops",
+    "opentelemetry-exporter-otlp-proto-http",
+    "pydantic==2.9.2",
+    "pytest-interface-tester",
+    "pyhcl",
+    "requests",
+    "rpds-py==0.18.0",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "juju",
+    "pytest",
+    "pytest-operator",
+    "pytest-asyncio==0.21.2",
+    "ops[testing]",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+    "types-hvac",
+]
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
