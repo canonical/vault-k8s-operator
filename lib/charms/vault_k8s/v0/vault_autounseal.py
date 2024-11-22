@@ -324,6 +324,11 @@ class VaultAutounsealProvides(Object):
             approle_role_id: The AppRole Role ID to use when authenticating with the external Vault server.
             approle_secret_id: The AppRole Secret ID to use when authenticating with the external Vault server.
             ca_certificate: The CA certificate to use when validating the external Vault server's certificate.
+
+        Raises:
+            TransientJujuError
+            SecretValidationError
+            ValueError
         """
         if not self.juju_facade.is_leader:
             return
@@ -432,6 +437,10 @@ class VaultAutounsealRequires(Object):
 
         Returns:
             An AutounsealDetails object if the data is valid, None otherwise.
+
+        Raises:
+            RuntimeError: If the requirer is related to more than one provider.
+            TransientJujuError
         """
         try:
             relation_data = self.juju_facade.get_remote_app_relation_data(self.relation_name)
