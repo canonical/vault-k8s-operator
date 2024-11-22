@@ -33,6 +33,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from charms.vault_k8s.v0.juju_facade import NoSuchRelationError, TransientJujuError
 from charms.vault_k8s.v0.vault_autounseal import (
     AutounsealDetails,
     VaultAutounsealProvides,
@@ -304,15 +305,19 @@ class VaultCharm(CharmBase):
             logger.warning("CA certificate not available, ignoring request to set autounseal data")
             return
 
-        self.vault_autounseal_provides.set_autounseal_data(
-            relation,
-            vault_address,
-            AUTOUNSEAL_MOUNT_PATH,
-            key_name,
-            approle_id,
-            approle_secret_id,
-            ca_cert,
-        )
+        try:
+            self.vault_autounseal_provides.set_autounseal_data(
+                relation,
+                vault_address,
+                AUTOUNSEAL_MOUNT_PATH,
+                key_name,
+                approle_id,
+                approle_secret_id,
+                ca_cert,
+            )
+        except NoSuchRelationError as e:
+            logger.error("Failed to set autounseal data: %s", e)
+            return
 
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
@@ -1161,7 +1166,11 @@ class VaultCharm(CharmBase):
         Returns the autounseal configuration details if all the required
         information is available, otherwise `None`.
         """
-        autounseal_details = self.vault_autounseal_requires.get_details()
+        try:
+            autounseal_details = self.vault_autounseal_requires.get_details()
+        except TransientJujuError as e:
+            logger.error("Failed to get autounseal details: %s", e)
+            return None
         if not autounseal_details:
             return None
 

@@ -6,6 +6,7 @@ import pytest
 from charms.vault_k8s.v0.juju_facade import (
     InvalidRelationDataError,
     JujuFacade,
+    MultipleRelationsFoundError,
     NoSuchRelationError,
     NoSuchSecretError,
     NoSuchStorageError,
@@ -261,6 +262,37 @@ class TestJujuFacade:
         data = {"key": 123}  # int value
         with pytest.raises(InvalidRelationDataError):
             self.facade.set_app_relation_data(cast(dict[str, str], data), "test-relation", 1)
+
+    def test_given_no_relations_when_get_relation_by_name_then_raises_no_such_relation(self):
+        charm = Mock()
+        charm.model = Mock(relations={})
+        self.facade.charm = charm
+
+        with pytest.raises(NoSuchRelationError):
+            self.facade.get_relation_by_name("test-relation")
+
+    def test_given_multiple_relations_with_relation_name_when_get_relation_by_name_then_raises_multiple_relations_found(
+        self,
+    ):
+        relation_1 = Mock()
+        relation_2 = Mock()
+        charm = Mock()
+        charm.model = Mock(relations={"test-relation": [relation_1, relation_2]})
+        self.facade.charm = charm
+
+        with pytest.raises(MultipleRelationsFoundError):
+            self.facade.get_relation_by_name("test-relation")
+
+    def test_given_multiple_relations_when_get_active_relations_then_returns_only_active_relations(
+        self,
+    ):
+        relation_1 = Mock(active=True)
+        relation_2 = Mock(active=False)
+        charm = Mock()
+        charm.model = Mock(relations={"test-relation": [relation_1, relation_2]})
+        self.facade.charm = charm
+
+        assert self.facade.get_active_relations("test-relation") == [relation_1]
 
     # Tests for Storage methods
 
