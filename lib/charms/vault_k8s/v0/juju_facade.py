@@ -117,8 +117,6 @@ class JujuFacade:
             return True
         except NoSuchSecretError:
             return False
-        except TransientJujuError:
-            raise
 
     def secret_exists_with_fields(
         self, fields: tuple[str, ...], label: str | None = None, id: str | None = None
@@ -141,8 +139,6 @@ class JujuFacade:
             return all(secret_content.get(field) for field in fields)
         except (NoSuchSecretError, SecretRemovedError):
             return False
-        except TransientJujuError:
-            raise
 
     def _get_secret_content(
         self, label: str | None = None, id: str | None = None, refresh: bool = False
@@ -169,10 +165,7 @@ class JujuFacade:
             NoSuchSecretError
             SecretRemovedError
         """
-        try:
-            return self._get_secret_content(label=label, id=id)
-        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
-            raise
+        return self._get_secret_content(label=label, id=id)
 
     def get_latest_secret_content(
         self, label: str | None = None, id: str | None = None
@@ -184,10 +177,7 @@ class JujuFacade:
             NoSuchSecretError
             SecretRemovedError
         """
-        try:
-            return self._get_secret_content(label=label, id=id, refresh=True)
-        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
-            raise
+        return self._get_secret_content(label=label, id=id, refresh=True)
 
     def get_secret_content_values(
         self, *keys: str, label: str | None = None, id: str | None = None
@@ -208,14 +198,11 @@ class JujuFacade:
             NoSuchSecretError
             SecretRemovedError
         """
-        try:
-            secret_content = self._get_secret_content(label=label, id=id)
-            for key in keys:
-                if key not in secret_content:
-                    logger.warning("Secret %s does not have key %s", label, key)
-            return tuple(secret_content.get(key, None) for key in keys)
-        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
-            raise
+        secret_content = self._get_secret_content(label=label, id=id)
+        for key in keys:
+            if key not in secret_content:
+                logger.warning("Secret %s does not have key %s", label or id, key)
+        return tuple(secret_content.get(key, None) for key in keys)
 
     def _add_app_secret(self, content: dict[str, str], label: str | None = None) -> Secret:
         """Add a secret to the application."""
@@ -259,8 +246,6 @@ class JujuFacade:
         try:
             secret = self.get_secret(label=label, id=id)
             latest_content = self.get_latest_secret_content(label=label, id=id)
-        except TransientJujuError:
-            raise
         except (NoSuchSecretError, SecretRemovedError):
             return self._create_secret(content, label, unit_or_app)
         try:
@@ -290,10 +275,7 @@ class JujuFacade:
             TransientJujuError
             SecretValidationError
         """
-        try:
-            return self._set_secret_content(content=content, label=label, id=id, unit_or_app="app")
-        except (TransientJujuError, SecretValidationError):
-            raise
+        return self._set_secret_content(content=content, label=label, id=id, unit_or_app="app")
 
     def set_unit_secret_content(
         self, content: dict[str, str], label: str, id: str | None = None
@@ -306,12 +288,7 @@ class JujuFacade:
             TransientJujuError
             SecretValidationError
         """
-        try:
-            return self._set_secret_content(
-                content=content, label=label, id=id, unit_or_app="unit"
-            )
-        except (TransientJujuError, SecretValidationError):
-            raise
+        return self._set_secret_content(content=content, label=label, id=id, unit_or_app="unit")
 
     def set_secret_label(self, new_label: str, label: str, id: str | None = None) -> None:
         """Set a new label for the secret if the secret exists.
@@ -319,11 +296,8 @@ class JujuFacade:
         Raises:
             TransientJujuError
         """
-        try:
-            secret = self.get_secret(label=label, id=id)
-            secret.set_info(label=new_label)
-        except TransientJujuError:
-            raise
+        secret = self.get_secret(label=label, id=id)
+        secret.set_info(label=new_label)
 
     def set_secret_expiry(self, expiry: datetime, label: str, id: str | None = None) -> None:
         """Set a new expiry date for the secret if the secret exists.
@@ -331,11 +305,8 @@ class JujuFacade:
         Raises:
             TransientJujuError
         """
-        try:
-            secret = self.get_secret(label=label, id=id)
-            secret.set_info(expire=expiry)
-        except TransientJujuError:
-            raise
+        secret = self.get_secret(label=label, id=id)
+        secret.set_info(expire=expiry)
 
     def grant_secret(
         self,
@@ -355,10 +326,7 @@ class JujuFacade:
         if secret:
             secret.grant(relation)
             return
-        try:
-            secret = self.get_secret(id=secret_id, label=secret_label)
-        except (NoSuchSecretError, SecretRemovedError):
-            raise
+        secret = self.get_secret(id=secret_id, label=secret_label)
         secret.grant(relation)
 
     # Relation related methods
@@ -377,22 +345,20 @@ class JujuFacade:
             raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
         return relation
 
-    def get_relation_by_name(self, relation_name: str) -> Relation:
+    def get_relation_by_name(self, name: str) -> Relation:
         """Get the relation object by name.
 
         Raises:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        relations = self.charm.model.relations.get(relation_name, [])
+        relations = self.charm.model.relations.get(name, [])
         if not relations:
-            logger.error("No relations found for %s", relation_name)
-            raise NoSuchRelationError(f"Relation {relation_name} not found")
+            logger.error("No relations found for %s", name)
+            raise NoSuchRelationError(f"Relation {name} not found")
         if len(relations) > 1:
-            logger.warning("More than one relation found for %s", relation_name)
-            raise MultipleRelationsFoundError(
-                f"More than one relation found for name {relation_name}"
-            )
+            logger.warning("More than one relation found for %s", name)
+            raise MultipleRelationsFoundError(f"More than one relation found for name {name}")
         return relations[0]
 
     def get_relations(self, relation_name: str, relation_id: int | None = None) -> List[Relation]:
@@ -424,14 +390,11 @@ class JujuFacade:
     def _read_relation_data(
         self, relation_name: str, relation_id: int | None, entity: Unit | Application
     ) -> RelationDataContent | dict[str, str]:
-        try:
-            relation = (
-                self.get_relation_by_id(relation_name, relation_id)
-                if relation_id
-                else self.get_relation_by_name(relation_name)
-            )
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        relation = (
+            self.get_relation_by_id(relation_name, relation_id)
+            if relation_id
+            else self.get_relation_by_name(relation_name)
+        )
         return relation.data.get(entity, {})
 
     def get_app_relation_data(
@@ -446,10 +409,7 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        try:
-            return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
 
     def get_remote_app_relation_data(
         self, relation_name: str, relation_id: int | None = None
@@ -463,22 +423,19 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        try:
-            relation = (
-                self.get_relation_by_id(relation_name, relation_id)
-                if relation_id
-                else self.get_relation_by_name(relation_name)
+        relation = (
+            self.get_relation_by_id(relation_name, relation_id)
+            if relation_id
+            else self.get_relation_by_name(relation_name)
+        )
+        if not relation:
+            raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
+        if not relation.app:
+            logger.warning("No remote application yet")
+            raise NoRemoteAppError(
+                f"Relation {relation_name}:{relation_id} has no remote application yet"
             )
-            if not relation:
-                raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
-            if not relation.app:
-                logger.warning("No remote application yet")
-                raise NoRemoteAppError(
-                    f"Relation {relation_name}:{relation_id} has no remote application yet"
-                )
-            return relation.data.get(relation.app, {})
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        return relation.data.get(relation.app, {})
 
     def get_unit_relation_data(
         self, relation_name: str, relation_id: int | None
@@ -489,10 +446,7 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        try:
-            return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
 
     def get_remote_units_relation_data(
         self, relation_name: str, relation_id: int | None
@@ -503,14 +457,11 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        try:
-            relation = (
-                self.get_relation_by_id(relation_name, relation_id)
-                if relation_id
-                else self.get_relation_by_name(relation_name)
-            )
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        relation = (
+            self.get_relation_by_id(relation_name, relation_id)
+            if relation_id
+            else self.get_relation_by_name(relation_name)
+        )
         return [relation.data.get(unit, {}) for unit in relation.units]
 
     def _set_relation_data(
@@ -520,15 +471,11 @@ class JujuFacade:
         relation_id: int | None,
         entity: Unit | Application,
     ) -> None:
-        try:
-            relation = (
-                self.get_relation_by_id(relation_name, relation_id)
-                if relation_id
-                else self.get_relation_by_name(relation_name)
-            )
-        except (NoSuchRelationError, MultipleRelationsFoundError):
-            raise
-
+        relation = (
+            self.get_relation_by_id(relation_name, relation_id)
+            if relation_id
+            else self.get_relation_by_name(relation_name)
+        )
         if not all(isinstance(value, str) for value in chain(data.values(), data.keys())):
             raise InvalidRelationDataError("Invalid relation data")
         try:
@@ -553,15 +500,12 @@ class JujuFacade:
         """
         if not self.charm.model.unit.is_leader():
             raise NotLeaderError("Action not allowed for non-leader units")
-        try:
-            self._set_relation_data(
-                data=data,
-                relation_name=relation_name,
-                relation_id=relation_id,
-                entity=self.charm.model.app,
-            )
-        except (InvalidRelationDataError, NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        self._set_relation_data(
+            data=data,
+            relation_name=relation_name,
+            relation_id=relation_id,
+            entity=self.charm.model.app,
+        )
 
     def set_unit_relation_data(
         self, data: dict[str, str], relation_name: str, relation_id: int | None
@@ -573,15 +517,12 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        try:
-            self._set_relation_data(
-                data=data,
-                relation_name=relation_name,
-                relation_id=relation_id,
-                entity=self.charm.model.unit,
-            )
-        except (InvalidRelationDataError, NoSuchRelationError, MultipleRelationsFoundError):
-            raise
+        self._set_relation_data(
+            data=data,
+            relation_name=relation_name,
+            relation_id=relation_id,
+            entity=self.charm.model.unit,
+        )
 
     # Charm config related methods
     def get_string_config(self, key: str) -> str | None:

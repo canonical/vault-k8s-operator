@@ -72,9 +72,7 @@ from charms.vault_k8s.v0.juju_facade import (
     NoRemoteAppError,
     NoSuchRelationError,
     NoSuchSecretError,
-    NotLeaderError,
     SecretRemovedError,
-    SecretValidationError,
     TransientJujuError,
 )
 from interface_tester import DataBagSchema
@@ -280,14 +278,6 @@ class AutounsealDetails:
     ca_certificate: str
 
 
-@dataclass
-class ApproleDetails:
-    """The details required to authenticate with Vault using the approle auth method."""
-
-    role_id: str
-    secret_id: str
-
-
 class VaultAutounsealProvides(Object):
     """Manages the vault-autounseal relation from the provider side."""
 
@@ -314,34 +304,6 @@ class VaultAutounsealProvides(Object):
         """Handle the relation broken event and emit a custom event."""
         self.on.vault_autounseal_requirer_relation_broken.emit(relation=event.relation)
 
-    def _create_autounseal_credentials_secret(
-        self, relation: Relation, role_id: str, secret_id: str
-    ) -> str:
-        """Create a Juju secret with the autounseal credentials.
-
-        Args:
-            relation: The relation to grant access to the secret.
-            role_id: The AppRole Role ID to store in the secret.
-            secret_id: The AppRole Secret ID to store in the secret.
-
-        Returns:
-            The secret id of the created secret.
-        """
-        try:
-            secret = self.juju_facade.set_app_secret_content(
-                label=f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation.id}",
-                content={
-                    "role-id": role_id,
-                    "secret-id": secret_id,
-                },
-            )
-        except (TransientJujuError, SecretValidationError):
-            raise
-        self.juju_facade.grant_secret(secret=secret, relation=relation)
-        if secret.id is None:
-            raise ValueError("Secret id is None")
-        return secret.id
-
     def set_autounseal_data(
         self,
         relation: Relation,
@@ -365,25 +327,27 @@ class VaultAutounsealProvides(Object):
         """
         if not self.juju_facade.is_leader:
             return
-        credentials_secret_id = self._create_autounseal_credentials_secret(
-            relation, approle_role_id, approle_secret_id
+        secret = self.juju_facade.set_app_secret_content(
+            label=f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation.id}",
+            content={
+                "role-id": approle_role_id,
+                "secret-id": approle_secret_id,
+            },
         )
-        try:
-            self.juju_facade.set_app_relation_data(
-                relation_name=self.relation_name,
-                relation_id=relation.id,
-                data={
-                    "address": vault_address,
-                    "mount_path": mount_path,
-                    "key_name": key_name,
-                    "credentials_secret_id": credentials_secret_id,
-                    "ca_certificate": ca_certificate,
-                },
-            )
-        except (TransientJujuError, SecretValidationError):
-            raise
-        except NotLeaderError:
-            return
+        self.juju_facade.grant_secret(secret=secret, relation=relation)
+        if secret.id is None:
+            raise ValueError("Secret id is None")
+        self.juju_facade.set_app_relation_data(
+            relation_name=self.relation_name,
+            relation_id=relation.id,
+            data={
+                "address": vault_address,
+                "mount_path": mount_path,
+                "key_name": key_name,
+                "credentials_secret_id": secret.id,
+                "ca_certificate": ca_certificate,
+            },
+        )
 
     def get_outstanding_requests(self, relation_id: int | None = None) -> List[Relation]:
         """Get the outstanding requests for the relation.
@@ -411,11 +375,10 @@ class VaultAutounsealProvides(Object):
             role_id, secret_id = self.juju_facade.get_secret_content_values(
                 "role-id",
                 "secret-id",
-                label=f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation_id}",
                 id=credentials_secret_id,
             )
             return bool(role_id and secret_id)
-        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
+        except (NoSuchSecretError, SecretRemovedError):
             return False
 
 
@@ -445,7 +408,10 @@ class VaultAutounsealRequires(Object):
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         data = event.relation.data[event.app]
         if _is_provider_data_valid(data):
-            details = self.get_details()
+            try:
+                details = self.get_details()
+            except TransientJujuError:
+                return
             if not details:
                 logger.warning("Missing details, but somehow we passed validation")
                 return
@@ -469,37 +435,15 @@ class VaultAutounsealRequires(Object):
         """
         try:
             relation_data = self.juju_facade.get_remote_app_relation_data(self.relation_name)
-        except (TransientJujuError, NoSuchRelationError, NoRemoteAppError):
+        except (NoSuchRelationError, NoRemoteAppError):
             return None
         except MultipleRelationsFoundError:
-            raise MultipleRelationsFoundError(
-                "Autounseal requirer can't be related to more than one provider"
-            )
+            raise RuntimeError("Autounseal requirer can't be related to more than one provider")
         address = relation_data.get("address")
         mount_path = relation_data.get("mount_path")
         key_name = relation_data.get("key_name")
         ca_certificate = relation_data.get("ca_certificate")
         credentials_secret_id = relation_data.get("credentials_secret_id")
-        if not credentials_secret_id:
-            return None
-        credentials = self._get_credentials(credentials_secret_id)
-        if not (address and mount_path and key_name and ca_certificate and credentials):
-            return None
-        return AutounsealDetails(
-            address,
-            mount_path,
-            key_name,
-            credentials.role_id,
-            credentials.secret_id,
-            ca_certificate,
-        )
-
-    def _get_credentials(self, credentials_secret_id: str) -> ApproleDetails | None:
-        """Return the token from the Juju secret.
-
-        Returns:
-            An ApproleDetails object if the credentials are found, None otherwise.
-        """
         if not credentials_secret_id:
             return None
         try:
@@ -508,8 +452,15 @@ class VaultAutounsealRequires(Object):
                 "secret-id",
                 id=credentials_secret_id,
             )
-            if not role_id or not secret_id:
-                return None
-        except (TransientJujuError, NoSuchSecretError, SecretRemovedError):
+        except (NoSuchSecretError, SecretRemovedError):
             return None
-        return ApproleDetails(role_id, secret_id)
+        if not (address and mount_path and key_name and ca_certificate and role_id and secret_id):
+            return None
+        return AutounsealDetails(
+            address,
+            mount_path,
+            key_name,
+            role_id,
+            secret_id,
+            ca_certificate,
+        )
