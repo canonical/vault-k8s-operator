@@ -12,11 +12,11 @@ attrs==24.2.0
     # via
     #   jsonschema
     #   referencing
-boto3==1.35.63
+boto3==1.35.68
     # via -r requirements.in
-boto3-stubs[s3]==1.35.63
+boto3-stubs[s3]==1.35.68
     # via -r requirements.in
-botocore==1.35.63
+botocore==1.35.68
     # via
     #   boto3
     #   s3transfer
@@ -33,7 +33,7 @@ charset-normalizer==3.4.0
     # via requests
 click==8.1.7
     # via typer
-cosl==0.0.43
+cosl==0.0.45
     # via -r requirements.in
 cryptography==43.0.3
     # via -r requirements.in
@@ -83,22 +83,22 @@ markupsafe==3.0.2
     # via jinja2
 mypy-boto3-s3==1.35.46
     # via boto3-stubs
-opentelemetry-api==1.28.1
+opentelemetry-api==1.28.2
     # via
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-otlp-proto-common==1.28.1
+opentelemetry-exporter-otlp-proto-common==1.28.2
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.28.1
+opentelemetry-exporter-otlp-proto-http==1.28.2
     # via -r requirements.in
-opentelemetry-proto==1.28.1
+opentelemetry-proto==1.28.2
     # via
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-sdk==1.28.1
+opentelemetry-sdk==1.28.2
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-semantic-conventions==0.49b1
+opentelemetry-semantic-conventions==0.49b2
     # via opentelemetry-sdk
 ops==2.17.0
     # via
@@ -117,18 +117,18 @@ protobuf==5.28.3
     #   opentelemetry-proto
 pycparser==2.22
     # via cffi
-pydantic==2.9.2
+pydantic==2.10.1
     # via
     #   -r requirements.in
     #   cosl
     #   pytest-interface-tester
-pydantic-core==2.23.4
+pydantic-core==2.27.1
     # via pydantic
 pyhcl==0.4.5
     # via -r requirements.in
 pytest==8.3.3
     # via pytest-interface-tester
-pytest-interface-tester==3.2.0
+pytest-interface-tester==3.3.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via botocore

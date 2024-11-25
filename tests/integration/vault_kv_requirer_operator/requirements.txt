@@ -28,15 +28,15 @@ packaging==24.0
     # via pytest
 pluggy==1.5.0
     # via pytest
-pydantic==2.9.1
+pydantic==2.10.1
     # via
     #   -r requirements.in
     #   pytest-interface-tester
-pydantic-core==2.23.3
+pydantic-core==2.27.1
     # via pydantic
 pytest==8.3.3
     # via pytest-interface-tester
-pytest-interface-tester==3.2.0
+pytest-interface-tester==3.3.0
     # via -r requirements.in
 pyyaml==6.0.1
     # via
@@ -46,7 +46,7 @@ requests==2.32.3
     # via hvac
 typer==0.7.0
     # via pytest-interface-tester
-typing-extensions==4.12.1
+typing-extensions==4.12.2
     # via
     #   pydantic
     #   pydantic-core

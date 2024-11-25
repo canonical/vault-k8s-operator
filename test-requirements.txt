@@ -22,7 +22,7 @@ charset-normalizer==3.4.0
     # via requests
 codespell==2.3.0
     # via -r test-requirements.in
-coverage[toml]==7.6.7
+coverage[toml]==7.6.8
     # via -r test-requirements.in
 cryptography==43.0.3
     # via paramiko
@@ -144,7 +144,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.7.4
+ruff==0.8.0
     # via -r test-requirements.in
 six==1.16.0
     # via
