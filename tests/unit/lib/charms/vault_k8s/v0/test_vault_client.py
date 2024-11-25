@@ -13,10 +13,12 @@ from charms.vault_k8s.v0.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
-    VaultAutounsealProviderManager,
-    VaultAutounsealRequirerManager,
     VaultClient,
     VaultClientError,
+)
+from charms.vault_k8s.v0.vault_managers import (
+    VaultAutounsealProviderManager,
+    VaultAutounsealRequirerManager,
 )
 from charms.vault_k8s.v0.vault_tls import VaultTLSManager
 from hvac.exceptions import Forbidden, InternalServerError, InvalidPath
@@ -441,7 +443,7 @@ class TestVaultAutounsealRequirerManager:
             (None, None, "new token"),  # Token is not set
         ],
     )
-    @patch("charms.vault_k8s.v0.vault_client.VaultClient")
+    @patch("charms.vault_k8s.v0.vault_managers.VaultClient")
     def test_when_vault_configuration_details_called_then_details_are_retrieved_correctly(
         self, vault_client_mock, token, token_valid, expected_token
     ):
@@ -507,7 +509,7 @@ class TestVaultAutounsealProviderManager:
         assert secret_id == "secret_id"
         provides.set_autounseal_data.assert_called_once()
 
-    @patch("charms.vault_k8s.v0.vault_client.JujuFacade")
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
     def test_sync(self, juju_facade_mock):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()
@@ -519,7 +521,6 @@ class TestVaultAutounsealProviderManager:
         test_relation = MagicMock()
         test_relation.id = 123
         provides.get_outstanding_requests.return_value = [test_relation]
-        # provides.get_active_relations.return_value = [test_relation]
         juju_facade_instance.get_active_relations.return_value = [test_relation]
         autounseal = VaultAutounsealProviderManager(
             charm, model, vault_client_mock, provides, "ca_cert"

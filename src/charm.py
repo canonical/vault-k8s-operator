@@ -39,11 +39,8 @@ from charms.vault_k8s.v0.vault_autounseal import (
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
     AuditDeviceType,
-    AutounsealConfigurationDetails,
     SecretsBackend,
     Token,
-    VaultAutounsealProviderManager,
-    VaultAutounsealRequirerManager,
     VaultClient,
     VaultClientError,
 )
@@ -51,6 +48,11 @@ from charms.vault_k8s.v0.vault_kv import (
     NewVaultKvClientAttachedEvent,
     VaultKvClientDetachedEvent,
     VaultKvProvides,
+)
+from charms.vault_k8s.v0.vault_managers import (
+    AutounsealConfigurationDetails,
+    VaultAutounsealProviderManager,
+    VaultAutounsealRequirerManager,
 )
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from charms.vault_k8s.v0.vault_tls import File, VaultCertsError, VaultTLSManager

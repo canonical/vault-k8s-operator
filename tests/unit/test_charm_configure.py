@@ -12,11 +12,13 @@ from charms.tls_certificates_interface.v4.tls_certificates import ProviderCertif
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
-    AutounsealConfigurationDetails,
     Certificate,
     SecretsBackend,
 )
 from charms.vault_k8s.v0.vault_kv import KVRequest
+from charms.vault_k8s.v0.vault_managers import (
+    AutounsealConfigurationDetails,
+)
 from ops.pebble import Layer
 
 from tests.unit.certificates import (

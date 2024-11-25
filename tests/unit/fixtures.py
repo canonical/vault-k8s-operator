@@ -7,9 +7,11 @@ import ops.testing as testing
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_client import (
+    VaultClient,
+)
+from charms.vault_k8s.v0.vault_managers import (
     VaultAutounsealProviderManager,
     VaultAutounsealRequirerManager,
-    VaultClient,
 )
 from charms.vault_k8s.v0.vault_s3 import S3
 from charms.vault_k8s.v0.vault_tls import VaultTLSManager
