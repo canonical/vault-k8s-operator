@@ -878,6 +878,9 @@ class VaultAutounsealRequirerManager:
             external_vault.authenticate(
                 AppRole(autounseal_details.role_id, autounseal_details.secret_id)
             )
+            # NOTE: This is a little hacky. If the token expires, every unit
+            # will generate a new token, until the leader unit generates a new
+            # valid token and sets it in the Juju secret.
             if self._model.unit.is_leader():
                 self._set_juju_secret(
                     self.AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": external_vault.token}
