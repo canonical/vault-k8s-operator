@@ -577,7 +577,6 @@ class VaultAutounsealProviderManager:
         ca_cert: str,
         mount_path: str = "charm-autounseal",
     ):
-        self._charm = charm
         self._juju_facade = JujuFacade(charm)
         self._model = juju_model
         self._client = client
@@ -756,12 +755,11 @@ class VaultAutounsealRequirerManager:
         self,
         charm: CharmBase,
         tls_manager: VaultTLSManager,
-        model: Model,
         requires: VaultAutounsealRequires,
     ):
+        self._charm = charm
         self._juju_facade = JujuFacade(charm)
         self._tls_manager = tls_manager
-        self._model = model
         self._requires = requires
 
     def vault_configuration_details(self) -> AutounsealConfigurationDetails | None:
@@ -812,7 +810,7 @@ class VaultAutounsealRequirerManager:
             # NOTE: This is a little hacky. If the token expires, every unit
             # will generate a new token, until the leader unit generates a new
             # valid token and sets it in the Juju secret.
-            if self._model.unit.is_leader():
+            if self._charm.model.unit.is_leader():
                 self._juju_facade.set_app_secret_content(
                     {"token": external_vault.token},
                     self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
