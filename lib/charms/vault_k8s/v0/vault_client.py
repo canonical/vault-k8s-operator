@@ -178,7 +178,8 @@ class VaultClient:
             return {}
         if data is None:
             return {}
-        assert isinstance(data, dict)
+        if isinstance(data, requests.Response):
+            data = data.json()
         return data.get("data", {})
 
     def write(self, path: str, data: dict) -> bool:
@@ -200,7 +201,8 @@ class VaultClient:
             return []
         if data is None:
             return []
-        assert isinstance(data, dict)
+        if isinstance(data, requests.Response):
+            data = data.json()
         try:
             return data["data"]["keys"]
         except KeyError:
