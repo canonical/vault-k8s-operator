@@ -305,7 +305,7 @@ class VaultClient:
 
     def create_or_update_approle(
         self,
-        role_name: str,
+        name: str,
         token_ttl=None,
         token_max_ttl=None,
         policies: List[str] | None = None,
@@ -315,7 +315,7 @@ class VaultClient:
         """Create/update a role within vault associating the supplied policies.
 
         Args:
-            role_name: Name of the role to be created or updated
+            name: Name of the role to be created or updated
             policies: The attached list of policy names this approle will have access to
             token_ttl: Incremental lifetime for generated tokens, provided as a duration string such as "5m"
             token_max_ttl: Maximum lifetime for generated tokens, provided as a duration string such as "5m"
@@ -323,7 +323,7 @@ class VaultClient:
             cidrs: The list of IP networks that are allowed to authenticate
         """
         self._client.auth.approle.create_or_update_approle(
-            role_name,
+            name,
             bind_secret_id="true",
             token_ttl=token_ttl,
             token_max_ttl=token_max_ttl,
@@ -331,7 +331,7 @@ class VaultClient:
             token_bound_cidrs=cidrs,
             token_period=token_period,
         )
-        response = self._client.auth.approle.read_role_id(role_name)
+        response = self._client.auth.approle.read_role_id(name)
         return response["data"]["role_id"]
 
     def generate_role_secret_id(self, name: str, cidrs: List[str] | None = None) -> str:
@@ -477,16 +477,16 @@ class VaultClient:
         """Check if raft cluster is healthy."""
         return self.get_raft_cluster_state()["healthy"]
 
-    def remove_raft_node(self, node_id: str) -> None:
+    def remove_raft_node(self, id: str) -> None:
         """Remove raft peer."""
         try:
-            self._client.sys.remove_raft_node(server_id=node_id)
+            self._client.sys.remove_raft_node(server_id=id)
         except (InternalServerError, ConnectionError) as e:
             logger.warning("Error while removing raft node: %s", e)
             return
-        logger.info("Removed raft node %s", node_id)
+        logger.info("Removed raft node %s", id)
 
-    def is_node_in_raft_peers(self, node_id: str) -> bool:
+    def is_node_in_raft_peers(self, id: str) -> bool:
         """Check if node is in raft peers."""
         try:
             raft_config = self._client.sys.read_raft_config()
@@ -494,7 +494,7 @@ class VaultClient:
             logger.warning("Error while reading raft config: %s", e)
             return False
         for peer in raft_config["data"]["config"]["servers"]:
-            if peer["node_id"] == node_id:
+            if peer["node_id"] == id:
                 return True
         return False
 
@@ -557,13 +557,13 @@ class VaultClient:
         response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
         logging.debug("Created a new transit key. response=%s", response)
 
-    def delete_role(self, role_name: str) -> None:
+    def delete_role(self, name: str) -> None:
         """Delete the approle with the given name."""
-        return self._client.auth.approle.delete_role(role_name)
+        return self._client.auth.approle.delete_role(name)
 
-    def delete_policy(self, policy_name: str) -> None:
+    def delete_policy(self, name: str) -> None:
         """Delete the policy with the given name."""
-        return self._client.sys.delete_policy(policy_name)
+        return self._client.sys.delete_policy(name)
 
 
 def generate_pem_bundle(certificate: str, private_key: str) -> str:

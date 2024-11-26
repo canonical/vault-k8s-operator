@@ -82,7 +82,7 @@ def test_given_node_in_peer_list_when_is_node_in_raft_peers_then_returns_true(pa
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
     patch_health_status.return_value = {"data": {"config": {"servers": [{"node_id": node_id}]}}}
 
-    assert vault.is_node_in_raft_peers(node_id=node_id)
+    assert vault.is_node_in_raft_peers(node_id)
 
 
 @patch("hvac.api.system_backend.raft.Raft.read_raft_config")
@@ -95,7 +95,7 @@ def test_given_node_not_in_peer_list_when_is_node_in_raft_peers_then_returns_fal
         "data": {"config": {"servers": [{"node_id": "not our node"}]}}
     }
 
-    assert not vault.is_node_in_raft_peers(node_id=node_id)
+    assert not vault.is_node_in_raft_peers(node_id)
 
 
 @patch("hvac.api.system_backend.raft.Raft.read_raft_config")

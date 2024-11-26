@@ -379,8 +379,8 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             return
         vault.authenticate(AppRole(role_id, secret_id))
-        if vault.is_node_in_raft_peers(node_id=self._node_id) and vault.get_num_raft_peers() > 1:
-            vault.remove_raft_node(node_id=self._node_id)
+        if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
+            vault.remove_raft_node(self._node_id)
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""
@@ -670,7 +670,7 @@ class VaultCharm(CharmBase):
             vault.create_or_update_policy(name=CHARM_POLICY_NAME, path=CHARM_POLICY_PATH)
             cidrs = [f"{self._bind_address}/24"]
             role_id = vault.create_or_update_approle(
-                role_name=APPROLE_ROLE_NAME,
+                name=APPROLE_ROLE_NAME,
                 cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
                 token_ttl="1h",
