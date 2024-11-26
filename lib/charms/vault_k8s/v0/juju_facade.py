@@ -79,6 +79,10 @@ class MultipleRelationsFoundError(FacadeError):
     """Exception raised when multiple relations are found."""
 
 
+class BindingNotFoundError(FacadeError):
+    """Exception raised when binding is not found for a relation."""
+
+
 class JujuFacade:
     """Juju API wrapper class."""
 
@@ -544,6 +548,15 @@ class JujuFacade:
         if not storages[storage_name]:
             raise NoSuchStorageError(f"Storage {storage_name} not found")
         return storages[storage_name][0].location
+
+    def get_ingress_address(self, relation) -> str | None:
+        """Get the ingress address."""
+        binding = self.charm.model.get_binding(relation)
+        if not binding:
+            raise BindingNotFoundError()
+        if binding.network.ingress_address:
+            return str(binding.network.ingress_address)
+        return None
 
     @property
     def model_name(self) -> str:

@@ -334,7 +334,6 @@ class VaultCharm(CharmBase):
         self._configure_pki_secrets_engine()
         VaultAutounsealProviderManager(
             self,
-            self.model,
             vault,
             self.vault_autounseal_provides,
             self.tls.pull_tls_file_from_workload(File.CA),
@@ -1151,7 +1150,7 @@ class VaultCharm(CharmBase):
         ]
 
         autounseal_details = VaultAutounsealRequirerManager(
-            self, self.tls, self.model, self.vault_autounseal_requires
+            self, self.tls, self.vault_autounseal_requires
         ).vault_configuration_details()
         content = _render_vault_config_file(
             default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),

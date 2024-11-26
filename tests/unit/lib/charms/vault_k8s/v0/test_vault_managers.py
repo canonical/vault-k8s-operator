@@ -32,7 +32,6 @@ class TestVaultAutounsealRequirerManager:
     ):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()
-        model = MagicMock()
         tls_manager = MagicMock(spec=VaultTLSManager)
         tls_manager.get_tls_file_path_in_workload.return_value = "/my/test/path"
         vault_client_instance = vault_client_mock.return_value
@@ -62,7 +61,7 @@ class TestVaultAutounsealRequirerManager:
         if not token:
             juju_facade_instance.get_secret_content_values.side_effect = SecretRemovedError()
 
-        autounseal = VaultAutounsealRequirerManager(charm, tls_manager, model, requires)
+        autounseal = VaultAutounsealRequirerManager(charm, tls_manager, requires)
         details = autounseal.vault_configuration_details()
 
         assert details is not None
@@ -76,7 +75,6 @@ class TestVaultAutounsealRequirerManager:
 class TestVaultAutounsealProviderManager:
     def test_create_credentials(self):
         charm = MagicMock()
-        model = MagicMock()
         provides = MagicMock()
         relation_id = 1
         relation = MagicMock()
@@ -85,9 +83,7 @@ class TestVaultAutounsealProviderManager:
         vault_client.create_or_update_approle.return_value = "role_id"
         vault_client.generate_role_secret_id.return_value = "secret_id"
 
-        autounseal = VaultAutounsealProviderManager(
-            charm, model, vault_client, provides, "ca_cert"
-        )
+        autounseal = VaultAutounsealProviderManager(charm, vault_client, provides, "ca_cert")
 
         key_name, role_id, secret_id = autounseal.create_credentials(relation)
 
@@ -100,7 +96,6 @@ class TestVaultAutounsealProviderManager:
     def test_sync(self, juju_facade_mock):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()
-        model = MagicMock()
         provides = MagicMock()
         vault_client_mock = MagicMock()
         vault_client_mock.list.return_value = ["charm-autounseal-123", "charm-autounseal-321"]
@@ -109,9 +104,7 @@ class TestVaultAutounsealProviderManager:
         test_relation.id = 123
         provides.get_outstanding_requests.return_value = [test_relation]
         juju_facade_instance.get_active_relations.return_value = [test_relation]
-        autounseal = VaultAutounsealProviderManager(
-            charm, model, vault_client_mock, provides, "ca_cert"
-        )
+        autounseal = VaultAutounsealProviderManager(charm, vault_client_mock, provides, "ca_cert")
 
         autounseal.sync()
 
@@ -131,17 +124,14 @@ class TestVaultAutounsealProviderManager:
         )
 
     @patch("charms.vault_k8s.v0.vault_client.VaultClient")
-    def test_get_address(self, vault_client_mock):
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
+    def test_get_address(self, juju_facade_mock, vault_client_mock):
+        juju_facade_instance = juju_facade_mock.return_value
+        juju_facade_instance.get_ingress_address.return_value = "1.2.3.4"
         charm = MagicMock()
-        model = MagicMock()
         provides = MagicMock()
         relation = MagicMock()
-        binding = MagicMock()
-        binding.network.ingress_address = "1.2.3.4"
-        model.get_binding.return_value = binding
-        autounseal = VaultAutounsealProviderManager(
-            charm, model, vault_client_mock, provides, "ca_cert"
-        )
+        autounseal = VaultAutounsealProviderManager(charm, vault_client_mock, provides, "ca_cert")
 
         address = autounseal.get_address(relation)
 

@@ -42,9 +42,8 @@ from charms.vault_k8s.v0.vault_client import (
     SecretsBackend,
     Token,
     VaultClient,
-    VaultClientError,
 )
-from ops import CharmBase, EventBase, Model, Object, Relation
+from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
 
 # The unique Charmhub library identifier, never change it
@@ -571,14 +570,13 @@ class VaultAutounsealProviderManager:
     def __init__(
         self,
         charm: CharmBase,
-        juju_model: Model,
         client: VaultClient,
         provides: VaultAutounsealProvides,
         ca_cert: str,
         mount_path: str = "charm-autounseal",
     ):
         self._juju_facade = JujuFacade(charm)
-        self._model = juju_model
+        self._model = charm.model
         self._client = client
         self._provides = provides
         self._mount_path = mount_path
@@ -590,10 +588,7 @@ class VaultAutounsealProviderManager:
 
     def get_address(self, relation: Relation) -> str:
         """Fetch the address from the relation and return it."""
-        binding = self._model.get_binding(relation)
-        if binding is None:
-            raise VaultClientError("Failed to fetch binding from relation")
-        return f"https://{binding.network.ingress_address}:{self._port}"
+        return f"https://{self._juju_facade.get_ingress_address(relation)}:{self._port}"
 
     @property
     def mount_path(self) -> str:
@@ -611,7 +606,7 @@ class VaultAutounsealProviderManager:
         relations, and logs a warning about orphaned keys. It will not remove
         any keys, to prevent loss of data.
         """
-        if not self._model.unit.is_leader():
+        if not self._juju_facade.is_leader:
             return
         outstanding_requests = self._provides.get_outstanding_requests()
         if outstanding_requests:
@@ -630,9 +625,9 @@ class VaultAutounsealProviderManager:
         """
         self._clean_up_roles()
         self._clean_up_policies()
-        self._detect_orphaned_keys()
+        self._detect_and_allow_deletion_of_orphaned_keys()
 
-    def _detect_orphaned_keys(self) -> None:
+    def _detect_and_allow_deletion_of_orphaned_keys(self) -> None:
         existing_keys = self._get_existing_keys()
         relation_key_names = [
             VaultAutounsealRelationDetails(relation).key_name
@@ -646,7 +641,7 @@ class VaultAutounsealProviderManager:
             " To delete a key, use the command `vault delete charm-autounseal/keys/<key_name>`."
         )
         for key_name in orphaned_keys:
-            deletion_allowed = self._detect_if_deletion_allowed(key_name)
+            deletion_allowed = self._is_deletion_allowed(key_name)
             if not deletion_allowed:
                 self._allow_key_deletion(key_name)
 
@@ -654,7 +649,7 @@ class VaultAutounsealProviderManager:
         logger.info("Allowing deletion of key %s", key_name)
         self._client.write(f"{self.mount_path}/keys/{key_name}/config", {"deletion_allowed": True})
 
-    def _detect_if_deletion_allowed(self, key_name) -> bool:
+    def _is_deletion_allowed(self, key_name) -> bool:
         data = self._client.read(f"{self.mount_path}/keys/{key_name}")
         return data["deletion_allowed"]
 
@@ -666,8 +661,8 @@ class VaultAutounsealProviderManager:
         ]
         for role in existing_roles:
             if role not in relation_role_names:
-                logging.info("Removing unused role: %s", role)
                 self._client.delete_role(role)
+                logging.info("Removing unused role: %s", role)
 
     def _clean_up_policies(self) -> None:
         existing_policies = self._get_existing_policies()
@@ -677,8 +672,8 @@ class VaultAutounsealProviderManager:
         ]
         for policy in existing_policies:
             if policy not in relation_policy_names:
-                logging.info("Removing unused policy: %s", policy)
                 self._client.delete_policy(policy)
+                logging.info("Removing unused policy: %s", policy)
 
     def _create_key(self, key_name) -> None:
         response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
@@ -810,7 +805,7 @@ class VaultAutounsealRequirerManager:
             # NOTE: This is a little hacky. If the token expires, every unit
             # will generate a new token, until the leader unit generates a new
             # valid token and sets it in the Juju secret.
-            if self._charm.model.unit.is_leader():
+            if self._juju_facade.is_leader:
                 self._juju_facade.set_app_secret_content(
                     {"token": external_vault.token},
                     self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
