@@ -17,7 +17,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from charms.vault_k8s.v0.vault_tls import CA_CERTIFICATE_JUJU_SECRET_LABEL
+from charms.vault_k8s.v0.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops.model import WaitingStatus
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
@@ -25,7 +25,7 @@ from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
 CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v0.certificate_transfer"
-VAULT_TLS_PATH = "charms.vault_k8s.v0.vault_tls"
+VAULT_MANAGERS_PATH = "charms.vault_k8s.v0.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
 
@@ -315,7 +315,7 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
-    @patch(f"{VAULT_TLS_PATH}.generate_certificate")
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
         self, patch_generate_certificate
     ):
@@ -481,8 +481,8 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_api_available", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
-    @patch(f"{VAULT_TLS_PATH}.generate_ca")
-    @patch(f"{VAULT_TLS_PATH}.generate_certificate")
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
         self, patch_generate_certificate, patch_generate_ca
     ):

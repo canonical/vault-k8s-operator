@@ -12,9 +12,9 @@ from charms.vault_k8s.v0.vault_client import (
 from charms.vault_k8s.v0.vault_managers import (
     VaultAutounsealProviderManager,
     VaultAutounsealRequirerManager,
+    VaultTLSManager,
 )
 from charms.vault_k8s.v0.vault_s3 import S3
-from charms.vault_k8s.v0.vault_tls import VaultTLSManager
 
 from charm import VaultCharm
 

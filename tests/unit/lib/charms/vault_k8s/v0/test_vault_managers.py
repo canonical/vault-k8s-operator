@@ -7,8 +7,8 @@ from charms.vault_k8s.v0.vault_client import VaultClient
 from charms.vault_k8s.v0.vault_managers import (
     VaultAutounsealProviderManager,
     VaultAutounsealRequirerManager,
+    VaultTLSManager,
 )
-from charms.vault_k8s.v0.vault_tls import VaultTLSManager
 
 
 class TestVaultAutounsealRequirerManager:

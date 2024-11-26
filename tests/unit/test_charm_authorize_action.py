@@ -145,7 +145,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             path="src/templates/charm_policy.hcl",
         )
         self.mock_vault.create_or_update_approle.assert_called_once_with(
-            role_name="charm",
+            name="charm",
             cidrs=["1.2.3.4/24"],
             policies=["charm-access", "default"],
             token_ttl="1h",
