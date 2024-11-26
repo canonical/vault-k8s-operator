@@ -140,9 +140,9 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             device_type=AuditDeviceType.FILE, path="stdout"
         )
         self.mock_vault.enable_approle_auth_method.assert_called_once()
-        self.mock_vault.configure_policy.assert_called_once_with(
-            policy_name="charm-access",
-            policy_path="src/templates/charm_policy.hcl",
+        self.mock_vault.create_or_update_policy.assert_called_once_with(
+            name="charm-access",
+            path="src/templates/charm_policy.hcl",
         )
         self.mock_vault.create_or_update_approle.assert_called_once_with(
             role_name="charm",

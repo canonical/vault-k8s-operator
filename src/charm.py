@@ -667,7 +667,7 @@ class VaultCharm(CharmBase):
         try:
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
             vault.enable_approle_auth_method()
-            vault.configure_policy(policy_name=CHARM_POLICY_NAME, policy_path=CHARM_POLICY_PATH)
+            vault.create_or_update_policy(name=CHARM_POLICY_NAME, path=CHARM_POLICY_PATH)
             cidrs = [f"{self._bind_address}/24"]
             role_id = vault.create_or_update_approle(
                 role_name=APPROLE_ROLE_NAME,
@@ -909,7 +909,7 @@ class VaultCharm(CharmBase):
     ):
         """Ensure a unit has credentials to access the vault-kv mount."""
         policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
-        vault.configure_policy(policy_name, "src/templates/kv_mount.hcl", mount=mount)
+        vault.create_or_update_policy(policy_name, "src/templates/kv_mount.hcl", mount=mount)
         role_id = vault.create_or_update_approle(
             role_name,
             policies=[policy_name],

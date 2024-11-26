@@ -284,40 +284,24 @@ class VaultClient:
         except VaultError as e:
             raise VaultClientError(e) from e
 
-    def configure_policy(self, policy_name: str, policy_path: str, **formatting_args: str) -> None:
+    def create_or_update_policy(self, name: str, path: str, **formatting_args: str) -> None:
         """Create/update a policy within vault.
 
         Args:
-            policy_name: Name of the policy to create
-            policy_path: The path of the file where the policy is defined, ending with .hcl
+            name: Name of the policy to create
+            path: The path of the file where the policy is defined, ending with .hcl
             **formatting_args: Additional arguments to format the policy
         """
-        with open(policy_path, "r") as f:
+        with open(path, "r") as f:
             policy = f.read()
         try:
             self._client.sys.create_or_update_policy(
-                name=policy_name,
+                name=name,
                 policy=policy if not formatting_args else policy.format(**formatting_args),
             )
         except VaultError as e:
             raise VaultClientError(e) from e
-        logger.debug("Created or updated charm policy: %s", policy_name)
-
-    def create_or_update_policy(self, policy_name: str, policy_content: str) -> None:
-        """Create or update a policy within vault.
-
-        Args:
-            policy_name: Name of the policy to create
-            policy_content: The path of the file where the policy is defined, ending with .hcl
-        """
-        try:
-            self._client.sys.create_or_update_policy(
-                name=policy_name,
-                policy=policy_content,
-            )
-        except VaultError as e:
-            raise VaultClientError(e) from e
-        logger.debug("Created or updated charm policy: %s", policy_name)
+        logger.debug("Created or updated charm policy: %s", name)
 
     def create_or_update_approle(
         self,
