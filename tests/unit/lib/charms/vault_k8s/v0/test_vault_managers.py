@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from charms.vault_k8s.v0.juju_facade import SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
 from charms.vault_k8s.v0.vault_client import VaultClient
 from charms.vault_k8s.v0.vault_managers import (
@@ -8,7 +9,6 @@ from charms.vault_k8s.v0.vault_managers import (
     VaultAutounsealRequirerManager,
 )
 from charms.vault_k8s.v0.vault_tls import VaultTLSManager
-from ops import SecretNotFoundError
 
 
 class TestVaultAutounsealRequirerManager:
@@ -21,9 +21,17 @@ class TestVaultAutounsealRequirerManager:
         ],
     )
     @patch("charms.vault_k8s.v0.vault_managers.VaultClient")
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
     def test_when_vault_configuration_details_called_then_details_are_retrieved_correctly(
-        self, vault_client_mock, token, token_valid, expected_token
+        self,
+        juju_facade_mock,
+        vault_client_mock,
+        token,
+        token_valid,
+        expected_token,
     ):
+        juju_facade_instance = juju_facade_mock.return_value
+        charm = MagicMock()
         model = MagicMock()
         tls_manager = MagicMock(spec=VaultTLSManager)
         tls_manager.get_tls_file_path_in_workload.return_value = "/my/test/path"
@@ -49,10 +57,12 @@ class TestVaultAutounsealRequirerManager:
         relation_id = 1
         relation = MagicMock()
         relation.id = relation_id
+        if token:
+            juju_facade_instance.get_secret_content_values.return_value = (token,)
         if not token:
-            model.get_secret.side_effect = SecretNotFoundError()
+            juju_facade_instance.get_secret_content_values.side_effect = SecretRemovedError()
 
-        autounseal = VaultAutounsealRequirerManager(tls_manager, model, requires)
+        autounseal = VaultAutounsealRequirerManager(charm, tls_manager, model, requires)
         details = autounseal.vault_configuration_details()
 
         assert details is not None

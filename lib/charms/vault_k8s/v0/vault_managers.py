@@ -4,11 +4,10 @@ This library encapsulates the business logic for managing the Vault service and
 its associated integrations within the context of our charms.
 """
 
-# The unique Charmhub library identifier, never change it
 import logging
 from dataclasses import dataclass
 
-from charms.vault_k8s.v0.juju_facade import JujuFacade
+from charms.vault_k8s.v0.juju_facade import JujuFacade, SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import (
     AutounsealDetails,
     VaultAutounsealProvides,
@@ -22,8 +21,9 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_tls import File, VaultTLSManager
-from ops import CharmBase, Model, Relation, SecretNotFoundError
+from ops import CharmBase, Model, Relation
 
+# The unique Charmhub library identifier, never change it
 LIBID = "4a8652e06ecb4eb28c5fdbf220d126bb"
 
 # Increment this major API version when introducing breaking changes
@@ -282,10 +282,12 @@ class VaultAutounsealRequirerManager:
 
     def __init__(
         self,
+        charm: CharmBase,
         tls_manager: VaultTLSManager,
         model: Model,
         requires: VaultAutounsealRequires,
     ):
+        self._juju_facade = JujuFacade(charm)
         self._tls_manager = tls_manager
         self._model = model
         self._requires = requires
@@ -323,7 +325,12 @@ class VaultAutounsealRequirerManager:
             url=autounseal_details.address,
             ca_cert_path=self._tls_manager.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
         )
-        existing_token = self._get_juju_secret_field(self.AUTOUNSEAL_TOKEN_SECRET_LABEL, "token")
+        try:
+            existing_token = self._juju_facade.get_secret_content_values(
+                "token", self.AUTOUNSEAL_TOKEN_SECRET_LABEL
+            )[0]
+        except SecretRemovedError:
+            existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
         if not existing_token or not external_vault.authenticate(Token(existing_token)):
@@ -334,39 +341,8 @@ class VaultAutounsealRequirerManager:
             # will generate a new token, until the leader unit generates a new
             # valid token and sets it in the Juju secret.
             if self._model.unit.is_leader():
-                self._set_juju_secret(
-                    self.AUTOUNSEAL_TOKEN_SECRET_LABEL, {"token": external_vault.token}
+                self._juju_facade.set_app_secret_content(
+                    {"token": external_vault.token},
+                    self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
                 )
         return external_vault.token
-
-    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
-        """Retrieve the latest revision of the secret content from Juju.
-
-        Returns:
-            The value of the field is returned, or `None` if the field does not
-            exist.
-
-            If the secret does not exist, `None` is returned.
-        """
-        try:
-            juju_secret = self._model.get_secret(label=label)
-        except SecretNotFoundError:
-            return None
-        content = juju_secret.get_content(refresh=True)
-        return content.get(field)
-
-    def _set_juju_secret(
-        self, label: str, content: dict[str, str], description: str | None = None
-    ) -> None:
-        """Set the secret content at `label`, overwrite if it already exists.
-
-        Args:
-            label: The label of the secret.
-            content: The content of the secret.
-            description: The description of the secret.
-        """
-        try:
-            secret = self._model.get_secret(label=label)
-            secret.set_content(content)
-        except SecretNotFoundError:
-            self._model.app.add_secret(content, label=label, description=description)
