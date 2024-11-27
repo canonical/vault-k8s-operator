@@ -636,7 +636,7 @@ class VaultAutounsealProviderManager:
         orphaned_keys = [key for key in existing_keys if key not in relation_key_names]
         if not orphaned_keys:
             return
-        logging.warning(
+        logger.warning(
             "Orphaned autounseal keys were detected: %s. If you are sure these are no longer needed, you may manually delete them using the vault CLI to suppress this message. To delete a key, use the command `vault delete charm-autounseal/keys/<key_name>`.",
             orphaned_keys,
         )
@@ -646,8 +646,8 @@ class VaultAutounsealProviderManager:
                 self._allow_key_deletion(key_name)
 
     def _allow_key_deletion(self, key_name: str) -> None:
-        logger.info("Allowing deletion of key %s", key_name)
         self._client.write(f"{self.mount_path}/keys/{key_name}/config", {"deletion_allowed": True})
+        logger.info("Key marked as `deletion_allowed`: %s", key_name)
 
     def _is_deletion_allowed(self, key_name: str) -> bool:
         data = self._client.read(f"{self.mount_path}/keys/{key_name}")
@@ -662,7 +662,7 @@ class VaultAutounsealProviderManager:
         for role in existing_roles:
             if role not in relation_role_names:
                 self._client.delete_role(role)
-                logging.info("Removing unused role: %s", role)
+                logger.info("Removed unused role: %s", role)
 
     def _clean_up_policies(self) -> None:
         existing_policies = self._get_existing_policies()
@@ -673,11 +673,11 @@ class VaultAutounsealProviderManager:
         for policy in existing_policies:
             if policy not in relation_policy_names:
                 self._client.delete_policy(policy)
-                logging.info("Removing unused policy: %s", policy)
+                logger.info("Removed unused policy: %s", policy)
 
     def _create_key(self, key_name: str) -> None:
         response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
-        logging.debug("Created a new autounseal key: %s", response)
+        logger.debug("Created a new autounseal key: %s", response)
 
     def create_credentials(self, relation: Relation) -> tuple[str, str, str]:
         """Create auto-unseal credentials for the given relation.
