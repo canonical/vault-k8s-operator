@@ -645,11 +645,11 @@ class VaultAutounsealProviderManager:
             if not deletion_allowed:
                 self._allow_key_deletion(key_name)
 
-    def _allow_key_deletion(self, key_name) -> None:
+    def _allow_key_deletion(self, key_name: str) -> None:
         logger.info("Allowing deletion of key %s", key_name)
         self._client.write(f"{self.mount_path}/keys/{key_name}/config", {"deletion_allowed": True})
 
-    def _is_deletion_allowed(self, key_name) -> bool:
+    def _is_deletion_allowed(self, key_name: str) -> bool:
         data = self._client.read(f"{self.mount_path}/keys/{key_name}")
         return data["deletion_allowed"]
 
@@ -675,7 +675,7 @@ class VaultAutounsealProviderManager:
                 self._client.delete_policy(policy)
                 logging.info("Removing unused policy: %s", policy)
 
-    def _create_key(self, key_name) -> None:
+    def _create_key(self, key_name: str) -> None:
         response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
         logging.debug("Created a new autounseal key: %s", response)
 
