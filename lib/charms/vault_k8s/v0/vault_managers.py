@@ -528,8 +528,7 @@ def existing_certificate_is_self_signed(ca_certificate: Certificate) -> bool:
     return ca_certificate.common_name == VAULT_CA_SUBJECT
 
 
-@dataclass
-class VaultAutounsealRelationDetails:
+class VaultAutounsealNaming:
     """Computes the auto-unseal related values for a relation.
 
     This class is used to compute the static details for a vault-autounseal
@@ -540,22 +539,24 @@ class VaultAutounsealRelationDetails:
     the auto-unseal functionality.
     """
 
-    relation: Relation
+    key_prefix: str = ""
+    policy_prefix: str = "charm-autounseal-"
+    approle_prefix: str = "charm-autounseal-"
 
-    @property
-    def key_name(self) -> str:
+    @classmethod
+    def key_name(cls, relation_id) -> str:
         """Return the key name for the relation."""
-        return str(self.relation.id)
+        return f"{cls.key_prefix}{relation_id}"
 
-    @property
-    def policy_name(self) -> str:
+    @classmethod
+    def policy_name(cls, relation_id) -> str:
         """Return the policy name for the relation."""
-        return f"charm-autounseal-{self.relation.id}"
+        return f"{cls.policy_prefix}{relation_id}"
 
-    @property
-    def approle_name(self) -> str:
+    @classmethod
+    def approle_name(cls, relation_id) -> str:
         """Return the approle name for the relation."""
-        return f"charm-autounseal-{self.relation.id}"
+        return f"{cls.approle_prefix}{relation_id}"
 
 
 class VaultAutounsealProviderManager:
@@ -628,15 +629,16 @@ class VaultAutounsealProviderManager:
     def _detect_and_allow_deletion_of_orphaned_keys(self) -> None:
         existing_keys = self._get_existing_keys()
         relation_key_names = [
-            VaultAutounsealRelationDetails(relation).key_name
+            VaultAutounsealNaming.key_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         orphaned_keys = [key for key in existing_keys if key not in relation_key_names]
         if not orphaned_keys:
             return
         logger.warning(
-            "Orphaned autounseal keys were detected: %s. If you are sure these are no longer needed, you may manually delete them using the vault CLI to suppress this message. To delete a key, use the command `vault delete charm-autounseal/keys/<key_name>`.",
+            "Orphaned autounseal keys were detected: %s. If you are sure these are no longer needed, you may manually delete them using the vault CLI to suppress this message. To delete a key, use the command `vault delete %s/keys/<key_name>`.",
             orphaned_keys,
+            self.mount_path,
         )
         for key_name in orphaned_keys:
             deletion_allowed = self._is_deletion_allowed(key_name)
@@ -654,7 +656,7 @@ class VaultAutounsealProviderManager:
     def _clean_up_roles(self) -> None:
         existing_roles = self._get_existing_roles()
         relation_role_names = [
-            VaultAutounsealRelationDetails(relation).approle_name
+            VaultAutounsealNaming.approle_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         for role in existing_roles:
@@ -665,7 +667,7 @@ class VaultAutounsealProviderManager:
     def _clean_up_policies(self) -> None:
         existing_policies = self._get_existing_policies()
         relation_policy_names = [
-            VaultAutounsealRelationDetails(relation).policy_name
+            VaultAutounsealNaming.policy_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         for policy in existing_policies:
@@ -686,42 +688,44 @@ class VaultAutounsealProviderManager:
         Returns:
             A tuple containing the key name, role ID, and approle secret ID.
         """
-        relation_details = VaultAutounsealRelationDetails(relation)
-        self._create_key(relation_details.key_name)
-        policy_content = AUTOUNSEAL_POLICY.format(
-            mount=self.mount_path, key_name=relation_details.key_name
-        )
+        key_name = VaultAutounsealNaming.key_name(relation.id)
+        policy_name = VaultAutounsealNaming.policy_name(relation.id)
+        approle_name = VaultAutounsealNaming.approle_name(relation.id)
+        self._create_key(key_name)
+        policy_content = AUTOUNSEAL_POLICY.format(mount=self.mount_path, key_name=key_name)
         self._client.create_or_update_policy(
-            relation_details.policy_name,
+            policy_name,
             policy_content,
         )
         role_id = self._client.create_or_update_approle(
-            relation_details.approle_name,
-            policies=[relation_details.policy_name],
+            approle_name,
+            policies=[policy_name],
             token_period="60s",
         )
-        secret_id = self._client.generate_role_secret_id(relation_details.approle_name)
+        secret_id = self._client.generate_role_secret_id(approle_name)
         self._provides.set_autounseal_data(
             relation,
             self.get_address(relation),
             self.mount_path,
-            relation_details.key_name,
+            key_name,
             role_id,
             secret_id,
             self._ca_cert,
         )
-        return relation_details.key_name, role_id, secret_id
+        return key_name, role_id, secret_id
 
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
 
     def _get_existing_roles(self) -> list[str]:
         output = self._client.list("auth/approle/role")
-        return [role for role in output if role.startswith("charm-autounseal-")]
+        return [role for role in output if role.startswith(VaultAutounsealNaming.approle_prefix)]
 
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
-        return [policy for policy in output if policy.startswith("charm-autounseal-")]
+        return [
+            policy for policy in output if policy.startswith(VaultAutounsealNaming.policy_prefix)
+        ]
 
 
 @dataclass
