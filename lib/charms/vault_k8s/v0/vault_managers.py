@@ -637,8 +637,8 @@ class VaultAutounsealProviderManager:
         if not orphaned_keys:
             return
         logging.warning(
-            f"Orphaned autounseal keys were detected: {orphaned_keys}. If you are sure these are no longer needed, you may manually delete them using the vault CLI to suppress this message."
-            " To delete a key, use the command `vault delete charm-autounseal/keys/<key_name>`."
+            "Orphaned autounseal keys were detected: %s. If you are sure these are no longer needed, you may manually delete them using the vault CLI to suppress this message. To delete a key, use the command `vault delete charm-autounseal/keys/<key_name>`.",
+            orphaned_keys,
         )
         for key_name in orphaned_keys:
             deletion_allowed = self._is_deletion_allowed(key_name)
