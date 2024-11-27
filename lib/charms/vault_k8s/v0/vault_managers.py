@@ -552,15 +552,12 @@ def existing_certificate_is_self_signed(ca_certificate: Certificate) -> bool:
     return ca_certificate.common_name == VAULT_CA_SUBJECT
 
 
-class VaultAutounsealNaming:
-    """Computes the auto-unseal related values for a relation.
+class VaultNaming:
+    """Computes names for Vault features.
 
-    This class is used to compute the static details for a vault-autounseal
-    relation, such as the key name, policy name, and approle name. These values
-    are all based on the relation ID.
-
-    This class provides a central place to manage the naming conventions for
-    the auto-unseal functionality.
+    This class is used to compute names for Vault features based on the charm's
+    conventions, such as the key name, policy name, and approle name.  It
+    provides a central place to manage them.
     """
 
     key_prefix: str = ""
@@ -666,7 +663,7 @@ class VaultAutounsealProviderManager:
         """
         existing_keys = self._get_existing_keys()
         relation_key_names = [
-            VaultAutounsealNaming.key_name(relation.id)
+            VaultNaming.key_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         orphaned_keys = [key for key in existing_keys if key not in relation_key_names]
@@ -694,7 +691,7 @@ class VaultAutounsealProviderManager:
         """Delete roles that are no longer associated with an autounseal Juju relation."""
         existing_roles = self._get_existing_roles()
         relation_role_names = [
-            VaultAutounsealNaming.approle_name(relation.id)
+            VaultNaming.approle_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         for role in existing_roles:
@@ -706,7 +703,7 @@ class VaultAutounsealProviderManager:
         """Delete policies that are no longer associated with an autounseal Juju relation."""
         existing_policies = self._get_existing_policies()
         relation_policy_names = [
-            VaultAutounsealNaming.policy_name(relation.id)
+            VaultNaming.policy_name(relation.id)
             for relation in self._juju_facade.get_active_relations(self._provides.relation_name)
         ]
         for policy in existing_policies:
@@ -727,9 +724,9 @@ class VaultAutounsealProviderManager:
         Returns:
             A tuple containing the key name, role ID, and approle secret ID.
         """
-        key_name = VaultAutounsealNaming.key_name(relation.id)
-        policy_name = VaultAutounsealNaming.policy_name(relation.id)
-        approle_name = VaultAutounsealNaming.approle_name(relation.id)
+        key_name = VaultNaming.key_name(relation.id)
+        policy_name = VaultNaming.policy_name(relation.id)
+        approle_name = VaultNaming.approle_name(relation.id)
         self._create_key(key_name)
         policy_content = AUTOUNSEAL_POLICY.format(mount=self.mount_path, key_name=key_name)
         self._client.create_or_update_policy(
@@ -758,13 +755,11 @@ class VaultAutounsealProviderManager:
 
     def _get_existing_roles(self) -> list[str]:
         output = self._client.list("auth/approle/role")
-        return [role for role in output if role.startswith(VaultAutounsealNaming.approle_prefix)]
+        return [role for role in output if role.startswith(VaultNaming.approle_prefix)]
 
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
-        return [
-            policy for policy in output if policy.startswith(VaultAutounsealNaming.policy_prefix)
-        ]
+        return [policy for policy in output if policy.startswith(VaultNaming.policy_prefix)]
 
 
 @dataclass
