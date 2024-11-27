@@ -549,8 +549,11 @@ class JujuFacade:
             raise NoSuchStorageError(f"Storage {storage_name} not found")
         return storages[storage_name][0].location
 
-    def get_ingress_address(self, relation) -> str | None:
-        """Get the ingress address."""
+    def get_ingress_address(self, relation: Relation) -> str | None:
+        """Get the ingress IP address as a string.
+
+        Ex. "1.2.3.4"
+        """
         binding = self.charm.model.get_binding(relation)
         if not binding:
             raise BindingNotFoundError()
