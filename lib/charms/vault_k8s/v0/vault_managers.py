@@ -627,6 +627,19 @@ class VaultAutounsealProviderManager:
         self._detect_and_allow_deletion_of_orphaned_keys()
 
     def _detect_and_allow_deletion_of_orphaned_keys(self) -> None:
+        """Detect and allow deletion of autounseal keys that are no longer associated with a Juju autounseal relation.
+
+        The keys themselves are not deleted. This is to prevent an
+        unrecoverable state if a relation is removed by mistake, or before
+        migrating the data to a different seal type.
+
+        The keys are marked as `allow_deletion` in vault. This allows the user
+        to manually delete the keys using the Vault CLI if they are sure the
+        keys are no longer needed.
+
+        A warning is logged so that the Juju operator is aware of the orphaned
+        keys and can act accordingly.
+        """
         existing_keys = self._get_existing_keys()
         relation_key_names = [
             VaultAutounsealNaming.key_name(relation.id)
@@ -654,6 +667,7 @@ class VaultAutounsealProviderManager:
         return data["deletion_allowed"]
 
     def _clean_up_roles(self) -> None:
+        """Delete roles that are no longer associated with an autounseal Juju relation."""
         existing_roles = self._get_existing_roles()
         relation_role_names = [
             VaultAutounsealNaming.approle_name(relation.id)
@@ -665,6 +679,7 @@ class VaultAutounsealProviderManager:
                 logger.info("Removed unused role: %s", role)
 
     def _clean_up_policies(self) -> None:
+        """Delete policies that are no longer associated with an autounseal Juju relation."""
         existing_policies = self._get_existing_policies()
         relation_policy_names = [
             VaultAutounsealNaming.policy_name(relation.id)
