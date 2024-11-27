@@ -686,7 +686,7 @@ class VaultAutounsealProviderManager:
             relation: The relation to create the credentials for.
 
         Returns:
-            A tuple containing the key name, role ID, and secret ID.
+            A tuple containing the key name, role ID, and approle secret ID.
         """
         relation_details = VaultAutounsealRelationDetails(relation)
         self._create_key(relation_details.key_name)
