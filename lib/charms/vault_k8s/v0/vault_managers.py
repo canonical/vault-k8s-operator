@@ -63,7 +63,6 @@ from charms.vault_k8s.v0.vault_autounseal import (
 )
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
-    SecretsBackend,
     Token,
     VaultClient,
 )
@@ -595,8 +594,7 @@ class VaultAutounsealProviderManager:
         client: VaultClient,
         provides: VaultAutounsealProvides,
         ca_cert: str,
-        vault_port: int,
-        mount_path: str = "charm-autounseal",
+        mount_path: str,
     ):
         self._juju_facade = JujuFacade(charm)
         self._model = charm.model
@@ -604,39 +602,13 @@ class VaultAutounsealProviderManager:
         self._provides = provides
         self._mount_path = mount_path
         self._ca_cert = ca_cert
-        self._port = vault_port
-
-    def get_address(self, relation: Relation) -> str:
-        """Fetch the address from the relation and return it."""
-        return f"https://{self._juju_facade.get_ingress_address(relation)}:{self._port}"
 
     @property
     def mount_path(self) -> str:
         """Return the mount path for the transit backend."""
         return self._mount_path
 
-    def sync(self) -> None:
-        """Ensure that all auto-unseal requests are fulfilled and clean up unused credentials.
-
-        This looks for any outstanding requests for auto-unseal that may have
-        been missed. If there are any, it generates the credentials and sets
-        them in the relation databag.
-
-        It also cleans up any credentials that are no longer used by any of the
-        relations, and logs a warning about orphaned keys. It will not remove
-        any keys, to prevent loss of data.
-        """
-        if not self._juju_facade.is_leader:
-            return
-        outstanding_requests = self._provides.get_outstanding_requests()
-        if outstanding_requests:
-            self._client.enable_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
-        for relation in outstanding_requests:
-            self.create_credentials(relation)
-
-        self._clean_up_credentials()
-
-    def _clean_up_credentials(self) -> None:
+    def clean_up_credentials(self) -> None:
         """Clean up roles and policies that are no longer needed by autounseal.
 
         This method will remove any roles and policies that are no longer
@@ -715,11 +687,12 @@ class VaultAutounsealProviderManager:
         response = self._client.create_transit_key(mount_point=self.mount_path, key_name=key_name)
         logger.debug("Created a new autounseal key: %s", response)
 
-    def create_credentials(self, relation: Relation) -> tuple[str, str, str]:
+    def create_credentials(self, relation: Relation, vault_address: str) -> tuple[str, str, str]:
         """Create auto-unseal credentials for the given relation.
 
         Args:
             relation: The relation to create the credentials for.
+            vault_address: The address where this relation can reach the Vault.
 
         Returns:
             A tuple containing the key name, role ID, and approle secret ID.
@@ -741,7 +714,7 @@ class VaultAutounsealProviderManager:
         secret_id = self._client.generate_role_secret_id(approle_name)
         self._provides.set_autounseal_data(
             relation,
-            self.get_address(relation),
+            vault_address,
             self.mount_path,
             key_name,
             role_id,

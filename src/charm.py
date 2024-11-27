@@ -83,6 +83,7 @@ from container import Container
 logger = logging.getLogger(__name__)
 
 APPROLE_ROLE_NAME = "charm"
+AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
@@ -331,13 +332,7 @@ class VaultCharm(CharmBase):
         if not (vault := self._get_active_vault_client()):
             return
         self._configure_pki_secrets_engine()
-        VaultAutounsealProviderManager(
-            self,
-            vault,
-            self.vault_autounseal_provides,
-            self.tls.pull_tls_file_from_workload(File.CA),
-            self.VAULT_PORT,
-        ).sync()
+        self._sync_vault_autounseal(vault)
         self._sync_vault_kv()
         self._sync_vault_pki()
 
@@ -535,6 +530,31 @@ class VaultCharm(CharmBase):
             common_name=common_name,
             is_ca=True,
         )
+
+    def _sync_vault_autounseal(self, vault_client: VaultClient) -> None:
+        """Sync the vault autounseal relation."""
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-autounseal request")
+            return
+        autounseal_provider_manager = VaultAutounsealProviderManager(
+            charm=self,
+            client=vault_client,
+            provides=self.vault_autounseal_provides,
+            ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
+            mount_path=AUTOUNSEAL_MOUNT_PATH,
+        )
+        outstanding_autounseal_requests = self.vault_autounseal_provides.get_outstanding_requests()
+        if outstanding_autounseal_requests:
+            vault_client.enable_secrets_engine(
+                SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
+            )
+        for relation in outstanding_autounseal_requests:
+            relation_address = self._get_relation_api_address(relation)
+            if not relation_address:
+                logger.warning("Relation address not found for relation %s", relation.id)
+                continue
+            autounseal_provider_manager.create_credentials(relation, relation_address)
+        autounseal_provider_manager.clean_up_credentials()
 
     def _sync_vault_pki(self) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
