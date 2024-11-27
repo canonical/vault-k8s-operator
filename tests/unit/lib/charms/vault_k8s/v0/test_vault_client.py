@@ -157,7 +157,7 @@ def test_given_policy_with_mount_when_configure_policy_then_policy_is_formatted_
     patch_create_policy,
 ):
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    vault.create_or_update_policy(
+    vault.create_or_update_policy_from_file(
         "test-policy", path=f"{TEST_PATH}/kv_with_mount.hcl", mount="example"
     )
     with open(f"{TEST_PATH}/kv_mounted.hcl", "r") as f:
@@ -173,7 +173,7 @@ def test_given_policy_without_mount_when_configure_policy_then_policy_created_co
     patch_create_policy,
 ):
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    vault.create_or_update_policy("test-policy", path=f"{TEST_PATH}/kv_mounted.hcl")
+    vault.create_or_update_policy_from_file("test-policy", path=f"{TEST_PATH}/kv_mounted.hcl")
     with open(f"{TEST_PATH}/kv_mounted.hcl", "r") as f:
         policy = f.read()
         patch_create_policy.assert_called_with(
