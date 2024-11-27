@@ -108,7 +108,7 @@ class TestVaultAutounsealProviderManager:
 
         autounseal.sync()
 
-        vault_client_mock.ensure_secrets_engine.assert_called_once()
+        vault_client_mock.enable_secrets_engine.assert_called_once()
         provides.get_outstanding_requests.assert_called_once()
         vault_client_mock.create_or_update_approle.assert_called_once_with(
             "charm-autounseal-123",

@@ -432,7 +432,7 @@ class VaultCharm(CharmBase):
         provider_certificate, private_key = self._get_pki_intermediate_ca()
         if not provider_certificate:
             return
-        vault.ensure_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
+        vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
         existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
         existing_cert = (
             Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
@@ -593,7 +593,7 @@ class VaultCharm(CharmBase):
             logger.debug("Failed to get initialized Vault")
             return
         mount = f"charm-{app_name}-{mount_suffix}"
-        vault.ensure_secrets_engine(SecretsBackend.KV_V2, mount)
+        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         self._ensure_unit_credentials(vault, relation, unit_name, mount, nonce, egress_subnets)
         self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnets)
         self._remove_stale_nonce(relation=relation, nonce=nonce)

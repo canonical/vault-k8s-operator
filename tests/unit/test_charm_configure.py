@@ -183,7 +183,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            self.mock_vault.ensure_secrets_engine.assert_called_once_with(
+            self.mock_vault.enable_secrets_engine.assert_called_once_with(
                 SecretsBackend.PKI, "charm-pki"
             )
             self.mock_vault.import_ca_certificate_and_key.assert_called_once_with(
@@ -534,7 +534,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
             state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
-            self.mock_vault.ensure_secrets_engine.assert_called_once_with(
+            self.mock_vault.enable_secrets_engine.assert_called_once_with(
                 SecretsBackend.KV_V2, "charm-vault-kv-remote-suffix"
             )
             self.mock_kv_provides_set_ca_certificate.assert_called()

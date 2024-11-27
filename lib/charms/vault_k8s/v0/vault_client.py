@@ -346,7 +346,7 @@ class VaultClient:
         response = self._client.auth.approle.read_secret_id(name, id)
         return response["data"]
 
-    def ensure_secrets_engine(self, backend_type: SecretsBackend, path: str) -> None:
+    def enable_secrets_engine(self, backend_type: SecretsBackend, path: str) -> None:
         """Enable given secret engine on the given path."""
         try:
             self._client.sys.enable_secrets_engine(

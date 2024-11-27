@@ -610,7 +610,7 @@ class VaultAutounsealProviderManager:
             return
         outstanding_requests = self._provides.get_outstanding_requests()
         if outstanding_requests:
-            self._client.ensure_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
+            self._client.enable_secrets_engine(SecretsBackend.TRANSIT, self._mount_path)
         for relation in outstanding_requests:
             self.create_credentials(relation)
 

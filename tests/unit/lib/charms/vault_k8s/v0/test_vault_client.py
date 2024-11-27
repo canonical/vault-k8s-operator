@@ -214,7 +214,7 @@ def test_given_secrets_engine_with_valid_params_when_enable_secrets_engine_then_
     patch_enable_secrets_engine,
 ):
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    vault.ensure_secrets_engine(SecretsBackend.KV_V2, "some/path")
+    vault.enable_secrets_engine(SecretsBackend.KV_V2, "some/path")
 
     patch_enable_secrets_engine.assert_called_with(
         backend_type=SecretsBackend.KV_V2.value,
