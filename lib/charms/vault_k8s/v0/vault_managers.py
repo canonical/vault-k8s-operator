@@ -584,9 +584,6 @@ class VaultAutounsealProviderManager:
         self._ca_cert = ca_cert
         self._port = vault_port
 
-        if not self._ca_cert:
-            logger.warning("No CA certificate provided for auto-unseal")
-
     def get_address(self, relation: Relation) -> str:
         """Fetch the address from the relation and return it."""
         return f"https://{self._juju_facade.get_ingress_address(relation)}:{self._port}"
