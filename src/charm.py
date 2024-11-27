@@ -83,7 +83,6 @@ from container import Container
 logger = logging.getLogger(__name__)
 
 APPROLE_ROLE_NAME = "charm"
-AUTOUNSEAL_POLICY_PATH = "src/templates/autounseal_policy.hcl"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
