@@ -22,7 +22,7 @@ class TestVaultAutounsealRequirerManager:
     )
     @patch("charms.vault_k8s.v0.vault_managers.VaultClient")
     @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
-    def test_when_vault_configuration_details_called_then_details_are_retrieved_correctly(
+    def test_when_get_vault_configuration_details_called_then_details_are_retrieved_correctly(
         self,
         juju_facade_mock,
         vault_client_mock,
@@ -62,7 +62,7 @@ class TestVaultAutounsealRequirerManager:
             juju_facade_instance.get_secret_content_values.side_effect = SecretRemovedError()
 
         autounseal = VaultAutounsealRequirerManager(charm, tls_manager, requires)
-        details = autounseal.vault_configuration_details()
+        details = autounseal.get_vault_configuration_details()
 
         assert details is not None
         assert details.address == "my_address"

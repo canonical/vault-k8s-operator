@@ -757,8 +757,8 @@ class VaultAutounsealRequirerManager:
         self._tls_manager = tls_manager
         self._requires = requires
 
-    def vault_configuration_details(self) -> AutounsealConfigurationDetails | None:
-        """Return the configuration details for the vault."""
+    def get_vault_configuration_details(self) -> AutounsealConfigurationDetails | None:
+        """Return the necessary configuration details to properly configure auto-unseal."""
         autounseal_details = self._requires.get_details()
         if not autounseal_details:
             return None

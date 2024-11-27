@@ -1151,7 +1151,7 @@ class VaultCharm(CharmBase):
 
         autounseal_details = VaultAutounsealRequirerManager(
             self, self.tls, self.vault_autounseal_requires
-        ).vault_configuration_details()
+        ).get_vault_configuration_details()
         content = _render_vault_config_file(
             default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
             max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),

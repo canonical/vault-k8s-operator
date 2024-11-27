@@ -40,7 +40,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.mock_socket_fqdn.return_value = "myhostname"
             self.mock_vault_autounseal_requirer_manager.configure_mock(
                 **{
-                    "vault_configuration_details.return_value": None,
+                    "get_vault_configuration_details.return_value": None,
                 }
             )
             model_name = "whatever"
@@ -409,7 +409,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             )
             self.mock_vault_autounseal_requirer_manager.configure_mock(
                 **{
-                    "vault_configuration_details.return_value": AutounsealConfigurationDetails(
+                    "get_vault_configuration_details.return_value": AutounsealConfigurationDetails(
                         "1.2.3.4",
                         "charm-autounseal",
                         "key name",
