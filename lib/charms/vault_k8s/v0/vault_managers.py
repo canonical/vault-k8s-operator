@@ -568,17 +568,17 @@ class VaultAutounsealNaming:
     approle_prefix: str = "charm-autounseal-"
 
     @classmethod
-    def key_name(cls, relation_id) -> str:
+    def key_name(cls, relation_id: int) -> str:
         """Return the key name for the relation."""
         return f"{cls.key_prefix}{relation_id}"
 
     @classmethod
-    def policy_name(cls, relation_id) -> str:
+    def policy_name(cls, relation_id: int) -> str:
         """Return the policy name for the relation."""
         return f"{cls.policy_prefix}{relation_id}"
 
     @classmethod
-    def approle_name(cls, relation_id) -> str:
+    def approle_name(cls, relation_id: int) -> str:
         """Return the approle name for the relation."""
         return f"{cls.approle_prefix}{relation_id}"
 
