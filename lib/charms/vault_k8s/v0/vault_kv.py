@@ -127,6 +127,13 @@ import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, Json, ValidationError
 
+from charms.vault_k8s.v0.juju_facade import (
+    JujuFacade,
+    MultipleRelationsFoundError,
+    NoSuchRelationError,
+    NotLeaderError,
+)
+
 # The unique Charmhub library identifier, never change it
 LIBID = "591d6d2fb6a54853b4bb53ef16ef603a"
 
@@ -135,7 +142,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -339,6 +346,7 @@ class VaultKvProvides(ops.Object):
         relation_name: str,
     ) -> None:
         super().__init__(charm, relation_name)
+        self.juju_facade = JujuFacade(charm)
         self.charm = charm
         self.relation_name = relation_name
         self.framework.observe(
@@ -380,63 +388,9 @@ class VaultKvProvides(ops.Object):
         if event.departing_unit:
             self.on.vault_kv_client_detached.emit(unit_name=event.departing_unit.name)
 
-    def set_vault_url(self, relation: ops.Relation, vault_url: str):
-        """Set the vault_url on the relation."""
-        if not self.charm.unit.is_leader():
-            return
-
-        relation.data[self.charm.app]["vault_url"] = vault_url
-
-    def set_ca_certificate(self, relation: ops.Relation, ca_certificate: str):
-        """Set the ca_certificate on the relation."""
-        if not self.charm.unit.is_leader():
-            return
-        if not relation:
-            logger.warning("Relation is None")
-            return
-        if not relation.active:
-            logger.warning("Relation is not active")
-            return
-        relation.data[self.charm.app]["ca_certificate"] = ca_certificate
-
-    def set_mount(self, relation: ops.Relation, mount: str):
-        """Set the mount on the relation."""
-        if not self.charm.unit.is_leader():
-            return
-
-        relation.data[self.charm.app]["mount"] = mount
-
-    def set_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
-        """Set the egress_subnets on the relation."""
-        if not self.charm.unit.is_leader():
-            return
-        relation.data[self.charm.app]["egress_subnet"] = ",".join(egress_subnets)
-
-    def set_unit_credentials(
-        self,
-        relation: ops.Relation,
-        nonce: str,
-        secret: ops.Secret,
-    ):
-        """Set the unit credentials on the relation."""
-        if not self.charm.unit.is_leader():
-            return
-
-        credentials = self.get_credentials(relation)
-        if secret.id is None:
-            logger.debug(
-                "Secret id is None, not updating the relation '%s:%d' for nonce %r",
-                relation.name,
-                relation.id,
-                nonce,
-            )
-            return
-        credentials[nonce] = secret.id
-        relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
-
     def remove_unit_credentials(self, relation: ops.Relation, nonce: str | Iterable[str]):
         """Remove nonce(s) from the relation."""
-        if not self.charm.unit.is_leader():
+        if not self.juju_facade.is_leader:
             return
 
         if isinstance(nonce, str):
@@ -449,9 +403,13 @@ class VaultKvProvides(ops.Object):
 
         relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
-    def get_credentials(self, relation: ops.Relation) -> dict:
+    def get_credentials(self, relation_id: int) -> dict:
         """Get the unit credentials from the relation."""
-        return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
+        return json.loads(
+            self.juju_facade.get_app_relation_data(
+                relation_name=self.relation_name, relation_id=relation_id
+            ).get("credentials", "{}")
+        )
 
     def get_outstanding_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get the outstanding requests for the relation."""
@@ -467,23 +425,16 @@ class VaultKvProvides(ops.Object):
     def get_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get all KV requests for the relation."""
         kv_requests: List[KVRequest] = []
-        relations = (
-            [
-                relation
-                for relation in self.model.relations.get(self.relation_name, [])
-                if relation.id == relation_id
-            ]
-            if relation_id is not None
-            else self.model.relations.get(self.relation_name, [])
-        )
+        relations = self.juju_facade.get_active_relations(self.relation_name, relation_id)
         for relation in relations:
-            assert isinstance(relation.app, ops.Application)
-            if not relation.active:
-                continue
-            app_data = relation.data[relation.app]
+            app_data = self.juju_facade.get_remote_app_relation_data(
+                self.relation_name, relation.id
+            )
             for unit in relation.units:
-                unit_data = relation.data[unit]
-                if not is_requirer_data_valid(app_data=app_data, unit_data=unit_data):
+                unit_data = self.juju_facade.get_remote_unit_relation_data(
+                    self.relation_name, relation.id, unit
+                )
+                if not is_requirer_data_valid(app_data, unit_data):
                     continue
                 kv_requests.append(
                     KVRequest(
@@ -499,11 +450,40 @@ class VaultKvProvides(ops.Object):
 
     def _credentials_issued_for_request(self, nonce: str, relation_id: int) -> bool:
         """Return whether credentials have been issued for the request."""
-        relation = self.model.get_relation(self.relation_name, relation_id)
-        if not relation:
+        try:
+            relation = self.juju_facade.get_relation_by_id(self.relation_name, relation_id)
+        except NoSuchRelationError:
             return False
         credentials = self.get_credentials(relation)
         return credentials.get(nonce) is not None
+
+    def set_kv_data(
+        self,
+        relation: ops.Relation,
+        mount: str,
+        ca_certificate: str,
+        egress_subnets: List[str],
+        vault_url: str,
+        nonce: str,
+        secret_id: str,
+    ):
+        """Set the kv data on the relation."""
+        credentials = self.get_credentials(relation.id)
+        credentials[nonce] = secret_id
+        try:
+            self.juju_facade.set_app_relation_data(
+                relation_name=self.relation_name,
+                relation_id=relation.id,
+                data={
+                    "mount": mount,
+                    "ca_certificate": ca_certificate,
+                    "egress_subnet": ",".join(egress_subnets),
+                    "vault_url": vault_url,
+                    "credentials": json.dumps(credentials, sort_keys=True),
+                },
+            )
+        except (NoSuchRelationError, NotLeaderError):
+            return
 
 
 class VaultKvBaseEvent(ops.EventBase):
@@ -599,10 +579,16 @@ class VaultKvRequires(ops.Object):
         Set the secret backend in the application databag if we are the leader.
         Emit the connected event.
         """
-        relation = self.model.get_relation(relation_name=self.relation_name)
+        try:
+            relation = self.juju_facade.get_relation_by_name(self.relation_name)
+        except NoSuchRelationError:
+            return
+        except MultipleRelationsFoundError:
+            logger.warning("Too many relations found for %s", self.relation_name)
+            raise RuntimeError("KV requirer can't be integrated with multiple providers")
         if not relation:
             return
-        if self.charm.unit.is_leader():
+        if self.juju_facade.is_leader:
             relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
         self.on.connected.emit(
             relation.id,
