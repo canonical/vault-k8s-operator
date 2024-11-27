@@ -793,7 +793,7 @@ class VaultAutounsealRequirerManager:
         )
         try:
             existing_token = self._juju_facade.get_secret_content_values(
-                "token", self.AUTOUNSEAL_TOKEN_SECRET_LABEL
+                "token", label=self.AUTOUNSEAL_TOKEN_SECRET_LABEL
             )[0]
         except SecretRemovedError:
             existing_token = None
@@ -809,6 +809,6 @@ class VaultAutounsealRequirerManager:
             if self._juju_facade.is_leader:
                 self._juju_facade.set_app_secret_content(
                     {"token": external_vault.token},
-                    self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
+                    label=self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
                 )
         return external_vault.token
