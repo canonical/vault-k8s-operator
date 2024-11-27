@@ -336,6 +336,7 @@ class VaultCharm(CharmBase):
             vault,
             self.vault_autounseal_provides,
             self.tls.pull_tls_file_from_workload(File.CA),
+            self.VAULT_PORT,
         ).sync()
         self._sync_vault_kv()
         self._sync_vault_pki()

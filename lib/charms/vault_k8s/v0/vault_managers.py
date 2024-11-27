@@ -573,6 +573,7 @@ class VaultAutounsealProviderManager:
         client: VaultClient,
         provides: VaultAutounsealProvides,
         ca_cert: str,
+        vault_port: int,
         mount_path: str = "charm-autounseal",
     ):
         self._juju_facade = JujuFacade(charm)
@@ -581,7 +582,7 @@ class VaultAutounsealProviderManager:
         self._provides = provides
         self._mount_path = mount_path
         self._ca_cert = ca_cert
-        self._port = 8200
+        self._port = vault_port
 
         if not self._ca_cert:
             logger.warning("No CA certificate provided for auto-unseal")
