@@ -50,10 +50,10 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 from charms.vault_k8s.v0.juju_facade import (
+    FacadeError,
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
-    SecretRemovedError,
     TransientJujuError,
 )
 from charms.vault_k8s.v0.vault_autounseal import (
@@ -829,7 +829,7 @@ class VaultAutounsealRequirerManager:
             existing_token = self._juju_facade.get_secret_content_values(
                 "token", label=self.AUTOUNSEAL_TOKEN_SECRET_LABEL
             )[0]
-        except SecretRemovedError:
+        except FacadeError:
             existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
