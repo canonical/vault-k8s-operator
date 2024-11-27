@@ -750,7 +750,6 @@ class VaultAutounsealRequirerManager:
         tls_manager: VaultTLSManager,
         requires: VaultAutounsealRequires,
     ):
-        self._charm = charm
         self._juju_facade = JujuFacade(charm)
         self._tls_manager = tls_manager
         self._requires = requires
