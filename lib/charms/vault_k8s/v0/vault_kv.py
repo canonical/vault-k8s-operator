@@ -345,14 +345,13 @@ class VaultKvProvides(ops.Object):
     ) -> None:
         super().__init__(charm, relation_name)
         self.juju_facade = JujuFacade(charm)
-        self.charm = charm
         self.relation_name = relation_name
         self.framework.observe(
-            self.charm.on[relation_name].relation_changed,
+            charm.on[relation_name].relation_changed,
             self._on_relation_changed,
         )
         self.framework.observe(
-            self.charm.on[relation_name].relation_departed,
+            charm.on[relation_name].relation_departed,
             self._on_vault_kv_relation_departed,
         )
 
@@ -389,8 +388,6 @@ class VaultKvProvides(ops.Object):
 
     def remove_unit_credentials(self, relation: ops.Relation, nonce: str | Iterable[str]):
         """Remove nonce(s) from the relation."""
-        if not self.juju_facade.is_leader:
-            return
 
         if isinstance(nonce, str):
             nonce = [nonce]
@@ -400,17 +397,20 @@ class VaultKvProvides(ops.Object):
         for n in nonce:
             credentials.pop(n, None)
 
-        self.juju_facade.set_app_relation_data(
-            relation_name=self.relation_name,
-            relation=relation,
-            data={"credentials": json.dumps(credentials, sort_keys=True)},
-        )
+        try:
+            self.juju_facade.set_app_relation_data(
+                name=self.relation_name,
+                relation=relation,
+                data={"credentials": json.dumps(credentials, sort_keys=True)},
+            )
+        except NotLeaderError:
+            return
 
     def get_credentials(self, relation: ops.Relation) -> dict:
-        """Get the unit credentials from the relation and load it as a dict."""
+        """Get the unit credentials from the app relation data and load it as a dict."""
         return json.loads(
             self.juju_facade.get_app_relation_data(
-                relation_name=self.relation_name,
+                name=self.relation_name,
                 relation=relation,
             ).get("credentials", "{}")
         )
@@ -425,8 +425,8 @@ class VaultKvProvides(ops.Object):
             )
             for unit in relation.units:
                 unit_data = self.juju_facade.get_remote_unit_relation_data(
-                    relation_name=self.relation_name,
-                    relation_id=relation.id,
+                    name=self.relation_name,
+                    id=relation.id,
                     unit=unit,
                 )
                 if not is_requirer_data_valid(app_data, unit_data):
@@ -450,15 +450,15 @@ class VaultKvProvides(ops.Object):
         ca_certificate: str,
         vault_url: str,
         nonce: str,
-        secret_id: str,
+        credentials_juju_secret_id: str,
     ):
         """Set the kv data on the relation."""
         credentials = self.get_credentials(relation)
-        credentials[nonce] = secret_id
+        credentials[nonce] = credentials_juju_secret_id
         try:
             self.juju_facade.set_app_relation_data(
-                relation_name=self.relation_name,
-                relation=relation,
+                name=self.relation_name,
+                id=relation.id,
                 data={
                     "mount": mount,
                     "ca_certificate": ca_certificate,
@@ -560,8 +560,14 @@ class VaultKvRequires(ops.Object):
         if not relations:
             return
         for relation in relations:
-            if self.juju_facade.is_leader:
-                relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
+            try:
+                self.juju_facade.set_app_relation_data(
+                    name=self.relation_name,
+                    relation=relation,
+                    data={"mount_suffix": self.mount_suffix},
+                )
+            except NotLeaderError:
+                return
             self.on.connected.emit(
                 relation.id,
                 relation.name,
@@ -607,7 +613,7 @@ class VaultKvRequires(ops.Object):
         if isinstance(egress_subnet, str):
             egress_subnet = [egress_subnet]
         self.juju_facade.set_unit_relation_data(
-            relation_name=self.relation_name,
+            name=self.relation_name,
             relation=relation,
             data={"egress_subnet": ",".join(egress_subnet), "nonce": nonce},
         )

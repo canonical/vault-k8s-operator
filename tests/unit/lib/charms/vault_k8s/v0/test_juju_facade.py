@@ -298,18 +298,18 @@ class TestJujuFacade:
         self,
     ):
         with pytest.raises(ValueError):
-            self.facade.get_app_relation_data(relation_name="relation-name")
+            self.facade.get_app_relation_data(name="relation-name")
         with pytest.raises(ValueError):
-            self.facade.get_unit_relation_data(relation_name="relation-name")
+            self.facade.get_unit_relation_data(name="relation-name")
 
     def test_given_relation_and_relation_id_parameters_missing_when_set_relation_data_then_raises_value_error(
         self,
     ):
         with pytest.raises(ValueError):
-            self.facade.set_app_relation_data(data={"key": "value"}, relation_name="relation-name")
+            self.facade.set_app_relation_data(data={"key": "value"}, name="relation-name")
         with pytest.raises(ValueError):
             self.facade.set_unit_relation_data(
-                data={"key": "value"}, relation_name="relation-name"
+                data={"key": "value"}, name="relation-name"
             )
 
     # Tests for Storage methods

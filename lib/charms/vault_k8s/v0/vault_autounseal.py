@@ -99,7 +99,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 
 AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX = "vault-autounseal-credentials-"
@@ -343,8 +343,8 @@ class VaultAutounsealProvides(Object):
         if secret.id is None:
             raise ValueError("Secret id is None")
         self.juju_facade.set_app_relation_data(
-            relation_name=self.relation_name,
-            relation_id=relation.id,
+            name=self.relation_name,
+            id=relation.id,
             data={
                 "address": vault_address,
                 "mount_path": mount_path,

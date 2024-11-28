@@ -40,7 +40,7 @@ class VaultKVRequirerCharm(CharmBase):
         self.framework.observe(self.on.create_secret_action, self._on_create_secret_action)
         self.framework.observe(self.on.get_secret_action, self._on_get_secret_action)
 
-    def _configure(self, event: EventBase):
+    def _configure(self, _: EventBase):
         """Create a secret to store the nonce."""
         self.juju_facade.set_app_secret_content(
             label=NONCE_SECRET_LABEL,

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-
 import json
 import unittest
 
@@ -62,7 +61,7 @@ class VaultKvProviderCharm(CharmBase):
             relation=relation,
             mount=mount,
             nonce=nonce,
-            secret_id=secret_id,
+            credentials_juju_secret_id=secret_id,
             vault_url=url,
             ca_certificate=ca_certificate,
         )

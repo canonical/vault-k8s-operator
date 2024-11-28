@@ -703,7 +703,7 @@ class VaultCharm(CharmBase):
             ca_certificate=ca_certificate,
             vault_url=vault_url,
             nonce=nonce,
-            secret_id=secret_id,
+            credentials_juju_secret_id=secret_id,
         )
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
@@ -992,12 +992,12 @@ class VaultCharm(CharmBase):
         label: str,
         egress_subnets: List[str],
         role_name: str,
-        secret_id: str,
+        credentials_juju_secret_id: str,
     ) -> bool:
         try:
             role_secret_id = self.juju_facade.get_latest_secret_content(
                 label=label,
-                id=secret_id,
+                id=credentials_juju_secret_id,
             ).get("role-secret-id")
         except NoSuchSecretError:
             return False
@@ -1022,17 +1022,17 @@ class VaultCharm(CharmBase):
 
         juju_secret_label = self._get_vault_kv_secret_label(unit_name=unit_name)
         current_credentials = self.vault_kv.get_credentials(relation)
-        secret_id = current_credentials.get(nonce, None)
+        credentials_juju_secret_id = current_credentials.get(nonce, None)
 
         if self._is_vault_kv_role_configured(
             vault=vault,
             label=juju_secret_label,
             egress_subnets=egress_subnets,
             role_name=role_name,
-            secret_id=secret_id,
+            credentials_juju_secret_id=credentials_juju_secret_id,
         ):
             logger.info("Vault KV role already configured for the provided egress subnets")
-            return secret_id
+            return credentials_juju_secret_id
 
         vault.configure_policy(policy_name, "src/templates/kv_mount.hcl", mount=mount)
         role_id = vault.configure_approle(
