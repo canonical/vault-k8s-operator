@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
@@ -376,8 +376,6 @@ class JujuFacade:
             if not relation_id
             else [self.get_relation_by_id(relation_name, relation_id)]
         )
-        if not relations:
-            logger.error("No relations found for %s", relation_name)
         return relations
 
     def get_active_relations(
