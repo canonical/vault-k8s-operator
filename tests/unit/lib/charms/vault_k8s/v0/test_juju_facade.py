@@ -294,6 +294,24 @@ class TestJujuFacade:
 
         assert self.facade.get_active_relations("test-relation") == [relation_1]
 
+    def test_given_relation_and_relation_id_parameters_missing_when_get_relation_data_then_raises_value_error(
+        self,
+    ):
+        with pytest.raises(ValueError):
+            self.facade.get_app_relation_data(relation_name="relation-name")
+        with pytest.raises(ValueError):
+            self.facade.get_unit_relation_data(relation_name="relation-name")
+
+    def test_given_relation_and_relation_id_parameters_missing_when_set_relation_data_then_raises_value_error(
+        self,
+    ):
+        with pytest.raises(ValueError):
+            self.facade.set_app_relation_data(data={"key": "value"}, relation_name="relation-name")
+        with pytest.raises(ValueError):
+            self.facade.set_unit_relation_data(
+                data={"key": "value"}, relation_name="relation-name"
+            )
+
     # Tests for Storage methods
 
     def test_given_storage_not_exists_when_get_storage_location_then_raises_no_such_storage(

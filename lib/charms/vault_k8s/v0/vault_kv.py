@@ -124,15 +124,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import ops
-from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, Json, ValidationError
-
 from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
-    MultipleRelationsFoundError,
     NoSuchRelationError,
     NotLeaderError,
 )
+from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
+from pydantic import BaseModel, Field, Json, ValidationError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "591d6d2fb6a54853b4bb53ef16ef603a"
@@ -218,7 +216,7 @@ class RequirerSchema(DataBagSchema):
 class KVRequest:
     """This class represents a kv request from an interface Requirer."""
 
-    relation_id: int
+    relation: ops.Relation
     app_name: str
     unit_name: str
     mount_suffix: str
@@ -367,21 +365,22 @@ class VaultKvProvides(ops.Object):
         if event.app is None:
             logger.debug("No remote application yet")
             return
-        app_data = event.relation.data[event.app]
-        for unit in event.relation.units:
-            if not is_requirer_data_valid(app_data, event.relation.data[unit]):
-                logger.debug("Invalid data from unit %r", unit.name)
-                continue
-            self.on.new_vault_kv_client_attached.emit(
-                relation_id=event.relation.id,
-                app_name=event.app.name,
-                unit_name=unit.name,
-                mount_suffix=event.relation.data[event.app]["mount_suffix"],
-                egress_subnets=get_egress_subnets_list_from_relation_data(
-                    event.relation.data[unit]
-                ),
-                nonce=event.relation.data[unit]["nonce"],
-            )
+        app_data = event.relation.data.get(event.app, {})
+        if not event.unit:
+            logger.debug("No unit in relation changed event")
+            return
+        unit_data = event.relation.data.get(event.unit, {})
+        if not is_requirer_data_valid(app_data, unit_data):
+            logger.debug("Invalid data from unit %r", event.unit.name)
+            return
+        self.on.new_vault_kv_client_attached.emit(
+            relation_id=event.relation.id,
+            app_name=event.app.name,
+            unit_name=event.unit.name,
+            mount_suffix=app_data.get("mount_suffix"),
+            egress_subnets=get_egress_subnets_list_from_relation_data(unit_data),
+            nonce=unit_data.get("nonce"),
+        )
 
     def _on_vault_kv_relation_departed(self, event: ops.RelationDepartedEvent):
         """Handle relation departed."""
@@ -401,26 +400,20 @@ class VaultKvProvides(ops.Object):
         for n in nonce:
             credentials.pop(n, None)
 
-        relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
-
-    def get_credentials(self, relation_id: int) -> dict:
-        """Get the unit credentials from the relation."""
-        return json.loads(
-            self.juju_facade.get_app_relation_data(
-                relation_name=self.relation_name, relation_id=relation_id
-            ).get("credentials", "{}")
+        self.juju_facade.set_app_relation_data(
+            relation_name=self.relation_name,
+            relation=relation,
+            data={"credentials": json.dumps(credentials, sort_keys=True)},
         )
 
-    def get_outstanding_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
-        """Get the outstanding requests for the relation."""
-        outstanding_requests: List[KVRequest] = []
-        kv_requests = self.get_kv_requests(relation_id=relation_id)
-        for request in kv_requests:
-            if not self._credentials_issued_for_request(
-                nonce=request.nonce, relation_id=request.relation_id
-            ):
-                outstanding_requests.append(request)
-        return outstanding_requests
+    def get_credentials(self, relation: ops.Relation) -> dict:
+        """Get the unit credentials from the relation and load it as a dict."""
+        return json.loads(
+            self.juju_facade.get_app_relation_data(
+                relation_name=self.relation_name,
+                relation=relation,
+            ).get("credentials", "{}")
+        )
 
     def get_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get all KV requests for the relation."""
@@ -432,13 +425,15 @@ class VaultKvProvides(ops.Object):
             )
             for unit in relation.units:
                 unit_data = self.juju_facade.get_remote_unit_relation_data(
-                    self.relation_name, relation.id, unit
+                    relation_name=self.relation_name,
+                    relation_id=relation.id,
+                    unit=unit,
                 )
                 if not is_requirer_data_valid(app_data, unit_data):
                     continue
                 kv_requests.append(
                     KVRequest(
-                        relation_id=relation.id,
+                        relation=relation,
                         app_name=relation.app.name,
                         unit_name=unit.name,
                         mount_suffix=app_data["mount_suffix"],
@@ -448,54 +443,40 @@ class VaultKvProvides(ops.Object):
                 )
         return kv_requests
 
-    def _credentials_issued_for_request(self, nonce: str, relation_id: int) -> bool:
-        """Return whether credentials have been issued for the request."""
-        try:
-            relation = self.juju_facade.get_relation_by_id(self.relation_name, relation_id)
-        except NoSuchRelationError:
-            return False
-        credentials = self.get_credentials(relation)
-        return credentials.get(nonce) is not None
-
     def set_kv_data(
         self,
         relation: ops.Relation,
         mount: str,
         ca_certificate: str,
-        egress_subnets: List[str],
         vault_url: str,
         nonce: str,
         secret_id: str,
     ):
         """Set the kv data on the relation."""
-        credentials = self.get_credentials(relation.id)
+        credentials = self.get_credentials(relation)
         credentials[nonce] = secret_id
         try:
             self.juju_facade.set_app_relation_data(
                 relation_name=self.relation_name,
-                relation_id=relation.id,
+                relation=relation,
                 data={
                     "mount": mount,
                     "ca_certificate": ca_certificate,
-                    "egress_subnet": ",".join(egress_subnets),
                     "vault_url": vault_url,
                     "credentials": json.dumps(credentials, sort_keys=True),
                 },
             )
-        except (NoSuchRelationError, NotLeaderError):
+        except NotLeaderError:
             return
 
 
-class VaultKvBaseEvent(ops.EventBase):
+class VaultKvBaseEvent(ops.RelationEvent):
     """Base class for VaultKV requirer events."""
 
     def __init__(
-        self,
-        handle: ops.Handle,
-        relation_id: int,
-        relation_name: str,
+        self, handle: ops.Handle, relation_id: int, relation_name: str, relation: ops.Relation
     ):
-        super().__init__(handle)
+        super().__init__(handle, relation)
         self.relation_id = relation_id
         self.relation_name = relation_name
 
@@ -546,6 +527,7 @@ class VaultKvRequires(ops.Object):
     ) -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
+        self.juju_facade = JujuFacade(charm)
         self.relation_name = relation_name
         self.mount_suffix = mount_suffix
         self.framework.observe(
@@ -565,35 +547,26 @@ class VaultKvRequires(ops.Object):
             self._on_vault_kv_relation_broken,
         )
 
-    def _set_unit_nonce(self, relation: ops.Relation, nonce: str):
-        """Set the nonce on the relation."""
-        relation.data[self.charm.unit]["nonce"] = nonce
-
-    def _set_unit_egress_subnets(self, relation: ops.Relation, egress_subnets: List[str]):
-        """Set the egress_subnets on the relation."""
-        relation.data[self.charm.unit]["egress_subnet"] = ",".join(egress_subnets)
-
-    def _handle_relation(self, event: ops.EventBase):
+    def _handle_relation(self, _: ops.EventBase):
         """Run when a new unit joins the relation or when the address of the unit changes.
 
         Set the secret backend in the application databag if we are the leader.
         Emit the connected event.
         """
         try:
-            relation = self.juju_facade.get_relation_by_name(self.relation_name)
+            relations = self.juju_facade.get_relations(self.relation_name)
         except NoSuchRelationError:
             return
-        except MultipleRelationsFoundError:
-            logger.warning("Too many relations found for %s", self.relation_name)
-            raise RuntimeError("KV requirer can't be integrated with multiple providers")
-        if not relation:
+        if not relations:
             return
-        if self.juju_facade.is_leader:
-            relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
-        self.on.connected.emit(
-            relation.id,
-            relation.name,
-        )
+        for relation in relations:
+            if self.juju_facade.is_leader:
+                relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
+            self.on.connected.emit(
+                relation.id,
+                relation.name,
+                relation,
+            )
 
     def _on_vault_kv_relation_changed(self, event: ops.RelationChangedEvent):
         """Handle relation changed."""
@@ -608,6 +581,7 @@ class VaultKvRequires(ops.Object):
             self.on.ready.emit(
                 event.relation.id,
                 event.relation.name,
+                event.relation,
             )
 
     def _on_vault_kv_relation_broken(self, event: ops.RelationBrokenEvent):
@@ -619,16 +593,24 @@ class VaultKvRequires(ops.Object):
     ) -> None:
         """Request credentials from the vault-kv relation.
 
-        Generated secret ids are tied to the unit egress_subnet, so if the egress_subnet
+        Credentials are tied to the unit egress_subnet, so if the egress_subnet
         changes a new secret id must be generated.
 
         A change in egress_subnets can happen when the pod is rescheduled to a different
         node by the underlying substrate without a change from Juju.
+
+        Args:
+            relation: The relation object or the relation id.
+            egress_subnet: The egress subnets requesting the credentials for.
+            nonce: The nonce that identifies the unit.
         """
         if isinstance(egress_subnet, str):
             egress_subnet = [egress_subnet]
-        self._set_unit_egress_subnets(relation, egress_subnet)
-        self._set_unit_nonce(relation, nonce)
+        self.juju_facade.set_unit_relation_data(
+            relation_name=self.relation_name,
+            relation=relation,
+            data={"egress_subnet": ",".join(egress_subnet), "nonce": nonce},
+        )
 
     def get_vault_url(self, relation: ops.Relation) -> str | None:
         """Return the vault_url from the relation."""

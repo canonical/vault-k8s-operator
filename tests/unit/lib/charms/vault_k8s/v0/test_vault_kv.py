@@ -4,7 +4,6 @@
 
 import json
 import unittest
-from dataclasses import asdict
 
 import ops.testing as testing
 import pytest
@@ -33,18 +32,7 @@ class VaultKvProviderCharm(CharmBase):
         self.framework.observe(
             self.interface.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
-        self.framework.observe(
-            self.on.set_vault_url_action,
-            self._on_set_vault_url_action,
-        )
-        self.framework.observe(self.on.set_mount_action, self._on_set_mount_action)
-        self.framework.observe(
-            self.on.set_unit_credentials_action, self._on_set_unit_credentials_action
-        )
-        self.framework.observe(
-            self.on.get_outstanding_kv_requests_action,
-            self._on_get_outstanding_kv_requests_action,
-        )
+        self.framework.observe(self.on.set_kv_data_action, self._on_set_kv_data_action)
         self.framework.observe(
             self.on.get_kv_requests_action,
             self._on_get_kv_requests_action,
@@ -56,27 +44,12 @@ class VaultKvProviderCharm(CharmBase):
     def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
         pass
 
-    def _on_set_vault_url_action(self, event: ActionEvent):
+    def _on_set_kv_data_action(self, event: ActionEvent):
+        if not self.model.unit.is_leader():
+            return
         url = event.params.get("url", "")
-        relation_id = event.params.get("relation-id", "")
-        relation = self.model.get_relation(
-            relation_name=VAULT_KV_RELATION_NAME,
-            relation_id=int(relation_id),
-        )
-        assert relation
-        self.interface.set_vault_url(relation, url)
-
-    def _on_set_mount_action(self, event: ActionEvent):
         mount = event.params.get("mount", "")
-        relation_id = event.params.get("relation-id", "")
-        relation = self.model.get_relation(
-            relation_name=VAULT_KV_RELATION_NAME,
-            relation_id=int(relation_id),
-        )
-        assert relation
-        self.interface.set_mount(relation, mount)
-
-    def _on_set_unit_credentials_action(self, event: ActionEvent):
+        ca_certificate = event.params.get("ca-certificate", "")
         nonce = event.params.get("nonce", "")
         secret_id = event.params.get("secret-id", "")
         relation_id = event.params.get("relation-id", "")
@@ -85,19 +58,33 @@ class VaultKvProviderCharm(CharmBase):
             relation_id=int(relation_id),
         )
         assert relation
-        secret = self.model.get_secret(id=secret_id)
-        self.interface.set_unit_credentials(relation=relation, nonce=nonce, secret=secret)
-
-    def _on_get_outstanding_kv_requests_action(self, event: ActionEvent):
-        kv_requests = self.interface.get_outstanding_kv_requests()
-        event.set_results(
-            {"kv-requests": json.dumps([asdict(kv_request) for kv_request in kv_requests])}
+        self.interface.set_kv_data(
+            relation=relation,
+            mount=mount,
+            nonce=nonce,
+            secret_id=secret_id,
+            vault_url=url,
+            ca_certificate=ca_certificate,
         )
 
     def _on_get_kv_requests_action(self, event: ActionEvent):
         kv_requests = self.interface.get_kv_requests()
         event.set_results(
-            {"kv-requests": json.dumps([asdict(kv_request) for kv_request in kv_requests])}
+            {
+                "kv-requests": json.dumps(
+                    [
+                        {
+                            "relation_id": kv_request.relation.id,
+                            "app_name": kv_request.app_name,
+                            "unit_name": kv_request.unit_name,
+                            "mount_suffix": kv_request.mount_suffix,
+                            "egress_subnets": kv_request.egress_subnets,
+                            "nonce": kv_request.nonce,
+                        }
+                        for kv_request in kv_requests
+                    ]
+                )
+            }
         )
 
 
@@ -133,8 +120,8 @@ class TestVaultKvProvides(unittest.TestCase):
                 "provides": {"vault-kv": {"interface": "vault-kv"}},
             },
             actions={
-                "set-vault-url": {
-                    "description": "Set the vault url",
+                "set-kv-data": {
+                    "description": "Set the vault data",
                     "params": {
                         "url": {
                             "type": "string",
@@ -144,24 +131,10 @@ class TestVaultKvProvides(unittest.TestCase):
                             "type": "string",
                             "description": "The relation id",
                         },
-                    },
-                },
-                "set-mount": {
-                    "description": "Set the mount",
-                    "params": {
                         "mount": {
                             "type": "string",
                             "description": "The mount",
                         },
-                        "relation-id": {
-                            "type": "string",
-                            "description": "The relation id",
-                        },
-                    },
-                },
-                "set-unit-credentials": {
-                    "description": "Set the unit credentials",
-                    "params": {
                         "nonce": {
                             "type": "string",
                             "description": "The nonce",
@@ -170,9 +143,9 @@ class TestVaultKvProvides(unittest.TestCase):
                             "type": "string",
                             "description": "The secret id",
                         },
-                        "relation-id": {
+                        "ca-certificate": {
                             "type": "string",
-                            "description": "The relation id",
+                            "description": "The ca certificate",
                         },
                     },
                 },
@@ -224,7 +197,7 @@ class TestVaultKvProvides(unittest.TestCase):
 
         assert len(self.ctx.emitted_events) == 1
 
-    def test_given_unit_is_leader_when_setting_vault_url_then_relation_data_is_updated(
+    def test_given_unit_is_not_leader_when_setting_vault_data_then_relation_data_is_not_updated(
         self,
     ):
         vault_kv_relation = testing.Relation(
@@ -234,26 +207,31 @@ class TestVaultKvProvides(unittest.TestCase):
             remote_units_data={0: {}},
         )
         vault_url = "https://vault.example.com"
+        mount = "mount"
+        nonce = "abcd"
+        secret_id = "secret-id"
         state_in = testing.State(
             relations=[vault_kv_relation],
-            leader=True,
+            leader=False,
         )
         state_out = self.ctx.run(
             self.ctx.on.action(
-                "set-vault-url",
+                "set-kv-data",
                 params={
                     "url": vault_url,
+                    "mount": mount,
+                    "nonce": nonce,
+                    "secret-id": secret_id,
                     "relation-id": str(vault_kv_relation.id),
+                    "ca-certificate": "random certificate",
                 },
             ),
             state_in,
         )
 
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
-            "vault_url": vault_url
-        }
+        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
 
-    def test_given_unit_is_not_leader_when_setting_vault_url_then_relation_data_is_not_updated(
+    def test_given_unit_is_leader_when_setting_data_then_relation_data_is_updated(
         self,
     ):
         vault_kv_relation = testing.Relation(
@@ -263,298 +241,34 @@ class TestVaultKvProvides(unittest.TestCase):
             remote_units_data={0: {}},
         )
         vault_url = "https://vault.example.com"
+        mount = "charm-vault-kv-requires-dummy"
+        nonce = "abcd"
+        secret_id = "secret-id"
         state_in = testing.State(
             relations=[vault_kv_relation],
-            leader=False,
+            leader=True,
         )
         state_out = self.ctx.run(
             self.ctx.on.action(
-                "set-vault-url",
+                "set-kv-data",
                 params={
                     "url": vault_url,
-                    "relation-id": str(vault_kv_relation.id),
-                },
-            ),
-            state_in,
-        )
-
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
-
-    def test_given_unit_is_leader_when_setting_mount_then_relation_data_is_updated(
-        self,
-    ):
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_data={},
-            remote_units_data={0: {}},
-        )
-        mount = "charm-vault-kv-requires-dummy"
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=True,
-        )
-        state_out = self.ctx.run(
-            self.ctx.on.action(
-                "set-mount",
-                params={
                     "mount": mount,
-                    "relation-id": str(vault_kv_relation.id),
-                },
-            ),
-            state_in,
-        )
-
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {"mount": mount}
-
-    def test_given_unit_is_not_leader_when_setting_mount_then_relation_data_is_not_updated(
-        self,
-    ):
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_data={},
-            remote_units_data={0: {}},
-        )
-        mount = "charm-vault-kv-requires-dummy"
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=False,
-        )
-        state_out = self.ctx.run(
-            self.ctx.on.action(
-                "set-mount",
-                params={
-                    "mount": mount,
-                    "relation-id": str(vault_kv_relation.id),
-                },
-            ),
-            state_in,
-        )
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
-
-    def test_given_unit_is_leader_when_setting_credentials_then_relation_data_is_updated(
-        self,
-    ):
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_data={},
-            remote_units_data={0: {}},
-        )
-        secret = testing.Secret(tracked_content={})
-        nonce = "abcd"
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            secrets=[secret],
-            leader=True,
-        )
-        state_out = self.ctx.run(
-            self.ctx.on.action(
-                "set-unit-credentials",
-                params={
                     "nonce": nonce,
-                    "secret-id": secret.id,
+                    "secret-id": secret_id,
                     "relation-id": str(vault_kv_relation.id),
+                    "ca-certificate": "random certificate",
                 },
             ),
             state_in,
         )
 
         assert state_out.get_relation(vault_kv_relation.id).local_app_data == {
-            "credentials": json.dumps({nonce: f"{secret.id}"})
+            "mount": mount,
+            "ca_certificate": "random certificate",
+            "vault_url": vault_url,
+            "credentials": json.dumps({nonce: secret_id}),
         }
-
-    def test_given_unit_is_not_leader_when_setting_credentials_then_relation_data_is_not_updated(
-        self,
-    ):
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_data={},
-            remote_units_data={0: {}},
-        )
-        secret = testing.Secret(tracked_content={})
-        nonce = "abcd"
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            secrets=[secret],
-            leader=False,
-        )
-        state_out = self.ctx.run(
-            self.ctx.on.action(
-                "set-unit-credentials",
-                params={
-                    "nonce": nonce,
-                    "secret-id": secret.id,
-                    "relation-id": str(vault_kv_relation.id),
-                },
-            ),
-            state_in,
-        )
-
-        assert state_out.get_relation(vault_kv_relation.id).local_app_data == {}
-
-    def test_given_no_request_when_get_outstanding_kv_requests_then_empty_list_is_returned(self):
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_data={},
-            remote_units_data={0: {}},
-        )
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=True,
-        )
-
-        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
-
-        assert self.ctx.action_results == {"kv-requests": "[]"}
-
-    def test_given_1_outstanding_request_when_get_outstanding_kv_requests_then_request_is_returned(
-        self,
-    ):
-        suffix = "dummy"
-        nonce = "abcd"
-        egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_name="vault-kv-requirer",
-            remote_app_data={"mount_suffix": suffix},
-            remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
-        )
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
-
-        assert self.ctx.action_results == {
-            "kv-requests": json.dumps(
-                [
-                    {
-                        "relation_id": vault_kv_relation.id,
-                        "app_name": vault_kv_relation.remote_app_name,
-                        "unit_name": f"{vault_kv_relation.remote_app_name}/0",
-                        "mount_suffix": suffix,
-                        "egress_subnets": egress_subnets,
-                        "nonce": nonce,
-                    }
-                ]
-            )
-        }
-
-    def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
-        self,
-    ):
-        suffix = "dummy"
-        nonce_1 = "abcd"
-        nonce_2 = "efgh"
-        egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_name="vault-kv-requirer",
-            remote_app_data={"mount_suffix": suffix},
-            remote_units_data={
-                0: {"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)},
-                1: {"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)},
-            },
-            local_app_data={"credentials": json.dumps({nonce_1: "whatever secret id"})},
-        )
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
-
-        assert self.ctx.action_results == {
-            "kv-requests": json.dumps(
-                [
-                    {
-                        "relation_id": vault_kv_relation.id,
-                        "app_name": vault_kv_relation.remote_app_name,
-                        "unit_name": f"{vault_kv_relation.remote_app_name}/1",
-                        "mount_suffix": suffix,
-                        "egress_subnets": egress_subnets,
-                        "nonce": nonce_2,
-                    }
-                ]
-            )
-        }
-
-    def test_given_2_vault_kv_relations_when_get_outstanding_kv_requests_then_outstanding_request_is_returned(
-        self,
-    ):
-        suffix = "dummy"
-        nonce_1 = "abcd"
-        nonce_2 = "efgh"
-        egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation_1 = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_name="vault-kv-requirer",
-            remote_app_data={"mount_suffix": suffix},
-            remote_units_data={0: {"nonce": nonce_1, "egress_subnet": ",".join(egress_subnets)}},
-        )
-        vault_kv_relation_2 = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_name="vault-kv-requirer",
-            remote_app_data={"mount_suffix": suffix},
-            remote_units_data={0: {"nonce": nonce_2, "egress_subnet": ",".join(egress_subnets)}},
-        )
-        state_in = testing.State(
-            relations=[vault_kv_relation_1, vault_kv_relation_2],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
-
-        assert self.ctx.action_results == {
-            "kv-requests": json.dumps(
-                [
-                    {
-                        "relation_id": vault_kv_relation_1.id,
-                        "app_name": vault_kv_relation_1.remote_app_name,
-                        "unit_name": f"{vault_kv_relation_1.remote_app_name}/0",
-                        "mount_suffix": suffix,
-                        "egress_subnets": egress_subnets,
-                        "nonce": nonce_1,
-                    },
-                    {
-                        "relation_id": vault_kv_relation_2.id,
-                        "app_name": vault_kv_relation_2.remote_app_name,
-                        "unit_name": f"{vault_kv_relation_2.remote_app_name}/0",
-                        "mount_suffix": suffix,
-                        "egress_subnets": egress_subnets,
-                        "nonce": nonce_2,
-                    },
-                ]
-            )
-        }
-
-    def test_given_satisfied_request_when_get_outstanding_kv_requests_then_request_is_not_returned(
-        self,
-    ):
-        suffix = "dummy"
-        nonce = "abcd"
-        egress_subnets = ["10.0.0.1/32"]
-        vault_kv_relation = testing.Relation(
-            endpoint="vault-kv",
-            interface="vault-kv",
-            remote_app_name="vault-kv-requirer",
-            remote_app_data={"mount_suffix": suffix},
-            remote_units_data={0: {"nonce": nonce, "egress_subnet": ",".join(egress_subnets)}},
-            local_app_data={"credentials": json.dumps({nonce: "whatever secret id"})},
-        )
-        state_in = testing.State(
-            relations=[vault_kv_relation],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-outstanding-kv-requests"), state_in)
-
-        assert self.ctx.action_results == {"kv-requests": "[]"}
 
     def test_given_no_request_when_get_kv_requests_then_empty_list_is_returned(self):
         vault_kv_relation = testing.Relation(

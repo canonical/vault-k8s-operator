@@ -6,6 +6,7 @@ import logging
 import secrets
 from pathlib import Path
 
+from charms.vault_k8s.v0.juju_facade import JujuFacade, NoSuchStorageError
 from charms.vault_k8s.v0.vault_kv import (
     VaultKvConnectedEvent,
     VaultKvReadyEvent,
@@ -14,7 +15,7 @@ from charms.vault_k8s.v0.vault_kv import (
 from ops import main
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
-from ops.model import ActiveStatus, SecretNotFoundError
+from ops.model import ActiveStatus
 from vault_client import Vault  # type: ignore[import-not-found]
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
@@ -30,6 +31,7 @@ class VaultKVRequirerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.vault_kv = VaultKvRequires(self, "vault-kv", mount_suffix="kv")
+        self.juju_facade = JujuFacade(self)
         self.framework.observe(self.on.install, self._configure)
         self.framework.observe(self.on.update_status, self._configure)
         self.framework.observe(self.on.config_changed, self._configure)
@@ -40,32 +42,22 @@ class VaultKVRequirerCharm(CharmBase):
 
     def _configure(self, event: EventBase):
         """Create a secret to store the nonce."""
-        try:
-            self.model.get_secret(label=NONCE_SECRET_LABEL)
-        except SecretNotFoundError:
-            self.unit.add_secret(
-                {"nonce": secrets.token_hex(16)},
-                label=NONCE_SECRET_LABEL,
-                description="Nonce for vault-kv relation",
-            )
+        self.juju_facade.set_app_secret_content(
+            label=NONCE_SECRET_LABEL,
+            content={"nonce": secrets.token_hex(16)},
+        )
         self.unit.status = ActiveStatus()
 
     def _on_kv_connected(self, event: VaultKvConnectedEvent):
         """Request credentials from Vault KV."""
-        relation = self.model.get_relation(event.relation_name, event.relation_id)
-        if not relation:
-            return
-        binding = self.model.get_binding(relation)
-        if not binding:
-            logger.error("Binding not found")
-            return
-        egress_subnets = [str(subnet) for subnet in binding.network.egress_subnets]
-        egress_subnets.append(str(binding.network.interfaces[0].subnet))
-        self.vault_kv.request_credentials(relation, egress_subnets, self.get_nonce())
+        egress_subnets = self.juju_facade.get_egress_subnets(
+            event.relation_name, relation=event.relation
+        )
+        self.vault_kv.request_credentials(event.relation, egress_subnets, self.get_nonce())
 
     def _on_kv_ready(self, event: VaultKvReadyEvent):
         """Store the Vault KV credentials in a secret."""
-        if (relation := self.model.get_relation(event.relation_name, event.relation_id)) is None:
+        if not (relation := event.relation):
             return
         if not (ca_certificate := self.vault_kv.get_ca_certificate(relation)):
             logger.error("CA certificate not found")
@@ -85,13 +77,9 @@ class VaultKVRequirerCharm(CharmBase):
             "role-id": secret_content["role-id"],
             "role-secret-id": secret_content["role-secret-id"],
         }
-        try:
-            vault_kv_secret = self.model.get_secret(label=VAULT_KV_SECRET_LABEL)
-            vault_kv_secret.set_content(content=juju_secret_content)
-            logger.info("Vault KV secret updated")
-        except SecretNotFoundError:
-            self.app.add_secret(juju_secret_content, label=VAULT_KV_SECRET_LABEL)
-            logger.info("Vault KV secret created")
+        self.juju_facade.set_app_secret_content(
+            label=VAULT_KV_SECRET_LABEL, content=juju_secret_content
+        )
         self._store_ca_certificate(cert=ca_certificate)
 
     def _store_ca_certificate(self, cert: str) -> None:
@@ -102,13 +90,11 @@ class VaultKVRequirerCharm(CharmBase):
 
     def _on_create_secret_action(self, event: ActionEvent):
         """Create a secret in Vault KV."""
-        try:
-            secret = self.model.get_secret(label=VAULT_KV_SECRET_LABEL)
-        except SecretNotFoundError:
+        if not self.juju_facade.secret_exists(label=VAULT_KV_SECRET_LABEL):
             event.fail("Vault KV secret not found")
             return
-        secret_content = secret.get_content(refresh=True)
-        mount = secret_content["mount"]
+        kv_secret_content = self.juju_facade.get_latest_secret_content(label=VAULT_KV_SECRET_LABEL)
+        mount = kv_secret_content["mount"]
         ca_certificate_path = self._get_ca_cert_location_in_charm()
         if ca_certificate_path is None:
             event.fail("CA certificate not found")
@@ -119,23 +105,21 @@ class VaultKVRequirerCharm(CharmBase):
             event.fail("Missing key or value")
             return
         vault = Vault(
-            url=secret_content["vault-url"],
-            approle_role_id=secret_content["role-id"],
+            url=kv_secret_content["vault-url"],
+            approle_role_id=kv_secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
-            approle_secret_id=secret_content["role-secret-id"],
+            approle_secret_id=kv_secret_content["role-secret-id"],
         )
         vault.create_secret_in_kv(
             path=VAULT_KV_SECRET_PATH, mount=mount, key=secret_key, value=secret_value
         )
 
     def _on_get_secret_action(self, event: ActionEvent) -> None:
-        try:
-            secret = self.model.get_secret(label=VAULT_KV_SECRET_LABEL)
-        except SecretNotFoundError:
+        if not self.juju_facade.secret_exists(label=VAULT_KV_SECRET_LABEL):
             event.fail("Vault KV secret not found")
             return
-        secret_content = secret.get_content(refresh=True)
-        mount = secret_content["mount"]
+        kv_secret_content = self.juju_facade.get_latest_secret_content(label=VAULT_KV_SECRET_LABEL)
+        mount = kv_secret_content["mount"]
         ca_certificate_path = self._get_ca_cert_location_in_charm()
         if ca_certificate_path is None:
             event.fail("CA certificate not found")
@@ -145,10 +129,10 @@ class VaultKVRequirerCharm(CharmBase):
             event.fail("Missing key or value")
             return
         vault = Vault(
-            url=secret_content["vault-url"],
-            approle_role_id=secret_content["role-id"],
+            url=kv_secret_content["vault-url"],
+            approle_role_id=kv_secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
-            approle_secret_id=secret_content["role-secret-id"],
+            approle_secret_id=kv_secret_content["role-secret-id"],
         )
         vault_secret = vault.get_secret_in_kv(path=VAULT_KV_SECRET_PATH, mount=mount)
         if secret_key not in vault_secret:
@@ -172,13 +156,10 @@ class VaultKVRequirerCharm(CharmBase):
         Raises:
             VaultCertsError: If the CA certificate is not found
         """
-        storage = self.model.storages
-        if "certs" not in storage:
+        try:
+            return self.juju_facade.get_storage_location("certs")
+        except NoSuchStorageError:
             return None
-        if len(storage["certs"]) == 0:
-            return None
-        cert_storage = storage["certs"][0]
-        return cert_storage.location
 
 
 if __name__ == "__main__":  # pragma: no cover
