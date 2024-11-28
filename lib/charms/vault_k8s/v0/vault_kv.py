@@ -566,7 +566,8 @@ class VaultKvRequires(ops.Object):
                     data={"mount_suffix": self.mount_suffix},
                 )
             except NotLeaderError:
-                return
+                logger.debug("Not leader, not setting mount_suffix")
+                pass
             self.on.connected.emit(
                 relation.id,
                 relation.name,
