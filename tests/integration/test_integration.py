@@ -958,12 +958,13 @@ class TestVaultK8sIntegrationsPart3:
         crash_pod(name="vault-b-0", namespace=k8s_namespace)
         crash_pod(name="vault-b-1", namespace=k8s_namespace)
         crash_pod(name="vault-b-2", namespace=k8s_namespace)
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="active",
-            wait_for_exact_units=3,
-            idle_period=5,
-        )
+        async with ops_test.fast_forward():
+            await ops_test.model.wait_for_idle(
+                apps=["vault-b"],
+                status="active",
+                wait_for_exact_units=3,
+                idle_period=5,
+            )
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_b_is_deployed_and_unsealed_when_auth_token_goes_bad_then_units_recover(
@@ -992,12 +993,13 @@ class TestVaultK8sIntegrationsPart3:
             root_token=root_token,
             endpoint=unit_addresses[leader_unit_index],
         )
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="active",
-            wait_for_exact_units=3,
-            idle_period=5,
-        )
+        async with ops_test.fast_forward():
+            await ops_test.model.wait_for_idle(
+                apps=["vault-b"],
+                status="active",
+                wait_for_exact_units=3,
+                idle_period=5,
+            )
 
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
