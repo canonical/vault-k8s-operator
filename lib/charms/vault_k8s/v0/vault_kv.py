@@ -388,7 +388,6 @@ class VaultKvProvides(ops.Object):
 
     def remove_unit_credentials(self, relation: ops.Relation, nonce: str | Iterable[str]):
         """Remove nonce(s) from the relation."""
-
         if isinstance(nonce, str):
             nonce = [nonce]
 

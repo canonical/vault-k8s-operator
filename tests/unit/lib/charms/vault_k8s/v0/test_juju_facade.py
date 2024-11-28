@@ -308,9 +308,7 @@ class TestJujuFacade:
         with pytest.raises(ValueError):
             self.facade.set_app_relation_data(data={"key": "value"}, name="relation-name")
         with pytest.raises(ValueError):
-            self.facade.set_unit_relation_data(
-                data={"key": "value"}, name="relation-name"
-            )
+            self.facade.set_unit_relation_data(data={"key": "value"}, name="relation-name")
 
     # Tests for Storage methods
 
