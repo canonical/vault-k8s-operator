@@ -6,16 +6,28 @@ from unittest.mock import patch
 import ops.testing as testing
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
-from charms.vault_k8s.v0.vault_client import Vault
+from charms.vault_k8s.v0.vault_client import (
+    VaultClient,
+)
+from charms.vault_k8s.v0.vault_managers import (
+    VaultAutounsealProviderManager,
+    VaultAutounsealRequirerManager,
+    VaultTLSManager,
+)
 from charms.vault_k8s.v0.vault_s3 import S3
-from charms.vault_k8s.v0.vault_tls import VaultTLSManager
 
 from charm import VaultCharm
 
 
 class VaultCharmFixtures:
     patcher_tls = patch("charm.VaultTLSManager", autospec=VaultTLSManager)
-    patcher_vault = patch("charm.Vault", autospec=Vault)
+    patcher_vault = patch("charm.VaultClient", autospec=VaultClient)
+    patcher_vault_autounseal_provider_manager = patch(
+        "charm.VaultAutounsealProviderManager", autospec=VaultAutounsealProviderManager
+    )
+    patcher_vault_autounseal_requirer_manager = patch(
+        "charm.VaultAutounsealRequirerManager", autospec=VaultAutounsealRequirerManager
+    )
     patcher_s3_requirer = patch("charm.S3Requirer", autospec=S3Requirer)
     patcher_s3 = patch("charm.S3", autospec=S3)
     patcher_socket_fqdn = patch("socket.getfqdn")
@@ -51,6 +63,12 @@ class VaultCharmFixtures:
     def setup(self):
         self.mock_tls = VaultCharmFixtures.patcher_tls.start().return_value
         self.mock_vault = VaultCharmFixtures.patcher_vault.start().return_value
+        self.mock_vault_autounseal_manager = (
+            VaultCharmFixtures.patcher_vault_autounseal_provider_manager.start().return_value
+        )
+        self.mock_vault_autounseal_requirer_manager = (
+            VaultCharmFixtures.patcher_vault_autounseal_requirer_manager.start().return_value
+        )
         self.mock_s3_requirer = VaultCharmFixtures.patcher_s3_requirer.start().return_value
         self.mock_s3 = VaultCharmFixtures.patcher_s3.start()
         self.mock_socket_fqdn = VaultCharmFixtures.patcher_socket_fqdn.start()

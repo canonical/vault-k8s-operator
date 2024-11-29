@@ -6,7 +6,7 @@
 
 from typing import TextIO
 
-from charms.vault_k8s.v0.vault_tls import WorkloadBase
+from charms.vault_k8s.v0.vault_managers import WorkloadBase
 from ops import Container as OpsContainer
 
 

@@ -1,7 +1,7 @@
-path "example_mount/encrypt/1" {
+path "charm-autounseal/encrypt/1" {
     capabilities = ["update"]
 }
 
-path "example_mount/decrypt/1" {
+path "charm-autounseal/decrypt/1" {
     capabilities = ["update"]
 }
