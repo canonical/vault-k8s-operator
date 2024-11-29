@@ -333,8 +333,8 @@ class VaultCharm(CharmBase):
             return
         self._configure_pki_secrets_engine()
         self._sync_vault_autounseal(vault)
-        self._sync_vault_kv()
-        self._sync_vault_pki()
+        self._sync_vault_kv(vault)
+        self._sync_vault_pki(vault)
 
         if vault.is_active_or_standby() and not vault.is_raft_cluster_healthy():
             # Log if a raft node starts reporting unhealthy
@@ -392,7 +392,12 @@ class VaultCharm(CharmBase):
         if not relation.active:
             logger.error("Relation is not active for relation id %s", event.relation_id)
             return
+        vault = self._get_active_vault_client()
+        if not vault:
+            logger.debug("Failed to get initialized Vault")
+            return
         self._generate_kv_for_requirer(
+            vault=vault,
             relation=relation,
             app_name=event.app_name,
             unit_name=event.unit_name,
@@ -556,7 +561,7 @@ class VaultCharm(CharmBase):
             autounseal_provider_manager.create_credentials(relation, relation_address)
         autounseal_provider_manager.clean_up_credentials()
 
-    def _sync_vault_pki(self) -> None:
+    def _sync_vault_pki(self, vault: VaultClient) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki request")
@@ -564,10 +569,11 @@ class VaultCharm(CharmBase):
         outstanding_pki_requests = self.vault_pki.get_outstanding_certificate_requests()
         for pki_request in outstanding_pki_requests:
             self._generate_pki_certificate_for_requirer(
+                vault=vault,
                 requirer_csr=pki_request,
             )
 
-    def _sync_vault_kv(self) -> None:
+    def _sync_vault_kv(self, vault: VaultClient) -> None:
         """Goes through all the vault-kv relations and sends necessary KV information."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-kv request")
@@ -584,6 +590,7 @@ class VaultCharm(CharmBase):
                 logger.warning("Relation is not active for relation id %s", kv_request.relation_id)
                 continue
             self._generate_kv_for_requirer(
+                vault=vault,
                 relation=relation,
                 app_name=kv_request.app_name,
                 unit_name=kv_request.unit_name,
@@ -594,6 +601,7 @@ class VaultCharm(CharmBase):
 
     def _generate_kv_for_requirer(
         self,
+        vault: VaultClient,
         relation: Relation,
         app_name: str,
         unit_name: str,
@@ -608,27 +616,21 @@ class VaultCharm(CharmBase):
         if not ca_certificate:
             logger.debug("Vault CA certificate not available")
             return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
         mount = f"charm-{app_name}-{mount_suffix}"
         vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
         self._ensure_unit_credentials(vault, relation, unit_name, mount, nonce, egress_subnets)
         self._set_kv_relation_data(relation, mount, ca_certificate, egress_subnets)
         self._remove_stale_nonce(relation=relation, nonce=nonce)
 
-    def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCertificateRequest):
+    def _generate_pki_certificate_for_requirer(
+        self, vault: VaultClient, requirer_csr: RequirerCertificateRequest
+    ):
         """Generate a PKI certificate for a TLS requirer."""
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki request")
             return
         if not self._tls_certificates_pki_relation_created():
             logger.debug("TLS Certificates PKI relation not created")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
             return
         common_name = self._get_config_common_name()
         if not common_name:
