@@ -26,7 +26,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +77,6 @@ class NoRemoteAppError(FacadeError):
 
 class MultipleRelationsFoundError(FacadeError):
     """Exception raised when multiple relations are found."""
-
-
-class BindingNotFoundError(FacadeError):
-    """Exception raised when binding is not found for a relation."""
 
 
 class JujuFacade:
@@ -546,18 +542,6 @@ class JujuFacade:
         if not storages[storage_name]:
             raise NoSuchStorageError(f"Storage {storage_name} not found")
         return storages[storage_name][0].location
-
-    def get_ingress_address(self, relation: Relation) -> str | None:
-        """Get the ingress IP address as a string.
-
-        Ex. "1.2.3.4"
-        """
-        binding = self.charm.model.get_binding(relation)
-        if not binding:
-            raise BindingNotFoundError()
-        if binding.network.ingress_address:
-            return str(binding.network.ingress_address)
-        return None
 
     @property
     def model_name(self) -> str:
