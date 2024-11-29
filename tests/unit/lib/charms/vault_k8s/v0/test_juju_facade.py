@@ -190,11 +190,11 @@ class TestJujuFacade:
 
     # Tests for Relation methods
 
-    def test_given_relation_not_found_when_get_relation_by_id_then_raises_no_such_relation(self):
+    def test_given_relation_not_found_when_get_relation_then_raises_no_such_relation(self):
         self.facade.charm.model.get_relation = Mock(return_value=None)
 
         with pytest.raises(NoSuchRelationError):
-            self.facade.get_relation_by_id("test-relation", 1)
+            self.facade.get_relation("test-relation", 1)
 
     def test_given_relation_not_found_when_get_app_relation_data_then_raises_no_such_relation(
         self,
@@ -257,7 +257,7 @@ class TestJujuFacade:
 
     def test_given_invalid_data_when_set_relation_data_then_raises_invalid_data(self):
         relation = Mock()
-        self.facade.get_relation_by_id = Mock(return_value=relation)
+        self.facade.get_relation = Mock(return_value=relation)
 
         data = {"key": 123}  # int value
         with pytest.raises(InvalidRelationDataError):

@@ -369,9 +369,7 @@ class JujuFacade:
             A list of relation objects, the list is empty if no relations are found
         """
         relations = (
-            self.charm.model.relations.get(name, [])
-            if not id
-            else [self.get_relation_by_id(name, id)]
+            self.charm.model.relations.get(name, []) if not id else [self.get_relation(name, id)]
         )
         if not relations:
             logger.warning("No relations found for %s", name)
@@ -379,7 +377,7 @@ class JujuFacade:
 
     def get_active_relation(self, name: str, id: int) -> Relation | None:
         """Get the active relation object by name and id."""
-        relation = self.get_relation_by_id(name, id)
+        relation = self.get_relation(name, id)
         if not relation.active:
             logger.warning("Relation %s:%d is not active", name, id)
             return None
@@ -404,7 +402,7 @@ class JujuFacade:
         if not relation and not id:
             raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            (self.get_relation_by_id(name, id) if id else self.get_relation_by_name(name))
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
             if not relation
             else relation
         )
@@ -452,7 +450,7 @@ class JujuFacade:
             MultipleRelationsFoundError
         """
         relation = (
-            (self.get_relation_by_id(name, id) if id else self.get_relation_by_name(name))
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
             if not relation
             else relation
         )
@@ -513,7 +511,7 @@ class JujuFacade:
         if not relation and not id:
             raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            (self.get_relation_by_id(name, id) if id else self.get_relation_by_name(name))
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
             if not relation
             else relation
         )
@@ -530,7 +528,7 @@ class JujuFacade:
         if not relation and not id:
             raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            (self.get_relation_by_id(name, id) if id else self.get_relation_by_name(name))
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
             if not relation
             else relation
         )
@@ -627,7 +625,7 @@ class JujuFacade:
             raise ValueError("Either relation or relation_id must be provided")
         relation = (
             (
-                self.get_relation_by_id(relation_name, relation_id)
+                self.get_relation(relation_name, relation_id)
                 if relation_id
                 else self.get_relation_by_name(relation_name)
             )
