@@ -16,9 +16,6 @@ from charms.vault_k8s.v0.vault_client import (
     SecretsBackend,
 )
 from charms.vault_k8s.v0.vault_kv import KVRequest
-from charms.vault_k8s.v0.vault_managers import (
-    AutounsealConfigurationDetails,
-)
 from ops.pebble import Layer
 
 from tests.unit.certificates import (
@@ -38,11 +35,7 @@ class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_config_file_is_pushed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_socket_fqdn.return_value = "myhostname"
-            self.mock_vault_autounseal_requirer_manager.configure_mock(
-                **{
-                    "get_vault_configuration_details.return_value": None,
-                }
-            )
+            self.mock_autounseal_requires_get_details.return_value = None
             model_name = "whatever"
             vault_raft_mount = testing.Mount(
                 location="/vault/raft",
@@ -405,16 +398,16 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "create_credentials.return_value": (key_name, approle_id, approle_secret_id),
                 }
             )
-            self.mock_vault_autounseal_requirer_manager.configure_mock(
-                **{
-                    "get_vault_configuration_details.return_value": AutounsealConfigurationDetails(
-                        "1.2.3.4",
-                        "charm-autounseal",
-                        "key name",
-                        "some token",
-                        "ca cert",
-                    ),
-                }
+            self.mock_autounseal_requires_get_details.return_value = AutounsealDetails(
+                "1.2.3.4",
+                "charm-autounseal",
+                "key name",
+                "role id",
+                "secret id",
+                "ca cert",
+            )
+            self.mock_vault_autounseal_requirer_manager.get_provider_vault_token.return_value = (
+                "some token"
             )
             self.mock_tls.configure_mock(
                 **{

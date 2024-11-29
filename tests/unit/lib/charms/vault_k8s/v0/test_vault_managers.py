@@ -8,7 +8,6 @@ from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     VaultAutounsealProviderManager,
     VaultAutounsealRequirerManager,
-    VaultTLSManager,
 )
 
 from charm import AUTOUNSEAL_MOUNT_PATH
@@ -35,8 +34,6 @@ class TestVaultAutounsealRequirerManager:
     ):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()
-        tls_manager = MagicMock(spec=VaultTLSManager)
-        tls_manager.get_tls_file_path_in_workload.return_value = "/my/test/path"
         vault_client_instance = vault_client_mock.return_value
         vault_client_instance.token = token
 
@@ -48,7 +45,7 @@ class TestVaultAutounsealRequirerManager:
 
         vault_client_instance.authenticate.side_effect = authenticate
         requires = MagicMock()
-        requires.get_details.return_value = AutounsealDetails(
+        autounseal_details = AutounsealDetails(
             "my_address",
             "my_mount_path",
             "my_key_name",
@@ -56,23 +53,15 @@ class TestVaultAutounsealRequirerManager:
             "my_secret_id",
             "my_ca_certificate",
         )
-        relation_id = 1
-        relation = MagicMock()
-        relation.id = relation_id
+        ca_cert_path = "/my/test/path"
         if token:
             juju_facade_instance.get_secret_content_values.return_value = (token,)
         if not token:
             juju_facade_instance.get_secret_content_values.side_effect = SecretRemovedError()
 
-        autounseal = VaultAutounsealRequirerManager(charm, tls_manager, requires)
-        details = autounseal.get_vault_configuration_details()
-
-        assert details is not None
-        assert details.address == "my_address"
-        assert details.mount_path == "my_mount_path"
-        assert details.key_name == "my_key_name"
-        assert details.token == expected_token
-        assert details.ca_cert_path == "/my/test/path"
+        autounseal = VaultAutounsealRequirerManager(charm, requires)
+        returned_token = autounseal.get_provider_vault_token(autounseal_details, ca_cert_path)
+        assert returned_token == expected_token
 
 
 class TestVaultAutounsealProviderManager:

@@ -1171,9 +1171,8 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_node_api_addresses()
         ]
 
-        autounseal_details = VaultAutounsealRequirerManager(
-            self, self.tls, self.vault_autounseal_requires
-        ).get_vault_configuration_details()
+        autounseal_configuration_details = self._get_vault_autounseal_configuration()
+
         content = _render_vault_config_file(
             default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
             max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),
@@ -1185,7 +1184,7 @@ class VaultCharm(CharmBase):
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
-            autounseal_details=autounseal_details,
+            autounseal_details=autounseal_configuration_details,
         )
         existing_content = ""
         if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
@@ -1200,6 +1199,25 @@ class VaultCharm(CharmBase):
             if _seal_type_has_changed(existing_content, content):
                 if self._vault_service_is_running():
                     self._container.restart(self._service_name)
+
+    def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
+        autounseal_relation_details = self.vault_autounseal_requires.get_details()
+        if not autounseal_relation_details:
+            return None
+        autounseal_requirer_manager = VaultAutounsealRequirerManager(
+            self, self.vault_autounseal_requires
+        )
+        self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
+        provider_vault_token = autounseal_requirer_manager.get_provider_vault_token(
+            autounseal_relation_details, self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA)
+        )
+        return AutounsealConfigurationDetails(
+            autounseal_relation_details.address,
+            autounseal_relation_details.mount_path,
+            autounseal_relation_details.key_name,
+            provider_vault_token,
+            self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
+        )
 
     def _push_config_file_to_workload(self, content: str):
         """Push the config file to the workload."""

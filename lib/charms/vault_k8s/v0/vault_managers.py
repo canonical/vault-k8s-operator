@@ -758,29 +758,14 @@ class VaultAutounsealRequirerManager:
     def __init__(
         self,
         charm: CharmBase,
-        tls_manager: VaultTLSManager,
         requires: VaultAutounsealRequires,
     ):
         self._juju_facade = JujuFacade(charm)
-        self._tls_manager = tls_manager
         self._requires = requires
 
-    def get_vault_configuration_details(self) -> AutounsealConfigurationDetails | None:
-        """Return the necessary configuration details to properly configure auto-unseal."""
-        autounseal_details = self._requires.get_details()
-        if not autounseal_details:
-            return None
-        self._tls_manager.push_autounseal_ca_cert(autounseal_details.ca_certificate)
-        ca_cert_path = self._tls_manager.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA)
-        return AutounsealConfigurationDetails(
-            autounseal_details.address,
-            autounseal_details.mount_path,
-            autounseal_details.key_name,
-            self._get_autounseal_vault_token(autounseal_details),
-            ca_cert_path,
-        )
-
-    def _get_autounseal_vault_token(self, autounseal_details: AutounsealDetails) -> str:
+    def get_provider_vault_token(
+        self, autounseal_details: AutounsealDetails, ca_cert_path: str
+    ) -> str:
         """Retrieve the auto-unseal Vault token, or generate a new one if required.
 
         Retrieves the last used token from Juju secrets, and validates that it
@@ -789,15 +774,13 @@ class VaultAutounsealRequirerManager:
 
         Args:
             autounseal_details: The autounseal configuration details.
+            ca_cert_path: The path to the CA certificate to validate the provider Vault.
 
         Returns:
             A periodic Vault token that can be used for auto-unseal.
 
         """
-        external_vault = VaultClient(
-            url=autounseal_details.address,
-            ca_cert_path=self._tls_manager.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA),
-        )
+        external_vault = VaultClient(url=autounseal_details.address, ca_cert_path=ca_cert_path)
         try:
             existing_token = self._juju_facade.get_secret_content_values(
                 "token", label=self.AUTOUNSEAL_TOKEN_SECRET_LABEL
