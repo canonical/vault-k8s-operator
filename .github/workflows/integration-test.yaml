@@ -37,7 +37,7 @@ jobs:
           provider: microk8s
           channel: 1.29-strict/stable
           juju-channel: 3.4/stable
-          lxd-channel: 5.0/stable
+          lxd-channel: 5.21/stable
 
       - name: Enable Metallb
         run: |
