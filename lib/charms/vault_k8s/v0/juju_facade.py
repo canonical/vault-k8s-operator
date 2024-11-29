@@ -331,7 +331,7 @@ class JujuFacade:
         secret.grant(relation)
 
     # Relation related methods
-    def get_relation_by_id(self, name: str, id: int) -> Relation:
+    def get_relation(self, name: str, id: int) -> Relation:
         """Get the relation object by name and id.
 
         Returns:
@@ -469,7 +469,7 @@ class JujuFacade:
         id: int | None = None,
         relation: Relation | None = None,
     ) -> RelationDataContent | dict[str, str]:
-        """Get relation data from the remote unit databag.
+        """Get relation data from the caller's unit databag.
 
         Raises:
             NoSuchRelationError
