@@ -18,7 +18,7 @@ idna==3.7
     # via requests
 iniconfig==2.0.0
     # via pytest
-ops==2.17.0
+ops==2.17.1
     # via
     #   -r requirements.in
     #   ops-scenario
@@ -28,13 +28,13 @@ packaging==24.0
     # via pytest
 pluggy==1.5.0
     # via pytest
-pydantic==2.10.1
+pydantic==2.10.2
     # via
     #   -r requirements.in
     #   pytest-interface-tester
 pydantic-core==2.27.1
     # via pydantic
-pytest==8.3.3
+pytest==8.3.4
     # via pytest-interface-tester
 pytest-interface-tester==3.3.0
     # via -r requirements.in
