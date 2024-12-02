@@ -28,7 +28,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 22
+LIBPATCH = 23
 
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
@@ -166,7 +166,7 @@ class VaultClient:
             #
             # hvac.exceptions.InternalServerError:
             # core: barrier reports initialized but no seal configuration found
-            logging.error("Error while checking Vault seal status: %s", e)
+            logger.error("Error while checking Vault seal status: %s", e)
             raise VaultClientError(e) from e
 
     def read(self, path: str) -> dict:
@@ -573,7 +573,7 @@ class VaultClient:
     def create_transit_key(self, mount_point: str, key_name: str) -> None:
         """Create a new key in the transit backend."""
         response = self._client.secrets.transit.create_key(mount_point=mount_point, name=key_name)
-        logging.debug("Created a new transit key. response=%s", response)
+        logger.debug("Created a new transit key. response=%s", response)
 
     def delete_role(self, name: str) -> None:
         """Delete the approle with the given name."""

@@ -14,7 +14,19 @@ log_cli_level = "INFO"
 line-length = 99
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "C", "N", "D", "I001"]
+select = [
+    "E",
+    "W",
+    "F",
+    "C",
+    "N",
+    "D",
+    "I001",
+    "G001",  # Logging statement uses str.format
+    "G002",  # Logging statement uses %
+    "G003",  # Logging statement uses +
+    "G004",  # Logging statement uses an f-string
+]
 extend-ignore = [
     "D203",
     "D204",
