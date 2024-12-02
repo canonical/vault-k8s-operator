@@ -3,6 +3,8 @@
 # See LICENSE file for licensing details.
 
 
+from typing import Any
+
 import ops.testing as testing
 import pytest
 from charms.vault_k8s.v0.vault_autounseal import (
@@ -14,7 +16,7 @@ from ops.charm import ActionEvent, CharmBase
 
 
 class VaultAutounsealProviderCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultAutounsealProvides(self, "vault-autounseal-provides")
         self.framework.observe(
@@ -279,7 +281,7 @@ class TestVaultAutounsealProvides:
 
 
 class VaultAutounsealRequirerCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultAutounsealRequires(self, "vault-autounseal-requires")
         self.framework.observe(self.on.get_details_action, self._on_get_details_action)

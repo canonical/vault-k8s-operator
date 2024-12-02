@@ -13,7 +13,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from io import IOBase
-from typing import List, Protocol
+from typing import List, MutableMapping, Protocol
 
 import hvac
 import requests
@@ -39,7 +39,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_client"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Decides the format for the prepended text."""
         return f"[{self.prefix}] {msg}", kwargs
 
@@ -324,11 +324,11 @@ class VaultClient:
     def create_or_update_approle(
         self,
         name: str,
-        token_ttl=None,
-        token_max_ttl=None,
+        token_ttl: str | None = None,
+        token_max_ttl: str | None = None,
         policies: List[str] | None = None,
         cidrs: List[str] | None = None,
-        token_period=None,
+        token_period: str | None = None,
     ) -> str:
         """Create/update a role within vault associating the supplied policies.
 

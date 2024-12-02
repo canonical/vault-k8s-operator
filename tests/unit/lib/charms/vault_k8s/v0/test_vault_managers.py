@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from charms.vault_k8s.v0.juju_facade import SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
-from charms.vault_k8s.v0.vault_client import VaultClient
+from charms.vault_k8s.v0.vault_client import AuthMethod, VaultClient
 from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     VaultAutounsealProviderManager,
@@ -19,25 +19,25 @@ class TestVaultAutounsealRequirerManager:
         [
             ("initial token", True, "initial token"),  # Token is set and valid
             ("initial token", False, "new token"),  # Token is set but invalid
-            (None, None, "new token"),  # Token is not set
+            (None, False, "new token"),  # Token is not set
         ],
     )
     @patch("charms.vault_k8s.v0.vault_managers.VaultClient")
     @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
     def test_when_get_vault_configuration_details_called_then_details_are_retrieved_correctly(
         self,
-        juju_facade_mock,
-        vault_client_mock,
-        token,
-        token_valid,
-        expected_token,
+        juju_facade_mock: MagicMock,
+        vault_client_mock: MagicMock,
+        token: str | None,
+        token_valid: bool,
+        expected_token: str,
     ):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()
         vault_client_instance = vault_client_mock.return_value
         vault_client_instance.token = token
 
-        def authenticate(auth_method):
+        def authenticate(auth_method: AuthMethod) -> bool:
             if token and vault_client_instance.authenticate.call_count == 1:
                 return token_valid
             vault_client_instance.token = "new token"
@@ -103,7 +103,7 @@ class TestVaultAutounsealProviderManager:
 
     @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
     def test_given_orphaned_credentials_when_clean_up_credentials_then_credentials_removed_and_keys_marked_deletion_allowed(
-        self, juju_facade_mock
+        self, juju_facade_mock: MagicMock
     ):
         juju_facade_instance = juju_facade_mock.return_value
         charm = MagicMock()

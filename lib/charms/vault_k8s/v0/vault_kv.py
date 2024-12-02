@@ -121,7 +121,7 @@ import json
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, MutableMapping
 
 import ops
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
@@ -145,7 +145,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_kv"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Decides the format for the prepended text."""
         return f"[{self.prefix}] {msg}", kwargs
 
