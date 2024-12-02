@@ -35,8 +35,8 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.29-strict/stable
-          juju-channel: 3.4/stable
+          channel: 1.31-strict/stable
+          juju-channel: 3.6/stable
           lxd-channel: 5.21/stable
 
       - name: Enable Metallb
