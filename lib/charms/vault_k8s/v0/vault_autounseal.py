@@ -354,22 +354,16 @@ class VaultAutounsealProvides(Object):
             },
         )
 
-    def get_outstanding_requests(self, relation_id: int | None = None) -> List[Relation]:
-        """Get the outstanding requests for the relation.
-
-        This will retrieve any vault-autounseal relations that have not yet had
-        credentials issued for them.
-        """
-        outstanding_requests: List[Relation] = []
-        requirer_requests = self.juju_facade.get_active_relations(self.relation_name, relation_id)
-        outstanding_requests = [
+    def get_relations_without_credentials(self, relation_id: int | None = None) -> List[Relation]:
+        """Get the relations which do not have credentials for auto-unseal."""
+        requirer_relations = self.juju_facade.get_active_relations(self.relation_name, relation_id)
+        return [
             relation
-            for relation in requirer_requests
-            if not self._credentials_issued_for_request(relation_id=relation.id)
+            for relation in requirer_relations
+            if not self._credentials_issued_for_relation(relation_id=relation.id)
         ]
-        return outstanding_requests
 
-    def _credentials_issued_for_request(self, relation_id: int) -> bool:
+    def _credentials_issued_for_relation(self, relation_id: int) -> bool:
         try:
             if not (
                 credentials_secret_id := self.juju_facade.get_app_relation_data(
