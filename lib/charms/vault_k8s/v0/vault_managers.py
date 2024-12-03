@@ -34,7 +34,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum, auto
-from typing import FrozenSet, TextIO
+from typing import FrozenSet, MutableMapping, TextIO
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
@@ -100,7 +100,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_managers"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Decides the format for the prepended text."""
         return f"[{self.prefix}] {msg}", kwargs
 

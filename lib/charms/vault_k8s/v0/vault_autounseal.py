@@ -64,7 +64,7 @@ where `vault a` is the Vault app which will provide the autounseal service, and
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, MutableMapping
 
 from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
@@ -110,7 +110,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_autounseal"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Prepend the prefix to the log message."""
         return f"[{self.prefix}] {msg}", kwargs
 
@@ -146,7 +146,14 @@ class VaultAutounsealDetailsReadyEvent(EventBase):
     """Event emitted on the requirer when Vault autounseal details are ready in the databag."""
 
     def __init__(
-        self, handle: Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
+        self,
+        handle: Handle,
+        address: str,
+        mount_path: str,
+        key_name: str,
+        role_id: str,
+        secret_id: str,
+        ca_certificate: str,
     ):
         """VaultAutounsealDetailsReadyEvent.
 
