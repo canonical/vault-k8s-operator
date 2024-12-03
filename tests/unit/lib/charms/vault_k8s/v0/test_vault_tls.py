@@ -5,7 +5,7 @@
 import os
 import tempfile
 from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import ops.testing as testing
 import pytest
@@ -317,7 +317,7 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
-        self, patch_generate_certificate
+        self, patch_generate_certificate: MagicMock
     ):
         private_key = generate_private_key()
         ca_private_key = generate_private_key()
@@ -484,7 +484,7 @@ class TestCharmTLS:
     @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
-        self, patch_generate_certificate, patch_generate_ca
+        self, patch_generate_certificate: MagicMock, patch_generate_ca: MagicMock
     ):
         self_signed_private_key = generate_private_key()
         self_signed_ca_private_key = generate_private_key()
@@ -585,7 +585,7 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
     def test_given_ca_cert_exists_when_certificate_transfer_relation_joins_then_ca_cert_is_advertised(
-        self, set_certificate, is_api_available, is_sealed
+        self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
     ):
         is_api_available.return_value = True
         is_sealed.return_value = False
@@ -668,7 +668,7 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
     def test_given_ca_cert_is_not_stored_when_certificate_transfer_relation_joins_then_ca_cert_is_not_advertised(
-        self, set_certificate, is_api_available, is_sealed
+        self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
     ):
         is_api_available.return_value = True
         is_sealed.return_value = False
