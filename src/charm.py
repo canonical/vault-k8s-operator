@@ -913,7 +913,7 @@ class VaultCharm(CharmBase):
 
     def _is_vault_kv_role_configured(
         self,
-        vault: Vault,
+        vault: VaultClient,
         label: str,
         egress_subnets: List[str],
         role_name: str,
