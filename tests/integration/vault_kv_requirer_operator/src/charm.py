@@ -18,7 +18,7 @@ from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.model import ActiveStatus
 from vault_client import (
-    Vault,  # type: ignore[import-not-found]
+    VaultClient,  # type: ignore[import-not-found]
 )
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
@@ -107,7 +107,7 @@ class VaultKVRequirerCharm(CharmBase):
         credentials_secret_content = self.juju_facade.get_latest_secret_content(
             id=kv_secret_content["credentials-secret-id"]
         )
-        vault = Vault(
+        vault = VaultClient(
             url=kv_secret_content["vault-url"],
             approle_role_id=credentials_secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
@@ -134,7 +134,7 @@ class VaultKVRequirerCharm(CharmBase):
         if not secret_key:
             event.fail("Missing key or value")
             return
-        vault = Vault(
+        vault = VaultClient(
             url=kv_secret_content["vault-url"],
             approle_role_id=credentials_secret_content["role-id"],
             ca_certificate=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
