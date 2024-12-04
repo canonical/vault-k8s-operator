@@ -14,6 +14,7 @@ from cryptography import x509
 from juju.action import Action
 from juju.application import Application
 from juju.unit import Unit
+from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.helpers import (
@@ -52,11 +53,11 @@ NUM_VAULT_UNITS = 3
 
 
 @pytest.fixture(scope="module")
-async def deployed_vault(ops_test: OpsTest, request):
+async def deployed_vault(ops_test: OpsTest, request: pytest.FixtureRequest):
     """Deploy Vault."""
     assert ops_test.model
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
-    charm_path = Path(request.config.getoption("--charm_path")).resolve()
+    charm_path = Path(str(request.config.getoption("--charm_path"))).resolve()
     await ops_test.model.deploy(
         charm_path,
         resources=resources,
@@ -238,11 +239,11 @@ class TestVaultK8sIntegrationsPart1:
         self,
         ops_test: OpsTest,
         deployed_vault_initialized_leader: Tuple[int, str, str],
-        request,
+        request: pytest.FixtureRequest,
     ):
         assert ops_test.model
         kv_requirer_charm_path = Path(
-            request.config.getoption("--kv_requirer_charm_path")
+            str(request.config.getoption("--kv_requirer_charm_path"))
         ).resolve()
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -259,12 +260,10 @@ class TestVaultK8sIntegrationsPart1:
             application_name=VAULT_KV_REQUIRER_2_APPLICATION_NAME,
             num_units=1,
         )
-        pki_requirer_charm_path = request.config.getoption(
-            "--pki_requirer_charm_path", default=None
-        )
+        pki_requirer_charm_path = request.config.getoption("--pki_requirer_charm_path")
 
         deploy_vault_pki_requirer = ops_test.model.deploy(
-            Path(pki_requirer_charm_path).resolve()
+            Path(str(pki_requirer_charm_path)).resolve()
             if pki_requirer_charm_path
             else VAULT_PKI_REQUIRER_APPLICATION_NAME,
             application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
@@ -317,11 +316,13 @@ class TestVaultK8sIntegrationsPart1:
 
     @pytest.mark.abort_on_fail
     async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is_created(
-        self, ops_test, deploy_requiring_charms: None
+        self, ops_test: OpsTest, deploy_requiring_charms: None
     ):
+        assert ops_test.model
         secret_key = "test-key"
         secret_value = "test-value"
         vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_1_APPLICATION_NAME]
+        assert isinstance(vault_kv_application, Application)
         vault_kv_unit = vault_kv_application.units[0]
         vault_kv_create_secret_action = await vault_kv_unit.run_action(
             action_name="create-secret",
@@ -854,11 +855,11 @@ class TestVaultK8sIntegrationsPart3:
         self,
         ops_test: OpsTest,
         deployed_vault_initialized_leader: Tuple[int, str, str],
-        request,
+        request: FixtureRequest,
     ):
         assert ops_test.model
         resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
-        charm_path = Path(request.config.getoption("--charm_path")).resolve()
+        charm_path = Path(str(request.config.getoption("--charm_path"))).resolve()
         await ops_test.model.deploy(
             charm_path,
             resources=resources,
@@ -1184,7 +1185,7 @@ def unseal_all_vaults(unit_addresses: List[str], root_token: str, unseal_key: st
 
 
 async def authorize_charm(
-    ops_test: OpsTest, root_token: str, app_name=APPLICATION_NAME
+    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME
 ) -> Any | Dict:
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)

@@ -15,7 +15,7 @@ Add the following dependencies to the charm's requirements.txt file:
 """
 
 import logging
-from typing import IO, List, cast
+from typing import IO, List, MutableMapping, cast
 
 import boto3
 from botocore.config import Config
@@ -41,7 +41,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_s3"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Decides the format for the prepended text."""
         return f"[{self.prefix}] {msg}", kwargs
 

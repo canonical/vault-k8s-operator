@@ -52,9 +52,7 @@ class TestCharmRemove(VaultCharmFixtures):
                 f.write("data")
 
             self.ctx.run(self.ctx.on.remove(), state_in)
-            self.mock_vault.remove_raft_node.assert_called_with(
-                node_id=f"{model_name}-vault-k8s/0"
-            )
+            self.mock_vault.remove_raft_node.assert_called_with(f"{model_name}-vault-k8s/0")
             assert not os.path.exists(f"{temp_dir}/vault.db")
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
 

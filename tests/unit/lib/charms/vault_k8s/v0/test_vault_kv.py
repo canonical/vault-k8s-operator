@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 import json
 import unittest
+from typing import Any
 
 import ops.testing as testing
 import pytest
@@ -22,7 +23,7 @@ VAULT_KV_RELATION_NAME = "vault-kv"
 
 
 class VaultKvProviderCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultKvProvides(self, "vault-kv")
         self.framework.observe(
@@ -88,7 +89,7 @@ class VaultKvProviderCharm(CharmBase):
 
 
 class VaultKvRequirerCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultKvRequires(
             self,

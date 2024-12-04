@@ -6,7 +6,7 @@
 
 from typing import TextIO
 
-from charms.vault_k8s.v0.vault_tls import WorkloadBase
+from charms.vault_k8s.v0.vault_managers import WorkloadBase
 from ops import Container as OpsContainer
 
 
@@ -16,7 +16,7 @@ class Container(WorkloadBase):
     def __init__(self, container: OpsContainer):
         self._container = container
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         """Delegate all unknown attributes to the container."""
         return getattr(self._container, name)
 
