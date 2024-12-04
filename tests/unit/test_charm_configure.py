@@ -441,7 +441,9 @@ class TestCharmConfigure(VaultCharmFixtures):
                 ingress_address="myhostname",
             )
             relation = MockRelation(id=vault_autounseal_relation.id)
-            self.mock_autounseal_provides_get_outstanding_requests.return_value = [relation]
+            self.mock_autounseal_provides_get_relations_without_credentials.return_value = [
+                relation
+            ]
             approle_secret = testing.Secret(
                 label="vault-approle-auth-details",
                 tracked_content={"role-id": "role id", "secret-id": "secret id"},

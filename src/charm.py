@@ -548,12 +548,14 @@ class VaultCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        outstanding_autounseal_requests = self.vault_autounseal_provides.get_outstanding_requests()
-        if outstanding_autounseal_requests:
+        relations_without_credentials = (
+            self.vault_autounseal_provides.get_relations_without_credentials()
+        )
+        if relations_without_credentials:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in outstanding_autounseal_requests:
+        for relation in relations_without_credentials:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
