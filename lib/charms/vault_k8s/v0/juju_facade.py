@@ -9,6 +9,7 @@ from typing import List, Literal, cast
 from ops.charm import CharmBase
 from ops.model import (
     Application,
+    Binding,
     ModelError,
     Relation,
     RelationDataContent,
@@ -26,7 +27,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +331,7 @@ class JujuFacade:
         secret.grant(relation)
 
     # Relation related methods
-    def get_relation_by_id(self, relation_name: str, relation_id: int) -> Relation:
+    def get_relation(self, name: str, id: int) -> Relation:
         """Get the relation object by name and id.
 
         Returns:
@@ -339,10 +340,10 @@ class JujuFacade:
         Raises:
             NoSuchRelationError: if the relation does not exist
         """
-        relation = self.charm.model.get_relation(relation_name, relation_id)
+        relation = self.charm.model.get_relation(name, id)
         if not relation:
-            logger.error("Relation %s:%d not found", relation_name, relation_id)
-            raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
+            logger.error("Relation %s:%d not found", name, id)
+            raise NoSuchRelationError(f"Relation {name}:{id} not found")
         return relation
 
     def get_relation_by_name(self, name: str) -> Relation:
@@ -361,44 +362,61 @@ class JujuFacade:
             raise MultipleRelationsFoundError(f"More than one relation found for name {name}")
         return relations[0]
 
-    def get_relations(self, relation_name: str, relation_id: int | None = None) -> List[Relation]:
+    def get_relations(self, name: str, id: int | None = None) -> List[Relation]:
         """Get all relation objects with the given name.
 
         Returns:
             A list of relation objects, the list is empty if no relations are found
         """
         relations = (
-            self.charm.model.relations.get(relation_name, [])
-            if not relation_id
-            else [self.get_relation_by_id(relation_name, relation_id)]
+            self.charm.model.relations.get(name, []) if not id else [self.get_relation(name, id)]
         )
+        if not relations:
+            logger.warning("No relations found for %s", name)
         return relations
 
-    def get_active_relations(
-        self, relation_name: str, relation_id: int | None = None
-    ) -> List[Relation]:
+    def get_active_relation(self, name: str, id: int) -> Relation | None:
+        """Get the active relation object by name and id."""
+        relation = self.get_relation(name, id)
+        if not relation.active:
+            logger.warning("Relation %s:%d is not active", name, id)
+            return None
+        return relation
+
+    def get_active_relations(self, name: str, id: int | None = None) -> List[Relation]:
         """Get all relations with the given name or ID that are active."""
-        relations = self.get_relations(relation_name, relation_id)
+        relations = self.get_relations(name, id)
         return [relation for relation in relations if relation.active]
 
-    def relation_exists(self, relation_name: str) -> bool:
+    def relation_exists(self, name: str) -> bool:
         """Check if there are any relations with the given name."""
-        return self.get_relations(relation_name) != []
+        return self.get_relations(name) != []
 
     def _read_relation_data(
-        self, relation_name: str, relation_id: int | None, entity: Unit | Application
+        self,
+        name: str,
+        entity: Unit | Application,
+        id: int | None,
+        relation: Relation | None = None,
     ) -> RelationDataContent | dict[str, str]:
+        if not relation and not id:
+            raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            self.get_relation_by_id(relation_name, relation_id)
-            if relation_id
-            else self.get_relation_by_name(relation_name)
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
+            if not relation
+            else relation
         )
         return relation.data.get(entity, {})
 
     def get_app_relation_data(
-        self, relation_name: str, relation_id: int | None
+        self,
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> RelationDataContent | dict[str, str]:
         """Get relation data from the caller's application databag.
+
+        Either relation or relation_id must be provided.
 
         Returns:
             The relation data as a dict
@@ -407,12 +425,22 @@ class JujuFacade:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        return self._read_relation_data(relation_name, relation_id, self.charm.model.app)
+        return self._read_relation_data(
+            name=name,
+            entity=self.charm.model.app,
+            id=id,
+            relation=relation,
+        )
 
     def get_remote_app_relation_data(
-        self, relation_name: str, relation_id: int | None = None
+        self,
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> RelationDataContent | dict[str, str]:
         """Get relation data from the remote application databag.
+
+        Either relation or relation_id must be provided.
 
         Returns:
             The relation data as a dict
@@ -422,71 +450,108 @@ class JujuFacade:
             MultipleRelationsFoundError
         """
         relation = (
-            self.get_relation_by_id(relation_name, relation_id)
-            if relation_id
-            else self.get_relation_by_name(relation_name)
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
+            if not relation
+            else relation
         )
         if not relation:
-            raise NoSuchRelationError(f"Relation {relation_name}:{relation_id} not found")
+            raise NoSuchRelationError(f"Relation {name}:{id} not found")
         if not relation.app:
             logger.warning("No remote application yet")
-            raise NoRemoteAppError(
-                f"Relation {relation_name}:{relation_id} has no remote application yet"
-            )
+            raise NoRemoteAppError(f"Relation {name}:{id} has no remote application yet")
         return relation.data.get(relation.app, {})
 
     def get_unit_relation_data(
-        self, relation_name: str, relation_id: int | None
+        self,
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> RelationDataContent | dict[str, str]:
-        """Get relation data from the remote unit databag.
+        """Get relation data from the caller's unit databag.
 
         Raises:
             NoSuchRelationError
             MultipleRelationsFoundError
         """
-        return self._read_relation_data(relation_name, relation_id, self.charm.model.unit)
+        return self._read_relation_data(
+            name=name,
+            entity=self.charm.model.unit,
+            id=id,
+            relation=relation,
+        )
+
+    def get_remote_unit_relation_data(
+        self,
+        name: str,
+        unit: Unit,
+        id: int | None = None,
+        relation: Relation | None = None,
+    ) -> RelationDataContent | dict[str, str]:
+        """Get relation data from the remote unit databag."""
+        return self._read_relation_data(
+            name=name,
+            entity=unit,
+            id=id,
+            relation=relation,
+        )
 
     def get_remote_units_relation_data(
-        self, relation_name: str, relation_id: int | None
+        self,
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> List[RelationDataContent | dict[str, str]]:
         """Get relation data from the remote units databags.
 
         Raises:
             NoSuchRelationError
             MultipleRelationsFoundError
+            ValueError
         """
+        if not relation and not id:
+            raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            self.get_relation_by_id(relation_name, relation_id)
-            if relation_id
-            else self.get_relation_by_name(relation_name)
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
+            if not relation
+            else relation
         )
         return [relation.data.get(unit, {}) for unit in relation.units]
 
     def _set_relation_data(
         self,
         data: dict[str, str],
-        relation_name: str,
-        relation_id: int | None,
+        name: str,
         entity: Unit | Application,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> None:
+        if not relation and not id:
+            raise ValueError("Either relation or relation_id must be provided")
         relation = (
-            self.get_relation_by_id(relation_name, relation_id)
-            if relation_id
-            else self.get_relation_by_name(relation_name)
+            (self.get_relation(name, id) if id else self.get_relation_by_name(name))
+            if not relation
+            else relation
         )
         if not all(isinstance(value, str) for value in chain(data.values(), data.keys())):
             raise InvalidRelationDataError("Invalid relation data")
         try:
-            logger.info("Setting relation data for %s:%d", relation_name, relation_id)
+            logger.info("Setting relation data for %s:%d", name, id or relation.id)
             relation.data[entity].update(data)
         except RelationDataError as e:
             logger.error(
-                "Error setting relation data for %s:%d: %s", relation_name, relation_id, e
+                "Error setting relation data for %s:%d: %s",
+                name,
+                id or relation.id,
+                e,
             )
             raise InvalidRelationDataError(e) from e
 
     def set_app_relation_data(
-        self, data: dict[str, str], relation_name: str, relation_id: int | None
+        self,
+        data: dict[str, str],
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> None:
         """Set relation data in the caller's application databag.
 
@@ -500,13 +565,18 @@ class JujuFacade:
             raise NotLeaderError("Action not allowed for non-leader units")
         self._set_relation_data(
             data=data,
-            relation_name=relation_name,
-            relation_id=relation_id,
+            name=name,
+            id=id,
+            relation=relation,
             entity=self.charm.model.app,
         )
 
     def set_unit_relation_data(
-        self, data: dict[str, str], relation_name: str, relation_id: int | None
+        self,
+        data: dict[str, str],
+        name: str,
+        id: int | None = None,
+        relation: Relation | None = None,
     ) -> None:
         """Set relation data in the caller's unit databag.
 
@@ -517,8 +587,9 @@ class JujuFacade:
         """
         self._set_relation_data(
             data=data,
-            relation_name=relation_name,
-            relation_id=relation_id,
+            name=name,
+            id=id,
+            relation=relation,
             entity=self.charm.model.unit,
         )
 
@@ -542,6 +613,47 @@ class JujuFacade:
         if not storages[storage_name]:
             raise NoSuchStorageError(f"Storage {storage_name} not found")
         return storages[storage_name][0].location
+
+    def get_binding(
+        self,
+        relation_name: str,
+        relation: Relation | None = None,
+        relation_id: int | None = None,
+    ) -> Binding | None:
+        """Get the binding for the given relation."""
+        if not relation and not relation_id:
+            raise ValueError("Either relation or relation_id must be provided")
+        relation = (
+            (
+                self.get_relation(relation_name, relation_id)
+                if relation_id
+                else self.get_relation_by_name(relation_name)
+            )
+            if not relation
+            else relation
+        )
+        return self.charm.model.get_binding(relation)
+
+    def get_egress_subnets(
+        self,
+        relation_name: str,
+        relation_id: int | None = None,
+        relation: Relation | None = None,
+    ) -> List[str]:
+        """Get the list of egress subnets for the given relation.
+
+        This returns how units on the relation will see the charm connecting from.
+        For example ['10.0.0.1/32', '10.1.1.1/32']
+        """
+        binding = self.get_binding(
+            relation_name=relation_name, relation_id=relation_id, relation=relation
+        )
+        if not binding:
+            return []
+        egress_subnets = [str(subnet) for subnet in binding.network.egress_subnets]
+        if binding.network.interfaces:
+            egress_subnets.append(str(binding.network.interfaces[0].subnet))
+        return egress_subnets
 
     @property
     def model_name(self) -> str:

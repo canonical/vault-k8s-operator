@@ -118,7 +118,7 @@ class TestVaultK8s:
         assert ops_test.model
         leader_unit_index, root_token, unseal_key = deployed_vault_initialized_leader
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
             await wait_for_status_message(
                 ops_test=ops_test,
@@ -154,7 +154,7 @@ class TestVaultK8s:
         )
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[crashing_pod_index], root_token, unseal_key)
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -181,7 +181,7 @@ class TestVaultK8s:
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_vault(unit_addresses[-1], root_token, unseal_key)
 
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -574,7 +574,7 @@ class TestVaultK8sIntegrationsPart1:
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(unit_addresses, root_token, unseal_key)
 
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -624,7 +624,7 @@ class TestVaultK8sIntegrationsPart1:
         unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
         unseal_all_vaults(unit_addresses, root_token, unseal_key)
 
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -891,7 +891,7 @@ class TestVaultK8sIntegrationsPart3:
         await ops_test.model.integrate(
             f"{APPLICATION_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires"
         )
-        async with ops_test.fast_forward(fast_interval="10s"):
+        async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
                 apps=["vault-b"], status="blocked", wait_for_exact_units=1, idle_period=5
             )
