@@ -350,8 +350,8 @@ class VaultAutounsealProvides(Object):
         if secret.id is None:
             raise ValueError("Secret id is None")
         self.juju_facade.set_app_relation_data(
-            relation_name=self.relation_name,
-            relation_id=relation.id,
+            name=self.relation_name,
+            id=relation.id,
             data={
                 "address": vault_address,
                 "mount_path": mount_path,
