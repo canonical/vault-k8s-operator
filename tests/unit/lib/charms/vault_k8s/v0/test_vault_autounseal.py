@@ -3,6 +3,8 @@
 # See LICENSE file for licensing details.
 
 
+from typing import Any
+
 import ops.testing as testing
 import pytest
 from charms.vault_k8s.v0.vault_autounseal import (
@@ -14,14 +16,15 @@ from ops.charm import ActionEvent, CharmBase
 
 
 class VaultAutounsealProviderCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultAutounsealProvides(self, "vault-autounseal-provides")
         self.framework.observe(
             self.on.set_autounseal_data_action, self._on_set_autounseal_data_action
         )
         self.framework.observe(
-            self.on.get_outstanding_requests_action, self._on_get_outstanding_requests_action
+            self.on.get_relations_without_credentials_action,
+            self._on_get_relations_without_credentials_action,
         )
 
     def _on_set_autounseal_data_action(self, event: ActionEvent):
@@ -53,8 +56,8 @@ class VaultAutounsealProviderCharm(CharmBase):
             approle_secret_id=approle_secret_id,
         )
 
-    def _on_get_outstanding_requests_action(self, event: ActionEvent):
-        relations = self.interface.get_outstanding_requests()
+    def _on_get_relations_without_credentials_action(self, event: ActionEvent):
+        relations = self.interface.get_relations_without_credentials()
         event.set_results(results={"relations": [relation.id for relation in relations]})
 
 
@@ -101,8 +104,8 @@ class TestVaultAutounsealProvides:
                         },
                     },
                 },
-                "get-outstanding-requests": {
-                    "description": "Get the outstanding requests",
+                "get-relations-without-credentials": {
+                    "description": "Get any relations which do not have credentials",
                 },
             },
         )
@@ -182,16 +185,18 @@ class TestVaultAutounsealProvides:
         assert state_out.get_relation(vault_autounseal_relation.id).local_app_data == {}
         assert len(list(state_out.secrets)) == 0
 
-    def test_given_no_request_when_get_outstanding_requests_then_empty_list_is_returned(self):
+    def test_given_no_request_when_get_relations_without_credentials_then_empty_list_is_returned(
+        self,
+    ):
         state_in = testing.State(
             relations=[],
             leader=True,
         )
-        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
         assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == []
 
-    def test_given_1_outstanding_request_when_get_outstanding_requests_then_request_is_returned(
+    def test_given_1_outstanding_request_when_get_relations_without_credentials_then_request_is_returned(
         self,
     ):
         vault_autounseal_relation = testing.Relation(
@@ -203,11 +208,11 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation],
             leader=True,
         )
-        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
         assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == [vault_autounseal_relation.id]
 
-    def test_given_1_outstanding_and_1_satisfied_request_when_get_outstanding_requests_then_outstanding_request_is_returned(
+    def test_given_1_outstanding_and_1_satisfied_request_when_get_relations_without_credentials_then_outstanding_request_is_returned(
         self,
     ):
         vault_autounseal_relation_1_credentials_secret = testing.Secret(
@@ -230,11 +235,11 @@ class TestVaultAutounsealProvides:
             secrets=[vault_autounseal_relation_1_credentials_secret],
             leader=True,
         )
-        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
         assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == [vault_autounseal_relation_2.id]
 
-    def test_given_satisfied_request_when_get_outstanding_requests_then_request_is_not_returned(
+    def test_given_satisfied_request_when_get_relations_without_credentials_then_request_is_not_returned(
         self,
     ):
         vault_autounseal_relation_credentials_secret = testing.Secret(
@@ -253,11 +258,13 @@ class TestVaultAutounsealProvides:
             secrets=[vault_autounseal_relation_credentials_secret],
             leader=True,
         )
-        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
         assert self.ctx.action_results
         assert self.ctx.action_results["relations"] == []
 
-    def test_given_2_requests_when_get_outstanding_requests_then_requests_are_returned(self):
+    def test_given_2_requests_when_get_relations_without_credentials_then_requests_are_returned(
+        self,
+    ):
         vault_autounseal_relation_1 = testing.Relation(
             endpoint="vault-autounseal-provides",
             interface="vault-autounseal",
@@ -270,7 +277,7 @@ class TestVaultAutounsealProvides:
             relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
             leader=True,
         )
-        self.ctx.run(self.ctx.on.action("get-outstanding-requests"), state_in)
+        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
         assert self.ctx.action_results
         assert set(self.ctx.action_results["relations"]) == {
             vault_autounseal_relation_1.id,
@@ -279,7 +286,7 @@ class TestVaultAutounsealProvides:
 
 
 class VaultAutounsealRequirerCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.interface = VaultAutounsealRequires(self, "vault-autounseal-requires")
         self.framework.observe(self.on.get_details_action, self._on_get_details_action)

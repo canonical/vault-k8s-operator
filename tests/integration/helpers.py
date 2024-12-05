@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List
 
 import yaml
+from juju.model import Model
 from juju.unit import Unit
 from lightkube.core.client import Client as KubernetesClient
 from lightkube.resources.core_v1 import Pod
@@ -22,9 +23,10 @@ def crash_pod(name: str, namespace: str) -> None:
     k8s.delete(Pod, name=name, namespace=namespace)
 
 
-async def get_leader_unit(model, application_name: str) -> Unit:
+async def get_leader_unit(model: Model, application_name: str) -> Unit:
     """Return the leader unit for the given application."""
     for unit in model.units.values():
+        assert unit
         if unit.application == application_name and await unit.is_leader_from_status():
             return unit
     raise RuntimeError(f"Leader unit for `{application_name}` not found.")

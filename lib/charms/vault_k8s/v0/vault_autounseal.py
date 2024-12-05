@@ -64,7 +64,7 @@ where `vault a` is the Vault app which will provide the autounseal service, and
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, MutableMapping
 
 from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
@@ -110,7 +110,7 @@ class LogAdapter(logging.LoggerAdapter):
 
     prefix = "vault_autounseal"
 
-    def process(self, msg, kwargs):
+    def process(self, msg: str, kwargs: MutableMapping) -> tuple[str, MutableMapping]:
         """Prepend the prefix to the log message."""
         return f"[{self.prefix}] {msg}", kwargs
 
@@ -146,7 +146,14 @@ class VaultAutounsealDetailsReadyEvent(EventBase):
     """Event emitted on the requirer when Vault autounseal details are ready in the databag."""
 
     def __init__(
-        self, handle: Handle, address, mount_path, key_name, role_id, secret_id, ca_certificate
+        self,
+        handle: Handle,
+        address: str,
+        mount_path: str,
+        key_name: str,
+        role_id: str,
+        secret_id: str,
+        ca_certificate: str,
     ):
         """VaultAutounsealDetailsReadyEvent.
 
@@ -354,22 +361,16 @@ class VaultAutounsealProvides(Object):
             },
         )
 
-    def get_outstanding_requests(self, relation_id: int | None = None) -> List[Relation]:
-        """Get the outstanding requests for the relation.
-
-        This will retrieve any vault-autounseal relations that have not yet had
-        credentials issued for them.
-        """
-        outstanding_requests: List[Relation] = []
-        requirer_requests = self.juju_facade.get_active_relations(self.relation_name, relation_id)
-        outstanding_requests = [
+    def get_relations_without_credentials(self, relation_id: int | None = None) -> List[Relation]:
+        """Get the relations which do not have credentials for auto-unseal."""
+        requirer_relations = self.juju_facade.get_active_relations(self.relation_name, relation_id)
+        return [
             relation
-            for relation in requirer_requests
-            if not self._credentials_issued_for_request(relation_id=relation.id)
+            for relation in requirer_relations
+            if not self._credentials_issued_for_relation(relation_id=relation.id)
         ]
-        return outstanding_requests
 
-    def _credentials_issued_for_request(self, relation_id: int) -> bool:
+    def _credentials_issued_for_relation(self, relation_id: int) -> bool:
         try:
             if not (
                 credentials_secret_id := self.juju_facade.get_app_relation_data(

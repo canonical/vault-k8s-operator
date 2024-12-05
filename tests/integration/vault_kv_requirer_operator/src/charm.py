@@ -5,6 +5,7 @@
 import logging
 import secrets
 from pathlib import Path
+from typing import Any
 
 from charms.vault_k8s.v0.vault_kv import (
     VaultKvConnectedEvent,
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class VaultKVRequirerCharm(CharmBase):
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super().__init__(*args)
         self.vault_kv = VaultKvRequires(self, "vault-kv", mount_suffix="kv")
         self.framework.observe(self.on.install, self._configure)
