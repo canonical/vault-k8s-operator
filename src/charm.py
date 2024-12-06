@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from datetime import datetime
-from typing import IO, Any, Dict, List, Tuple, cast
+from typing import IO, Any, Dict, List, Tuple
 
 import hcl
 from botocore.response import StreamingBody
@@ -426,7 +426,7 @@ class VaultCharm(CharmBase):
         if not self._common_name_config_is_valid():
             logger.debug("Common name config is not valid, skipping")
             return
-        config_common_name = self.juju_facade.get_string_config("common-name")
+        config_common_name = self.juju_facade.get_string_config("common_name")
         if not config_common_name:
             logger.error("Common name is not set in the charm config")
             return
@@ -529,7 +529,7 @@ class VaultCharm(CharmBase):
         return provider_certificate, private_key
 
     def _get_certificate_request(self) -> CertificateRequestAttributes | None:
-        common_name = self._get_config_common_name()
+        common_name = self.juju_facade.get_string_config("common_name")
         if not common_name:
             return None
         return CertificateRequestAttributes(
@@ -643,7 +643,7 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             logger.debug("TLS Certificates PKI relation not created")
             return
-        common_name = self._get_config_common_name()
+        common_name = self.juju_facade.get_string_config("common_name")
         if not common_name:
             logger.error("Common name is not set in the charm config")
             return
@@ -1029,7 +1029,7 @@ class VaultCharm(CharmBase):
 
     def _common_name_config_is_valid(self) -> bool:
         """Return whether the config value for the common name is valid."""
-        common_name = self.juju_facade.get_string_config("common-name")
+        common_name = self.juju_facade.get_string_config("common_name")
         return common_name != ""
 
     def _generate_vault_config_file(self) -> None:
