@@ -354,7 +354,7 @@ class JujuFacade:
         try:
             secret = self.get_secret(label=label, id=id)
             secret.remove_all_revisions()
-        except NoSuchSecretError:
+        except (NoSuchSecretError, SecretNotFoundError):
             return
 
     # Relation related methods
