@@ -39,6 +39,12 @@ jobs:
           juju-channel: 3.6/stable
           lxd-channel: 5.21/stable
 
+      - name: Install UV and Tox
+        run: |
+          python3 -m pip uninstall tox -y
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv
+
       - name: Enable Metallb
         run: |
           IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
