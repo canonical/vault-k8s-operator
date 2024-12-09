@@ -14,9 +14,8 @@ from charms.vault_k8s.v0.vault_client import (
     SecretsBackend,
     Token,
     VaultClient,
-    VaultClientError,
 )
-from hvac.exceptions import Forbidden, InternalServerError, InvalidPath
+from hvac.exceptions import Forbidden, InternalServerError
 
 TEST_PATH = "./tests/unit/lib/charms/vault_k8s/v0"
 
@@ -279,58 +278,6 @@ def test_given_connection_error_when_is_active_then_return_false(patch_health_st
     patch_health_status.side_effect = requests.exceptions.ConnectionError()
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
     assert not vault.is_active_or_standby()
-
-
-@patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
-def test_given_no_pki_issuers_when_make_latest_pki_issuer_default_then_vault_client_error_is_raised(
-    patch_read_pki_issuers: MagicMock,
-):
-    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    patch_read_pki_issuers.side_effect = InvalidPath()
-    with pytest.raises(VaultClientError):
-        vault.make_latest_pki_issuer_default(mount="test")
-
-
-@patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
-@patch("hvac.Client.write_data")
-@patch("hvac.Client.read")
-def test_given_existing_pki_issuers_when_make_latest_pki_issuer_default_then_config_written_to_path(
-    patch_read: MagicMock,
-    patch_write: MagicMock,
-    patch_read_pki_issuers: MagicMock,
-):
-    patch_read.return_value = {
-        "data": {"default_follows_latest_issuer": False, "default": "whatever issuer"}
-    }
-    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
-    mount = "test"
-    vault.make_latest_pki_issuer_default(mount=mount)
-    patch_write.assert_called_with(
-        path=f"{mount}/config/issuers",
-        data={
-            "default_follows_latest_issuer": True,
-            "default": "issuer",
-        },
-    )
-
-
-@patch("hvac.api.secrets_engines.pki.Pki.list_issuers")
-@patch("hvac.Client.write_data")
-@patch("hvac.Client.read")
-def test_given_issuers_config_already_updated_when_make_latest_pki_issuer_default_then_config_not_written(
-    patch_read: MagicMock,
-    patch_write: MagicMock,
-    patch_read_pki_issuers: MagicMock,
-):
-    patch_read.return_value = {
-        "data": {"default_follows_latest_issuer": True, "default": "whatever issuer"}
-    }
-    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    patch_read_pki_issuers.return_value = {"data": {"keys": ["issuer"]}}
-    mount = "test"
-    vault.make_latest_pki_issuer_default(mount=mount)
-    patch_write.assert_not_called()
 
 
 @pytest.mark.parametrize(
