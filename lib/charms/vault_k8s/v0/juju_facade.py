@@ -355,7 +355,6 @@ class JujuFacade:
         """
         relations = self.charm.model.relations.get(name, [])
         if not relations:
-            logger.error("No relations found for %s", name)
             raise NoSuchRelationError(f"Relation {name} not found")
         if len(relations) > 1:
             logger.warning("More than one relation found for %s", name)

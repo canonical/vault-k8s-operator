@@ -56,6 +56,7 @@ from charms.vault_k8s.v0.vault_kv import (
 from charms.vault_k8s.v0.vault_managers import (
     AutounsealConfigurationDetails,
     File,
+    PKIManager,
     VaultAutounsealProviderManager,
     VaultAutounsealRequirerManager,
     VaultCertsError,
@@ -82,6 +83,7 @@ from ops.model import (
 from ops.pebble import ChangeError, Layer, PathError
 
 from container import Container
+from debug_da import RemoteDebuggerCharmBase
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +122,7 @@ VAULT_STORAGE_PATH = "/vault/raft"
     server_cert="_tracing_server_cert",
     extra_types=(TLSCertificatesProvidesV4,),
 )
-class VaultCharm(CharmBase):
+class VaultCharm(RemoteDebuggerCharmBase):
     """Main class to handle Juju events for the vault-k8s charm."""
 
     VAULT_PORT = 8200
@@ -195,6 +197,7 @@ class VaultCharm(CharmBase):
             self.on.config_changed,
             self.on[PEER_RELATION_NAME].relation_created,
             self.on[PEER_RELATION_NAME].relation_changed,
+            self.on.vault_pki_relation_changed,
             self.on.tls_certificates_pki_relation_joined,
             self.tls_certificates_pki.on.certificate_available,
             self.vault_autounseal_requires.on.vault_autounseal_details_ready,
@@ -335,7 +338,7 @@ class VaultCharm(CharmBase):
             return
         if not (vault := self._get_active_vault_client()):
             return
-        self._configure_pki_secrets_engine()
+        self._configure_pki_secrets_engine(vault)
         self._sync_vault_autounseal(vault)
         self._sync_vault_kv(vault)
         self._sync_vault_pki(vault)
@@ -414,103 +417,23 @@ class VaultCharm(CharmBase):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self._remove_juju_secret_by_label(label=label)
 
-    def _configure_pki_secrets_engine(self) -> None:  # noqa: C901
-        """Configure the PKI secrets engine."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki certificate request")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        if not self._tls_certificates_pki_relation_created():
-            logger.debug("TLS Certificates PKI relation not created, skipping")
-            return
-        if not self._common_name_config_is_valid():
-            logger.debug("Common name config is not valid, skipping")
-            return
-        config_common_name = self._get_config_common_name()
-        if not config_common_name:
-            logger.error("Common name is not set in the charm config")
-            return
-        provider_certificate, private_key = self._get_pki_intermediate_ca()
-        if not provider_certificate:
-            return
+    def _configure_pki_secrets_engine(self, vault: VaultClient) -> None:
+        # TODO: Remove this line, currently the tests expect it
         vault.enable_secrets_engine(SecretsBackend.PKI, PKI_MOUNT)
-        existing_ca_certificate = vault.get_intermediate_ca(mount=PKI_MOUNT)
-        existing_cert = (
-            Certificate.from_string(existing_ca_certificate) if existing_ca_certificate else None
-        )
-        if existing_cert and existing_cert == provider_certificate.certificate:
-            if not self._intermediate_ca_exceeds_role_ttl(vault, existing_cert):
-                self.tls_certificates_pki.renew_certificate(
-                    provider_certificate,
-                )
-                logger.debug("Renewing CA certificate")
-                return
-            logger.debug("CA certificate already set in the PKI secrets engine")
+        common_name = self._get_config_common_name()
+        if not common_name:
+            logger.warning("Common name is not set in the charm config")
             return
-        self.vault_pki.revoke_all_certificates()
-        vault.import_ca_certificate_and_key(
-            certificate=str(provider_certificate.certificate),
-            private_key=str(private_key),
-            mount=PKI_MOUNT,
+        manager = PKIManager(
+            self,
+            vault,
+            common_name,
+            PKI_MOUNT,
+            PKI_ROLE_NAME,
+            self.vault_pki,
+            tls_certificates_pki=self.tls_certificates_pki,
         )
-        issued_certificates_validity = self._calculate_pki_certificates_ttl(
-            provider_certificate.certificate
-        )
-        if not vault.is_common_name_allowed_in_pki_role(
-            role=PKI_ROLE_NAME,
-            mount=PKI_MOUNT,
-            common_name=config_common_name,
-        ) or issued_certificates_validity != vault.get_role_max_ttl(
-            role=PKI_ROLE_NAME, mount=PKI_MOUNT
-        ):
-            vault.create_or_update_pki_charm_role(
-                allowed_domains=config_common_name,
-                mount=PKI_MOUNT,
-                role=PKI_ROLE_NAME,
-                max_ttl=f"{issued_certificates_validity}s",
-            )
-        # Can run only after the first issuer has been actually created.
-        try:
-            vault.make_latest_pki_issuer_default(mount=PKI_MOUNT)
-        except VaultClientError as e:
-            logger.error("Failed to make latest issuer default: %s", e)
-
-    def _intermediate_ca_exceeds_role_ttl(
-        self, vault: VaultClient, intermediate_ca_certificate: Certificate
-    ) -> bool:
-        """Check if the intermediate CA's remaining validity exceeds the role's max TTL.
-
-        Vault PKI enforces that issued certificates cannot outlast their signing CA.
-        This method ensures that the intermediate CA's remaining validity period
-        is longer than the maximum TTL allowed for certificates issued by this role.
-        """
-        current_ttl = vault.get_role_max_ttl(role=PKI_ROLE_NAME, mount=PKI_MOUNT)
-        if (
-            not current_ttl
-            or not intermediate_ca_certificate.expiry_time
-            or not intermediate_ca_certificate.validity_start_time
-        ):
-            return False
-        certificate_validity = (
-            intermediate_ca_certificate.expiry_time
-            - intermediate_ca_certificate.validity_start_time
-        )
-        certificate_validity_seconds = certificate_validity.total_seconds()
-        return certificate_validity_seconds > current_ttl
-
-    def _calculate_pki_certificates_ttl(self, certificate: Certificate) -> int:
-        """Calculate the maximum allowed validity of certificates issued by PKI.
-
-        Return half the CA certificate validity in seconds.
-        """
-        if not certificate.expiry_time or not certificate.validity_start_time:
-            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
-        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
-        ca_validity_seconds = ca_validity_time.total_seconds()
-        return int(ca_validity_seconds / 2)
+        manager.configure()
 
     def _get_pki_intermediate_ca(
         self,
@@ -569,15 +492,19 @@ class VaultCharm(CharmBase):
 
     def _sync_vault_pki(self, vault: VaultClient) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-pki request")
+        common_name = self._get_config_common_name()
+        if not common_name:
             return
-        outstanding_pki_requests = self.vault_pki.get_outstanding_certificate_requests()
-        for pki_request in outstanding_pki_requests:
-            self._generate_pki_certificate_for_requirer(
-                vault=vault,
-                requirer_csr=pki_request,
-            )
+        manager = PKIManager(
+            self,
+            vault,
+            common_name,
+            PKI_MOUNT,
+            PKI_ROLE_NAME,
+            self.vault_pki,
+            tls_certificates_pki=self.tls_certificates_pki,
+        )
+        manager.sync()
 
     def _sync_vault_kv(self, vault: VaultClient) -> None:
         """Goes through all the vault-kv relations and sends necessary KV information."""
@@ -648,7 +575,7 @@ class VaultCharm(CharmBase):
             return
         common_name = self._get_config_common_name()
         if not common_name:
-            logger.error("Common name is not set in the charm config")
+            logger.warning("Common name is not set in the charm config")
             return
         if not vault.is_pki_role_created(role=PKI_ROLE_NAME, mount=PKI_MOUNT):
             logger.debug("PKI role not created")
@@ -656,7 +583,7 @@ class VaultCharm(CharmBase):
         provider_certificate, _ = self._get_pki_intermediate_ca()
         if not provider_certificate:
             return
-        allowed_cert_validity = self._calculate_pki_certificates_ttl(
+        allowed_cert_validity = PKIManager.calculate_pki_certificates_ttl(
             provider_certificate.certificate
         )
         certificate = vault.sign_pki_certificate_signing_request(
