@@ -1,4 +1,4 @@
 ops
 hvac
-pydantic==2.10.1
+pydantic==2.10.3
 pytest-interface-tester
