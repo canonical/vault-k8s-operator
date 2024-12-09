@@ -140,7 +140,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 13
+LIBPATCH = 14
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -282,21 +282,22 @@ class VaultKvClientDetachedEvent(ops.EventBase):
         self.unit_name = snapshot["unit_name"]
 
 
-class NewVaultKvClientAttachedEvent(ops.EventBase):
+class NewVaultKvClientAttachedEvent(ops.RelationEvent):
     """New vault kv client attached event."""
 
     def __init__(
         self,
         handle: ops.Handle,
-        relation_id: int,
+        relation: ops.Relation,
         app_name: str,
         unit_name: str,
         mount_suffix: str,
         egress_subnets: List[str],
         nonce: str,
     ):
-        super().__init__(handle)
-        self.relation_id = relation_id
+        super().__init__(handle, relation)
+        self.relation_id = relation.id
+        self.relation_name = relation.name
         self.app_name = app_name
         self.unit_name = unit_name
         self.mount_suffix = mount_suffix
@@ -307,6 +308,7 @@ class NewVaultKvClientAttachedEvent(ops.EventBase):
         """Return snapshot data that should be persisted."""
         return {
             "relation_id": self.relation_id,
+            "relation_name": self.relation_name,
             "app_name": self.app_name,
             "unit_name": self.unit_name,
             "mount_suffix": self.mount_suffix,
@@ -372,7 +374,7 @@ class VaultKvProvides(ops.Object):
             logger.debug("Invalid data from unit %r", event.unit.name)
             return
         self.on.new_vault_kv_client_attached.emit(
-            relation_id=event.relation.id,
+            relation=event.relation,
             app_name=event.app.name,
             unit_name=event.unit.name,
             mount_suffix=app_data.get("mount_suffix"),
