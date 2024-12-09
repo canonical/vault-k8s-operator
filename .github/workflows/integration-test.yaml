@@ -41,9 +41,9 @@ jobs:
 
       - name: Install UV and Tox
         run: |
-          python3 -m pip uninstall tox -y
+          pipx uninstall tox
           sudo snap install astral-uv --classic
-          uv tool install tox --with tox-uv
+          uv tool install tox --with tox-uv --force
 
       - name: Enable Metallb
         run: |
