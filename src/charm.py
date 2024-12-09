@@ -284,8 +284,7 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not self._get_approle_auth_secret():
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
@@ -365,8 +364,7 @@ class VaultCharm(CharmBase):
 
     def _remove_node_from_raft_cluster(self):
         """Remove the node from the raft cluster."""
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not (approle := self._get_approle_auth_secret()):
             return
         vault = VaultClient(url=self._api_address, ca_cert_path=None)
         if not vault.is_api_available():
@@ -378,7 +376,7 @@ class VaultCharm(CharmBase):
                 return
         except VaultClientError:
             return
-        vault.authenticate(AppRole(role_id, secret_id))
+        vault.authenticate(approle)
         if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(self._node_id)
 
@@ -864,12 +862,12 @@ class VaultCharm(CharmBase):
                 fields=("role-id", "secret-id"),
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
             ):
-                role_id, secret_id = self._get_approle_auth_secret()
+                approle = self._get_approle_auth_secret()
                 vault = VaultClient(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
-                if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
+                if approle and not vault.authenticate(approle):
                     self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
         except Exception as e:
             logger.error("Failed to remove old approle secret: %s", e)
@@ -1089,19 +1087,21 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _get_approle_auth_secret(self) -> Tuple[str | None, str | None]:
+    def _get_approle_auth_secret(self) -> AppRole | None:
         """Get the vault approle login details secret.
 
         Returns:
-            The root token and unseal keys.
+            AppRole: An AppRole object with role_id and secret_id set from the
+                     values stored in the Juju secret, or None if the secret is
+                     not found or either of the values are not set.
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
                 "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
             )
         except NoSuchSecretError:
-            return None, None
-        return role_id, secret_id
+            return None
+        return AppRole(role_id, secret_id) if role_id and secret_id else None
 
     def _get_vault_kv_secret_label(self, unit_name: str):
         unit_name_dash = unit_name.replace("/", "-")
@@ -1155,11 +1155,10 @@ class VaultCharm(CharmBase):
             logger.error("Failed to find active Vault client, cannot restore snapshot.")
             return False
         try:
-            role_id, secret_id = self._get_approle_auth_secret()
-            if not role_id or not secret_id:
+            if not (approle := self._get_approle_auth_secret()):
                 logger.error("Failed to log in to Vault")
                 return False
-            vault.authenticate(AppRole(role_id, secret_id))
+            vault.authenticate(approle)
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context
@@ -1193,10 +1192,9 @@ class VaultCharm(CharmBase):
             return None
         if not vault.is_api_available():
             return None
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not (approle := self._get_approle_auth_secret()):
             return None
-        if not vault.authenticate(AppRole(role_id, secret_id)):
+        if not vault.authenticate(approle):
             return None
         if not vault.is_active_or_standby():
             return None
