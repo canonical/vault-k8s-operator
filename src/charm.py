@@ -387,19 +387,13 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-kv request")
             return
-        if not (
-            relation := self.juju_facade.get_active_relation(
-                name=KV_RELATION_NAME, id=event.relation_id
-            )
-        ):
-            return
         vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
         self._generate_kv_for_requirer(
             vault=vault,
-            relation=relation,
+            relation=event.relation,
             app_name=event.app_name,
             unit_name=event.unit_name,
             mount_suffix=event.mount_suffix,
