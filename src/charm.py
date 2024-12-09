@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from datetime import datetime
-from typing import IO, Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Tuple, cast
 
 import hcl
 from botocore.response import StreamingBody
@@ -89,13 +89,11 @@ APPROLE_ROLE_NAME = "charm"
 AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
-AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 BACKUP_KEY_PREFIX = "vault-backup"
 CHARM_POLICY_NAME = "charm-access"
 CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
-CONFIG_TRANSIT_STANZA_TEMPLATE_NAME = "vault_transit.hcl.j2"
 CONTAINER_NAME = "vault"
 CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
@@ -111,7 +109,6 @@ S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
-VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
 
 
@@ -1065,22 +1062,6 @@ class VaultCharm(CharmBase):
             logger.warning("Failed to retrieve secret `%s`: %s", label, e)
             return None
 
-    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
-        """Retrieve the latest revision of the secret content from Juju.
-
-        Args:
-            label: The label of the secret.
-            field: The field to retrieve from the secret.
-
-        Returns:
-            The value of the field is returned, or `None` if the field does not
-            exist.
-
-            If the secret does not exist, or there is an error retrieving the secret, `None` is returned.
-        """
-        content = self._get_juju_secret_content(label)
-        return content.get(field) if content else None
-
     def _get_juju_secret_fields(self, label: str, *fields: str) -> Tuple[str | None, ...]:
         """Retrieve the latest revision of the secret content from Juju.
 
@@ -1246,19 +1227,6 @@ class VaultCharm(CharmBase):
         role_id, secret_id = self._get_approle_auth_secret()
         return bool(role_id and secret_id)
 
-    def _create_raft_snapshot(self) -> IO[bytes] | None:
-        """Create a snapshot of Vault.
-
-        Returns:
-            The snapshot content as a file like object, or None if the snapshot
-            could not be created.
-        """
-        if not (vault := self._get_active_vault_client()):
-            logger.error("Failed to get Vault client, cannot create snapshot.")
-            return None
-        response = vault.create_snapshot()
-        return response.raw  # type: ignore[reportReturnType]
-
     def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
 
@@ -1395,10 +1363,6 @@ class VaultCharm(CharmBase):
         Example of node id: "vault-k8s-0"
         """
         return f"{self.model.name}-{self.unit.name}"
-
-    @property
-    def _certificate_subject(self) -> str:
-        return f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
 
 def _render_vault_config_file(
