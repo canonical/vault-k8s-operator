@@ -11,5 +11,5 @@ __pycache__/
 .vscode
 
 *.pem
-tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
+tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/*
 .charm_tracing_buffer.raw
