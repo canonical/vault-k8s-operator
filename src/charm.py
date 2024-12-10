@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from datetime import datetime
-from typing import IO, Any, Dict, List, Tuple, cast
+from typing import IO, Any, Dict, List, Tuple
 
 import hcl
 from botocore.response import StreamingBody
@@ -35,6 +35,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
+    SecretRemovedError,
 )
 from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealProvides,
@@ -76,7 +77,6 @@ from ops.model import (
     BlockedStatus,
     ModelError,
     Relation,
-    SecretNotFoundError,
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
@@ -228,7 +228,7 @@ class VaultCharm(CharmBase):
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
         if (
-            self._tls_certificates_pki_relation_created()
+            self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
             and not self._common_name_config_is_valid()
         ):
             event.add_status(
@@ -240,7 +240,7 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
             return
-        if not self._is_peer_relation_created():
+        if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
         if not self._bind_address or not self._ingress_address:
@@ -284,8 +284,7 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not self._get_approle_auth_secret():
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
@@ -302,7 +301,7 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
-        if not self._is_peer_relation_created():
+        if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return
         if not self._bind_address or not self._ingress_address:
             return
@@ -365,8 +364,7 @@ class VaultCharm(CharmBase):
 
     def _remove_node_from_raft_cluster(self):
         """Remove the node from the raft cluster."""
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not (approle := self._get_approle_auth_secret()):
             return
         vault = VaultClient(url=self._api_address, ca_cert_path=None)
         if not vault.is_api_available():
@@ -378,7 +376,7 @@ class VaultCharm(CharmBase):
                 return
         except VaultClientError:
             return
-        vault.authenticate(AppRole(role_id, secret_id))
+        vault.authenticate(approle)
         if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(self._node_id)
 
@@ -387,22 +385,13 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-kv request")
             return
-        relation = self.model.get_relation(
-            relation_name=KV_RELATION_NAME, relation_id=event.relation_id
-        )
-        if not relation:
-            logger.error("Relation not found for relation id %s", event.relation_id)
-            return
-        if not relation.active:
-            logger.error("Relation is not active for relation id %s", event.relation_id)
-            return
         vault = self._get_active_vault_client()
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
         self._generate_kv_for_requirer(
             vault=vault,
-            relation=relation,
+            relation=event.relation,
             app_name=event.app_name,
             unit_name=event.unit_name,
             mount_suffix=event.mount_suffix,
@@ -412,7 +401,7 @@ class VaultCharm(CharmBase):
 
     def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
-        self._remove_juju_secret_by_label(label=label)
+        self.juju_facade.remove_secret(label=label)
 
     def _configure_pki_secrets_engine(self) -> None:  # noqa: C901
         """Configure the PKI secrets engine."""
@@ -423,13 +412,13 @@ class VaultCharm(CharmBase):
         if not vault:
             logger.debug("Failed to get initialized Vault")
             return
-        if not self._tls_certificates_pki_relation_created():
+        if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             logger.debug("TLS Certificates PKI relation not created, skipping")
             return
         if not self._common_name_config_is_valid():
             logger.debug("Common name config is not valid, skipping")
             return
-        config_common_name = self._get_config_common_name()
+        config_common_name = self.juju_facade.get_string_config("common_name")
         if not config_common_name:
             logger.error("Common name is not set in the charm config")
             return
@@ -532,7 +521,7 @@ class VaultCharm(CharmBase):
         return provider_certificate, private_key
 
     def _get_certificate_request(self) -> CertificateRequestAttributes | None:
-        common_name = self._get_config_common_name()
+        common_name = self.juju_facade.get_string_config("common_name")
         if not common_name:
             return None
         return CertificateRequestAttributes(
@@ -643,10 +632,10 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-pki request")
             return
-        if not self._tls_certificates_pki_relation_created():
+        if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             logger.debug("TLS Certificates PKI relation not created")
             return
-        common_name = self._get_config_common_name()
+        common_name = self.juju_facade.get_string_config("common_name")
         if not common_name:
             logger.error("Common name is not set in the charm config")
             return
@@ -687,9 +676,12 @@ class VaultCharm(CharmBase):
 
         secret_id = event.params.get("secret-id", "")
         try:
-            token_secret = self.model.get_secret(id=secret_id)
-            token = token_secret.get_content(refresh=True).get("token", "")
-        except SecretNotFoundError:
+            if not (
+                token := self.juju_facade.get_latest_secret_content(id=secret_id).get("token", "")
+            ):
+                event.fail("Token not found in the secret. Please provide a valid token secret.")
+                return
+        except (NoSuchSecretError, SecretRemovedError):
             event.fail(
                 "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
             )
@@ -714,9 +706,9 @@ class VaultCharm(CharmBase):
                 token_max_ttl="1h",
             )
             secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
-            self._set_juju_secret(
-                VAULT_CHARM_APPROLE_SECRET_LABEL,
-                {"role-id": role_id, "secret-id": secret_id},
+            self.juju_facade.set_app_secret_content(
+                content={"role-id": role_id, "secret-id": secret_id},
+                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
                 description="The authentication details for the charm's access to vault.",
             )
             event.set_results(
@@ -866,14 +858,17 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         try:
-            if self._approle_secret_set():
-                role_id, secret_id = self._get_approle_auth_secret()
+            if self.juju_facade.secret_exists_with_fields(
+                fields=("role-id", "secret-id"),
+                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+            ):
+                approle = self._get_approle_auth_secret()
                 vault = VaultClient(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
-                if role_id and secret_id and not vault.authenticate(AppRole(role_id, secret_id)):
-                    self._remove_juju_secret_by_label(VAULT_CHARM_APPROLE_SECRET_LABEL)
+                if approle and not vault.authenticate(approle):
+                    self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
         except Exception as e:
             logger.error("Failed to remove old approle secret: %s", e)
             event.fail(message="Failed to remove old approle secret.")
@@ -898,7 +893,7 @@ class VaultCharm(CharmBase):
         """Check if the S3 pre-requisites are met."""
         if not self.unit.is_leader():
             return "Only leader unit can perform backup operations"
-        if not self._is_relation_created(S3_RELATION_NAME):
+        if not self.juju_facade.relation_exists(S3_RELATION_NAME):
             return "S3 relation not created"
         if missing_parameters := self._get_missing_s3_parameters():
             return "S3 parameters missing ({})".format(", ".join(missing_parameters))
@@ -1020,106 +1015,14 @@ class VaultCharm(CharmBase):
 
         Example: "https://10.152.183.20:8200"
         """
-        binding = self.model.get_binding(relation)
-        if binding is None:
+        if not (ingress_address := self.juju_facade.get_ingress_address(relation=relation)):
             return None
-        return f"https://{binding.network.ingress_address}:{self.VAULT_PORT}"
+        return f"https://{ingress_address}:{self.VAULT_PORT}"
 
     def _common_name_config_is_valid(self) -> bool:
         """Return whether the config value for the common name is valid."""
-        common_name = self._get_config_common_name()
+        common_name = self.juju_facade.get_string_config("common_name")
         return common_name != ""
-
-    @property
-    def _api_address(self) -> str:
-        """Return the FQDN with the https schema and vault port.
-
-        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
-        """
-        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
-
-    @property
-    def _cluster_address(self) -> str:
-        """Return the FQDN with the https schema and vault cluster port.
-
-        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
-        """
-        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
-
-    def _get_juju_secret_content(self, label: str) -> Dict[str, str] | None:
-        """Retrieve the latest revision of the secret content from Juju.
-
-        Args:
-            label: The label of the secret.
-
-        Returns:
-            The secret is returned, or `None` if the secret does not exist or
-              there is an error retrieving the secret.
-        """
-        try:
-            secret = self.model.get_secret(label=label)
-            return secret.get_content(refresh=True)
-        except SecretNotFoundError:
-            return None
-        except ModelError as e:
-            logger.warning("Failed to retrieve secret `%s`: %s", label, e)
-            return None
-
-    def _get_juju_secret_field(self, label: str, field: str) -> str | None:
-        """Retrieve the latest revision of the secret content from Juju.
-
-        Args:
-            label: The label of the secret.
-            field: The field to retrieve from the secret.
-
-        Returns:
-            The value of the field is returned, or `None` if the field does not
-            exist.
-
-            If the secret does not exist, or there is an error retrieving the secret, `None` is returned.
-        """
-        content = self._get_juju_secret_content(label)
-        return content.get(field) if content else None
-
-    def _get_juju_secret_fields(self, label: str, *fields: str) -> Tuple[str | None, ...]:
-        """Retrieve the latest revision of the secret content from Juju.
-
-        Args:
-            label: The label of the secret.
-            fields: The fields to retrieve from the secret.
-
-        Returns:
-            The value of the fields are returned as a tuple, or `None` if the field does not
-            exist.
-
-            If the secret does not exist, or there is an error retrieving the secret, `None` is returned for all fields.
-        """
-        content = self._get_juju_secret_content(label)
-        return (
-            tuple(content.get(field) for field in fields)
-            if content
-            else tuple(None for _ in fields)
-        )
-
-    def _set_juju_secret(
-        self, label: str, content: Dict[str, str], description: str | None = None
-    ) -> None:
-        """Set the secret content at `label`, overwrite if it already exists.
-
-        Args:
-            label: The label of the secret.
-            content: The content of the secret.
-            description: The description of the secret.
-        """
-        try:
-            secret = self.model.get_secret(label=label)
-        except SecretNotFoundError:
-            self.app.add_secret(content, label=label, description=description)
-            return
-        except ModelError as e:
-            logger.warning("Failed to retrieve secret `%s`: %s", label, e)
-            return
-        secret.set_content(content)
 
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""
@@ -1134,8 +1037,8 @@ class VaultCharm(CharmBase):
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
 
         content = _render_vault_config_file(
-            default_lease_ttl=cast(str, self.model.config["default_lease_ttl"]),
-            max_lease_ttl=cast(str, self.model.config["max_lease_ttl"]),
+            default_lease_ttl=self.juju_facade.get_string_config("default_lease_ttl"),
+            max_lease_ttl=self.juju_facade.get_string_config("max_lease_ttl"),
             cluster_address=self._cluster_address,
             api_address=self._api_address,
             tcp_address=f"[::]:{self.VAULT_PORT}",
@@ -1184,24 +1087,21 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _get_approle_auth_secret(self) -> Tuple[str | None, str | None]:
+    def _get_approle_auth_secret(self) -> AppRole | None:
         """Get the vault approle login details secret.
 
         Returns:
-            The root token and unseal keys.
+            AppRole: An AppRole object with role_id and secret_id set from the
+                     values stored in the Juju secret, or None if the secret is
+                     not found or either of the values are not set.
         """
-        role_id, secret_id = self._get_juju_secret_fields(
-            VAULT_CHARM_APPROLE_SECRET_LABEL, "role-id", "secret-id"
-        )
-        return role_id, secret_id
-
-    def _remove_juju_secret_by_label(self, label: str):
-        """Remove the specified secret if it exists."""
         try:
-            juju_secret = self.model.get_secret(label=label)
-            juju_secret.remove_all_revisions()
-        except SecretNotFoundError:
-            return
+            role_id, secret_id = self.juju_facade.get_secret_content_values(
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+            )
+        except NoSuchSecretError:
+            return None
+        return AppRole(role_id, secret_id) if role_id and secret_id else None
 
     def _get_vault_kv_secret_label(self, unit_name: str):
         unit_name_dash = unit_name.replace("/", "-")
@@ -1216,22 +1116,6 @@ class VaultCharm(CharmBase):
         s3_parameters = self.s3_requirer.get_s3_connection_info()
         return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
 
-    def _is_peer_relation_created(self) -> bool:
-        """Check if the peer relation is created."""
-        return bool(self.model.get_relation(PEER_RELATION_NAME))
-
-    def _tls_certificates_pki_relation_created(self) -> bool:
-        """Check if the TLS Certificates PKI relation is created."""
-        return self._is_relation_created(TLS_CERTIFICATES_PKI_RELATION_NAME)
-
-    def _is_relation_created(self, relation_name: str) -> bool:
-        """Check if the relation is created.
-
-        Args:
-            relation_name: Checked relation name
-        """
-        return bool(self.model.get_relation(relation_name))
-
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
         plan = self._container.get_plan()
@@ -1240,11 +1124,6 @@ class VaultCharm(CharmBase):
             self._container.add_layer(self._container_name, layer, combine=True)
             self._container.replan()
             logger.info("Pebble layer added")
-
-    def _approle_secret_set(self) -> bool:
-        """Return whether approle secret is stored."""
-        role_id, secret_id = self._get_approle_auth_secret()
-        return bool(role_id and secret_id)
 
     def _create_raft_snapshot(self) -> IO[bytes] | None:
         """Create a snapshot of Vault.
@@ -1276,11 +1155,10 @@ class VaultCharm(CharmBase):
             logger.error("Failed to find active Vault client, cannot restore snapshot.")
             return False
         try:
-            role_id, secret_id = self._get_approle_auth_secret()
-            if not role_id or not secret_id:
+            if not (approle := self._get_approle_auth_secret()):
                 logger.error("Failed to log in to Vault")
                 return False
-            vault.authenticate(AppRole(role_id, secret_id))
+            vault.authenticate(approle)
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context
@@ -1314,50 +1192,13 @@ class VaultCharm(CharmBase):
             return None
         if not vault.is_api_available():
             return None
-        role_id, secret_id = self._get_approle_auth_secret()
-        if not role_id or not secret_id:
+        if not (approle := self._get_approle_auth_secret()):
             return None
-        if not vault.authenticate(AppRole(role_id, secret_id)):
+        if not vault.authenticate(approle):
             return None
         if not vault.is_active_or_standby():
             return None
         return vault
-
-    @property
-    def _bind_address(self) -> str | None:
-        """Fetch the bind address from peer relation and returns it.
-
-        Returns:
-            str: Bind address
-        """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not peer_relation:
-            return None
-        try:
-            binding = self.model.get_binding(peer_relation)
-            if not binding or not binding.network.bind_address:
-                return None
-            return str(binding.network.bind_address)
-        except ModelError:
-            return None
-
-    @property
-    def _ingress_address(self) -> str | None:
-        """Fetch the ingress address from peer relation and returns it.
-
-        Returns:
-            str: Ingress address
-        """
-        peer_relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not peer_relation:
-            return None
-        try:
-            binding = self.model.get_binding(peer_relation)
-            if not binding or not binding.network.ingress_address:
-                return None
-            return str(binding.network.ingress_address)
-        except ModelError:
-            return None
 
     @property
     def _vault_layer(self) -> Layer:
@@ -1384,10 +1225,6 @@ class VaultCharm(CharmBase):
             for i in range(self.app.planned_units())
         ]
 
-    def _get_config_common_name(self) -> str:
-        """Return the common name to use for the PKI backend."""
-        return cast(str, self.config.get("common_name", ""))
-
     @property
     def _node_id(self) -> str:
         """Return the node id for vault.
@@ -1399,6 +1236,40 @@ class VaultCharm(CharmBase):
     @property
     def _certificate_subject(self) -> str:
         return f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+    @property
+    def _api_address(self) -> str:
+        """Return the FQDN with the https schema and vault port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
+
+    @property
+    def _cluster_address(self) -> str:
+        """Return the FQDN with the https schema and vault cluster port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
+
+    @property
+    def _bind_address(self) -> str | None:
+        """Fetch the bind address from peer relation and returns it.
+
+        Returns:
+            str: Bind address
+        """
+        return self.juju_facade.get_bind_address(relation_name=PEER_RELATION_NAME)
+
+    @property
+    def _ingress_address(self) -> str | None:
+        """Fetch the ingress address from peer relation and returns it.
+
+        Returns:
+            str: Ingress address
+        """
+        return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
 
 
 def _render_vault_config_file(
