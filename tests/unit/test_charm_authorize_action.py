@@ -43,6 +43,36 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             == exc.value.message
         )
 
+    def test_given_no_token_when_authorize_charm_then_action_fails(self):
+        self.mock_vault.configure_mock(
+            **{
+                "authenticate.return_value": False,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        user_provided_secret = testing.Secret(
+            tracked_content={"no-token": "no token"},
+        )
+        state_in = testing.State(
+            containers=[container],
+            leader=True,
+            secrets=[user_provided_secret],
+        )
+        with pytest.raises(testing.ActionFailed) as exc:
+            self.ctx.run(
+                self.ctx.on.action(
+                    "authorize-charm", params={"secret-id": user_provided_secret.id}
+                ),
+                state=state_in,
+            )
+        assert (
+            "Token not found in the secret. Please provide a valid token secret."
+            == exc.value.message
+        )
+
     def test_given_invalid_token_when_authorize_charm_then_action_fails(self):
         self.mock_vault.configure_mock(
             **{
@@ -53,18 +83,19 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             name="vault",
             can_connect=True,
         )
-        approle_secret = testing.Secret(
-            label="vault-approle-auth-details",
-            tracked_content={"role-id": "role id", "secret-id": "secret id"},
+        user_provided_secret = testing.Secret(
+            tracked_content={"token": "invalid token"},
         )
         state_in = testing.State(
             containers=[container],
             leader=True,
-            secrets=[approle_secret],
+            secrets=[user_provided_secret],
         )
         with pytest.raises(testing.ActionFailed) as exc:
             self.ctx.run(
-                self.ctx.on.action("authorize-charm", params={"secret-id": approle_secret.id}),
+                self.ctx.on.action(
+                    "authorize-charm", params={"secret-id": user_provided_secret.id}
+                ),
                 state=state_in,
             )
         assert (
@@ -84,18 +115,19 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             name="vault",
             can_connect=True,
         )
-        approle_secret = testing.Secret(
-            label="vault-approle-auth-details",
-            tracked_content={"role-id": "role id", "secret-id": "secret id"},
+        user_provided_secret = testing.Secret(
+            tracked_content={"token": "my token"},
         )
         state_in = testing.State(
             containers=[container],
             leader=True,
-            secrets=[approle_secret],
+            secrets=[user_provided_secret],
         )
         with pytest.raises(testing.ActionFailed) as exc:
             self.ctx.run(
-                self.ctx.on.action("authorize-charm", params={"secret-id": approle_secret.id}),
+                self.ctx.on.action(
+                    "authorize-charm", params={"secret-id": user_provided_secret.id}
+                ),
                 state=state_in,
             )
         assert (
