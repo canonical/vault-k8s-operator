@@ -116,7 +116,7 @@ class TestJujuFacade:
 
         result = self.facade.set_app_secret_content(content, "test-label")
 
-        assert secret.set_content.not_called()
+        secret.set_content.assert_not_called()
         assert result == secret
 
     def test_given_secret_not_exists_when_set_app_secret_content_then_creates_new_secret(self):
