@@ -162,6 +162,14 @@ class WorkloadBase(ABC):
         """Stop a service in the workload."""
         pass
 
+    @abstractmethod
+    def is_accessible(self) -> bool:
+        """Return whether the workload is accessible.
+
+        For a container, this would check if we can connect to pebble.
+        """
+        pass
+
 
 class VaultCertsError(Exception):
     """Exception raised when a vault certificate is not found."""
@@ -269,6 +277,8 @@ class VaultTLSManager(Object):
 
     def _configure_self_signed_certificates(self, _: EventBase) -> None:
         """Configure the charm with self signed certificates."""
+        if not self.workload.is_accessible():
+            return
         if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
             self.juju_facade.set_app_secret_content(
