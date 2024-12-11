@@ -28,6 +28,10 @@ class TestJujuFacade:
 
     # Tests for Secret methods
 
+    def test_given_no_label_or_id_when_get_secret_then_raises_value_error(self):
+        with pytest.raises(ValueError):
+            self.facade.get_secret()
+
     def test_given_model_error_when_get_secret_then_raises_transient_error(self):
         self.facade.charm.model.get_secret = Mock(side_effect=ModelError())
 
@@ -123,7 +127,9 @@ class TestJujuFacade:
 
         result = self.facade.set_app_secret_content(content, "test-label")
 
-        self.facade.charm.app.add_secret.assert_called_once_with(content, label="test-label")
+        self.facade.charm.app.add_secret.assert_called_once_with(
+            content, label="test-label", description=None
+        )
         assert result == new_secret
 
     def test_given_secret_exists_when_set_unit_secret_content_with_same_content_then_skips_update(
@@ -294,21 +300,21 @@ class TestJujuFacade:
 
         assert self.facade.get_active_relations("test-relation") == [relation_1]
 
-    def test_given_relation_and_relation_id_parameters_missing_when_get_relation_data_then_raises_value_error(
+    def test_given_relation_and_relation_name_parameters_missing_when_get_relation_data_then_raises_value_error(
         self,
     ):
         with pytest.raises(ValueError):
-            self.facade.get_app_relation_data(name="relation-name")
+            self.facade.get_app_relation_data(id=1)
         with pytest.raises(ValueError):
-            self.facade.get_unit_relation_data(name="relation-name")
+            self.facade.get_unit_relation_data(id=1)
 
-    def test_given_relation_and_relation_id_parameters_missing_when_set_relation_data_then_raises_value_error(
+    def test_given_relation_and_relation_name_parameters_missing_when_set_relation_data_then_raises_value_error(
         self,
     ):
         with pytest.raises(ValueError):
-            self.facade.set_app_relation_data(data={"key": "value"}, name="relation-name")
+            self.facade.set_app_relation_data(data={"key": "value"}, id=1)
         with pytest.raises(ValueError):
-            self.facade.set_unit_relation_data(data={"key": "value"}, name="relation-name")
+            self.facade.set_unit_relation_data(data={"key": "value"}, id=1)
 
     # Tests for Storage methods
 

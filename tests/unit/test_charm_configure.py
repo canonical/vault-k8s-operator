@@ -5,6 +5,7 @@
 
 import tempfile
 from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 import hcl
 import ops.testing as testing
@@ -15,6 +16,7 @@ from charms.vault_k8s.v0.vault_client import (
     Certificate,
     SecretsBackend,
 )
+from charms.vault_k8s.v0.vault_kv import KVRequest
 from ops.pebble import Layer
 
 from tests.unit.certificates import (
@@ -535,8 +537,9 @@ class TestCharmConfigure(VaultCharmFixtures):
                 "role-secret-id": "kv role secret id",
             }
 
+    @patch("charm.VaultKvProvides.get_kv_requests")
     def test_given_related_kv_client_unit_egress_is_updated_when_configure_then_secret_content_is_updated(
-        self,
+        self, mock_get_kv_requests: MagicMock
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
             nonce = "123123"
@@ -601,10 +604,20 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret, kv_secret],
             )
             self.mock_kv_provides_get_credentials.return_value = {nonce: kv_secret.id}
+            mock_get_kv_requests.return_value = [
+                KVRequest(
+                    relation=kv_relation,  # type: ignore
+                    app_name="vault-kv-remote",
+                    unit_name="vault-kv-remote/0",
+                    mount_suffix="suffix",
+                    egress_subnets=["2.2.2.0/24"],
+                    nonce=nonce,
+                )
+            ]
 
             state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             assert state_out.get_secret(label="kv-creds-vault-kv-remote-0").latest_content == {
                 "role-id": "kv role id",
-                "role-secret-id": "initial kv role secret id",
+                "role-secret-id": "new kv role secret id",
             }
