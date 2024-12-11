@@ -1061,6 +1061,8 @@ class VaultCharm(CharmBase):
             # for the enterprise version in Vault 1.16+
             if _seal_type_has_changed(existing_content, content):
                 if self._vault_service_is_running():
+                    # TODO: This name is misleading. We're not restarting the container, we're
+                    # restarting the service. We should rename this method to reflect that.
                     self._container.restart(self._service_name)
 
     def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
