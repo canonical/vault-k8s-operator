@@ -54,6 +54,7 @@ NUM_VAULT_UNITS = 3
 
 class ActionFailedError(Exception):
     """Exception raised when an action fails."""
+
     pass
 
 
@@ -1209,14 +1210,11 @@ async def authorize_charm(
             "secret-id": secret_id,
         },
     )
-    status = await ops_test.model.get_action_status(
-        action_uuid=authorize_action.entity_id
-    )
-    if status == "failed":
-        raise ActionFailedError("Failed to authorize charm")
     result = await ops_test.model.get_action_output(
         action_uuid=authorize_action.entity_id, wait=120
     )
+    if not result or "result" not in result:
+        raise ActionFailedError("Failed to authorize charm")
     return result
 
 

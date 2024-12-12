@@ -680,7 +680,9 @@ class VaultCharm(CharmBase):
                 event.fail("Token not found in the secret. Please provide a valid token secret.")
                 return
         except (NoSuchSecretError, SecretRemovedError):
-            logger.warning("Secret id provided could not be found by the charm when authorizing charm.")
+            logger.warning(
+                "Secret id provided could not be found by the charm when authorizing charm."
+            )
             event.fail(
                 "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
             )
