@@ -32,7 +32,7 @@ from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from ops import BoundEvent, CharmBase, CharmEvents, SecretExpiredEvent
+from ops import BoundEvent, CharmBase, CharmEvents, SecretExpiredEvent, SecretRemoveEvent
 from ops.framework import EventBase, EventSource, Handle, Object
 from ops.jujuversion import JujuVersion
 from ops.model import (
@@ -52,7 +52,7 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 PYDEPS = ["cryptography", "pydantic"]
 
@@ -974,6 +974,7 @@ class TLSCertificatesRequiresV4(Object):
         self.framework.observe(charm.on[relationship_name].relation_created, self._configure)
         self.framework.observe(charm.on[relationship_name].relation_changed, self._configure)
         self.framework.observe(charm.on.secret_expired, self._on_secret_expired)
+        self.framework.observe(charm.on.secret_remove, self._on_secret_remove)
         for event in refresh_events:
             self.framework.observe(event, self._configure)
 
@@ -995,6 +996,10 @@ class TLSCertificatesRequiresV4(Object):
 
     def _mode_is_valid(self, mode) -> bool:
         return mode in [Mode.UNIT, Mode.APP]
+
+    def _on_secret_remove(self, event: SecretRemoveEvent) -> None:
+        """Handle Secret Removed Event."""
+        event.secret.remove_revision(event.revision)
 
     def _on_secret_expired(self, event: SecretExpiredEvent) -> None:
         """Handle Secret Expired Event.
