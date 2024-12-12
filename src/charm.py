@@ -13,7 +13,6 @@ import socket
 from datetime import datetime
 from typing import IO, Any, Dict, List, Tuple
 
-import hcl
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -23,7 +22,6 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
-    CertificateRequestAttributes,
     Mode,
     PrivateKey,
     ProviderCertificate,
@@ -42,12 +40,19 @@ from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealRequires,
 )
 from charms.vault_k8s.v0.vault_client import (
-    AppRole,
     AuditDeviceType,
     SecretsBackend,
     Token,
     VaultClient,
     VaultClientError,
+)
+from charms.vault_k8s.v0.vault_helpers import (
+    PEER_RELATION_NAME,
+    VAULT_PORT,
+    VaultHelpers,
+    config_file_content_matches,
+    render_vault_config_file,
+    seal_type_has_changed,
 )
 from charms.vault_k8s.v0.vault_kv import (
     NewVaultKvClientAttachedEvent,
@@ -63,7 +68,6 @@ from charms.vault_k8s.v0.vault_managers import (
     VaultTLSManager,
 )
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
-from jinja2 import Environment, FileSystemLoader
 from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
     ActionEvent,
@@ -93,15 +97,12 @@ AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 BACKUP_KEY_PREFIX = "vault-backup"
 CHARM_POLICY_NAME = "charm-access"
 CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
-CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
-CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 CONFIG_TRANSIT_STANZA_TEMPLATE_NAME = "vault_transit.hcl.j2"
 CONTAINER_NAME = "vault"
 CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
-PEER_RELATION_NAME = "vault-peers"
 PKI_MOUNT = "charm-pki"
 PKI_RELATION_NAME = "vault-pki"
 PKI_ROLE_NAME = "charm"
@@ -109,7 +110,6 @@ PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
-VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
@@ -123,21 +123,21 @@ VAULT_STORAGE_PATH = "/vault/raft"
 class VaultCharm(CharmBase):
     """Main class to handle Juju events for the vault-k8s charm."""
 
-    VAULT_PORT = 8200
     VAULT_CLUSTER_PORT = 8201
 
     def __init__(self, *args: Any):
         super().__init__(*args)
         self.juju_facade = JujuFacade(self)
+        self.vault_helpers = VaultHelpers(self)
         self._service_name = self._container_name = CONTAINER_NAME
         self._container = Container(container=self.unit.get_container(self._container_name))
-        self.unit.set_ports(self.VAULT_PORT)
+        self.unit.set_ports(VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
         self.vault_pki = TLSCertificatesProvidesV4(
             charm=self,
             relationship_name=PKI_RELATION_NAME,
         )
-        certificate_request = self._get_certificate_request()
+        certificate_request = self.vault_helpers.get_certificate_request()
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
@@ -163,7 +163,7 @@ class VaultCharm(CharmBase):
                     "scheme": "https",
                     "tls_config": {"insecure_skip_verify": True},
                     "metrics_path": "/v1/sys/metrics",
-                    "static_configs": [{"targets": [f"*:{self.VAULT_PORT}"]}],
+                    "static_configs": [{"targets": [f"*:{VAULT_PORT}"]}],
                 }
             ],
             alert_rules_path=PROMETHEUS_ALERT_RULES_PATH,
@@ -177,13 +177,17 @@ class VaultCharm(CharmBase):
             workload=self._container,
             service_name=self._container_name,
             tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
-            common_name=self._ingress_address if self._ingress_address else "",
+            common_name=self.vault_helpers.ingress_address
+            if self.vault_helpers.ingress_address
+            else "",
             sans_dns=frozenset([socket.getfqdn()]),
-            sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
+            sans_ip=frozenset(
+                [self.vault_helpers.ingress_address] if self.vault_helpers.ingress_address else []
+            ),
         )
         self.ingress = IngressPerAppRequirer(
             charm=self,
-            port=self.VAULT_PORT,
+            port=VAULT_PORT,
             strip_prefix=True,
             scheme=lambda: "https",
         )
@@ -229,7 +233,7 @@ class VaultCharm(CharmBase):
         """Handle the collect status event."""
         if (
             self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
-            and not self._common_name_config_is_valid()
+            and not self.vault_helpers.common_name_config_is_valid()
         ):
             event.add_status(
                 BlockedStatus(
@@ -243,7 +247,7 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
-        if not self._bind_address or not self._ingress_address:
+        if not self.vault_helpers.bind_address or not self.vault_helpers.ingress_address:
             event.add_status(
                 WaitingStatus("Waiting for bind and ingress addresses to be available")
             )
@@ -284,7 +288,7 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_approle_auth_secret():
+        if not self.vault_helpers.get_approle_auth_secret():
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
@@ -303,7 +307,7 @@ class VaultCharm(CharmBase):
             return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return
-        if not self._bind_address or not self._ingress_address:
+        if not self.vault_helpers.bind_address or not self.vault_helpers.ingress_address:
             return
         if not self.tls.ca_certificate_secret_exists():
             return
@@ -364,7 +368,7 @@ class VaultCharm(CharmBase):
 
     def _remove_node_from_raft_cluster(self):
         """Remove the node from the raft cluster."""
-        if not (approle := self._get_approle_auth_secret()):
+        if not (approle := self.vault_helpers.get_approle_auth_secret()):
             return
         vault = VaultClient(url=self._api_address, ca_cert_path=None)
         if not vault.is_api_available():
@@ -377,8 +381,11 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             return
         vault.authenticate(approle)
-        if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
-            vault.remove_raft_node(self._node_id)
+        if (
+            vault.is_node_in_raft_peers(self.vault_helpers.node_id)
+            and vault.get_num_raft_peers() > 1
+        ):
+            vault.remove_raft_node(self.vault_helpers.node_id)
 
     def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
         """Handle vault-kv-client attached event."""
@@ -415,7 +422,7 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             logger.debug("TLS Certificates PKI relation not created, skipping")
             return
-        if not self._common_name_config_is_valid():
+        if not self.vault_helpers.common_name_config_is_valid():
             logger.debug("Common name config is not valid, skipping")
             return
         config_common_name = self.juju_facade.get_string_config("common_name")
@@ -505,7 +512,7 @@ class VaultCharm(CharmBase):
         self,
     ) -> Tuple[ProviderCertificate | None, PrivateKey | None]:
         """Get the intermediate CA certificate."""
-        certificate_request = self._get_certificate_request()
+        certificate_request = self.vault_helpers.get_certificate_request()
         if not certificate_request:
             logger.error("Certificate request is not valid")
             return None, None
@@ -519,15 +526,6 @@ class VaultCharm(CharmBase):
             logger.debug("No private key available")
             return None, None
         return provider_certificate, private_key
-
-    def _get_certificate_request(self) -> CertificateRequestAttributes | None:
-        common_name = self.juju_facade.get_string_config("common_name")
-        if not common_name:
-            return None
-        return CertificateRequestAttributes(
-            common_name=common_name,
-            is_ca=True,
-        )
 
     def _sync_vault_autounseal(self, vault_client: VaultClient) -> None:
         """Sync the vault autounseal relation."""
@@ -549,7 +547,7 @@ class VaultCharm(CharmBase):
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
         for relation in relations_without_credentials:
-            relation_address = self._get_relation_api_address(relation)
+            relation_address = self.vault_helpers.get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
                 continue
@@ -602,7 +600,7 @@ class VaultCharm(CharmBase):
         if not ca_certificate:
             logger.debug("Vault CA certificate not available")
             return
-        if not (vault_url := self._get_relation_api_address(relation)):
+        if not (vault_url := self.vault_helpers.get_relation_api_address(relation)):
             logger.debug("Failed to get Vault URL for relation %s", relation.id)
             return
         mount = f"charm-{app_name}-{mount_suffix}"
@@ -697,7 +695,7 @@ class VaultCharm(CharmBase):
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
             vault.enable_approle_auth_method()
             vault.create_or_update_policy_from_file(name=CHARM_POLICY_NAME, path=CHARM_POLICY_PATH)
-            cidrs = [f"{self._bind_address}/24"]
+            cidrs = [f"{self.vault_helpers.bind_address}/24"]
             role_id = vault.create_or_update_approle(
                 name=APPROLE_ROLE_NAME,
                 cidrs=cidrs,
@@ -706,11 +704,7 @@ class VaultCharm(CharmBase):
                 token_max_ttl="1h",
             )
             secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
-            self.juju_facade.set_app_secret_content(
-                content={"role-id": role_id, "secret-id": secret_id},
-                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-                description="The authentication details for the charm's access to vault.",
-            )
+            self.vault_helpers.set_approle_auth_secret(role_id, secret_id)
             event.set_results(
                 {"result": "Charm authorized successfully. You may now remove the secret."}
             )
@@ -858,17 +852,13 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         try:
-            if self.juju_facade.secret_exists_with_fields(
-                fields=("role-id", "secret-id"),
-                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-            ):
-                approle = self._get_approle_auth_secret()
+            if approle := self.vault_helpers.get_approle_auth_secret():
                 vault = VaultClient(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
                 if approle and not vault.authenticate(approle):
-                    self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+                    self.vault_helpers.remove_approle_auth_secret()
         except Exception as e:
             logger.error("Failed to remove old approle secret: %s", e)
             event.fail(message="Failed to remove old approle secret.")
@@ -990,39 +980,12 @@ class VaultCharm(CharmBase):
         if nonce not in set(credential_nonces):
             self.vault_kv.remove_unit_credentials(relation, nonce=nonce)
 
-    def _delete_vault_data(self) -> None:
-        """Delete Vault's data."""
-        try:
-            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
-            logger.info("Removed Vault's main database")
-        except PathError:
-            logger.info("No Vault database to remove")
-        try:
-            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
-            logger.info("Removed Vault's Raft database")
-        except PathError:
-            logger.info("No Vault raft database to remove")
-
     def _vault_service_is_running(self) -> bool:
         """Check if the vault service is running."""
         try:
             return self._container.get_service(service_name=self._service_name).is_running()
         except ModelError:
             return False
-
-    def _get_relation_api_address(self, relation: Relation) -> str | None:
-        """Fetch the api address from relation and returns it.
-
-        Example: "https://10.152.183.20:8200"
-        """
-        if not (ingress_address := self.juju_facade.get_ingress_address(relation=relation)):
-            return None
-        return f"https://{ingress_address}:{self.VAULT_PORT}"
-
-    def _common_name_config_is_valid(self) -> bool:
-        """Return whether the config value for the common name is valid."""
-        common_name = self.juju_facade.get_string_config("common_name")
-        return common_name != ""
 
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""
@@ -1036,16 +999,16 @@ class VaultCharm(CharmBase):
 
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
 
-        content = _render_vault_config_file(
+        content = render_vault_config_file(
             default_lease_ttl=self.juju_facade.get_string_config("default_lease_ttl"),
             max_lease_ttl=self.juju_facade.get_string_config("max_lease_ttl"),
             cluster_address=self._cluster_address,
             api_address=self._api_address,
-            tcp_address=f"[::]:{self.VAULT_PORT}",
+            tcp_address=f"[::]:{VAULT_PORT}",
             tls_cert_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CERT.name.lower()}.pem",
             tls_key_file=f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.KEY.name.lower()}.pem",
             raft_storage_path=VAULT_STORAGE_PATH,
-            node_id=self._node_id,
+            node_id=self.vault_helpers.node_id,
             retry_joins=retry_joins,
             autounseal_details=autounseal_configuration_details,
         )
@@ -1059,7 +1022,7 @@ class VaultCharm(CharmBase):
             # If the seal type has changed, we need to restart Vault to apply
             # the changes. SIGHUP is currently only supported as a beta feature
             # for the enterprise version in Vault 1.16+
-            if _seal_type_has_changed(existing_content, content):
+            if seal_type_has_changed(existing_content, content):
                 if self._vault_service_is_running():
                     self._container.restart(self._service_name)
 
@@ -1086,26 +1049,6 @@ class VaultCharm(CharmBase):
         """Push the config file to the workload."""
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
-
-    def _get_approle_auth_secret(self) -> AppRole | None:
-        """Get the vault approle login details secret.
-
-        Returns:
-            AppRole: An AppRole object with role_id and secret_id set from the
-                     values stored in the Juju secret, or None if the secret is
-                     not found or either of the values are not set.
-        """
-        try:
-            role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
-            )
-        except NoSuchSecretError:
-            return None
-        return AppRole(role_id, secret_id) if role_id and secret_id else None
-
-    def _get_vault_kv_secret_label(self, unit_name: str):
-        unit_name_dash = unit_name.replace("/", "-")
-        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
@@ -1155,7 +1098,7 @@ class VaultCharm(CharmBase):
             logger.error("Failed to find active Vault client, cannot restore snapshot.")
             return False
         try:
-            if not (approle := self._get_approle_auth_secret()):
+            if not (approle := self.vault_helpers.get_approle_auth_secret()):
                 logger.error("Failed to log in to Vault")
                 return False
             vault.authenticate(approle)
@@ -1192,13 +1135,30 @@ class VaultCharm(CharmBase):
             return None
         if not vault.is_api_available():
             return None
-        if not (approle := self._get_approle_auth_secret()):
+        if not (approle := self.vault_helpers.get_approle_auth_secret()):
             return None
         if not vault.authenticate(approle):
             return None
         if not vault.is_active_or_standby():
             return None
         return vault
+
+    def _delete_vault_data(self) -> None:
+        """Delete Vault's data."""
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
+            logger.info("Removed Vault's main database")
+        except PathError:
+            logger.info("No Vault database to remove")
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
+            logger.info("Removed Vault's Raft database")
+        except PathError:
+            logger.info("No Vault raft database to remove")
+
+    def _get_vault_kv_secret_label(self, unit_name: str):
+        unit_name_dash = unit_name.replace("/", "-")
+        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
 
     @property
     def _vault_layer(self) -> Layer:
@@ -1221,17 +1181,9 @@ class VaultCharm(CharmBase):
     def _get_peer_node_api_addresses(self) -> List[str]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
         return [
-            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
+            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{VAULT_PORT}"
             for i in range(self.app.planned_units())
         ]
-
-    @property
-    def _node_id(self) -> str:
-        """Return the node id for vault.
-
-        Example of node id: "vault-k8s-0"
-        """
-        return f"{self.model.name}-{self.unit.name}"
 
     @property
     def _certificate_subject(self) -> str:
@@ -1243,7 +1195,7 @@ class VaultCharm(CharmBase):
 
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
         """
-        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
+        return f"https://{socket.getfqdn()}:{VAULT_PORT}"
 
     @property
     def _cluster_address(self) -> str:
@@ -1252,113 +1204,6 @@ class VaultCharm(CharmBase):
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
-
-    @property
-    def _bind_address(self) -> str | None:
-        """Fetch the bind address from peer relation and returns it.
-
-        Returns:
-            str: Bind address
-        """
-        return self.juju_facade.get_bind_address(relation_name=PEER_RELATION_NAME)
-
-    @property
-    def _ingress_address(self) -> str | None:
-        """Fetch the ingress address from peer relation and returns it.
-
-        Returns:
-            str: Ingress address
-        """
-        return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
-
-
-def _render_vault_config_file(
-    default_lease_ttl: str,
-    max_lease_ttl: str,
-    cluster_address: str,
-    api_address: str,
-    tls_cert_file: str,
-    tls_key_file: str,
-    tcp_address: str,
-    raft_storage_path: str,
-    node_id: str,
-    retry_joins: List[Dict[str, str]],
-    autounseal_details: AutounsealConfigurationDetails | None = None,
-) -> str:
-    jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
-    template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
-    content = template.render(
-        default_lease_ttl=default_lease_ttl,
-        max_lease_ttl=max_lease_ttl,
-        cluster_address=cluster_address,
-        api_address=api_address,
-        tls_cert_file=tls_cert_file,
-        tls_key_file=tls_key_file,
-        tcp_address=tcp_address,
-        raft_storage_path=raft_storage_path,
-        node_id=node_id,
-        retry_joins=retry_joins,
-        autounseal_address=autounseal_details.address if autounseal_details else None,
-        autounseal_key_name=autounseal_details.key_name if autounseal_details else None,
-        autounseal_mount_path=autounseal_details.mount_path if autounseal_details else None,
-        autounseal_token=autounseal_details.token if autounseal_details else None,
-        autounseal_tls_ca_cert=autounseal_details.ca_cert_path if autounseal_details else None,
-    )
-    return content
-
-
-def _seal_type_has_changed(content_a: str, content_b: str) -> bool:
-    """Check if the seal type has changed between two versions of the Vault configuration file.
-
-    Currently only checks if the transit stanza is present or not, since this
-    is all we support. This function will need to be extended to support
-    alternate cases if and when we support them.
-    """
-    config_a = hcl.loads(content_a)
-    config_b = hcl.loads(content_b)
-    return _contains_transit_stanza(config_a) != _contains_transit_stanza(config_b)
-
-
-def _contains_transit_stanza(config: dict) -> bool:
-    return "seal" in config and "transit" in config["seal"]
-
-
-def config_file_content_matches(existing_content: str, new_content: str) -> bool:
-    """Return whether two Vault config file contents match.
-
-    We check if the retry_join addresses match, and then we check if the rest of the config
-    file matches.
-
-    Returns:
-        bool: Whether the vault config file content matches
-    """
-    existing_config_hcl = hcl.loads(existing_content)
-    new_content_hcl = hcl.loads(new_content)
-    if not existing_config_hcl:
-        logger.info("Existing config file is empty")
-        return existing_config_hcl == new_content_hcl
-    if not new_content_hcl:
-        logger.info("New config file is empty")
-        return existing_config_hcl == new_content_hcl
-
-    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
-    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
-
-    # If there is only one retry join, it is a dict
-    if isinstance(new_retry_joins, dict):
-        new_retry_joins = [new_retry_joins]
-    if isinstance(existing_retry_joins, dict):
-        existing_retry_joins = [existing_retry_joins]
-
-    new_retry_join_api_addresses = {address["leader_api_addr"] for address in new_retry_joins}
-    existing_retry_join_api_addresses = {
-        address["leader_api_addr"] for address in existing_retry_joins
-    }
-
-    return (
-        new_retry_join_api_addresses == existing_retry_join_api_addresses
-        and new_content_hcl == existing_config_hcl
-    )
 
 
 if __name__ == "__main__":  # pragma: no cover
