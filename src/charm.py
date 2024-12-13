@@ -1101,7 +1101,7 @@ class VaultCharm(CharmBase):
                 "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
             )
         except NoSuchSecretError:
-            logger.warning("Apprle secret not yet created")
+            logger.warning("Approle secret not yet created")
             return None
         return AppRole(role_id, secret_id) if role_id and secret_id else None
 
