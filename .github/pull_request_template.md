@@ -10,3 +10,4 @@ Please include a summary of the change. Please also include relevant motivation 
 - [ ] I have added tests that validate the behaviour of the software
 - [ ] I validated that new and existing unit tests pass locally with my changes
 - [ ] Any dependent changes have been merged and published in downstream modules
+- [ ] I have bumped the version of any required library.

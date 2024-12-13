@@ -77,7 +77,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -160,6 +160,14 @@ class WorkloadBase(ABC):
     @abstractmethod
     def stop(self, process: str) -> None:
         """Stop a service in the workload."""
+        pass
+
+    @abstractmethod
+    def is_accessible(self) -> bool:
+        """Return whether the workload is accessible.
+
+        For a container, this would check if we can connect to pebble.
+        """
         pass
 
 
@@ -269,6 +277,9 @@ class VaultTLSManager(Object):
 
     def _configure_self_signed_certificates(self, _: EventBase) -> None:
         """Configure the charm with self signed certificates."""
+        if not self.workload.is_accessible():
+            logger.debug("Workload is not accessible")
+            return
         if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
             self.juju_facade.set_app_secret_content(
@@ -321,6 +332,9 @@ class VaultTLSManager(Object):
 
         Retrieve assigned certificate and private key from the relation and save them to the workload.
         """
+        if not self.workload.is_accessible():
+            logger.debug("Workload is not accessible")
+            return
         if not self.tls_access:
             logger.debug("No TLS access relation.")
             return
