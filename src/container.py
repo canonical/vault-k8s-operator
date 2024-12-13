@@ -51,3 +51,7 @@ class Container(WorkloadBase):
     def stop(self, process: str) -> None:
         """Stop the workload."""
         self._container.stop(process)
+
+    def is_accessible(self) -> bool:
+        """Check if we can connect to pebble."""
+        return self._container.can_connect()

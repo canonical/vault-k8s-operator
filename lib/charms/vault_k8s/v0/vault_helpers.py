@@ -1,6 +1,5 @@
 """Common functions used by the vault charms."""
 
-# The unique Charmhub library identifier, never change it
 import logging
 from typing import Dict, List
 
@@ -18,6 +17,7 @@ from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.model import Relation
 
+# The unique Charmhub library identifier, never change it
 LIBID = "92129fe159114cf699a24f2e252795a0"
 
 # Increment this major API version when introducing breaking changes
@@ -95,6 +95,10 @@ class VaultHelpers:
     def remove_approle_auth_secret(self) -> None:
         """Remove the vault approle login details secret."""
         self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+
+    def peer_relation_exists(self) -> bool:
+        """Return whether the peer relation exists."""
+        return self.juju_facade.relation_exists(PEER_RELATION_NAME)
 
     @property
     def bind_address(self) -> str | None:

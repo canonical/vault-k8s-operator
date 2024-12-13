@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from datetime import datetime
-from typing import IO, Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -93,7 +93,6 @@ APPROLE_ROLE_NAME = "charm"
 AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
-AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 BACKUP_KEY_PREFIX = "vault-backup"
 CHARM_POLICY_NAME = "charm-access"
 CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
@@ -111,7 +110,6 @@ REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
-VAULT_INITIALIZATION_SECRET_LABEL = "vault-initialization"
 VAULT_STORAGE_PATH = "/vault/raft"
 
 
@@ -244,7 +242,7 @@ class VaultCharm(CharmBase):
         if not self._container.can_connect():
             event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
             return
-        if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
+        if not self.vault_helpers.peer_relation_exists():
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
         if not self.vault_helpers.bind_address or not self.vault_helpers.ingress_address:
@@ -305,7 +303,7 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
-        if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
+        if not self.vault_helpers.peer_relation_exists():
             return
         if not self.vault_helpers.bind_address or not self.vault_helpers.ingress_address:
             return
@@ -987,6 +985,19 @@ class VaultCharm(CharmBase):
         except ModelError:
             return False
 
+    def _delete_vault_data(self) -> None:
+        """Delete Vault's data."""
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
+            logger.info("Removed Vault's main database")
+        except PathError:
+            logger.info("No Vault database to remove")
+        try:
+            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
+            logger.info("Removed Vault's Raft database")
+        except PathError:
+            logger.info("No Vault raft database to remove")
+
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""
         retry_joins = [
@@ -1068,19 +1079,6 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _create_raft_snapshot(self) -> IO[bytes] | None:
-        """Create a snapshot of Vault.
-
-        Returns:
-            The snapshot content as a file like object, or None if the snapshot
-            could not be created.
-        """
-        if not (vault := self._get_active_vault_client()):
-            logger.error("Failed to get Vault client, cannot create snapshot.")
-            return None
-        response = vault.create_snapshot()
-        return response.raw  # type: ignore[reportReturnType]
-
     def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
 
@@ -1143,23 +1141,6 @@ class VaultCharm(CharmBase):
             return None
         return vault
 
-    def _delete_vault_data(self) -> None:
-        """Delete Vault's data."""
-        try:
-            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
-            logger.info("Removed Vault's main database")
-        except PathError:
-            logger.info("No Vault database to remove")
-        try:
-            self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
-            logger.info("Removed Vault's Raft database")
-        except PathError:
-            logger.info("No Vault raft database to remove")
-
-    def _get_vault_kv_secret_label(self, unit_name: str):
-        unit_name_dash = unit_name.replace("/", "-")
-        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
-
     @property
     def _vault_layer(self) -> Layer:
         """Return the pebble layer to start Vault."""
@@ -1186,8 +1167,20 @@ class VaultCharm(CharmBase):
         ]
 
     @property
-    def _certificate_subject(self) -> str:
-        return f"{self.app.name}.{self.model.name}.svc.cluster.local"
+    def _api_address(self) -> str:
+        """Return the FQDN with the https schema and vault port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8200"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_PORT}"
+
+    @property
+    def _cluster_address(self) -> str:
+        """Return the FQDN with the https schema and vault cluster port.
+
+        Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
+        """
+        return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
     @property
     def _api_address(self) -> str:
