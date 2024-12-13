@@ -17,10 +17,11 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.vault_k8s.v0.vault_helpers import VAULT_CHARM_APPROLE_SECRET_LABEL
 from charms.vault_k8s.v0.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from ops.model import WaitingStatus
 
-from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
+from charm import VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
