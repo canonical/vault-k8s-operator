@@ -52,6 +52,12 @@ MINIO_CONFIG = {
 NUM_VAULT_UNITS = 3
 
 
+class ActionFailedError(Exception):
+    """Exception raised when an action fails."""
+
+    pass
+
+
 @pytest.fixture(scope="module")
 async def deployed_vault(ops_test: OpsTest, request: pytest.FixtureRequest):
     """Deploy Vault."""
@@ -130,7 +136,10 @@ class TestVaultK8s:
                 expected_message="Please authorize charm (see `authorize-charm` action)",
                 count=NUM_VAULT_UNITS,
             )
-            await authorize_charm(ops_test, root_token)
+            try:
+                await authorize_charm(ops_test, root_token)
+            except ActionFailedError:
+                logger.warning("Failed to authorize charm")
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -910,7 +919,10 @@ class TestVaultK8sIntegrationsPart3:
                 expected_message="Please authorize charm (see `authorize-charm` action)",
                 app_name="vault-b",
             )
-            await authorize_charm(ops_test, root_token, "vault-b")
+            try:
+                await authorize_charm(ops_test, root_token, "vault-b")
+            except ActionFailedError:
+                logger.warning("Failed to authorize charm, retrying...")
             await ops_test.model.wait_for_idle(
                 apps=["vault-b"],
                 status="active",
@@ -1201,6 +1213,8 @@ async def authorize_charm(
     result = await ops_test.model.get_action_output(
         action_uuid=authorize_action.entity_id, wait=120
     )
+    if not result or "result" not in result:
+        raise ActionFailedError("Failed to authorize charm")
     return result
 
 
