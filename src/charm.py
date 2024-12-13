@@ -676,15 +676,20 @@ class VaultCharm(CharmBase):
             if not (
                 token := self.juju_facade.get_latest_secret_content(id=secret_id).get("token", "")
             ):
+                logger.warning("Token not found in the secret when authorizing charm.")
                 event.fail("Token not found in the secret. Please provide a valid token secret.")
                 return
         except (NoSuchSecretError, SecretRemovedError):
+            logger.warning(
+                "Secret id provided could not be found by the charm when authorizing charm."
+            )
             event.fail(
                 "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
             )
             return
         vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         if not vault.authenticate(Token(token)):
+            logger.error("The token provided is not valid when authorizing charm.")
             event.fail(
                 "The token provided is not valid. Please use a Vault token with the appropriate permissions."
             )
@@ -1097,6 +1102,7 @@ class VaultCharm(CharmBase):
                 "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
             )
         except NoSuchSecretError:
+            logger.warning("Approle secret not yet created")
             return None
         return AppRole(role_id, secret_id) if role_id and secret_id else None
 
