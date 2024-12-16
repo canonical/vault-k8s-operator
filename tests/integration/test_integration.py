@@ -729,11 +729,11 @@ class TestVaultK8sIntegrationsPart2:
             wait_for_exact_units=1,
         )
         status = await ops_test.model.get_status()
-        minio_ip = (
-            status.applications[MINIO_APPLICATION_NAME]
-            .units[f"{MINIO_APPLICATION_NAME}/0"]
-            .address
-        )
+        minio_app = status.applications[MINIO_APPLICATION_NAME]
+        assert minio_app
+        minio_unit = minio_app.units[f"{MINIO_APPLICATION_NAME}/0"]
+        assert minio_unit
+        minio_ip = minio_unit.address
         endpoint = f"http://{minio_ip}:9000"
         s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
         assert s3_integrator
