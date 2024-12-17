@@ -136,10 +136,7 @@ class TestVaultK8s:
                 expected_message="Please authorize charm (see `authorize-charm` action)",
                 count=NUM_VAULT_UNITS,
             )
-            try:
-                await authorize_charm(ops_test, root_token)
-            except ActionFailedError:
-                logger.warning("Failed to authorize charm")
+            await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -919,10 +916,7 @@ class TestVaultK8sIntegrationsPart3:
                 expected_message="Please authorize charm (see `authorize-charm` action)",
                 app_name="vault-b",
             )
-            try:
-                await authorize_charm(ops_test, root_token, "vault-b")
-            except ActionFailedError:
-                logger.warning("Failed to authorize charm, retrying...")
+            await authorize_charm(ops_test, root_token, "vault-b")
             await ops_test.model.wait_for_idle(
                 apps=["vault-b"],
                 status="active",
@@ -1197,7 +1191,7 @@ def unseal_all_vaults(unit_addresses: List[str], root_token: str, unseal_key: st
 
 
 async def authorize_charm(
-    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME
+    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME, attempts: int = 3
 ) -> Any | Dict:
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)
@@ -1210,12 +1204,14 @@ async def authorize_charm(
             "secret-id": secret_id,
         },
     )
-    result = await ops_test.model.get_action_output(
-        action_uuid=authorize_action.entity_id, wait=120
-    )
-    if not result or "result" not in result:
-        raise ActionFailedError("Failed to authorize charm")
-    return result
+    for _ in range(attempts):
+        result = await ops_test.model.get_action_output(
+            action_uuid=authorize_action.entity_id, wait=120
+        )
+        if result and "result" in result:
+            return result
+        await asyncio.sleep(5)
+    raise ActionFailedError("Failed to authorize charm")
 
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
