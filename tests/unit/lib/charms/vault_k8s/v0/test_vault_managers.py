@@ -6,14 +6,14 @@ from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
 from charms.vault_k8s.v0.vault_client import AuthMethod, VaultClient
 from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
-    VaultAutounsealProviderManager,
-    VaultAutounsealRequirerManager,
+    AutounsealProviderManager,
+    AutounsealRequirerManager,
 )
 
 from charm import AUTOUNSEAL_MOUNT_PATH
 
 
-class TestVaultAutounsealRequirerManager:
+class TestAutounsealRequirerManager:
     @pytest.mark.parametrize(
         "token, token_valid, expected_token",
         [
@@ -59,12 +59,12 @@ class TestVaultAutounsealRequirerManager:
         if not token:
             juju_facade_instance.get_secret_content_values.side_effect = SecretRemovedError()
 
-        autounseal = VaultAutounsealRequirerManager(charm, requires)
+        autounseal = AutounsealRequirerManager(charm, requires)
         returned_token = autounseal.get_provider_vault_token(autounseal_details, ca_cert_path)
         assert returned_token == expected_token
 
 
-class TestVaultAutounsealProviderManager:
+class TestAutounsealProviderManager:
     def test_when_create_credentials_then_vault_client_called_and_key_name_and_credentials_are_returned(
         self,
     ):
@@ -80,7 +80,7 @@ class TestVaultAutounsealProviderManager:
         vault_client.create_or_update_approle.return_value = "role_id"
         vault_client.generate_role_secret_id.return_value = "secret_id"
 
-        autounseal = VaultAutounsealProviderManager(
+        autounseal = AutounsealProviderManager(
             charm, vault_client, provides, "ca_cert", AUTOUNSEAL_MOUNT_PATH
         )
 
@@ -115,7 +115,7 @@ class TestVaultAutounsealProviderManager:
         test_relation.id = 123
         provides.get_outstanding_requests.return_value = [test_relation]
         juju_facade_instance.get_active_relations.return_value = [test_relation]
-        autounseal = VaultAutounsealProviderManager(
+        autounseal = AutounsealProviderManager(
             charm, vault_client_mock, provides, "ca_cert", AUTOUNSEAL_MOUNT_PATH
         )
 

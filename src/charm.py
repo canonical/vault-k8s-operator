@@ -56,11 +56,11 @@ from charms.vault_k8s.v0.vault_kv import (
 )
 from charms.vault_k8s.v0.vault_managers import (
     AutounsealConfigurationDetails,
+    AutounsealProviderManager,
+    AutounsealRequirerManager,
     File,
-    VaultAutounsealProviderManager,
-    VaultAutounsealRequirerManager,
+    TLSManager,
     VaultCertsError,
-    VaultTLSManager,
 )
 from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from jinja2 import Environment, FileSystemLoader
@@ -169,7 +169,7 @@ class VaultCharm(CharmBase):
             charm=self,
             relation_name=LOG_FORWARDING_RELATION_NAME,
         )
-        self.tls = VaultTLSManager(
+        self.tls = TLSManager(
             charm=self,
             workload=self._container,
             service_name=self._container_name,
@@ -531,7 +531,7 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader():
             logger.debug("Only leader unit can handle a vault-autounseal request")
             return
-        autounseal_provider_manager = VaultAutounsealProviderManager(
+        autounseal_provider_manager = AutounsealProviderManager(
             charm=self,
             client=vault_client,
             provides=self.vault_autounseal_provides,
@@ -1069,7 +1069,7 @@ class VaultCharm(CharmBase):
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
         if not autounseal_relation_details:
             return None
-        autounseal_requirer_manager = VaultAutounsealRequirerManager(
+        autounseal_requirer_manager = AutounsealRequirerManager(
             self, self.vault_autounseal_requires
         )
         self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
