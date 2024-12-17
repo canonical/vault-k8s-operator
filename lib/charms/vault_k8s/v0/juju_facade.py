@@ -27,7 +27,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -152,10 +152,8 @@ class JujuFacade:
         except NoSuchSecretError:
             raise
         except SecretNotFoundError as e:
-            logger.warning("Secret %s not found: %s", label, e)
             raise SecretRemovedError(e) from e
         except ModelError as e:
-            logger.error("Error getting secret content for %s: %s", label, e)
             raise SecretAccessDeniedError(e) from e
 
     def get_current_secret_content(
@@ -216,7 +214,6 @@ class JujuFacade:
             logger.info("Secret %s added to application", label or secret.id)
             return secret
         except ValueError as e:
-            logger.error("Invalid secret content %s: %s", content, e)
             raise SecretValidationError(e) from e
 
     def _add_unit_secret(
@@ -228,7 +225,6 @@ class JujuFacade:
             logger.info("Secret %s added to unit", label or secret.id)
             return secret
         except ValueError as e:
-            logger.error("Invalid secret content %s: %s", content, e)
             raise SecretValidationError(e) from e
 
     def _create_secret(
@@ -266,10 +262,8 @@ class JujuFacade:
             secret.set_content(content)
             return secret
         except ModelError as e:
-            logger.error("Error setting secret content for %s: %s", label or secret.id, e)
             raise TransientJujuError(e) from e
         except ValueError as e:
-            logger.error("Invalid secret content %s: %s", content, e)
             raise SecretValidationError(e) from e
 
     def set_app_secret_content(
@@ -370,7 +364,6 @@ class JujuFacade:
         """
         relation = self.charm.model.get_relation(name, id)
         if not relation:
-            logger.error("Relation %s:%d not found", name, id)
             raise NoSuchRelationError(f"Relation {name}:{id} not found")
         return relation
 
@@ -383,10 +376,8 @@ class JujuFacade:
         """
         relations = self.charm.model.relations.get(name, [])
         if not relations:
-            logger.error("No relations found for %s", name)
             raise NoSuchRelationError(f"Relation {name} not found")
         if len(relations) > 1:
-            logger.warning("More than one relation found for %s", name)
             raise MultipleRelationsFoundError(f"More than one relation found for name {name}")
         return relations[0]
 
@@ -485,7 +476,6 @@ class JujuFacade:
         if not relation:
             raise NoSuchRelationError(f"Relation {name}:{id} not found")
         if not relation.app:
-            logger.warning("No remote application yet")
             raise NoRemoteAppError(f"Relation {name}:{id} has no remote application yet")
         return relation.data.get(relation.app, {})
 
