@@ -1218,13 +1218,13 @@ async def authorize_charm(
         secret = await helpers.get_model_secret_id(ops_test, f"approle-token-{app_name}")
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
-    authorize_action = await leader_unit.run_action(
-        action_name="authorize-charm",
-        **{
-            "secret-id": secret_id,
-        },
-    )
     for _ in range(attempts):
+        authorize_action = await leader_unit.run_action(
+            action_name="authorize-charm",
+            **{
+                "secret-id": secret_id,
+            },
+        )
         result = await ops_test.model.get_action_output(
             action_uuid=authorize_action.entity_id, wait=120
         )
