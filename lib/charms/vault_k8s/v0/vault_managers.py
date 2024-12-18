@@ -916,7 +916,17 @@ class PKIManager:
         return certificate_validity_seconds > current_ttl
 
     def configure(self):
-        """Perform the initial configuration of the PKI backend."""
+        """Enable the PKI backend and update the PKI role in Vault.
+
+        This method retrieves the intermediate certificate from the relation
+        and configures the PKI role in Vault if they have changed (or haven't
+        yet been configured). It will also revoke all existing certificates if
+        the provider has issued a new CA certificate, and ensure all future
+        certificates are issued by the new CA certificate.
+
+        Additionally, this method ensures that the intermediate CA certificate
+        is renewed if necessary.
+        """
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
             return
