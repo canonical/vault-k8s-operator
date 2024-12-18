@@ -403,7 +403,6 @@ class VaultCharm(CharmBase):
         if not common_name:
             logger.warning("Common name is not set in the charm config")
             return
-        logger.debug("Common name: %s", common_name)
         manager = PKIManager(
             self,
             vault,
@@ -456,7 +455,6 @@ class VaultCharm(CharmBase):
         common_name = self.juju_facade.get_string_config("common_name")
         if not common_name:
             return
-        logger.debug("Common name: %s", common_name)
         manager = PKIManager(
             self,
             vault,
