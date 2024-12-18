@@ -864,7 +864,7 @@ class PKIManager:
         self._vault_pki = vault_pki
         self._tls_certificates_pki = tls_certificates_pki
 
-    def intermediate_ca_cert_request(self) -> CertificateRequestAttributes:
+    def get_intermediate_ca_cert_request(self) -> CertificateRequestAttributes:
         """Return the certificate request attributes for the intermediate CA.
 
         Returns:
@@ -872,7 +872,7 @@ class PKIManager:
             intermediate CA certificate from the TLS certificates provider.
         """
         return CertificateRequestAttributes(
-            self._common_name,
+            common_name=self._common_name,
             is_ca=True,
         )
 
@@ -889,7 +889,7 @@ class PKIManager:
         This is the CA certificate that the provider charm has issued to Vault.
         """
         provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
-            certificate_request=self.intermediate_ca_cert_request()
+            certificate_request=self.get_intermediate_ca_cert_request()
         )
         if not provider_certificate:
             logger.debug("No intermediate CA certificate available")
