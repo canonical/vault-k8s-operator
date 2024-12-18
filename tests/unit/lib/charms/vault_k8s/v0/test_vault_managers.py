@@ -3,14 +3,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from charms.vault_k8s.v0.juju_facade import SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
-from charms.vault_k8s.v0.vault_client import AuthMethod, VaultClient
+from charms.vault_k8s.v0.vault_client import AuthMethod, SecretsBackend, VaultClient
 from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    KVManager,
+    VaultKvProvides,
 )
 
-from charm import AUTOUNSEAL_MOUNT_PATH
+from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
 
 
 class TestAutounsealRequirerManager:
@@ -126,3 +128,68 @@ class TestAutounsealProviderManager:
         vault_client_mock.write.assert_called_with(
             "charm-autounseal/keys/charm-autounseal-321/config", {"deletion_allowed": True}
         )
+
+
+class TestKVManager:
+    @pytest.fixture(autouse=True)
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock):
+        self.juju_facade = juju_facade_mock.return_value
+        self.charm = MagicMock(spec=VaultCharm)
+        self.vault_client = MagicMock(spec=VaultClient)
+        self.vault_kv = MagicMock(spec=VaultKvProvides)
+        self.ca_cert = "some cert"
+
+        self.manager = KVManager(self.charm, self.vault_client, self.vault_kv, self.ca_cert)
+
+    def test_when_generate_kv_for_requirer_then_relation_data_is_set(self):
+        relation = MagicMock()
+        app_name = "myapp"
+        unit_name = "myunit"
+        mount_suffix = "mount"
+        egress_subnets = ["1.2.3.4/32"]
+        nonce = "123123"
+        vault_url = "https://vault:8200"
+
+        self.vault_kv.get_credentials.return_value = {
+            "nonce": "my-secret-id",
+        }
+        self.juju_facade.get_latest_secret_content.return_value = {
+            "role-secret-id": "charm-myapp-mount-juju-secret-id"
+        }
+        secret = MagicMock()
+        secret.id = "my-secret-id"
+        self.juju_facade.set_app_secret_content.return_value = secret
+
+        self.manager.generate_kv_for_requirer(
+            relation, app_name, unit_name, mount_suffix, egress_subnets, nonce, vault_url
+        )
+
+        self.vault_client.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.KV_V2, "charm-myapp-mount"
+        )
+        self.vault_client.create_or_update_policy_from_file.assert_called_once_with(
+            "charm-myapp-mount-myunit", "src/templates/kv_mount.hcl", mount="charm-myapp-mount"
+        )
+        self.vault_client.generate_role_secret_id.assert_called_once_with(
+            "charm-myapp-mount-myunit", egress_subnets
+        )
+
+        self.vault_client.create_or_update_approle.assert_called_once_with(
+            "charm-myapp-mount-myunit",
+            policies=["charm-myapp-mount-myunit"],
+            cidrs=egress_subnets,
+            token_ttl="1h",
+            token_max_ttl="1h",
+        )
+        self.vault_kv.set_kv_data.assert_called_once_with(
+            relation=relation,
+            mount="charm-myapp-mount",
+            ca_certificate=self.ca_cert,
+            vault_url=vault_url,
+            nonce=nonce,
+            credentials_juju_secret_id="my-secret-id",
+        )
+
+    def test_when_egress_address_changed_then_secret_content_is_updated(self):
+        pass

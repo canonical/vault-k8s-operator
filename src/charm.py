@@ -59,6 +59,7 @@ from charms.vault_k8s.v0.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
     File,
+    KVManager,
     TLSManager,
     VaultCertsError,
 )
@@ -570,16 +571,25 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-kv request")
             return
+        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+        if not ca_certificate:
+            logger.debug("Vault CA certificate not available")
+            return
+        manager = KVManager(self, vault, self.vault_kv, ca_certificate)
+
         kv_requests = self.vault_kv.get_kv_requests()
         for kv_request in kv_requests:
-            self._generate_kv_for_requirer(
+            if not (vault_url := self._get_relation_api_address(kv_request.relation)):
+                logger.debug("Failed to get Vault URL for relation %s", kv_request.relation.id)
+                return
+            manager.generate_kv_for_requirer(
                 relation=kv_request.relation,
-                vault=vault,
                 app_name=kv_request.app_name,
                 unit_name=kv_request.unit_name,
                 mount_suffix=kv_request.mount_suffix,
                 egress_subnets=kv_request.egress_subnets,
                 nonce=kv_request.nonce,
+                vault_url=vault_url,
             )
 
     def _generate_kv_for_requirer(

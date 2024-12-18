@@ -63,9 +63,11 @@ from charms.vault_k8s.v0.vault_autounseal import (
 )
 from charms.vault_k8s.v0.vault_client import (
     AppRole,
+    SecretsBackend,
     Token,
     VaultClient,
 )
+from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
 
@@ -576,6 +578,8 @@ class Naming:
     key_prefix: str = ""
     policy_prefix: str = "charm-autounseal-"
     approle_prefix: str = "charm-autounseal-"
+    kv_secret_prefix: str = "vault-kv-"
+    kv_mount_prefix: str = "charm-"
 
     @classmethod
     def key_name(cls, relation_id: int) -> str:
@@ -591,6 +595,17 @@ class Naming:
     def approle_name(cls, relation_id: int) -> str:
         """Return the approle name for the relation."""
         return f"{cls.approle_prefix}{relation_id}"
+
+    @classmethod
+    def kv_secret_label(cls, unit_name: str) -> str:
+        """Return the secret label for the KV backend."""
+        unit_name_dash = unit_name.replace("/", "-")
+        return f"{cls.kv_secret_label}{unit_name_dash}"
+
+    @classmethod
+    def kv_mount_path(cls, app_name: str, mount_suffix: str) -> str:
+        """Return the mount path for the KV backend."""
+        return f"{cls.kv_mount_prefix}-{app_name}-{mount_suffix}"
 
 
 class AutounsealProviderManager:
@@ -816,3 +831,137 @@ class AutounsealRequirerManager:
                     label=self.AUTOUNSEAL_TOKEN_SECRET_LABEL,
                 )
         return external_vault.token
+
+
+class KVManager:
+    """This class manages the KV backend in Vault."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        vault_client: VaultClient,
+        vault_kv: VaultKvProvides,
+        ca_cert: str,
+    ):
+        self._vault_client = vault_client
+        self._juju_facade = JujuFacade(charm)
+        self._vault_kv = vault_kv
+        self._ca_cert = ca_cert
+
+    def generate_kv_for_requirer(
+        self,
+        relation: Relation,
+        app_name: str,
+        unit_name: str,
+        mount_suffix: str,
+        egress_subnets: list[str],
+        nonce: str,
+        vault_url: str,
+    ):
+        """Generate KV credentials for the requirer."""
+        if not self._juju_facade.is_leader:
+            logger.debug("Only leader unit can handle a vault-kv request")
+            return
+        # TODO: Replace with a call to Naming
+        mount = f"charm-{app_name}-{mount_suffix}"
+        self._vault_client.enable_secrets_engine(SecretsBackend.KV_V2, mount)
+        secret_id = self._ensure_unit_credentials(
+            vault=self._vault_client,
+            relation=relation,
+            unit_name=unit_name,
+            mount=mount,
+            nonce=nonce,
+            egress_subnets=egress_subnets,
+        )
+        self._vault_kv.set_kv_data(
+            relation=relation,
+            mount=mount,
+            ca_certificate=self._ca_cert,
+            vault_url=vault_url,
+            nonce=nonce,
+            credentials_juju_secret_id=secret_id,
+        )
+        self._remove_stale_nonce(relation=relation, nonce=nonce)
+
+    def _remove_stale_nonce(self, relation: Relation, nonce: str) -> None:
+        """Remove stale nonce.
+
+        If the nonce is not present in the credentials, it is stale and should be removed.
+
+        Args:
+            relation: Relation
+            nonce: the one to remove if stale
+        """
+        credential_nonces = self._vault_kv.get_credentials(relation).keys()
+        if nonce not in set(credential_nonces):
+            self._vault_kv.remove_unit_credentials(relation, nonce=nonce)
+
+    def _ensure_unit_credentials(
+        self,
+        vault: VaultClient,
+        relation: Relation,
+        unit_name: str,
+        mount: str,
+        nonce: str,
+        egress_subnets: list[str],
+    ) -> str:
+        """Ensure a unit has credentials to access the vault-kv mount."""
+        # TODO: Replace with a call to Naming
+        policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
+
+        juju_secret_label = Naming.kv_secret_label(unit_name=unit_name)
+        current_credentials = self._vault_kv.get_credentials(relation)
+        credentials_juju_secret_id = current_credentials.get(nonce, None)
+
+        if self._is_vault_kv_role_configured(
+            vault=vault,
+            label=juju_secret_label,
+            egress_subnets=egress_subnets,
+            role_name=role_name,
+            credentials_juju_secret_id=credentials_juju_secret_id,
+        ):
+            logger.info("Vault KV role already configured for the provided egress subnets")
+            return credentials_juju_secret_id
+        vault.create_or_update_policy_from_file(
+            policy_name, "src/templates/kv_mount.hcl", mount=mount
+        )
+        role_id = vault.create_or_update_approle(
+            role_name,
+            policies=[policy_name],
+            cidrs=egress_subnets,
+            token_ttl="1h",
+            token_max_ttl="1h",
+        )
+        role_secret_id = vault.generate_role_secret_id(role_name, egress_subnets)
+        secret = self._juju_facade.set_app_secret_content(
+            content={"role-id": role_id, "role-secret-id": role_secret_id},
+            label=juju_secret_label,
+        )
+        self._juju_facade.grant_secret(relation, secret=secret)
+        if not secret.id:
+            raise ValueError(
+                f"Unexpected error, just created secret {juju_secret_label!r} has no id"
+            )
+        return secret.id
+
+    def _is_vault_kv_role_configured(
+        self,
+        vault: VaultClient,
+        label: str,
+        egress_subnets: list[str],
+        role_name: str,
+        credentials_juju_secret_id: str,
+    ) -> bool:
+        try:
+            role_secret_id = self._juju_facade.get_latest_secret_content(
+                label=label,
+                id=credentials_juju_secret_id,
+            ).get("role-secret-id")
+        except NoSuchSecretError:
+            return False
+        if not role_secret_id:
+            return False
+        role_data = vault.read_role_secret(role_name, role_secret_id)
+        if egress_subnets in role_data["cidr_list"]:
+            return True
+        return False
