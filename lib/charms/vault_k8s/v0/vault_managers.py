@@ -838,7 +838,7 @@ class PKIManager:
         self,
         charm: CharmBase,
         vault_client: VaultClient,
-        common_name: str,
+        certificate_request_attributes: CertificateRequestAttributes,
         mount_point: str,
         role_name: str,
         vault_pki: TLSCertificatesProvidesV4,
@@ -849,37 +849,21 @@ class PKIManager:
         Args:
             charm: The charm this manager is associated with
             vault_client: The Vault client object
-            common_name: The common name for the certificates allowed by the PKI backend
+            certificate_request_attributes: The certificate request attributes
+                that were used when requesting an intermediate certificate from
+                the tls_certificates_pki relation provider.
             mount_point: The mount point in Vault for the PKI backend
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
             tls_certificates_pki: The tls_certificates_pki requirer relation helper library
         """
-        self.validate_input(common_name=common_name)
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
-        self._common_name = common_name
         self._mount_point = mount_point
         self._role_name = role_name
         self._vault_pki = vault_pki
         self._tls_certificates_pki = tls_certificates_pki
-
-    def get_intermediate_ca_cert_request(self) -> CertificateRequestAttributes:
-        """Return the certificate request attributes for the intermediate CA.
-
-        Returns:
-            The CertificateRequestAttributes that should be used to request the
-            intermediate CA certificate from the TLS certificates provider.
-        """
-        return CertificateRequestAttributes(
-            common_name=self._common_name,
-            is_ca=True,
-        )
-
-    def validate_input(self, *, common_name: str):
-        """Validate the inputs to this class."""
-        if common_name == "":
-            raise ManagerError("Common name cannot be empty.")
+        self._certificate_request_attributes = certificate_request_attributes
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -889,7 +873,7 @@ class PKIManager:
         This is the CA certificate that the provider charm has issued to Vault.
         """
         provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
-            certificate_request=self.get_intermediate_ca_cert_request()
+            certificate_request=self._certificate_request_attributes
         )
         if not provider_certificate:
             logger.debug("No intermediate CA certificate available")
@@ -970,12 +954,12 @@ class PKIManager:
         if not self._vault_client.is_common_name_allowed_in_pki_role(
             role=self._role_name,
             mount=self._mount_point,
-            common_name=self._common_name,
+            common_name=self._certificate_request_attributes.common_name,
         ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
             self._vault_client.create_or_update_pki_charm_role(
-                allowed_domains=self._common_name,
+                allowed_domains=self._certificate_request_attributes.common_name,
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
@@ -993,7 +977,6 @@ class PKIManager:
         except (VaultClientError, IndexError) as e:
             logger.error("Failed to get the first issuer: %s", e)
             return
-
         try:
             issuers_config = self._vault_client.read(path=f"{self._mount_point}/config/issuers")
             if issuers_config and not issuers_config["default_follows_latest_issuer"]:

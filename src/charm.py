@@ -131,11 +131,12 @@ class VaultCharm(CharmBase):
             charm=self,
             relationship_name=PKI_RELATION_NAME,
         )
-        certificate_request = self._get_certificate_request()
+        common_name = self.juju_facade.get_string_config("common_name")
+        certificate_requests = [self._get_certificate_request(common_name)] if common_name else []
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
-            certificate_requests=[certificate_request] if certificate_request else [],
+            certificate_requests=certificate_requests,
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
@@ -406,7 +407,7 @@ class VaultCharm(CharmBase):
         manager = PKIManager(
             self,
             vault,
-            common_name,
+            self._get_certificate_request(common_name),
             PKI_MOUNT,
             PKI_ROLE_NAME,
             self.vault_pki,
@@ -414,10 +415,7 @@ class VaultCharm(CharmBase):
         )
         manager.configure()
 
-    def _get_certificate_request(self) -> CertificateRequestAttributes | None:
-        common_name = self.juju_facade.get_string_config("common_name")
-        if not common_name:
-            return None
+    def _get_certificate_request(self, common_name: str) -> CertificateRequestAttributes:
         return CertificateRequestAttributes(
             common_name=common_name,
             is_ca=True,
@@ -458,7 +456,7 @@ class VaultCharm(CharmBase):
         manager = PKIManager(
             self,
             vault,
-            common_name,
+            self._get_certificate_request(common_name),
             PKI_MOUNT,
             PKI_ROLE_NAME,
             self.vault_pki,

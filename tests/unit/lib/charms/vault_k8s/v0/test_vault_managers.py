@@ -10,6 +10,7 @@ from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    CertificateRequestAttributes,
     PKIManager,
     PrivateKey,
     ProviderCertificate,
@@ -153,7 +154,10 @@ class TestPKIManager:
     def setup(self):
         self.charm = MagicMock(spec=VaultCharm)
         self.vault = MagicMock(spec=VaultClient)
-        self.common_name = "common_name"
+        self.certificate_request_attributes = CertificateRequestAttributes(
+            common_name="common_name",
+            is_ca=True,
+        )
         self.mount_point = "mount_point"
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
@@ -162,7 +166,7 @@ class TestPKIManager:
         self.pki_manager = PKIManager(
             self.charm,
             self.vault,
-            self.common_name,
+            self.certificate_request_attributes,
             self.mount_point,
             self.role_name,
             self.vault_pki,
@@ -190,7 +194,7 @@ class TestPKIManager:
     @pytest.fixture
     def assigned_certificate_and_key(self) -> tuple[ProviderCertificate, PrivateKey]:
         provider_certificate, private_key = generate_example_provider_certificate(
-            self.common_name, 1, validity=timedelta(hours=24)
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
         )
         self.tls_certificates_pki.get_assigned_certificate.return_value = (
             provider_certificate,
@@ -253,7 +257,7 @@ class TestPKIManager:
         # Return a different certificate from Vault, to emulate the situation
         # where a new certificate has been issued.
         vault_certificate, _ = generate_example_provider_certificate(
-            self.common_name, 1, validity=timedelta(hours=24)
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
         )
         self.vault.get_intermediate_ca.return_value = str(vault_certificate.certificate)
 
@@ -267,7 +271,7 @@ class TestPKIManager:
 
         # Certificates are issued for half the time the provider certificate is valid for
         self.vault.create_or_update_pki_charm_role.assert_called_once_with(
-            allowed_domains=self.common_name,
+            allowed_domains=self.certificate_request_attributes.common_name,
             mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{12 * SECONDS_IN_HOUR}s",
@@ -279,7 +283,7 @@ class TestPKIManager:
         provider_certificate, private_key = assigned_certificate_and_key
 
         self.vault.is_pki_role_created.return_value = True
-        csr = generate_example_requirer_csr(self.common_name, 1)
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
         self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
 
         signed_certificate = sign_certificate(
@@ -299,7 +303,7 @@ class TestPKIManager:
             mount=self.mount_point,
             role=self.role_name,
             csr=str(csr.certificate_signing_request),
-            common_name=self.common_name,
+            common_name=self.certificate_request_attributes.common_name,
             ttl=f"{12 * SECONDS_IN_HOUR}s",
         )
 
