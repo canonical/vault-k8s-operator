@@ -140,7 +140,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -482,10 +482,11 @@ class VaultKvBaseEvent(ops.RelationEvent):
 
     def snapshot(self) -> dict:
         """Return snapshot data that should be persisted."""
-        return {
-            "relation_id": self.relation_id,
-            "relation_name": self.relation_name,
-        }
+        return dict(
+            super().snapshot(),
+            relation_id=self.relation_id,
+            relation_name=self.relation_name,
+        )
 
     def restore(self, snapshot: Dict[str, Any]):
         """Restore the value state from a given snapshot."""
