@@ -10,17 +10,20 @@ from typing import Any, Dict, List, Tuple
 import hvac
 import pytest
 import yaml
-from cryptography import x509
 from juju.action import Action
 from juju.application import Application
+from juju.errors import JujuError
 from juju.unit import Unit
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
+import tests.integration.helpers as helpers
 from tests.integration.helpers import (
     crash_pod,
     get_leader_unit,
     get_model_secret_field,
+    get_vault_pki_intermediate_ca_common_name,
+    revoke_token,
     wait_for_status_message,
 )
 
@@ -97,9 +100,16 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[int
     if seal_type == "shamir":
         initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
         root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
-        await ops_test.model.add_secret(
-            "initialization-secrets", [f"root-token={root_token}", f"unseal-key={unseal_key}"]
-        )
+        try:
+            await ops_test.model.add_secret(
+                "initialization-secrets", [f"root-token={root_token}", f"unseal-key={unseal_key}"]
+            )
+        except JujuError:
+            await ops_test.model.update_secret(
+                "initialization-secrets",
+                [f"root-token={root_token}", f"unseal-key={unseal_key}"],
+                new_name="initialization-secrets",
+            )
         return leader_unit_index, root_token, unseal_key
     initialize_response = client.sys.initialize(recovery_shares=1, recovery_threshold=1)
     root_token, recovery_key = (
@@ -1195,7 +1205,17 @@ async def authorize_charm(
 ) -> Any | Dict:
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)
-    secret = await ops_test.model.add_secret(f"approle-token-{app_name}", [f"token={root_token}"])
+    try:
+        secret = await ops_test.model.add_secret(
+            f"approle-token-{app_name}", [f"token={root_token}"]
+        )
+    except JujuError:
+        await ops_test.model.update_secret(
+            f"approle-token-{app_name}",
+            [f"token={root_token}"],
+            new_name=f"approle-token-{app_name}",
+        )
+        secret = await helpers.get_model_secret_id(ops_test, f"approle-token-{app_name}")
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
     for _ in range(attempts):
@@ -1212,19 +1232,3 @@ async def authorize_charm(
             return result
         await asyncio.sleep(5)
     raise ActionFailedError("Failed to authorize charm")
-
-
-def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
-    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
-    client.token = root_token
-    ca_cert = client.secrets.pki.read_ca_certificate(mount_point=mount)
-    loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
-    return str(
-        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
-    )
-
-
-def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
-    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
-    client.token = root_token
-    client.revoke_token(token=token_to_revoke)

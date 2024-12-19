@@ -6,7 +6,10 @@ from base64 import b64decode
 from pathlib import Path
 from typing import List
 
+import hvac
+import hvac.exceptions
 import yaml
+from cryptography import x509
 from juju.model import Model
 from juju.unit import Unit
 from lightkube.core.client import Client as KubernetesClient
@@ -97,3 +100,25 @@ async def get_model_secret_field(ops_test: OpsTest, label: str, field: str) -> s
     secret = next(secret for secret in secrets if secret.label == label)
     field_content = b64decode(secret.value.data[field]).decode("utf-8")
     return field_content
+
+
+async def get_model_secret_id(ops_test: OpsTest, label: str) -> str:
+    secrets = await ops_test.model.list_secrets(show_secrets=True)  # type: ignore
+    secret = next(secret for secret in secrets if secret.label == label)
+    return secret.uri
+
+
+def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    ca_cert = client.secrets.pki.read_ca_certificate(mount_point=mount)
+    loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
+    return str(
+        loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
+    )
+
+
+def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
+    client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
+    client.token = root_token
+    client.revoke_token(token=token_to_revoke)

@@ -464,7 +464,12 @@ class VaultClient:
                 "max_ttl": max_ttl,
             },
         )
-        logger.info("Created or updated PKI role %s", role)
+        logger.info(
+            "Created or updated PKI role `%s` with `allowed_domains=%s` and `max_ttl=%s`",
+            role,
+            allowed_domains,
+            max_ttl,
+        )
 
     def is_pki_role_created(self, role: str, mount: str) -> bool:
         """Check if the role is created for the PKI backend."""
@@ -547,28 +552,20 @@ class VaultClient:
             logger.warning("Role does not exist on the specified path.")
             return None
 
-    def make_latest_pki_issuer_default(self, mount: str) -> None:
-        """Update the issuers config to always make the latest issuer created default issuer."""
+    def list_pki_issuers(self, mount: str) -> List[str]:
+        """Get the list of issuers for the PKI backend.
+
+        Args:
+            mount: The mount point of the PKI backend.
+
+        Returns:
+            The list of issuers (i.e. ["issuer1", "issuer2"]).
+        """
         try:
-            first_issuer = self._client.secrets.pki.list_issuers(mount_point=mount)["data"][
-                "keys"
-            ][0]
+            return self._client.secrets.pki.list_issuers(mount_point=mount)["data"]["keys"]
         except (InvalidPath, KeyError) as e:
             logger.error("No issuers found on the specified path: %s", e)
             raise VaultClientError("No issuers found on the specified path.")
-        try:
-            issuers_config = self._client.read(path=f"{mount}/config/issuers")
-            if issuers_config and not issuers_config["data"]["default_follows_latest_issuer"]:  # type: ignore -- bad type hint in stubs
-                logger.debug("Updating issuers config")
-                self._client.write_data(
-                    path=f"{mount}/config/issuers",
-                    data={
-                        "default_follows_latest_issuer": True,
-                        "default": first_issuer,
-                    },
-                )
-        except (TypeError, KeyError):
-            logger.error("Issuers config is not yet created")
 
     def create_transit_key(self, mount_point: str, key_name: str) -> None:
         """Create a new key in the transit backend."""
