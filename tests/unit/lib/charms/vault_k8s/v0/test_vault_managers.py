@@ -34,7 +34,7 @@ def is_error_logged(caplog: pytest.LogCaptureFixture, error_message: str):
     return any(error_message in record.message for record in error_records)
 
 
-class TestVaultAutounsealRequirerManager:
+class TestAutounsealRequirerManager:
     @pytest.mark.parametrize(
         "token, token_valid, expected_token",
         [
