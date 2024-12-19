@@ -52,6 +52,7 @@ class VaultCharmFixtures:
     patcher_autounseal_requires_get_details = patch("charm.VaultAutounsealRequires.get_details")
     patcher_kv_provides_get_credentials = patch("charm.VaultKvProvides.get_credentials")
     patcher_kv_provides_set_kv_data = patch("charm.VaultKvProvides.set_kv_data")
+    patcher_pebble_layer_is_applied = patch("charm.VaultCharm._pebble_layer_is_applied")
     patcher_get_binding = patch("ops.model.Model.get_binding")
 
     @pytest.fixture(autouse=True)
@@ -95,6 +96,9 @@ class VaultCharmFixtures:
         self.mock_get_binding = VaultCharmFixtures.patcher_get_binding.start()
         self.mock_pki_requirer_renew_certificate = (
             VaultCharmFixtures.patcher_pki_requirer_renew_certificate.start()
+        )
+        self.mock_pebble_layer_is_applied = (
+            VaultCharmFixtures.patcher_pebble_layer_is_applied.start()
         )
 
     @pytest.fixture(autouse=True)

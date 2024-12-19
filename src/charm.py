@@ -256,6 +256,9 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
+        if not self._pebble_layer_is_applied():
+            event.add_status(WaitingStatus("Waiting for pebble layer to be applied"))
+            return
         vault = VaultClient(
             url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
         )
@@ -310,9 +313,10 @@ class VaultCharm(CharmBase):
             return
         if not self.tls.tls_file_pushed_to_workload(File.KEY):
             return
-
-        self._generate_vault_config_file()
         self._set_pebble_plan()
+        if not self._pebble_layer_is_applied():
+            return
+        self._generate_vault_config_file()
         try:
             vault = VaultClient(
                 url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -397,6 +401,9 @@ class VaultCharm(CharmBase):
         )
 
     def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
+        if not self.unit.is_leader():
+            logger.debug("Only leader unit can handle a vault-kv-client detach event")
+            return
         label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
         self.juju_facade.remove_secret(label=label)
 
@@ -1127,6 +1134,11 @@ class VaultCharm(CharmBase):
             self._container.add_layer(self._container_name, layer, combine=True)
             self._container.replan()
             logger.info("Pebble layer added")
+
+    def _pebble_layer_is_applied(self) -> bool:
+        """Check if the pebble layer is applied."""
+        plan = self._container.get_plan()
+        return plan.services == self._vault_layer.services
 
     def _restore_vault(self, snapshot: StreamingBody) -> bool:
         """Restore vault using a raft snapshot.
