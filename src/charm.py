@@ -46,7 +46,6 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import (
-    NewVaultKvClientAttachedEvent,
     VaultKvClientDetachedEvent,
     VaultKvProvides,
 )
@@ -55,6 +54,7 @@ from charms.vault_k8s.v0.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
     File,
+    KVManager,
     PKIManager,
     TLSManager,
     VaultCertsError,
@@ -197,6 +197,7 @@ class VaultCharm(CharmBase):
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_created,
             self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
             self.vault_autounseal_provides.on.vault_autounseal_requirer_relation_broken,
+            self.vault_kv.on.new_vault_kv_client_attached,
         ]
         for event in configure_events:
             self.framework.observe(event, self._configure)
@@ -207,9 +208,6 @@ class VaultCharm(CharmBase):
         self.framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         self.framework.observe(self.on.list_backups_action, self._on_list_backups_action)
         self.framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
-        self.framework.observe(
-            self.vault_kv.on.new_vault_kv_client_attached, self._on_new_vault_kv_client_attached
-        )
         self.framework.observe(
             self.vault_kv.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
@@ -376,28 +374,8 @@ class VaultCharm(CharmBase):
         if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(self._node_id)
 
-    def _on_new_vault_kv_client_attached(self, event: NewVaultKvClientAttachedEvent):
-        """Handle vault-kv-client attached event."""
-        if not self.unit.is_leader():
-            logger.debug("Only leader unit can handle a vault-kv request")
-            return
-        vault = self._get_active_vault_client()
-        if not vault:
-            logger.debug("Failed to get initialized Vault")
-            return
-        self._generate_kv_for_requirer(
-            vault=vault,
-            relation=event.relation,
-            app_name=event.app_name,
-            unit_name=event.unit_name,
-            mount_suffix=event.mount_suffix,
-            egress_subnets=event.egress_subnets,
-            nonce=event.nonce,
-        )
-
     def _on_vault_kv_client_detached(self, event: VaultKvClientDetachedEvent):
-        label = self._get_vault_kv_secret_label(unit_name=event.unit_name)
-        self.juju_facade.remove_secret(label=label)
+        KVManager.remove_unit_credentials(self.juju_facade, event.unit_name)
 
     def _configure_pki_secrets_engine(self, vault: VaultClient) -> None:
         common_name = self.juju_facade.get_string_config("common_name")
@@ -469,57 +447,26 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-kv request")
             return
+        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
+        if not ca_certificate:
+            logger.debug("Vault CA certificate not available")
+            return
+        manager = KVManager(self, vault, self.vault_kv, ca_certificate)
+
         kv_requests = self.vault_kv.get_kv_requests()
         for kv_request in kv_requests:
-            self._generate_kv_for_requirer(
+            if not (vault_url := self._get_relation_api_address(kv_request.relation)):
+                logger.debug("Failed to get Vault URL for relation %s", kv_request.relation.id)
+                continue
+            manager.generate_credentials_for_requirer(
                 relation=kv_request.relation,
-                vault=vault,
                 app_name=kv_request.app_name,
                 unit_name=kv_request.unit_name,
                 mount_suffix=kv_request.mount_suffix,
                 egress_subnets=kv_request.egress_subnets,
                 nonce=kv_request.nonce,
+                vault_url=vault_url,
             )
-
-    def _generate_kv_for_requirer(
-        self,
-        vault: VaultClient,
-        relation: Relation,
-        app_name: str,
-        unit_name: str,
-        mount_suffix: str,
-        egress_subnets: List[str],
-        nonce: str,
-    ):
-        if not self.juju_facade.is_leader:
-            logger.debug("Only leader unit can handle a vault-kv request")
-            return
-        ca_certificate = self.tls.pull_tls_file_from_workload(File.CA)
-        if not ca_certificate:
-            logger.debug("Vault CA certificate not available")
-            return
-        if not (vault_url := self._get_relation_api_address(relation)):
-            logger.debug("Failed to get Vault URL for relation %s", relation.id)
-            return
-        mount = f"charm-{app_name}-{mount_suffix}"
-        vault.enable_secrets_engine(SecretsBackend.KV_V2, mount)
-        secret_id = self._ensure_unit_credentials(
-            vault=vault,
-            relation=relation,
-            unit_name=unit_name,
-            mount=mount,
-            nonce=nonce,
-            egress_subnets=egress_subnets,
-        )
-        self.vault_kv.set_kv_data(
-            relation=relation,
-            mount=mount,
-            ca_certificate=ca_certificate,
-            vault_url=vault_url,
-            nonce=nonce,
-            credentials_juju_secret_id=secret_id,
-        )
-        self._remove_stale_nonce(relation=relation, nonce=nonce)
 
     def _on_authorize_charm_action(self, event: ActionEvent) -> None:
         if not self.unit.is_leader():
@@ -765,88 +712,6 @@ class VaultCharm(CharmBase):
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
-    def _is_vault_kv_role_configured(
-        self,
-        vault: VaultClient,
-        label: str,
-        egress_subnets: List[str],
-        role_name: str,
-        credentials_juju_secret_id: str,
-    ) -> bool:
-        try:
-            role_secret_id = self.juju_facade.get_latest_secret_content(
-                label=label,
-                id=credentials_juju_secret_id,
-            ).get("role-secret-id")
-        except NoSuchSecretError:
-            return False
-        if not role_secret_id:
-            return False
-        role_data = vault.read_role_secret(role_name, role_secret_id)
-        if egress_subnets in role_data["cidr_list"]:
-            return True
-        return False
-
-    def _ensure_unit_credentials(
-        self,
-        vault: VaultClient,
-        relation: Relation,
-        unit_name: str,
-        mount: str,
-        nonce: str,
-        egress_subnets: List[str],
-    ) -> str:
-        """Ensure a unit has credentials to access the vault-kv mount."""
-        policy_name = role_name = mount + "-" + unit_name.replace("/", "-")
-
-        juju_secret_label = self._get_vault_kv_secret_label(unit_name=unit_name)
-        current_credentials = self.vault_kv.get_credentials(relation)
-        credentials_juju_secret_id = current_credentials.get(nonce, None)
-
-        if self._is_vault_kv_role_configured(
-            vault=vault,
-            label=juju_secret_label,
-            egress_subnets=egress_subnets,
-            role_name=role_name,
-            credentials_juju_secret_id=credentials_juju_secret_id,
-        ):
-            logger.info("Vault KV role already configured for the provided egress subnets")
-            return credentials_juju_secret_id
-        vault.create_or_update_policy_from_file(
-            policy_name, "src/templates/kv_mount.hcl", mount=mount
-        )
-        role_id = vault.create_or_update_approle(
-            role_name,
-            policies=[policy_name],
-            cidrs=egress_subnets,
-            token_ttl="1h",
-            token_max_ttl="1h",
-        )
-        role_secret_id = vault.generate_role_secret_id(role_name, egress_subnets)
-        secret = self.juju_facade.set_app_secret_content(
-            content={"role-id": role_id, "role-secret-id": role_secret_id},
-            label=juju_secret_label,
-        )
-        self.juju_facade.grant_secret(relation, secret=secret)
-        if not secret.id:
-            raise ValueError(
-                f"Unexpected error, just created secret {juju_secret_label!r} has no id"
-            )
-        return secret.id
-
-    def _remove_stale_nonce(self, relation: Relation, nonce: str) -> None:
-        """Remove stale nonce.
-
-        If the nonce is not present in the credentials, it is stale and should be removed.
-
-        Args:
-            relation: Relation
-            nonce: the one to remove if stale
-        """
-        credential_nonces = self.vault_kv.get_credentials(relation).keys()
-        if nonce not in set(credential_nonces):
-            self.vault_kv.remove_unit_credentials(relation, nonce=nonce)
-
     def _delete_vault_data(self) -> None:
         """Delete Vault's data."""
         try:
@@ -960,10 +825,6 @@ class VaultCharm(CharmBase):
             logger.warning("Approle secret not yet created")
             return None
         return AppRole(role_id, secret_id) if role_id and secret_id else None
-
-    def _get_vault_kv_secret_label(self, unit_name: str):
-        unit_name_dash = unit_name.replace("/", "-")
-        return f"{KV_SECRET_PREFIX}{unit_name_dash}"
 
     def _get_missing_s3_parameters(self) -> List[str]:
         """Return the list of missing S3 parameters.
