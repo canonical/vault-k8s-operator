@@ -596,26 +596,26 @@ class Naming:
     provides a central place to manage them.
     """
 
-    approle_prefix: str = "charm-autounseal-"
-    key_prefix: str = ""
+    autounseal_approle_prefix: str = "charm-autounseal-"
+    autounseal_key_prefix: str = ""
+    autounseal_policy_prefix: str = "charm-autounseal-"
     kv_mount_prefix: str = "charm-"
     kv_secret_prefix: str = "vault-kv-"
-    policy_prefix: str = "charm-autounseal-"
 
     @classmethod
     def autounseal_key_name(cls, relation_id: int) -> str:
         """Return the key name for the relation."""
-        return f"{cls.key_prefix}{relation_id}"
+        return f"{cls.autounseal_key_prefix}{relation_id}"
 
     @classmethod
     def autounseal_policy_name(cls, relation_id: int) -> str:
         """Return the policy name for the relation."""
-        return f"{cls.policy_prefix}{relation_id}"
+        return f"{cls.autounseal_policy_prefix}{relation_id}"
 
     @classmethod
     def autounseal_approle_name(cls, relation_id: int) -> str:
         """Return the approle name for the relation."""
-        return f"{cls.approle_prefix}{relation_id}"
+        return f"{cls.autounseal_approle_prefix}{relation_id}"
 
     @classmethod
     def kv_secret_label(cls, unit_name: str) -> str:
@@ -790,11 +790,11 @@ class AutounsealProviderManager:
 
     def _get_existing_roles(self) -> list[str]:
         output = self._client.list("auth/approle/role")
-        return [role for role in output if role.startswith(Naming.approle_prefix)]
+        return [role for role in output if role.startswith(Naming.autounseal_approle_prefix)]
 
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
-        return [policy for policy in output if policy.startswith(Naming.policy_prefix)]
+        return [policy for policy in output if policy.startswith(Naming.autounseal_policy_prefix)]
 
 
 @dataclass
