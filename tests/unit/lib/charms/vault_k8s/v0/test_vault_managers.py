@@ -2,21 +2,22 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from charms.vault_k8s.v0.juju_facade import SecretRemovedError
+from charms.vault_k8s.v0.juju_facade import NoSuchSecretError, SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
-from charms.vault_k8s.v0.vault_client import AuthMethod, VaultClient
+from charms.vault_k8s.v0.vault_client import AuthMethod, SecretsBackend, VaultClient
 from charms.vault_k8s.v0.vault_client import Certificate as VaultClientCertificate
 from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     CertificateRequestAttributes,
+    KVManager,
     PKIManager,
     PrivateKey,
     ProviderCertificate,
-    SecretsBackend,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
+    VaultKvProvides,
 )
 
 from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
@@ -147,6 +148,198 @@ class TestAutounsealProviderManager:
         vault_client_mock.write.assert_called_with(
             "charm-autounseal/keys/charm-autounseal-321/config", {"deletion_allowed": True}
         )
+
+
+class TestKVManager:
+    @pytest.fixture(autouse=True)
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock):
+        self.juju_facade = juju_facade_mock.return_value
+        self.charm = MagicMock(spec=VaultCharm)
+        self.vault_client = MagicMock(spec=VaultClient)
+        self.vault_kv = MagicMock(spec=VaultKvProvides)
+        self.ca_cert = "some cert"
+
+        self.manager = KVManager(self.charm, self.vault_client, self.vault_kv, self.ca_cert)
+
+    def test_given_role_does_not_exist_when_generate_kv_for_requirer_then_relation_data_is_set(
+        self,
+    ):
+        # Arrange
+        relation = MagicMock()
+        app_name = "myapp"
+        unit_name = "myapp/0"
+        mount_suffix = "mymount"
+        egress_subnets = ["1.2.3.4/32"]
+        nonce = "123123"
+        vault_url = "https://vault:8200"
+
+        self.vault_kv.get_credentials.return_value = {
+            "nonce": "my-secret-id",
+        }
+        secret = MagicMock()
+        secret.id = "my-secret-id"
+        self.juju_facade.set_app_secret_content.return_value = secret
+        self.vault_client.create_or_update_approle.return_value = "my-role-id"
+        self.vault_client.generate_role_secret_id.return_value = "my-role-secret-id"
+
+        # Simulate the case where role has not been created yet
+        self.juju_facade.get_latest_secret_content.side_effect = NoSuchSecretError()
+
+        # Act
+        self.manager.generate_credentials_for_requirer(
+            relation, app_name, unit_name, mount_suffix, egress_subnets, nonce, vault_url
+        )
+
+        # Assert
+        self.vault_client.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.KV_V2, "charm-myapp-mymount"
+        )
+        policy = """# Allows the KV requirer to create, read, update, delete and list secrets
+path "charm-myapp-mymount/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "sys/internal/ui/mounts/charm-myapp-mymount" {
+  capabilities = ["read"]
+}
+"""
+        self.vault_client.create_or_update_policy.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0",
+            policy,
+        )
+        self.vault_client.generate_role_secret_id.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0", egress_subnets
+        )
+
+        self.vault_client.create_or_update_approle.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0",
+            policies=["charm-myapp-mymount-myapp-0"],
+            cidrs=egress_subnets,
+            token_ttl="1h",
+            token_max_ttl="1h",
+        )
+        self.juju_facade.set_app_secret_content.assert_called_once_with(
+            content={"role-id": "my-role-id", "role-secret-id": "my-role-secret-id"},
+            label="vault-kv-myapp-0",
+        )
+        self.vault_kv.set_kv_data.assert_called_once_with(
+            relation=relation,
+            mount="charm-myapp-mymount",
+            ca_certificate=self.ca_cert,
+            vault_url=vault_url,
+            nonce=nonce,
+            credentials_juju_secret_id="my-secret-id",
+        )
+
+    def test_given_egress_changed_when_generate_kv_for_requirer_then_relation_data_is_set_and_secret_content_updated(
+        self,
+    ):
+        # Arrange
+        relation = MagicMock()
+        app_name = "myapp"
+        unit_name = "myapp/0"
+        mount_suffix = "mymount"
+        egress_subnets = ["1.2.3.4/32"]
+        nonce = "123123"
+        vault_url = "https://vault:8200"
+
+        self.vault_kv.get_credentials.return_value = {
+            "nonce": "my-secret-id",
+        }
+        self.juju_facade.get_latest_secret_content.return_value = {
+            "role-secret-id": "my-role-secret-id"
+        }
+        secret = MagicMock()
+        secret.id = "my-secret-id"
+        self.juju_facade.set_app_secret_content.return_value = secret
+        self.vault_client.create_or_update_approle.return_value = "my-role-id"
+        self.vault_client.generate_role_secret_id.return_value = "my-role-secret-id"
+
+        # Return a different cidr from vault to emulate a changed egress
+        self.vault_client.read_role_secret.return_value = {"cidr_list": ["4.3.2.1/32"]}
+
+        # Act
+        self.manager.generate_credentials_for_requirer(
+            relation, app_name, unit_name, mount_suffix, egress_subnets, nonce, vault_url
+        )
+
+        # Assert
+        self.vault_client.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.KV_V2, "charm-myapp-mymount"
+        )
+        policy = """# Allows the KV requirer to create, read, update, delete and list secrets
+path "charm-myapp-mymount/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "sys/internal/ui/mounts/charm-myapp-mymount" {
+  capabilities = ["read"]
+}
+"""
+        self.vault_client.create_or_update_policy.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0",
+            policy,
+        )
+        self.vault_client.generate_role_secret_id.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0", egress_subnets
+        )
+
+        self.vault_client.create_or_update_approle.assert_called_once_with(
+            "charm-myapp-mymount-myapp-0",
+            policies=["charm-myapp-mymount-myapp-0"],
+            cidrs=egress_subnets,
+            token_ttl="1h",
+            token_max_ttl="1h",
+        )
+        self.juju_facade.set_app_secret_content.assert_called_once_with(
+            content={"role-id": "my-role-id", "role-secret-id": "my-role-secret-id"},
+            label="vault-kv-myapp-0",
+        )
+        self.vault_kv.set_kv_data.assert_called_once_with(
+            relation=relation,
+            mount="charm-myapp-mymount",
+            ca_certificate=self.ca_cert,
+            vault_url=vault_url,
+            nonce=nonce,
+            credentials_juju_secret_id="my-secret-id",
+        )
+
+    def test_given_role_exists_and_unchanged_when_generate_kv_for_requirer_then_relation_data_not_set(
+        self,
+    ):
+        # Arrange
+        relation = MagicMock()
+        app_name = "myapp"
+        unit_name = "myapp/0"
+        mount_suffix = "mymount"
+        egress_subnets = ["1.2.3.4/32"]
+        nonce = "123123"
+        vault_url = "https://vault:8200"
+
+        self.vault_kv.get_credentials.return_value = {
+            "nonce": "my-secret-id",
+        }
+        self.juju_facade.get_latest_secret_content.return_value = {
+            "role-secret-id": "my-role-secret-id"
+        }
+        secret = MagicMock()
+        secret.id = "my-secret-id"
+        self.juju_facade.set_app_secret_content.return_value = secret
+        self.vault_client.create_or_update_approle.return_value = "my-role-id"
+        self.vault_client.generate_role_secret_id.return_value = "my-role-secret-id"
+
+        # Return a different cidr from vault to emulate a changed egress
+        self.vault_client.read_role_secret.return_value = {"cidr_list": ["1.2.3.4/32"]}
+
+        # Act
+        self.manager.generate_credentials_for_requirer(
+            relation, app_name, unit_name, mount_suffix, egress_subnets, nonce, vault_url
+        )
+
+        # Assert
+        self.vault_client.create_or_update_policy.assert_not_called()
+        self.vault_client.create_or_update_approle.assert_not_called()
+        self.vault_client.generate_role_secret_id.assert_not_called()
+        self.juju_facade.set_app_secret_content.assert_not_called()
 
 
 class TestPKIManager:
