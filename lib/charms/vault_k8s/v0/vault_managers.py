@@ -601,6 +601,7 @@ class Naming:
     autounseal_approle_prefix: str = "charm-autounseal-"
     autounseal_key_prefix: str = ""
     autounseal_policy_prefix: str = "charm-autounseal-"
+    backup_s3_key_prefix: str = "vault-backup-"
     kv_mount_prefix: str = "charm-"
     kv_secret_prefix: str = "vault-kv-"
 
@@ -618,6 +619,12 @@ class Naming:
     def autounseal_approle_name(cls, relation_id: int) -> str:
         """Return the approle name for the relation."""
         return f"{cls.autounseal_approle_prefix}{relation_id}"
+
+    @classmethod
+    def backup_s3_key_name(cls, model_name: str) -> str:
+        """Return the key name for the S3 backend."""
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        return f"{cls.backup_s3_key_prefix}{model_name}-{timestamp}"
 
     @classmethod
     def kv_secret_label(cls, unit_name: str) -> str:
@@ -1281,10 +1288,13 @@ class KVManager:
 
 
 class BackupManager:
-    """Encapsulates the business logic for managing backups in Vault from a Charm."""
+    """Encapsulates the business logic for managing backups in Vault from a Charm.
+
+    This class provides the business logic for creating, listing, and restoring
+    backups of the Vault data.
+    """
 
     REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
-    BACKUP_KEY_PREFIX = "vault-backup"
 
     def __init__(
         self,
@@ -1300,10 +1310,12 @@ class BackupManager:
     def create_backup(self, vault_client: VaultClient) -> str:
         """Create a backup of the Vault data.
 
+        Stores the backup in the S3 bucket provided by the S3 relation.
+
         Returns:
-            The backup key.
+            The S3 key of the backup.
         """
-        self._check_s3_pre_requisites()
+        self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
 
@@ -1320,7 +1332,7 @@ class BackupManager:
 
         if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
             raise ManagerError("Failed to create S3 bucket")
-        backup_key = self._get_backup_key()
+        backup_key = Naming.backup_s3_key_name(self._charm.model.name)
 
         response = vault_client.create_snapshot()
         content_uploaded = s3.upload_content(
@@ -1336,10 +1348,13 @@ class BackupManager:
     def list_backups(self) -> list[str]:
         """List all the backups available in the S3 bucket.
 
+        Backups are identified by the key prefix from
+        ``Naming.backup_s3_key_prefix``.
+
         Returns:
-            A list of backup keys.
+            A list of backup keys with the prefix.
         """
-        self._check_s3_pre_requisites()
+        self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
 
@@ -1355,20 +1370,20 @@ class BackupManager:
 
         try:
             backup_ids = s3.get_object_key_list(
-                bucket_name=s3_parameters["bucket"], prefix=self.BACKUP_KEY_PREFIX
+                bucket_name=s3_parameters["bucket"], prefix=Naming.backup_s3_key_prefix
             )
         except S3Error as e:
             raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
         return backup_ids
 
     def restore_backup(self, vault_client: VaultClient, backup_key: str) -> None:
-        """Restore the Vault data from the backup.
+        """Restore the Vault data from the backup using the ``vault_client`` provided.
 
         Args:
-            vault_client: The Vault client object
-            backup_key: The key of the backup to restore
+            vault_client: The Vault client to use for restoring the snapshot
+            backup_key: The S3 key of the backup to restore
         """
-        self._check_s3_pre_requisites()
+        self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
 
@@ -1397,8 +1412,12 @@ class BackupManager:
         except VaultClientError as e:
             raise ManagerError(f"Failed to restore snapshot: {e}")
 
-    def _check_s3_pre_requisites(self) -> str | None:
-        """Check if the S3 pre-requisites are met."""
+    def _validate_s3_prerequisites(self) -> str | None:
+        """Validate the S3 pre-requisites are met.
+
+        Raises:
+            ManagerError: If any of the pre-requisites are not met.
+        """
         if not self._juju_facade.is_leader:
             raise ManagerError("Only leader unit can perform backup operations")
         if not self._juju_facade.relation_exists(self._relation_name):
@@ -1428,12 +1447,3 @@ class BackupManager:
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
         return s3_parameters
-
-    def _get_backup_key(self) -> str:
-        """Return the backup key.
-
-        Returns:
-            str: The backup key
-        """
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        return f"{self.BACKUP_KEY_PREFIX}-{self._charm.model.name}-{timestamp}"
