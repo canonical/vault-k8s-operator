@@ -12,11 +12,11 @@ from charms.vault_k8s.v0.vault_client import (
 from charms.vault_k8s.v0.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    BackupManager,
     KVManager,
     PKIManager,
     TLSManager,
 )
-from charms.vault_k8s.v0.vault_s3 import S3
 
 from charm import VaultCharm
 
@@ -33,7 +33,7 @@ class VaultCharmFixtures:
     patcher_kv_manager = patch("charm.KVManager", autospec=KVManager)
     patcher_pki_manager = patch("charm.PKIManager", autospec=PKIManager)
     patcher_s3_requirer = patch("charm.S3Requirer", autospec=S3Requirer)
-    patcher_s3 = patch("charm.S3", autospec=S3)
+    patcher_backup_manager = patch("charm.BackupManager", autospec=BackupManager)
     patcher_socket_fqdn = patch("socket.getfqdn")
     patcher_pki_requirer_get_assigned_certificate = patch(
         "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
@@ -71,7 +71,7 @@ class VaultCharmFixtures:
         self.mock_kv_manager = VaultCharmFixtures.patcher_kv_manager.start().return_value
         self.mock_pki_manager = VaultCharmFixtures.patcher_pki_manager.start().return_value
         self.mock_s3_requirer = VaultCharmFixtures.patcher_s3_requirer.start().return_value
-        self.mock_s3 = VaultCharmFixtures.patcher_s3.start()
+        self.mock_backup_manager = VaultCharmFixtures.patcher_backup_manager.start().return_value
         self.mock_socket_fqdn = VaultCharmFixtures.patcher_socket_fqdn.start()
         self.mock_pki_requirer_get_assigned_certificate = (
             VaultCharmFixtures.patcher_pki_requirer_get_assigned_certificate.start()

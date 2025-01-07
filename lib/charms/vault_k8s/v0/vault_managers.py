@@ -32,13 +32,14 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -73,6 +74,7 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
 
@@ -1276,3 +1278,162 @@ class KVManager:
             unit_name: The name of the unit for which to remove the secret
         """
         juju_facade.remove_secret(Naming.kv_secret_label(unit_name=unit_name))
+
+
+class BackupManager:
+    """Encapsulates the business logic for managing backups in Vault from a Charm."""
+
+    REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
+    BACKUP_KEY_PREFIX = "vault-backup"
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        s3_requirer: S3Requirer,
+        relation_name: str,
+    ):
+        self._charm = charm
+        self._juju_facade = JujuFacade(charm)
+        self._s3_requirer = s3_requirer
+        self._relation_name = relation_name
+
+    def create_backup(self, vault_client: VaultClient) -> str:
+        """Create a backup of the Vault data.
+
+        Returns:
+            The backup key.
+        """
+        self._check_s3_pre_requisites()
+
+        s3_parameters = self._get_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except S3Error as e:
+            logger.error("Failed to create S3 session. %s", e)
+            raise ManagerError("Failed to create S3 session")
+
+        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+            raise ManagerError("Failed to create S3 bucket")
+        backup_key = self._get_backup_key()
+
+        response = vault_client.create_snapshot()
+        content_uploaded = s3.upload_content(
+            content=response.raw,  # type: ignore[reportArgumentType]
+            bucket_name=s3_parameters["bucket"],
+            key=backup_key,
+        )
+        if not content_uploaded:
+            raise ManagerError("Failed to upload backup to S3 bucket")
+        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
+        return backup_key
+
+    def list_backups(self) -> list[str]:
+        """List all the backups available in the S3 bucket.
+
+        Returns:
+            A list of backup keys.
+        """
+        self._check_s3_pre_requisites()
+
+        s3_parameters = self._get_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except S3Error:
+            raise ManagerError("Failed to create S3 session")
+
+        try:
+            backup_ids = s3.get_object_key_list(
+                bucket_name=s3_parameters["bucket"], prefix=self.BACKUP_KEY_PREFIX
+            )
+        except S3Error as e:
+            raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
+        return backup_ids
+
+    def restore_backup(self, vault_client: VaultClient, backup_key: str) -> None:
+        """Restore the Vault data from the backup.
+
+        Args:
+            vault_client: The Vault client object
+            backup_key: The key of the backup to restore
+        """
+        self._check_s3_pre_requisites()
+
+        s3_parameters = self._get_s3_parameters()
+
+        try:
+            s3 = S3(
+                access_key=s3_parameters["access-key"],
+                secret_key=s3_parameters["secret-key"],
+                endpoint=s3_parameters["endpoint"],
+                region=s3_parameters.get("region"),
+            )
+        except S3Error:
+            raise ManagerError("Failed to create S3 session")
+
+        try:
+            snapshot = s3.get_content(
+                bucket_name=s3_parameters["bucket"],
+                object_key=backup_key,
+            )
+        except S3Error as e:
+            raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
+        if not snapshot:
+            raise ManagerError("Snapshot not found in S3 bucket")
+
+        try:
+            vault_client.restore_snapshot(snapshot=snapshot)
+        except VaultClientError as e:
+            raise ManagerError(f"Failed to restore snapshot: {e}")
+
+    def _check_s3_pre_requisites(self) -> str | None:
+        """Check if the S3 pre-requisites are met."""
+        if not self._juju_facade.is_leader:
+            raise ManagerError("Only leader unit can perform backup operations")
+        if not self._juju_facade.relation_exists(self._relation_name):
+            raise ManagerError("S3 relation not created")
+        if missing_parameters := self._get_missing_s3_parameters():
+            raise ManagerError("S3 parameters missing ({})".format(", ".join(missing_parameters)))
+
+    def _get_missing_s3_parameters(self) -> list[str]:
+        """Return the list of missing S3 parameters.
+
+        Returns:
+            List[str]: List of missing required S3 parameters.
+        """
+        s3_parameters = self._s3_requirer.get_s3_connection_info()
+        return [param for param in self.REQUIRED_S3_PARAMETERS if param not in s3_parameters]
+
+    def _get_s3_parameters(self) -> dict[str, str]:
+        """Retrieve S3 parameters from the S3 integrator relation.
+
+        Removes leading and trailing whitespaces from the parameters.
+
+        Returns:
+            Dict[str, str]: Dictionary of the S3 parameters.
+        """
+        s3_parameters = self._s3_requirer.get_s3_connection_info()
+        for key, value in s3_parameters.items():
+            if isinstance(value, str):
+                s3_parameters[key] = value.strip()
+        return s3_parameters
+
+    def _get_backup_key(self) -> str:
+        """Return the backup key.
+
+        Returns:
+            str: The backup key
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        return f"{self.BACKUP_KEY_PREFIX}-{self._charm.model.name}-{timestamp}"

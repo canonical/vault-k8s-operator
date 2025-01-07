@@ -483,13 +483,16 @@ class VaultClient:
         """Create a snapshot of the Vault data."""
         return self._client.sys.take_raft_snapshot()
 
-    def restore_snapshot(self, snapshot: IOBase) -> requests.Response:
+    def restore_snapshot(self, snapshot: IOBase) -> None:
         """Restore a snapshot of the Vault data.
 
         Uses force_restore_raft_snapshot to restore the snapshot
         even if the unseal key used at backup time is different from the current one.
         """
-        return self._client.sys.force_restore_raft_snapshot(snapshot)
+        response = self._client.sys.force_restore_raft_snapshot(snapshot)
+        if not 200 <= response.status_code < 300:
+            logger.warning("Error while restoring snapshot: %s", response.text)
+            raise VaultClientError(f"Error while restoring snapshot: {response.text}")
 
     def get_raft_cluster_state(self) -> dict:
         """Get raft cluster state."""

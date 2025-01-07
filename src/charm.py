@@ -14,7 +14,6 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import hcl
-from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -53,13 +52,14 @@ from charms.vault_k8s.v0.vault_managers import (
     AutounsealConfigurationDetails,
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    BackupManager,
     File,
     KVManager,
+    ManagerError,
     PKIManager,
     TLSManager,
     VaultCertsError,
 )
-from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from jinja2 import Environment, FileSystemLoader
 from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
@@ -531,49 +531,17 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
-            return
-
-        s3_parameters = self._get_s3_parameters()
-
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error:
-            event.fail(message="Failed to create S3 session.")
-            logger.error("Failed to run create-backup action - Failed to create S3 session.")
-            return
-
-        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-            event.fail(message="Failed to create S3 bucket.")
-            logger.error("Failed to run create-backup action - Failed to create S3 bucket.")
-            return
-        backup_key = self._get_backup_key()
-        vault = self._get_active_vault_client()
-        if not vault:
+        vault_client = self._get_active_vault_client()
+        if not vault_client:
             event.fail(message="Failed to initialize Vault client.")
-            logger.error("Failed to run create-backup action - Failed to initialize Vault client.")
             return
-
-        response = vault.create_snapshot()
-        content_uploaded = s3.upload_content(
-            content=response.raw,  # type: ignore[reportArgumentType]
-            bucket_name=s3_parameters["bucket"],
-            key=backup_key,
-        )
-        if not content_uploaded:
-            event.fail(message="Failed to upload backup to S3 bucket.")
-            logger.error(
-                "Failed to run create-backup action - Failed to upload backup to S3 bucket."
-            )
+        try:
+            manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
+            backup_key = manager.create_backup(vault_client)
+        except ManagerError as e:
+            logger.error("Failed to create backup: %s", e)
+            event.fail(message=f"Failed to create backup: {e}")
             return
-        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
 
     def _on_list_backups_action(self, event: ActionEvent) -> None:
@@ -584,32 +552,12 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
-            return
-
-        s3_parameters = self._get_s3_parameters()
-
+        manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
         try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error as e:
-            event.fail(message="Failed to create S3 session.")
-            logger.error("Failed to run list-backups action - %s", e)
-            return
-
-        try:
-            backup_ids = s3.get_object_key_list(
-                bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
-            )
-        except S3Error as e:
+            backup_ids = manager.list_backups()
+        except ManagerError as e:
             logger.error("Failed to list backups: %s", e)
-            event.fail(message="Failed to run list-backups action - Failed to list backups.")
+            event.fail(message=f"Failed to list backups: {e}")
             return
 
         event.set_results({"backup-ids": json.dumps(backup_ids)})
@@ -622,60 +570,73 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
-            return
+        # s3_pre_requisites_err = self._check_s3_pre_requisites()
+        # if s3_pre_requisites_err:
+        #     event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
+        #     return
 
-        s3_parameters = self._get_s3_parameters()
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error as e:
-            logger.error("Failed to create S3 session: %s", e)
-            event.fail(message="Failed to create S3 session.")
+        # s3_parameters = self._get_s3_parameters()
+        # try:
+        #     s3 = S3(
+        #         access_key=s3_parameters["access-key"],
+        #         secret_key=s3_parameters["secret-key"],
+        #         endpoint=s3_parameters["endpoint"],
+        #         region=s3_parameters.get("region"),
+        #     )
+        # except S3Error as e:
+        #     logger.error("Failed to create S3 session: %s", e)
+        #     event.fail(message="Failed to create S3 session.")
+        #     return
+        # try:
+        #     snapshot = s3.get_content(
+        #         bucket_name=s3_parameters["bucket"],
+        #         object_key=event.params.get("backup-id"),  # type: ignore[reportArgumentType]
+        #     )
+        # except S3Error as e:
+        #     logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
+        #     event.fail(message="Failed to retrieve snapshot from S3 storage.")
+        #     return
+        # if not snapshot:
+        #     logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
+        #     event.fail(message="Backup not found in S3 bucket.")
+        #     return
+        # try:
+        #     if not (self._restore_vault(snapshot=snapshot)):
+        #         logger.error("Failed to restore vault.")
+        #         event.fail(message="Failed to restore vault.")
+        #         return
+        # except RuntimeError as e:
+        #     logger.error("Failed to restore vault: %s", e)
+        #     event.fail(message="Failed to restore vault.")
+        #     return
+        # try:
+        #     if self.juju_facade.secret_exists_with_fields(
+        #         fields=("role-id", "secret-id"),
+        #         label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+        #     ):
+        #         approle = self._get_approle_auth_secret()
+        #         vault = VaultClient(
+        #             url=self._api_address,
+        #             ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+        #         )
+        #         if approle and not vault.authenticate(approle):
+        #             self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
+        # except Exception as e:
+        #     logger.error("Failed to remove old approle secret: %s", e)
+        #     event.fail(message="Failed to remove old approle secret.")
+        vault_client = self._get_active_vault_client()
+        if not vault_client:
+            event.fail(message="Failed to initialize Vault client.")
             return
+        manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
+        key = event.params.get("backup-id")
+        assert isinstance(key, str)
         try:
-            snapshot = s3.get_content(
-                bucket_name=s3_parameters["bucket"],
-                object_key=event.params.get("backup-id"),  # type: ignore[reportArgumentType]
-            )
-        except S3Error as e:
-            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
-            event.fail(message="Failed to retrieve snapshot from S3 storage.")
+            manager.restore_backup(vault_client, key)
+        except ManagerError as e:
+            logger.error("Failed to restore backup: %s", e)
+            event.fail(message=f"Failed to restore backup: {e}")
             return
-        if not snapshot:
-            logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
-            event.fail(message="Backup not found in S3 bucket.")
-            return
-        try:
-            if not (self._restore_vault(snapshot=snapshot)):
-                logger.error("Failed to restore vault.")
-                event.fail(message="Failed to restore vault.")
-                return
-        except RuntimeError as e:
-            logger.error("Failed to restore vault: %s", e)
-            event.fail(message="Failed to restore vault.")
-            return
-        try:
-            if self.juju_facade.secret_exists_with_fields(
-                fields=("role-id", "secret-id"),
-                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-            ):
-                approle = self._get_approle_auth_secret()
-                vault = VaultClient(
-                    url=self._api_address,
-                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
-                )
-                if approle and not vault.authenticate(approle):
-                    self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
-        except Exception as e:
-            logger.error("Failed to remove old approle secret: %s", e)
-            event.fail(message="Failed to remove old approle secret.")
 
         event.set_results({"restored": event.params.get("backup-id")})
 
@@ -844,39 +805,39 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _restore_vault(self, snapshot: StreamingBody) -> bool:
-        """Restore vault using a raft snapshot.
+    # def _restore_vault(self, snapshot: StreamingBody) -> bool:
+    #     """Restore vault using a raft snapshot.
 
-        Args:
-            snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
+    #     Args:
+    #         snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
 
-        Returns:
-            bool: True if the restore was successful, False otherwise.
-        """
-        for address in self._get_peer_node_api_addresses():
-            vault = VaultClient(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
-            if vault.is_active():
-                break
-        else:
-            logger.error("Failed to find active Vault client, cannot restore snapshot.")
-            return False
-        try:
-            if not (approle := self._get_approle_auth_secret()):
-                logger.error("Failed to log in to Vault")
-                return False
-            vault.authenticate(approle)
-            # hvac vault client expects bytes or a file-like object to restore the snapshot
-            # StreamingBody implements the read() method
-            # so it can be used as a file-like object in this context
-            response = vault.restore_snapshot(snapshot)
-        except VaultClientError as e:
-            logger.error("Failed to restore snapshot: %s", e)
-            return False
-        if not 200 <= response.status_code < 300:
-            logger.error("Failed to restore snapshot: %s", response.json())
-            return False
+    #     Returns:
+    #         bool: True if the restore was successful, False otherwise.
+    #     """
+    #     for address in self._get_peer_node_api_addresses():
+    #         vault = VaultClient(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
+    #         if vault.is_active():
+    #             break
+    #     else:
+    #         logger.error("Failed to find active Vault client, cannot restore snapshot.")
+    #         return False
+    #     try:
+    #         if not (approle := self._get_approle_auth_secret()):
+    #             logger.error("Failed to log in to Vault")
+    #             return False
+    #         vault.authenticate(approle)
+    #         # hvac vault client expects bytes or a file-like object to restore the snapshot
+    #         # StreamingBody implements the read() method
+    #         # so it can be used as a file-like object in this context
+    #         response = vault.restore_snapshot(snapshot)
+    #     except VaultClientError as e:
+    #         logger.error("Failed to restore snapshot: %s", e)
+    #         return False
+    #     if not 200 <= response.status_code < 300:
+    #         logger.error("Failed to restore snapshot: %s", response.json())
+    #         return False
 
-        return True
+    #     return True
 
     def _get_active_vault_client(self) -> VaultClient | None:
         """Return an initialized vault client.
