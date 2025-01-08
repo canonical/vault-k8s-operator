@@ -22,86 +22,83 @@ from charm import VaultCharm
 
 
 class VaultCharmFixtures:
-    patcher_tls = patch("charm.TLSManager", autospec=TLSManager)
-    patcher_vault = patch("charm.VaultClient", autospec=VaultClient)
-    patcher_vault_autounseal_provider_manager = patch(
-        "charm.AutounsealProviderManager", autospec=AutounsealProviderManager
-    )
-    patcher_vault_autounseal_requirer_manager = patch(
-        "charm.AutounsealRequirerManager", autospec=AutounsealRequirerManager
-    )
-    patcher_kv_manager = patch("charm.KVManager", autospec=KVManager)
-    patcher_pki_manager = patch("charm.PKIManager", autospec=PKIManager)
-    patcher_s3_requirer = patch("charm.S3Requirer", autospec=S3Requirer)
-    patcher_s3 = patch("charm.S3", autospec=S3)
-    patcher_socket_fqdn = patch("socket.getfqdn")
-    patcher_pki_requirer_get_assigned_certificate = patch(
-        "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
-    )
-    patcher_pki_requirer_renew_certificate = patch(
-        "charm.TLSCertificatesRequiresV4.renew_certificate"
-    )
-    patcher_pki_provider_get_outstanding_certificate_requests = patch(
-        "charm.TLSCertificatesProvidesV4.get_outstanding_certificate_requests"
-    )
-    patcher_pki_provider_set_relation_certificate = patch(
-        "charm.TLSCertificatesProvidesV4.set_relation_certificate"
-    )
-    patcher_autounseal_provides_get_relations_without_credentials = patch(
-        "charm.VaultAutounsealProvides.get_relations_without_credentials"
-    )
-    patcher_autounseal_provides_set_data = patch(
-        "charm.VaultAutounsealProvides.set_autounseal_data"
-    )
-    patcher_autounseal_requires_get_details = patch("charm.VaultAutounsealRequires.get_details")
-    patcher_kv_provides_get_credentials = patch("charm.VaultKvProvides.get_credentials")
-    patcher_kv_provides_set_kv_data = patch("charm.VaultKvProvides.set_kv_data")
-    patcher_get_binding = patch("ops.model.Model.get_binding")
-
     @pytest.fixture(autouse=True)
     def setup(self):
-        self.mock_tls = VaultCharmFixtures.patcher_tls.start().return_value
-        self.mock_vault = VaultCharmFixtures.patcher_vault.start().return_value
-        self.mock_vault_autounseal_manager = (
-            VaultCharmFixtures.patcher_vault_autounseal_provider_manager.start().return_value
-        )
-        self.mock_vault_autounseal_requirer_manager = (
-            VaultCharmFixtures.patcher_vault_autounseal_requirer_manager.start().return_value
-        )
-        self.mock_kv_manager = VaultCharmFixtures.patcher_kv_manager.start().return_value
-        self.mock_pki_manager = VaultCharmFixtures.patcher_pki_manager.start().return_value
-        self.mock_s3_requirer = VaultCharmFixtures.patcher_s3_requirer.start().return_value
-        self.mock_s3 = VaultCharmFixtures.patcher_s3.start()
-        self.mock_socket_fqdn = VaultCharmFixtures.patcher_socket_fqdn.start()
-        self.mock_pki_requirer_get_assigned_certificate = (
-            VaultCharmFixtures.patcher_pki_requirer_get_assigned_certificate.start()
-        )
-        self.mock_pki_requirer_renew_certificate = (
-            VaultCharmFixtures.patcher_pki_requirer_renew_certificate.start()
-        )
-        self.mock_pki_provider_get_outstanding_certificate_requests = (
-            VaultCharmFixtures.patcher_pki_provider_get_outstanding_certificate_requests.start()
-        )
-        self.mock_pki_provider_set_relation_certificate = (
-            VaultCharmFixtures.patcher_pki_provider_set_relation_certificate.start()
-        )
-        self.mock_autounseal_provides_get_relations_without_credentials = VaultCharmFixtures.patcher_autounseal_provides_get_relations_without_credentials.start()
-        self.mock_autounseal_provides_set_data = (
-            VaultCharmFixtures.patcher_autounseal_provides_set_data.start()
-        )
-        self.mock_autounseal_requires_get_details = (
-            VaultCharmFixtures.patcher_autounseal_requires_get_details.start()
-        )
-        self.mock_kv_provides_get_credentials = (
-            VaultCharmFixtures.patcher_kv_provides_get_credentials.start()
-        )
-        self.mock_kv_provides_set_kv_data = (
-            VaultCharmFixtures.patcher_kv_provides_set_kv_data.start()
-        )
-        self.mock_get_binding = VaultCharmFixtures.patcher_get_binding.start()
-        self.mock_pki_requirer_renew_certificate = (
-            VaultCharmFixtures.patcher_pki_requirer_renew_certificate.start()
-        )
+        with (
+            patch("charm.TLSManager", autospec=TLSManager) as mock_tls,
+            patch("charm.VaultClient", autospec=VaultClient) as mock_vault,
+            patch(
+                "charm.AutounsealProviderManager", autospec=AutounsealProviderManager
+            ) as mock_autounseal_provider_manager,
+            patch(
+                "charm.AutounsealRequirerManager", autospec=AutounsealRequirerManager
+            ) as mock_autounseal_requirer_manager,
+            patch("charm.KVManager", autospec=KVManager) as mock_kv_manager,
+            patch("charm.PKIManager", autospec=PKIManager) as mock_pki_manager,
+            patch("charm.S3Requirer", autospec=S3Requirer) as mock_s3_requirer,
+            patch("charm.S3", autospec=S3) as mock_s3,
+            patch("socket.getfqdn") as mock_socket_fqdn,
+            patch(
+                "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
+            ) as mock_pki_requirer_get_assigned_certificate,
+            patch(
+                "charm.TLSCertificatesRequiresV4.renew_certificate"
+            ) as mock_pki_requirer_renew_certificate,
+            patch(
+                "charm.TLSCertificatesProvidesV4.get_outstanding_certificate_requests"
+            ) as mock_pki_provider_get_outstanding_certificate_requests,
+            patch(
+                "charm.TLSCertificatesProvidesV4.set_relation_certificate"
+            ) as mock_pki_provider_set_relation_certificate,
+            patch(
+                "charm.VaultAutounsealProvides.get_relations_without_credentials"
+            ) as mock_autounseal_provides_get_relations_without_credentials,
+            patch(
+                "charm.VaultAutounsealProvides.set_autounseal_data"
+            ) as mock_autounseal_provides_set_data,
+            patch(
+                "charm.VaultAutounsealRequires.get_details"
+            ) as mock_autounseal_requires_get_details,
+            patch("charm.VaultKvProvides.get_credentials") as mock_kv_provides_get_credentials,
+            patch("charm.VaultKvProvides.set_kv_data") as mock_kv_provides_set_kv_data,
+            patch("ops.model.Model.get_binding") as mock_get_binding,
+        ):
+            # When we want to mock the instances, we use the return value of
+            # the mock
+            self.mock_tls = mock_tls.return_value
+            self.mock_vault = mock_vault.return_value
+            self.mock_vault_autounseal_provider_manager = (
+                mock_autounseal_provider_manager.return_value
+            )
+            self.mock_vault_autounseal_requirer_manager = (
+                mock_autounseal_requirer_manager.return_value
+            )
+            self.mock_kv_manager = mock_kv_manager.return_value
+            self.mock_pki_manager = mock_pki_manager.return_value
+            self.mock_s3_requirer = mock_s3_requirer.return_value
+
+            # When we want to mock the callable, we use the mock directly
+            self.mock_s3 = mock_s3
+            self.mock_socket_fqdn = mock_socket_fqdn
+            self.mock_pki_requirer_get_assigned_certificate = (
+                mock_pki_requirer_get_assigned_certificate
+            )
+            self.mock_pki_requirer_renew_certificate = mock_pki_requirer_renew_certificate
+            self.mock_pki_provider_get_outstanding_certificate_requests = (
+                mock_pki_provider_get_outstanding_certificate_requests
+            )
+            self.mock_pki_provider_set_relation_certificate = (
+                mock_pki_provider_set_relation_certificate
+            )
+            self.mock_autounseal_provides_get_relations_without_credentials = (
+                mock_autounseal_provides_get_relations_without_credentials
+            )
+            self.mock_autounseal_provides_set_data = mock_autounseal_provides_set_data
+            self.mock_autounseal_requires_get_details = mock_autounseal_requires_get_details
+            self.mock_kv_provides_get_credentials = mock_kv_provides_get_credentials
+            self.mock_kv_provides_set_kv_data = mock_kv_provides_set_kv_data
+            self.mock_get_binding = mock_get_binding
+            yield
 
     @pytest.fixture(autouse=True)
     def context(self):
