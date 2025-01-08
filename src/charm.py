@@ -708,7 +708,10 @@ class VaultCharm(CharmBase):
             logger.info("Pebble layer added")
 
     def _get_active_vault_client(self) -> VaultClient | None:
-        """Initialize a Vault client for the active Vault node."""
+        """Return a client for the _active_ vault service.
+
+        This may not be the Vault service running on this unit.
+        """
         for address in self._get_peer_node_api_addresses():
             try:
                 vault = VaultClient(
@@ -728,7 +731,7 @@ class VaultCharm(CharmBase):
         return None
 
     def _get_authenticated_vault_client(self) -> VaultClient | None:
-        """Return an initialized vault client.
+        """Return an authenticated client for the Vault service on this unit.
 
         Returns:
             Vault: An active Vault client configured with the cluster address
