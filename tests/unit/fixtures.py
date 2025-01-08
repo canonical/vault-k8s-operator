@@ -24,6 +24,9 @@ from charm import VaultCharm
 class VaultCharmFixtures:
     patcher_tls = patch("charm.TLSManager", autospec=TLSManager)
     patcher_vault = patch("charm.VaultClient", autospec=VaultClient)
+    patcher_helpers_vault = patch(
+        "charms.vault_k8s.v0.vault_helpers.VaultClient", autospec=VaultClient
+    )
     patcher_vault_autounseal_provider_manager = patch(
         "charm.AutounsealProviderManager", autospec=AutounsealProviderManager
     )
@@ -62,6 +65,7 @@ class VaultCharmFixtures:
     def setup(self):
         self.mock_tls = VaultCharmFixtures.patcher_tls.start().return_value
         self.mock_vault = VaultCharmFixtures.patcher_vault.start().return_value
+        self.mock_helpers_vault = VaultCharmFixtures.patcher_helpers_vault.start().return_value
         self.mock_vault_autounseal_manager = (
             VaultCharmFixtures.patcher_vault_autounseal_provider_manager.start().return_value
         )

@@ -213,7 +213,7 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         )
         response = requests.Response()
         response.status_code = 200
-        self.mock_vault.configure_mock(
+        self.mock_helpers_vault.configure_mock(
             **{
                 "restore_snapshot.return_value": response,
             },
@@ -242,4 +242,4 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         )
 
         assert self.ctx.action_results == {"restored": "my-backup-id"}
-        self.mock_vault.restore_snapshot.assert_called_with("my snapshot content")
+        self.mock_helpers_vault.restore_snapshot.assert_called_with("my snapshot content")

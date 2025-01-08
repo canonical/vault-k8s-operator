@@ -31,6 +31,7 @@ from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
     SecretRemovedError,
+    TransientJujuError,
 )
 from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealProvides,
@@ -285,12 +286,7 @@ class VaultCharm(CharmBase):
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        try:
-            vault = self.helpers.get_active_vault_client(
-                self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-            )
-        except VaultCertsError as e:
-            logger.warning("Waiting for Vault Client %s", e)
+        if not vault.is_active_or_standby():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
@@ -314,7 +310,6 @@ class VaultCharm(CharmBase):
             return
         if not self.tls.tls_file_pushed_to_workload(File.KEY):
             return
-
         self._generate_vault_config_file()
         self._set_pebble_plan()
         try:
@@ -397,7 +392,6 @@ class VaultCharm(CharmBase):
             is_ca=True,
         )
 
-    # TODO It can be refactored to the feature manager
     def _sync_vault_autounseal(self, vault_client: VaultClient) -> None:
         """Sync the vault autounseal relation."""
         if not self.unit.is_leader():
@@ -551,9 +545,16 @@ class VaultCharm(CharmBase):
             return
         backup_key = self._get_backup_key()
         try:
-            vault = self.helpers.get_active_vault_client(
-                self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-            )
+            if not (
+                vault := self.helpers.get_active_vault_client(
+                    self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
+                )
+            ):
+                event.fail(message="Failed to initialize Vault client.")
+                logger.error(
+                    "Failed to run create-backup action - Failed to initialize Vault client."
+                )
+                return
         except VaultCertsError as e:
             event.fail(message="Failed to initialize Vault client.")
             logger.error("Failed to run create-backup action - %s", e)
@@ -664,18 +665,19 @@ class VaultCharm(CharmBase):
             event.fail(message="Failed to restore vault.")
             return
         try:
-            if self.helpers.get_approle_auth_secret():
-                approle = self.helpers.get_approle_auth_secret()
-                # TODO, don't we need an active vault here?
+            if approle := self.helpers.get_approle_auth_secret():
                 vault = VaultClient(
                     url=self._api_address,
                     ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
                 )
                 if approle and not vault.authenticate(approle):
                     self.helpers.remove_approle_auth_secret()
-        except Exception as e:
+        except TransientJujuError as e:
             logger.error("Failed to remove old approle secret: %s", e)
-            event.fail(message="Failed to remove old approle secret.")
+            event.fail(
+                message="Vault restored, but failed to remove old approle secret. Please remove it manually."  # noqa: E501
+            )
+            return
 
         event.set_results({"restored": event.params.get("backup-id")})
 
@@ -839,10 +841,17 @@ class VaultCharm(CharmBase):
             logger.error("Failed to find active Vault client, cannot restore snapshot.")
             return False
         try:
-            if not (approle := self.helpers.get_approle_auth_secret()):
-                logger.error("Failed to log in to Vault")
+            try:
+                if not (
+                    vault := self.helpers.get_active_vault_client(
+                        self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
+                    )
+                ):
+                    logger.error("Failed to get active Vault client")
+                    return False
+            except VaultClientError as e:
+                logger.error("Failed to get active Vault client: %s", e)
                 return False
-            vault.authenticate(approle)
             # hvac vault client expects bytes or a file-like object to restore the snapshot
             # StreamingBody implements the read() method
             # so it can be used as a file-like object in this context

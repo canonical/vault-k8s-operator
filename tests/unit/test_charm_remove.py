@@ -17,7 +17,7 @@ class TestCharmRemove(VaultCharmFixtures):
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            self.mock_vault.configure_mock(
+            self.mock_helpers_vault.configure_mock(
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
@@ -52,11 +52,18 @@ class TestCharmRemove(VaultCharmFixtures):
                 f.write("data")
 
             self.ctx.run(self.ctx.on.remove(), state_in)
-            self.mock_vault.remove_raft_node.assert_called_with(f"{model_name}-vault-k8s/0")
+            self.mock_helpers_vault.remove_raft_node.assert_called_with(
+                f"{model_name}-vault-k8s/0"
+            )
             assert not os.path.exists(f"{temp_dir}/vault.db")
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
 
     def test_given_service_is_running_when_remove_then_service_is_stopped(self):
+        self.mock_helpers_vault.configure_mock(
+            **{
+                "get_num_raft_peers.return_value": 4,
+            },
+        )
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},

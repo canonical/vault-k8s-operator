@@ -156,6 +156,12 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         assert e.value.message == "Failed to initialize Vault client."
 
     def test_given_failed_to_upload_backup_when_create_backup_then_action_fails(self):
+        self.mock_helpers_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_active_or_standby.return_value": True,
+            },
+        )
         self.mock_s3_requirer.configure_mock(
             **{
                 "get_s3_connection_info.return_value": {
@@ -170,12 +176,6 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         self.mock_s3.return_value.configure_mock(
             **{
                 "upload_content.return_value": False,
-            },
-        )
-        self.mock_vault.configure_mock(
-            **{
-                "is_api_available.return_value": True,
-                "is_active_or_standby.return_value": True,
             },
         )
         approle_secret = testing.Secret(
@@ -217,7 +217,7 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
                 "upload_content.return_value": True,
             },
         )
-        self.mock_vault.configure_mock(
+        self.mock_helpers_vault.configure_mock(
             **{
                 "is_api_available.return_value": True,
                 "is_active_or_standby.return_value": True,
@@ -243,7 +243,7 @@ class TestCharmCreateBackupAction(VaultCharmFixtures):
         )
         self.ctx.run(self.ctx.on.action("create-backup"), state_in)
         self.mock_s3.return_value.create_bucket.assert_called_with(bucket_name="my bucket")
-        self.mock_vault.create_snapshot.assert_called()
+        self.mock_helpers_vault.create_snapshot.assert_called()
         self.mock_s3.return_value.upload_content.assert_called()
         assert self.ctx.action_results
         assert "backup-id" in self.ctx.action_results.keys()
