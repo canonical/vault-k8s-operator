@@ -279,7 +279,7 @@ class VaultCharm(CharmBase):
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        if not self._get_active_vault_client():
+        if not self._get_authenticated_vault_client():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
@@ -322,7 +322,7 @@ class VaultCharm(CharmBase):
                 return
         except VaultClientError:
             return
-        if not (vault := self._get_active_vault_client()):
+        if not (vault := self._get_authenticated_vault_client()):
             return
         self._configure_pki_secrets_engine(vault)
         self._sync_vault_autounseal(vault)
@@ -527,7 +527,7 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        vault_client = self._get_active_vault_client()
+        vault_client = self._get_authenticated_vault_client()
         if not vault_client:
             event.fail(message="Failed to initialize Vault client.")
             return
@@ -568,7 +568,7 @@ class VaultCharm(CharmBase):
         """
         vault_client = self._get_active_vault_client()
         if not vault_client:
-            event.fail(message="Failed to initialize Vault client.")
+            event.fail(message="Failed to initialize an active Vault client.")
             return
         key = event.params.get("backup-id")
         # This should be enforced by Juju/charmcraft.yaml, but we assert here
@@ -708,6 +708,26 @@ class VaultCharm(CharmBase):
             logger.info("Pebble layer added")
 
     def _get_active_vault_client(self) -> VaultClient | None:
+        """Initialize a Vault client for the active Vault node."""
+        for address in self._get_peer_node_api_addresses():
+            try:
+                vault = VaultClient(
+                    address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+                )
+            except VaultCertsError as e:
+                logger.warning("Failed to get Vault client: %s", e)
+                continue
+            if vault.is_active():
+                if not vault.is_api_available():
+                    return None
+                if not (approle := self._get_approle_auth_secret()):
+                    return None
+                if not vault.authenticate(approle):
+                    return None
+                return vault
+        return None
+
+    def _get_authenticated_vault_client(self) -> VaultClient | None:
         """Return an initialized vault client.
 
         Returns:
