@@ -12,11 +12,11 @@ from charms.vault_k8s.v0.vault_client import (
 from charms.vault_k8s.v0.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    BackupManager,
     KVManager,
     PKIManager,
     TLSManager,
 )
-from charms.vault_k8s.v0.vault_s3 import S3
 
 from charm import VaultCharm
 
@@ -36,7 +36,7 @@ class VaultCharmFixtures:
             patch("charm.KVManager", autospec=KVManager) as mock_kv_manager,
             patch("charm.PKIManager", autospec=PKIManager) as mock_pki_manager,
             patch("charm.S3Requirer", autospec=S3Requirer) as mock_s3_requirer,
-            patch("charm.S3", autospec=S3) as mock_s3,
+            patch("charm.BackupManager", autospec=BackupManager) as mock_backup_manager,
             patch("socket.getfqdn") as mock_socket_fqdn,
             patch(
                 "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
@@ -76,9 +76,9 @@ class VaultCharmFixtures:
             self.mock_kv_manager = mock_kv_manager.return_value
             self.mock_pki_manager = mock_pki_manager.return_value
             self.mock_s3_requirer = mock_s3_requirer.return_value
+            self.mock_backup_manager = mock_backup_manager.return_value
 
             # When we want to mock the callable, we use the mock directly
-            self.mock_s3 = mock_s3
             self.mock_socket_fqdn = mock_socket_fqdn
             self.mock_pki_requirer_get_assigned_certificate = (
                 mock_pki_requirer_get_assigned_certificate
