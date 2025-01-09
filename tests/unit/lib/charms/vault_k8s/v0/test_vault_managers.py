@@ -2,16 +2,24 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.juju_facade import NoSuchSecretError, SecretRemovedError
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
-from charms.vault_k8s.v0.vault_client import AuthMethod, SecretsBackend, VaultClient
+from charms.vault_k8s.v0.vault_client import (
+    AuthMethod,
+    SecretsBackend,
+    VaultClient,
+    VaultClientError,
+)
 from charms.vault_k8s.v0.vault_client import Certificate as VaultClientCertificate
 from charms.vault_k8s.v0.vault_managers import (
     AUTOUNSEAL_POLICY,
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    BackupManager,
     CertificateRequestAttributes,
     KVManager,
+    ManagerError,
     PKIManager,
     PrivateKey,
     ProviderCertificate,
@@ -19,6 +27,7 @@ from charms.vault_k8s.v0.vault_managers import (
     TLSCertificatesRequiresV4,
     VaultKvProvides,
 )
+from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
 from tests.unit.certificates import (
@@ -509,3 +518,208 @@ class TestPKIManager:
                 chain=provider_certificate.chain,
             )
         )
+
+
+class TestBackupManager:
+    @pytest.fixture(autouse=True)
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock, monkeypatch: pytest.MonkeyPatch):
+        """Configure the test environment for the happy path.
+
+        Individual tests can then mock error scenarios by changing the mocks.
+        """
+        self.juju_facade = juju_facade_mock.return_value
+        self.juju_facade.is_leader = True
+        self.juju_facade.relation_exists.return_value = True
+        self.s3_class = MagicMock()
+        monkeypatch.setattr("charms.vault_k8s.v0.vault_managers.S3", self.s3_class)
+        self.s3 = self.s3_class.return_value
+        self.s3.get_object_key_list.return_value = [
+            "vault-backup-my-model-1",
+            "vault-backup-my-model-2",
+        ]
+        self.s3.get_content.return_value = "snapshot content"
+
+        self.charm = MagicMock(spec=VaultCharm)
+        self.charm.model.name = "my-model"
+        self.vault_client = MagicMock(spec=VaultClient)
+        self.s3_requirer = MagicMock(spec=S3Requirer)
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+        }
+
+        self.manager = BackupManager(self.charm, self.s3_requirer, "s3-relation")
+
+    def test_given_non_leader_when_create_backup_then_error_raised(self):
+        self.juju_facade.is_leader = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == "Only leader unit can perform backup operations"
+
+    def test_given_s3_relation_not_created_when_create_backup_then_error_raised(self):
+        self.juju_facade.relation_exists.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == "S3 relation not created"
+
+    @pytest.mark.parametrize(
+        "missing_key, expected_error_message",
+        [
+            ("bucket", "S3 parameters missing (bucket)"),
+            ("access-key", "S3 parameters missing (access-key)"),
+            ("secret-key", "S3 parameters missing (secret-key)"),
+            ("endpoint", "S3 parameters missing (endpoint)"),
+        ],
+    )
+    def test_given_missing_s3_parameter_when_create_backup_then_error_raised(
+        self, missing_key: str, expected_error_message: str
+    ):
+        del self.s3_requirer.get_s3_connection_info.return_value[missing_key]
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == expected_error_message
+
+    def test_given_s3_error_when_create_backup_then_error_raised(self):
+        self.s3_class.side_effect = S3Error()  # throw an error when creating the S3 object
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == "Failed to create S3 session"
+
+    def test_given_bucket_creation_returns_none_when_create_backup_then_error_raised(self):
+        self.s3.create_bucket.return_value = None
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == "Failed to create S3 bucket"
+
+    def test_given_failed_to_upload_backup_when_create_backup_then_error_raised(self):
+        self.s3.create_bucket.return_value = True
+        self.s3.upload_content.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.create_backup(self.vault_client)
+        assert str(e.value) == "Failed to upload backup to S3 bucket"
+
+    def test_given_s3_available_when_create_backup_then_backup_created(self):
+        key = self.manager.create_backup(self.vault_client)
+
+        self.vault_client.create_snapshot.assert_called_once()
+        self.s3.upload_content.assert_called_once()
+
+        assert key.startswith("vault-backup-my-model-")
+
+    # List backups
+    def test_given_non_leader_when_list_backups_then_error_raised(self):
+        self.juju_facade.is_leader = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.list_backups()
+        assert str(e.value) == "Only leader unit can perform backup operations"
+
+    def test_given_s3_relation_not_created_when_list_backups_then_error_raised(self):
+        self.juju_facade.is_leader = True
+        self.juju_facade.relation_exists.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.list_backups()
+        assert str(e.value) == "S3 relation not created"
+
+    @pytest.mark.parametrize(
+        "missing_key, expected_error_message",
+        [
+            ("bucket", "S3 parameters missing (bucket)"),
+            ("access-key", "S3 parameters missing (access-key)"),
+            ("secret-key", "S3 parameters missing (secret-key)"),
+            ("endpoint", "S3 parameters missing (endpoint)"),
+        ],
+    )
+    def test_given_missing_s3_parameter_when_list_backups_then_error_raised(
+        self, missing_key: str, expected_error_message: str
+    ):
+        self.juju_facade.is_leader = True
+        self.juju_facade.relation_exists.return_value = True
+        del self.s3_requirer.get_s3_connection_info.return_value[missing_key]
+        with pytest.raises(ManagerError) as e:
+            self.manager.list_backups()
+        assert str(e.value) == expected_error_message
+
+    def test_given_s3_error_when_list_backups_then_error_raised(self):
+        self.s3_class.side_effect = S3Error()  # throw an error when creating the S3 object
+        with pytest.raises(ManagerError) as e:
+            self.manager.list_backups()
+        assert str(e.value) == "Failed to create S3 session"
+
+    def test_given_s3_error_during_get_object_key_when_list_backups_then_error_raised(self):
+        self.s3.get_object_key_list.side_effect = S3Error("some error message")
+        with pytest.raises(ManagerError) as e:
+            self.manager.list_backups()
+        assert str(e.value) == "Failed to list backups in S3 bucket: some error message"
+
+    def test_given_s3_available_when_list_backups_then_backups_listed(self):
+        backups = self.manager.list_backups()
+        assert backups == ["vault-backup-my-model-1", "vault-backup-my-model-2"]
+
+    # Restore backup
+    def test_given_non_leader_when_restore_backup_then_error_raised(self):
+        self.juju_facade.is_leader = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "Only leader unit can perform backup operations"
+
+    def test_given_s3_relation_not_created_when_restore_backup_then_error_raised(self):
+        self.juju_facade.is_leader = True
+        self.juju_facade.relation_exists.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "S3 relation not created"
+
+    @pytest.mark.parametrize(
+        "missing_key, expected_error_message",
+        [
+            ("bucket", "S3 parameters missing (bucket)"),
+            ("access-key", "S3 parameters missing (access-key)"),
+            ("secret-key", "S3 parameters missing (secret-key)"),
+            ("endpoint", "S3 parameters missing (endpoint)"),
+        ],
+    )
+    def test_given_missing_s3_parameter_when_restore_backup_then_error_raised(
+        self, missing_key: str, expected_error_message: str
+    ):
+        self.juju_facade.is_leader = True
+        self.juju_facade.relation_exists.return_value = True
+        del self.s3_requirer.get_s3_connection_info.return_value[missing_key]
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == expected_error_message
+
+    def test_given_s3_error_when_restore_backup_then_error_raised(self):
+        self.s3_class.side_effect = S3Error()  # throw an error when creating the S3 object
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "Failed to create S3 session"
+
+    def test_given_s3_error_during_download_when_restore_backup_then_error_raised(self):
+        self.s3.get_content.side_effect = S3Error("some error message")
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "Failed to retrieve snapshot from S3: some error message"
+
+    def test_given_s3_content_not_found_when_restore_backup_then_error_raised(self):
+        self.s3.get_content.return_value = None
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "Snapshot not found in S3 bucket"
+
+    def test_given_vault_client_fails_to_restore_snapshot_when_restore_backup_then_error_raised(
+        self,
+    ):
+        self.vault_client.restore_snapshot.side_effect = VaultClientError("some error message")
+        with pytest.raises(ManagerError) as e:
+            self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        assert str(e.value) == "Failed to restore snapshot: some error message"
+
+    def test_given_s3_content_and_vault_client_available_when_restore_backup_then_backup_restored(
+        self,
+    ):
+        self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+        self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
