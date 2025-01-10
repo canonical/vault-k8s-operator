@@ -169,6 +169,17 @@ class VaultClient:
             logger.error("Error while checking Vault seal status: %s", e)
             raise VaultClientError(e) from e
 
+    def is_available_initialized_and_unsealed(self) -> bool:
+        """Return whether Vault is available, initialized and unsealed.
+
+        It surpasses intermittent errors when checking seal status.
+        """
+        try:
+            return self.is_api_available() and self.is_initialized() and not self.is_sealed()
+        except VaultClientError as e:
+            logger.error("Error while checking Vault status: %s", e)
+            return False
+
     def read(self, path: str) -> dict:
         """Read the data at the given path."""
         try:

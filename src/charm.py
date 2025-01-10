@@ -279,8 +279,10 @@ class VaultCharm(CharmBase):
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        if not self._get_authenticated_vault_client():
+        self._authenticate_vault_client(vault)
+        if not vault.is_active_or_standby():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
+            return
         event.add_status(ActiveStatus())
 
     def _configure(self, _: EventBase) -> None:  # noqa: C901
@@ -313,16 +315,11 @@ class VaultCharm(CharmBase):
         except VaultCertsError as e:
             logger.error("Failed to get TLS file path: %s", e)
             return
-        if not vault.is_api_available():
+        if not vault.is_available_initialized_and_unsealed():
             return
-        if not vault.is_initialized():
+        if not self._authenticate_vault_client(vault):
             return
-        try:
-            if vault.is_sealed():
-                return
-        except VaultClientError:
-            return
-        if not (vault := self._get_authenticated_vault_client()):
+        if not vault.is_active_or_standby():
             return
         self._configure_pki_secrets_engine(vault)
         self._sync_vault_autounseal(vault)
@@ -354,19 +351,10 @@ class VaultCharm(CharmBase):
 
     def _remove_node_from_raft_cluster(self):
         """Remove the node from the raft cluster."""
-        if not (approle := self._get_approle_auth_secret()):
-            return
         vault = VaultClient(url=self._api_address, ca_cert_path=None)
-        if not vault.is_api_available():
+        if not vault.is_available_initialized_and_unsealed():
             return
-        if not vault.is_initialized():
-            return
-        try:
-            if vault.is_sealed():
-                return
-        except VaultClientError:
-            return
-        vault.authenticate(approle)
+        self._authenticate_vault_client(vault)
         if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(self._node_id)
 
@@ -527,8 +515,19 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        vault_client = self._get_authenticated_vault_client()
-        if not vault_client:
+        try:
+            vault_client = VaultClient(
+                url=self._api_address,
+                ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+            )
+        except VaultCertsError as e:
+            logger.warning("Failed to get Vault client: %s", e)
+            event.fail(message="Failed to initialize Vault client.")
+            return
+        if (
+            not self._authenticate_vault_client(vault_client)
+            or not vault_client.is_active_or_standby()
+        ):
             event.fail(message="Failed to initialize Vault client.")
             return
         try:
@@ -723,40 +722,22 @@ class VaultCharm(CharmBase):
             if vault.is_active():
                 if not vault.is_api_available():
                     return None
-                if not (approle := self._get_approle_auth_secret()):
-                    return None
-                if not vault.authenticate(approle):
+                if not self._authenticate_vault_client(vault):
                     return None
                 return vault
         return None
 
-    def _get_authenticated_vault_client(self) -> VaultClient | None:
-        """Return an authenticated client for the Vault service on this unit.
+    def _authenticate_vault_client(self, vault: VaultClient) -> bool:
+        """Authenticate the Vault client.
 
         Returns:
-            Vault: An active Vault client configured with the cluster address
-                   and CA certificate, and authorized with the AppRole
-                   credentials set upon initial authorization of the charm, or
-                   `None` if the client could not be successfully created or
-                   has not been authorized.
+            bool: Whether the Vault client authentication was successful.
         """
-        try:
-            vault = VaultClient(
-                url=self._api_address,
-                ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
-            )
-        except VaultCertsError as e:
-            logger.warning("Failed to get Vault client: %s", e)
-            return None
-        if not vault.is_api_available():
-            return None
         if not (approle := self._get_approle_auth_secret()):
-            return None
+            return False
         if not vault.authenticate(approle):
-            return None
-        if not vault.is_active_or_standby():
-            return None
-        return vault
+            return False
+        return True
 
     @property
     def _vault_layer(self) -> Layer:
