@@ -10,6 +10,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
+import time
 from typing import Any, List
 
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -655,6 +656,7 @@ class VaultCharm(CharmBase):
             # for the enterprise version in Vault 1.16+
             if seal_type_has_changed(existing_content, content):
                 if self._vault_service_is_running():
+                    time.sleep(2)
                     self._container.restart(self._service_name)
 
     def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
