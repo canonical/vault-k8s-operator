@@ -1,0 +1,41 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-vfog  github-pr-f35ad-microk8s  microk8s/localhost  3.6.1    unsupported  21:33:59Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             1  10.152.183.219  no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.29   no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.12         
+vault-b/1     active    executing  10.1.53.4          
+vault-b/2     active    executing  10.1.53.10         
+vault-k8s/0*  active    executing  10.1.53.16         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 21:12:24 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-vfog.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7c205f6b85e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 21:13:52 ERROR unit.vault-k8s/3.juju-log vault-peers:0: Raft cluster is not healthy. {'failure_tolerance': 1, 'healthy': False, 'leader': 'test-integration-vfog-vault-k8s/0', 'servers': {'test-integration-vfog-vault-k8s/0': {'id': 'test-integration-vfog-vault-k8s/0', 'name': 'test-integration-vfog-vault-k8s/0', 'address': 'vault-k8s-0.vault-k8s-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 140, 'healthy': True, 'stable_since': '2025-01-13T21:09:28.072771602Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vfog-vault-k8s/1': {'id': 'test-integration-vfog-vault-k8s/1', 'name': 'test-integration-vfog-vault-k8s/1', 'address': 'vault-k8s-1.vault-k8s-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '2.8764863s', 'last_term': 3, 'last_index': 138, 'healthy': True, 'stable_since': '2025-01-13T21:10:26.072932023Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vfog-vault-k8s/2': {'id': 'test-integration-vfog-vault-k8s/2', 'name': 'test-integration-vfog-vault-k8s/2', 'address': 'vault-k8s-2.vault-k8s-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '595.846657ms', 'last_term': 3, 'last_index': 140, 'healthy': True, 'stable_since': '2025-01-13T21:10:28.072893998Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vfog-vault-k8s/3': {'id': 'test-integration-vfog-vault-k8s/3', 'name': 'test-integration-vfog-vault-k8s/3', 'address': 'vault-k8s-3.vault-k8s-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '1.175246121s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-13T21:13:52.073052116Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-vfog-vault-k8s/0', 'test-integration-vfog-vault-k8s/1', 'test-integration-vfog-vault-k8s/2']}
+controller-0: 21:28:36 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-vfog/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: 4c5a6316-8389-4310-a075-982515ed0b47, UID in object meta: 
+unit-vault-b-2: 21:31:59 ERROR unit.vault-b/2.juju-log vault-autounseal-requires:13: Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-vfog-vault-b/0', 'servers': {'test-integration-vfog-vault-b/0': {'id': 'test-integration-vfog-vault-b/0', 'name': 'test-integration-vfog-vault-b/0', 'address': 'vault-b-0.vault-b-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 101, 'healthy': True, 'stable_since': '2025-01-13T21:30:05.727831954Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vfog-vault-b/1': {'id': 'test-integration-vfog-vault-b/1', 'name': 'test-integration-vfog-vault-b/1', 'address': 'vault-b-1.vault-b-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '3.53962637s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-13T21:31:55.728882691Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vfog-vault-b/2': {'id': 'test-integration-vfog-vault-b/2', 'name': 'test-integration-vfog-vault-b/2', 'address': 'vault-b-2.vault-b-endpoints.test-integration-vfog.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '320.060005ms', 'last_term': 3, 'last_index': 98, 'healthy': True, 'stable_since': '2025-01-13T21:31:53.728635032Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-vfog-vault-b/0']}
+unit-vault-b-0: 21:32:27 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-vfog.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x79b69040bfd0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 21:33:08 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-integration-vfog.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x73fa0f5138e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 21:33:09 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-integration-vfog.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x73d4990a18a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 21:33:10 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-vfog.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7e577a644700>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-vfog...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
