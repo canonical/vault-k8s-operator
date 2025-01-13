@@ -1,0 +1,54 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:745 Adding model github-pr-6d026-microk8s:test-integration-i536 on cloud microk8s
+[32mINFO    [0m juju.model:model.py:2284 Deploying local:jammy/vault-k8s-0
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 2)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [allocating] waiting: installing agent
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/1 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:

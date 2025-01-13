@@ -1,0 +1,31 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-i536  github-pr-6d026-microk8s  microk8s/localhost  3.6.1    unsupported  13:57:32Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             error       3  vault-k8s             1  10.152.183.147  no       hook failed: "config-changed"
+vault-k8s           active      3  vault-k8s             0  10.152.183.160  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.53         
+vault-b/1     error     idle       10.1.53.63         hook failed: "config-changed"
+vault-b/2     blocked   executing  10.1.53.62         (start) Please unseal Vault
+vault-k8s/0*  active    executing  10.1.53.21         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 13:35:57 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-i536.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7225a51b4670>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-loki-k8s-0: 13:49:13 ERROR juju.worker.uniter pebble poll failed for container "node-exporter": failed to send pebble-ready event: terminated
+controller-0: 13:54:30 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-i536/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: 28981a19-5dda-4e81-9130-cf424ffd1a31, UID in object meta: 
+unit-vault-k8s-1: 13:54:51 ERROR juju.worker.dependency "uniter" manifold worker returned unexpected error: relation scope id "20ae6999-573c-441d-80a5-16b7aaf55c70:r#10#prometheus-k8s": settings 20ae6999-573c-441d-80a5-16b7aaf55c70:r#10#prometheus-k8s not found (not found)
+unit-prometheus-k8s-0: 13:54:57 ERROR juju.worker.dependency "uniter" manifold worker returned unexpected error: relation scope id "20ae6999-573c-441d-80a5-16b7aaf55c70:r#10#vault-k8s": settings 20ae6999-573c-441d-80a5-16b7aaf55c70:r#10#vault-k8s not found (not found)
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:949 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-i536...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
