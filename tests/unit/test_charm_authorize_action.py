@@ -178,7 +178,6 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         )
         self.mock_vault.create_or_update_approle.assert_called_once_with(
             name="charm",
-            cidrs=["1.2.3.4/24"],
             policies=["charm-access", "default"],
             token_ttl="1h",
             token_max_ttl="1h",

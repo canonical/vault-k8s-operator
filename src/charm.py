@@ -233,10 +233,8 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
-        if not self._bind_address or not self._ingress_address:
-            event.add_status(
-                WaitingStatus("Waiting for bind and ingress addresses to be available")
-            )
+        if not self._ingress_address:
+            event.add_status(WaitingStatus("Waiting for ingress address to be available"))
             return
         if not self.tls.tls_file_available_in_charm(File.CA):
             event.add_status(
@@ -293,7 +291,7 @@ class VaultCharm(CharmBase):
             return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return
-        if not self._bind_address or not self._ingress_address:
+        if not self._ingress_address:
             return
         if not self.tls.ca_certificate_secret_exists():
             return
@@ -497,15 +495,13 @@ class VaultCharm(CharmBase):
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
             vault.enable_approle_auth_method()
             vault.create_or_update_policy_from_file(name=CHARM_POLICY_NAME, path=CHARM_POLICY_PATH)
-            cidrs = [f"{self._bind_address}/24"]
             role_id = vault.create_or_update_approle(
                 name=APPROLE_ROLE_NAME,
-                cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
                 token_ttl="1h",
                 token_max_ttl="1h",
             )
-            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
+            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME)
             self.juju_facade.set_app_secret_content(
                 content={"role-id": role_id, "secret-id": secret_id},
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
@@ -806,15 +802,6 @@ class VaultCharm(CharmBase):
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
-
-    @property
-    def _bind_address(self) -> str | None:
-        """Fetch the bind address from peer relation and returns it.
-
-        Returns:
-            str: Bind address
-        """
-        return self.juju_facade.get_bind_address(relation_name=PEER_RELATION_NAME)
 
     @property
     def _ingress_address(self) -> str | None:
