@@ -9,6 +9,9 @@ from datetime import timedelta
 import hcl
 import ops.testing as testing
 from charms.vault_k8s.v0.vault_autounseal import AutounsealDetails
+from charms.vault_k8s.v0.vault_client import (
+    AppRole,
+)
 from ops.pebble import Layer
 
 from tests.unit.certificates import (
@@ -112,7 +115,7 @@ class TestCharmConfigure(VaultCharmFixtures):
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            self.mock_helpers_vault.configure_mock(
+            self.mock_vault.configure_mock(
                 **{
                     "is_api_available.return_value": True,
                     "authenticate.return_value": True,
@@ -178,7 +181,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             key_name = "my key"
             approle_id = "my approle id"
             approle_secret_id = "my approle secret id"
-            self.mock_helpers_vault.configure_mock(
+            self.mock_vault.configure_mock(
                 **{
                     "token": "some token",
                     "is_api_available.return_value": True,
@@ -262,6 +265,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             assert actual_config_hcl["seal"]["transit"]["mount_path"] == "charm-autounseal"
             assert actual_config_hcl["seal"]["transit"]["token"] == "some token"
             assert actual_config_hcl["seal"]["transit"]["key_name"] == "key name"
+            self.mock_vault.authenticate.assert_called_with(AppRole("role id", "secret id"))
 
     # Test KV
 
@@ -269,7 +273,7 @@ class TestCharmConfigure(VaultCharmFixtures):
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            self.mock_helpers_vault.configure_mock(
+            self.mock_vault.configure_mock(
                 **{
                     "token": "some token",
                     "is_api_available.return_value": True,

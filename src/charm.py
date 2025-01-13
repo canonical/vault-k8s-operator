@@ -629,6 +629,8 @@ class VaultCharm(CharmBase):
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
 
         content = render_vault_config_file(
+            config_template_path=CONFIG_TEMPLATE_DIR_PATH,
+            config_template_name=CONFIG_TEMPLATE_NAME,
             default_lease_ttl=self.juju_facade.get_string_config("default_lease_ttl"),
             max_lease_ttl=self.juju_facade.get_string_config("max_lease_ttl"),
             cluster_address=self._cluster_address,

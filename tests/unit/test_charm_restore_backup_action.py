@@ -27,7 +27,7 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         self.mock_backup_manager.list_backups.side_effect = ManagerError("some error message")
         response = requests.Response()
         response.status_code = 200
-        self.mock_helpers_vault.configure_mock(
+        self.mock_vault.configure_mock(
             **{
                 "restore_snapshot.return_value": response,
             },
