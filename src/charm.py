@@ -10,7 +10,6 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-import time
 from typing import Any, List
 
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -608,6 +607,12 @@ class VaultCharm(CharmBase):
         except ModelError:
             return False
 
+    def _pebble_plan_is_applied(self) -> bool:
+        """Check if the pebble plan is applied."""
+        plan = self._container.get_plan()
+        layer = self._vault_layer
+        return plan.services == layer.services
+
     def _get_relation_api_address(self, relation: Relation) -> str | None:
         """Fetch the api address from relation and returns it.
 
@@ -655,8 +660,9 @@ class VaultCharm(CharmBase):
             # the changes. SIGHUP is currently only supported as a beta feature
             # for the enterprise version in Vault 1.16+
             if seal_type_has_changed(existing_content, content):
-                if self._vault_service_is_running():
-                    time.sleep(2)
+                # Before restarting Vault, check if the pebble plan is applied
+                # If the plan was not applied, the service will restart anyway when applying the new plan
+                if self._vault_service_is_running() and self._pebble_plan_is_applied():
                     self._container.restart(self._service_name)
 
     def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
