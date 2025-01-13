@@ -190,7 +190,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_common_name_allowed_in_pki_role.return_value": False,
                 },
             )
-            self.mock_vault_autounseal_manager.configure_mock(
+            self.mock_vault_autounseal_provider_manager.configure_mock(
                 **{
                     "create_credentials.return_value": (key_name, approle_id, approle_secret_id),
                 }
