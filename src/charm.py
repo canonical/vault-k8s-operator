@@ -10,10 +10,8 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, List
 
-from botocore.response import StreamingBody
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -31,13 +29,13 @@ from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
     SecretRemovedError,
-    TransientJujuError,
 )
 from charms.vault_k8s.v0.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
 from charms.vault_k8s.v0.vault_client import (
+    AppRole,
     AuditDeviceType,
     SecretsBackend,
     Token,
@@ -45,7 +43,7 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_helpers import (
-    VaultHelpers,
+    common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
     seal_type_has_changed,
@@ -58,13 +56,14 @@ from charms.vault_k8s.v0.vault_managers import (
     AutounsealConfigurationDetails,
     AutounsealProviderManager,
     AutounsealRequirerManager,
+    BackupManager,
     File,
     KVManager,
+    ManagerError,
     PKIManager,
     TLSManager,
     VaultCertsError,
 )
-from charms.vault_k8s.v0.vault_s3 import S3, S3Error
 from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
     ActionEvent,
@@ -90,23 +89,22 @@ APPROLE_ROLE_NAME = "charm"
 AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
-BACKUP_KEY_PREFIX = "vault-backup"
 CHARM_POLICY_NAME = "charm-access"
 CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
 CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
+CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 CONTAINER_NAME = "vault"
 CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
-KV_SECRET_PREFIX = "kv-creds-"
 LOG_FORWARDING_RELATION_NAME = "logging"
 PEER_RELATION_NAME = "vault-peers"
 PKI_MOUNT = "charm-pki"
 PKI_RELATION_NAME = "vault-pki"
 PKI_ROLE_NAME = "charm"
 PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
-REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
+VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_STORAGE_PATH = "/vault/raft"
 
@@ -125,7 +123,6 @@ class VaultCharm(CharmBase):
     def __init__(self, *args: Any):
         super().__init__(*args)
         self.juju_facade = JujuFacade(self)
-        self.helpers = VaultHelpers(self)
         self._service_name = self._container_name = CONTAINER_NAME
         self._container = Container(container=self.unit.get_container(self._container_name))
         self.unit.set_ports(self.VAULT_PORT)
@@ -224,10 +221,9 @@ class VaultCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
-        if (
-            self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
-            and not self.helpers.common_name_config_is_valid()
-        ):
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
             event.add_status(
                 BlockedStatus(
                     "Common name is not set in the charm config, cannot configure PKI secrets engine"
@@ -281,12 +277,12 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self.helpers.get_approle_auth_secret():
+        if not self._get_approle_auth_secret():
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        if not vault.is_active_or_standby():
+        if not self._get_authenticated_vault_client():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
         event.add_status(ActiveStatus())
 
@@ -310,18 +306,26 @@ class VaultCharm(CharmBase):
             return
         if not self.tls.tls_file_pushed_to_workload(File.KEY):
             return
+
         self._generate_vault_config_file()
         self._set_pebble_plan()
         try:
-            if not (
-                vault := self.helpers.get_active_and_unsealed_vault_client(
-                    self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-                )
-            ):
-                logger.warning("Failed to get Vault Client.")
-                return
+            vault = VaultClient(
+                url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+            )
         except VaultCertsError as e:
             logger.error("Failed to get TLS file path: %s", e)
+            return
+        if not vault.is_api_available():
+            return
+        if not vault.is_initialized():
+            return
+        try:
+            if vault.is_sealed():
+                return
+        except VaultClientError:
+            return
+        if not (vault := self._get_authenticated_vault_client()):
             return
         self._configure_pki_secrets_engine(vault)
         self._sync_vault_autounseal(vault)
@@ -353,17 +357,19 @@ class VaultCharm(CharmBase):
 
     def _remove_node_from_raft_cluster(self):
         """Remove the node from the raft cluster."""
-        try:
-            if not (
-                vault := self.helpers.get_active_and_unsealed_vault_client(
-                    self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-                )
-            ):
-                logger.warning("Failed to get Vault Client.")
-                return
-        except VaultCertsError as e:
-            logger.error("Failed to get TLS file path: %s", e)
+        if not (approle := self._get_approle_auth_secret()):
             return
+        vault = VaultClient(url=self._api_address, ca_cert_path=None)
+        if not vault.is_api_available():
+            return
+        if not vault.is_initialized():
+            return
+        try:
+            if vault.is_sealed():
+                return
+        except VaultClientError:
+            return
+        vault.authenticate(approle)
         if vault.is_node_in_raft_peers(self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(self._node_id)
 
@@ -503,7 +509,11 @@ class VaultCharm(CharmBase):
                 token_max_ttl="1h",
             )
             secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
-            self.helpers.set_approle_auth_secret(role_id, secret_id)
+            self.juju_facade.set_app_secret_content(
+                content={"role-id": role_id, "secret-id": secret_id},
+                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
+                description="The authentication details for the charm's access to vault.",
+            )
             event.set_results(
                 {"result": "Charm authorized successfully. You may now remove the secret."}
             )
@@ -520,63 +530,17 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
-            return
-
-        s3_parameters = self._get_s3_parameters()
-
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error:
-            event.fail(message="Failed to create S3 session.")
-            logger.error("Failed to run create-backup action - Failed to create S3 session.")
-            return
-
-        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-            event.fail(message="Failed to create S3 bucket.")
-            logger.error("Failed to run create-backup action - Failed to create S3 bucket.")
-            return
-        backup_key = self._get_backup_key()
-        try:
-            if not (
-                vault := self.helpers.get_active_vault_client(
-                    self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-                )
-            ):
-                event.fail(message="Failed to initialize Vault client.")
-                logger.error(
-                    "Failed to run create-backup action - Failed to initialize Vault client."
-                )
-                return
-        except VaultCertsError as e:
+        vault_client = self._get_authenticated_vault_client()
+        if not vault_client:
             event.fail(message="Failed to initialize Vault client.")
-            logger.error("Failed to run create-backup action - %s", e)
             return
-        if not vault:
-            event.fail(message="Failed to initialize Vault client.")
-            logger.error("Failed to run create-backup action - Failed to initialize Vault client.")
+        try:
+            manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
+            backup_key = manager.create_backup(vault_client)
+        except ManagerError as e:
+            logger.error("Failed to create backup: %s", e)
+            event.fail(message=f"Failed to create backup: {e}")
             return
-
-        response = vault.create_snapshot()
-        content_uploaded = s3.upload_content(
-            content=response.raw,  # type: ignore[reportArgumentType]
-            bucket_name=s3_parameters["bucket"],
-            key=backup_key,
-        )
-        if not content_uploaded:
-            event.fail(message="Failed to upload backup to S3 bucket.")
-            logger.error(
-                "Failed to run create-backup action - Failed to upload backup to S3 bucket."
-            )
-            return
-        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         event.set_results({"backup-id": backup_key})
 
     def _on_list_backups_action(self, event: ActionEvent) -> None:
@@ -587,32 +551,12 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
-            return
-
-        s3_parameters = self._get_s3_parameters()
-
         try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error as e:
-            event.fail(message="Failed to create S3 session.")
-            logger.error("Failed to run list-backups action - %s", e)
-            return
-
-        try:
-            backup_ids = s3.get_object_key_list(
-                bucket_name=s3_parameters["bucket"], prefix=BACKUP_KEY_PREFIX
-            )
-        except S3Error as e:
+            manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
+            backup_ids = manager.list_backups()
+        except ManagerError as e:
             logger.error("Failed to list backups: %s", e)
-            event.fail(message="Failed to run list-backups action - Failed to list backups.")
+            event.fail(message=f"Failed to list backups: {e}")
             return
 
         event.set_results({"backup-ids": json.dumps(backup_ids)})
@@ -625,94 +569,23 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
-        s3_pre_requisites_err = self._check_s3_pre_requisites()
-        if s3_pre_requisites_err:
-            event.fail(message=f"S3 pre-requisites not met. {s3_pre_requisites_err}.")
+        vault_client = self._get_active_vault_client()
+        if not vault_client:
+            event.fail(message="Failed to initialize an active Vault client.")
             return
-
-        s3_parameters = self._get_s3_parameters()
+        key = event.params.get("backup-id")
+        # This should be enforced by Juju/charmcraft.yaml, but we assert here
+        # to make the typechecker happy
+        assert isinstance(key, str)
         try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error as e:
-            logger.error("Failed to create S3 session: %s", e)
-            event.fail(message="Failed to create S3 session.")
-            return
-        try:
-            snapshot = s3.get_content(
-                bucket_name=s3_parameters["bucket"],
-                object_key=event.params.get("backup-id"),  # type: ignore[reportArgumentType]
-            )
-        except S3Error as e:
-            logger.error("Failed to retrieve snapshot from S3 storage: %s", e)
-            event.fail(message="Failed to retrieve snapshot from S3 storage.")
-            return
-        if not snapshot:
-            logger.error("Backup %s not found in S3 bucket", event.params.get("backup-id"))
-            event.fail(message="Backup not found in S3 bucket.")
-            return
-        try:
-            if not (self._restore_vault(snapshot=snapshot)):
-                logger.error("Failed to restore vault.")
-                event.fail(message="Failed to restore vault.")
-                return
-        except RuntimeError as e:
-            logger.error("Failed to restore vault: %s", e)
-            event.fail(message="Failed to restore vault.")
-            return
-        try:
-            if approle := self.helpers.get_approle_auth_secret():
-                vault = VaultClient(
-                    url=self._api_address,
-                    ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
-                )
-                if approle and not vault.authenticate(approle):
-                    self.helpers.remove_approle_auth_secret()
-        except TransientJujuError as e:
-            logger.error("Failed to remove old approle secret: %s", e)
-            event.fail(
-                message="Vault restored, but failed to remove old approle secret. Please remove it manually."  # noqa: E501
-            )
+            manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
+            manager.restore_backup(vault_client, key)
+        except ManagerError as e:
+            logger.error("Failed to restore backup: %s", e)
+            event.fail(message=f"Failed to restore backup: {e}")
             return
 
         event.set_results({"restored": event.params.get("backup-id")})
-
-    def _get_s3_parameters(self) -> Dict[str, str]:
-        """Retrieve S3 parameters from the S3 integrator relation.
-
-        Removes leading and trailing whitespaces from the parameters.
-
-        Returns:
-            Dict[str, str]: Dictionary of the S3 parameters.
-        """
-        s3_parameters = self.s3_requirer.get_s3_connection_info()
-        for key, value in s3_parameters.items():
-            if isinstance(value, str):
-                s3_parameters[key] = value.strip()
-        return s3_parameters
-
-    def _check_s3_pre_requisites(self) -> str | None:
-        """Check if the S3 pre-requisites are met."""
-        if not self.unit.is_leader():
-            return "Only leader unit can perform backup operations"
-        if not self.juju_facade.relation_exists(S3_RELATION_NAME):
-            return "S3 relation not created"
-        if missing_parameters := self._get_missing_s3_parameters():
-            return "S3 parameters missing ({})".format(", ".join(missing_parameters))
-        return None
-
-    def _get_backup_key(self) -> str:
-        """Return the backup key.
-
-        Returns:
-            str: The backup key
-        """
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        return f"{BACKUP_KEY_PREFIX}-{self.model.name}-{timestamp}"
 
     def _delete_vault_data(self) -> None:
         """Delete Vault's data."""
@@ -806,14 +679,22 @@ class VaultCharm(CharmBase):
         self._container.push(path=VAULT_CONFIG_FILE_PATH, source=content)
         logger.info("Pushed %s config file", VAULT_CONFIG_FILE_PATH)
 
-    def _get_missing_s3_parameters(self) -> List[str]:
-        """Return the list of missing S3 parameters.
+    def _get_approle_auth_secret(self) -> AppRole | None:
+        """Get the vault approle login details secret.
 
         Returns:
-            List[str]: List of missing required S3 parameters.
+            AppRole: An AppRole object with role_id and secret_id set from the
+                     values stored in the Juju secret, or None if the secret is
+                     not found or either of the values are not set.
         """
-        s3_parameters = self.s3_requirer.get_s3_connection_info()
-        return [param for param in REQUIRED_S3_PARAMETERS if param not in s3_parameters]
+        try:
+            role_id, secret_id = self.juju_facade.get_secret_content_values(
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+            )
+        except NoSuchSecretError:
+            logger.warning("Approle secret not yet created")
+            return None
+        return AppRole(role_id, secret_id) if role_id and secret_id else None
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
@@ -824,53 +705,56 @@ class VaultCharm(CharmBase):
             self._container.replan()
             logger.info("Pebble layer added")
 
-    def _restore_vault(self, snapshot: StreamingBody) -> bool:
-        """Restore vault using a raft snapshot.
+    def _get_active_vault_client(self) -> VaultClient | None:
+        """Return a client for the _active_ vault service.
 
-        Args:
-            snapshot: Snapshot to be restored as a StreamingBody from the S3 storage.
-
-        Returns:
-            bool: True if the restore was successful, False otherwise.
+        This may not be the Vault service running on this unit.
         """
         for address in self._get_peer_node_api_addresses():
-            vault = VaultClient(address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA))
-            if vault.is_active():
-                break
-        else:
-            logger.error("Failed to find active Vault client, cannot restore snapshot.")
-            return False
-        try:
             try:
-                if not (
-                    vault := self.helpers.get_active_vault_client(
-                        self._api_address, self.tls.get_tls_file_path_in_charm(File.CA)
-                    )
-                ):
-                    logger.error("Failed to get active Vault client")
-                    return False
-            except VaultClientError as e:
-                logger.error("Failed to get active Vault client: %s", e)
-                return False
-            # hvac vault client expects bytes or a file-like object to restore the snapshot
-            # StreamingBody implements the read() method
-            # so it can be used as a file-like object in this context
-            response = vault.restore_snapshot(snapshot)
-        except VaultClientError as e:
-            logger.error("Failed to restore snapshot: %s", e)
-            return False
-        if not 200 <= response.status_code < 300:
-            logger.error("Failed to restore snapshot: %s", response.json())
-            return False
+                vault = VaultClient(
+                    address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+                )
+            except VaultCertsError as e:
+                logger.warning("Failed to get Vault client: %s", e)
+                continue
+            if vault.is_active():
+                if not vault.is_api_available():
+                    return None
+                if not (approle := self._get_approle_auth_secret()):
+                    return None
+                if not vault.authenticate(approle):
+                    return None
+                return vault
+        return None
 
-        return True
+    def _get_authenticated_vault_client(self) -> VaultClient | None:
+        """Return an authenticated client for the Vault service on this unit.
 
-    def _get_peer_node_api_addresses(self) -> List[str]:
-        """Return a list of unit addresses that should be a part of the raft cluster."""
-        return [
-            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
-            for i in range(self.app.planned_units())
-        ]
+        Returns:
+            Vault: An active Vault client configured with the cluster address
+                   and CA certificate, and authorized with the AppRole
+                   credentials set upon initial authorization of the charm, or
+                   `None` if the client could not be successfully created or
+                   has not been authorized.
+        """
+        try:
+            vault = VaultClient(
+                url=self._api_address,
+                ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA),
+            )
+        except VaultCertsError as e:
+            logger.warning("Failed to get Vault client: %s", e)
+            return None
+        if not vault.is_api_available():
+            return None
+        if not (approle := self._get_approle_auth_secret()):
+            return None
+        if not vault.authenticate(approle):
+            return None
+        if not vault.is_active_or_standby():
+            return None
+        return vault
 
     @property
     def _vault_layer(self) -> Layer:
@@ -889,6 +773,13 @@ class VaultCharm(CharmBase):
                 },
             }
         )
+
+    def _get_peer_node_api_addresses(self) -> List[str]:
+        """Return a list of unit addresses that should be a part of the raft cluster."""
+        return [
+            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
+            for i in range(self.app.planned_units())
+        ]
 
     @property
     def _node_id(self) -> str:
