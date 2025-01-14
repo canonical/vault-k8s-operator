@@ -57,6 +57,11 @@ class TestCharmRemove(VaultCharmFixtures):
             assert not os.path.exists(f"{temp_dir}/raft/raft.db")
 
     def test_given_service_is_running_when_remove_then_service_is_stopped(self):
+        self.mock_vault.configure_mock(
+            **{
+                "get_num_raft_peers.return_value": 4,
+            },
+        )
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},

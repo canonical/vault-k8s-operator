@@ -3,8 +3,9 @@
 # See LICENSE file for licensing details.
 
 
-from charm import (
+from charms.vault_k8s.v0.vault_helpers import (
     config_file_content_matches,
+    seal_type_has_changed,
 )
 
 
@@ -13,6 +14,18 @@ def read_file(path: str) -> str:
     with open(path, "r") as f:
         content = f.read()
     return content
+
+
+class TestSealTypeHasChanged:
+    def test_given_identical_vault_config_when_seal_type_has_changed_returns_false(self):
+        existing_content = read_file("tests/unit/config.hcl")
+        new_content = read_file("tests/unit/config.hcl")
+        assert not seal_type_has_changed(existing_content, new_content)
+
+    def test_given_different_seal_type_config_when_seal_type_has_changed_returns_true(self):
+        existing_content = read_file("tests/unit/config.hcl")
+        new_content = read_file("tests/unit/config_with_transit_stanza.hcl")
+        assert seal_type_has_changed(existing_content, new_content)
 
 
 class TestConfigFileContentMatches:
