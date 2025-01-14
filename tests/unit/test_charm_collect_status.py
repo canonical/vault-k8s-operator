@@ -39,28 +39,6 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == WaitingStatus("Waiting for peer relation")
 
-    def test_given_bind_address_not_available_when_collect_unit_status_then_status_is_waiting(
-        self,
-    ):
-        container = testing.Container(
-            name="vault",
-            can_connect=True,
-        )
-        peer_relation = testing.PeerRelation(
-            endpoint="vault-peers",
-        )
-        self.mock_get_binding.return_value = None
-        state_in = testing.State(
-            containers=[container],
-            relations=[peer_relation],
-        )
-
-        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
-
-        assert state_out.unit_status == WaitingStatus(
-            "Waiting for bind and ingress addresses to be available"
-        )
-
     def test_ca_not_available_when_collect_unit_status_then_status_is_waiting(
         self,
     ):

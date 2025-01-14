@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
+    "allure-pytest",
     "boto3",
     "boto3-stubs[s3]",
     "cosl",
