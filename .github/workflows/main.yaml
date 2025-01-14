@@ -12,17 +12,17 @@ concurrency:
 
 jobs:
   lint-report:
-    uses: ./.github/workflows/lint-report.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@main
 
   grafana-dashboard-lint-report:
-    uses: ./.github/workflows/grafana-dashboard-lint-report.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@main
 
   static-analysis:
     name: Static analysis
-    uses: ./.github/workflows/static-analysis.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@main
 
   unit-tests-with-coverage:
-    uses: ./.github/workflows/unit-test.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@main
 
   build:
     needs:
@@ -38,6 +38,7 @@ jobs:
     uses: ./.github/workflows/integration-test.yaml
 
   publish-charm:
+    name: Publish Charm
     needs:
       - lint-report
       - grafana-dashboard-lint-report
@@ -45,5 +46,8 @@ jobs:
       - unit-tests-with-coverage
       - integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
-    uses: ./.github/workflows/publish-charm.yaml
-    secrets: inherit
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@main
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      track-name: 1.16
