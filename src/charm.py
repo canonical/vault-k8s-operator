@@ -10,9 +10,8 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-from typing import Any, Dict, List
+from typing import Any, List
 
-import hcl
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -43,6 +42,12 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClient,
     VaultClientError,
 )
+from charms.vault_k8s.v0.vault_helpers import (
+    common_name_config_is_valid,
+    config_file_content_matches,
+    render_vault_config_file,
+    seal_type_has_changed,
+)
 from charms.vault_k8s.v0.vault_kv import (
     VaultKvClientDetachedEvent,
     VaultKvProvides,
@@ -59,7 +64,6 @@ from charms.vault_k8s.v0.vault_managers import (
     TLSManager,
     VaultCertsError,
 )
-from jinja2 import Environment, FileSystemLoader
 from ops import CharmBase, MaintenanceStatus, main
 from ops.charm import (
     ActionEvent,
@@ -217,10 +221,9 @@ class VaultCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
-        if (
-            self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
-            and not self._common_name_config_is_valid()
-        ):
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
             event.add_status(
                 BlockedStatus(
                     "Common name is not set in the charm config, cannot configure PKI secrets engine"
@@ -233,10 +236,8 @@ class VaultCharm(CharmBase):
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
-        if not self._bind_address or not self._ingress_address:
-            event.add_status(
-                WaitingStatus("Waiting for bind and ingress addresses to be available")
-            )
+        if not self._ingress_address:
+            event.add_status(WaitingStatus("Waiting for ingress address to be available"))
             return
         if not self.tls.tls_file_available_in_charm(File.CA):
             event.add_status(
@@ -295,7 +296,7 @@ class VaultCharm(CharmBase):
             return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return
-        if not self._bind_address or not self._ingress_address:
+        if not self._ingress_address:
             return
         if not self.tls.ca_certificate_secret_exists():
             return
@@ -485,15 +486,13 @@ class VaultCharm(CharmBase):
             vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
             vault.enable_approle_auth_method()
             vault.create_or_update_policy_from_file(name=CHARM_POLICY_NAME, path=CHARM_POLICY_PATH)
-            cidrs = [f"{self._bind_address}/24"]
             role_id = vault.create_or_update_approle(
                 name=APPROLE_ROLE_NAME,
-                cidrs=cidrs,
                 policies=[CHARM_POLICY_NAME, "default"],
                 token_ttl="1h",
                 token_max_ttl="1h",
             )
-            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME, cidrs=cidrs)
+            secret_id = vault.generate_role_secret_id(name=APPROLE_ROLE_NAME)
             self.juju_facade.set_app_secret_content(
                 content={"role-id": role_id, "secret-id": secret_id},
                 label=VAULT_CHARM_APPROLE_SECRET_LABEL,
@@ -603,6 +602,12 @@ class VaultCharm(CharmBase):
         except ModelError:
             return False
 
+    def _pebble_plan_is_applied(self) -> bool:
+        """Check if the pebble plan is applied."""
+        plan = self._container.get_plan()
+        layer = self._vault_layer
+        return plan.services == layer.services
+
     def _get_relation_api_address(self, relation: Relation) -> str | None:
         """Fetch the api address from relation and returns it.
 
@@ -611,11 +616,6 @@ class VaultCharm(CharmBase):
         if not (ingress_address := self.juju_facade.get_ingress_address(relation=relation)):
             return None
         return f"https://{ingress_address}:{self.VAULT_PORT}"
-
-    def _common_name_config_is_valid(self) -> bool:
-        """Return whether the config value for the common name is valid."""
-        common_name = self.juju_facade.get_string_config("common_name")
-        return common_name != ""
 
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""
@@ -629,7 +629,9 @@ class VaultCharm(CharmBase):
 
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
 
-        content = _render_vault_config_file(
+        content = render_vault_config_file(
+            config_template_path=CONFIG_TEMPLATE_DIR_PATH,
+            config_template_name=CONFIG_TEMPLATE_NAME,
             default_lease_ttl=self.juju_facade.get_string_config("default_lease_ttl"),
             max_lease_ttl=self.juju_facade.get_string_config("max_lease_ttl"),
             cluster_address=self._cluster_address,
@@ -652,8 +654,10 @@ class VaultCharm(CharmBase):
             # If the seal type has changed, we need to restart Vault to apply
             # the changes. SIGHUP is currently only supported as a beta feature
             # for the enterprise version in Vault 1.16+
-            if _seal_type_has_changed(existing_content, content):
-                if self._vault_service_is_running():
+            if seal_type_has_changed(existing_content, content):
+                # Before restarting Vault, check if the pebble plan is applied
+                # If the plan was not applied, the service will restart anyway when applying the new plan
+                if self._vault_service_is_running() and self._pebble_plan_is_applied():
                     self._container.restart(self._service_name)
 
     def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
@@ -789,15 +793,6 @@ class VaultCharm(CharmBase):
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
 
     @property
-    def _bind_address(self) -> str | None:
-        """Fetch the bind address from peer relation and returns it.
-
-        Returns:
-            str: Bind address
-        """
-        return self.juju_facade.get_bind_address(relation_name=PEER_RELATION_NAME)
-
-    @property
     def _ingress_address(self) -> str | None:
         """Fetch the ingress address from peer relation and returns it.
 
@@ -805,95 +800,6 @@ class VaultCharm(CharmBase):
             str: Ingress address
         """
         return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
-
-
-def _render_vault_config_file(
-    default_lease_ttl: str,
-    max_lease_ttl: str,
-    cluster_address: str,
-    api_address: str,
-    tls_cert_file: str,
-    tls_key_file: str,
-    tcp_address: str,
-    raft_storage_path: str,
-    node_id: str,
-    retry_joins: List[Dict[str, str]],
-    autounseal_details: AutounsealConfigurationDetails | None = None,
-) -> str:
-    jinja2_environment = Environment(loader=FileSystemLoader(CONFIG_TEMPLATE_DIR_PATH))
-    template = jinja2_environment.get_template(CONFIG_TEMPLATE_NAME)
-    content = template.render(
-        default_lease_ttl=default_lease_ttl,
-        max_lease_ttl=max_lease_ttl,
-        cluster_address=cluster_address,
-        api_address=api_address,
-        tls_cert_file=tls_cert_file,
-        tls_key_file=tls_key_file,
-        tcp_address=tcp_address,
-        raft_storage_path=raft_storage_path,
-        node_id=node_id,
-        retry_joins=retry_joins,
-        autounseal_address=autounseal_details.address if autounseal_details else None,
-        autounseal_key_name=autounseal_details.key_name if autounseal_details else None,
-        autounseal_mount_path=autounseal_details.mount_path if autounseal_details else None,
-        autounseal_token=autounseal_details.token if autounseal_details else None,
-        autounseal_tls_ca_cert=autounseal_details.ca_cert_path if autounseal_details else None,
-    )
-    return content
-
-
-def _seal_type_has_changed(content_a: str, content_b: str) -> bool:
-    """Check if the seal type has changed between two versions of the Vault configuration file.
-
-    Currently only checks if the transit stanza is present or not, since this
-    is all we support. This function will need to be extended to support
-    alternate cases if and when we support them.
-    """
-    config_a = hcl.loads(content_a)
-    config_b = hcl.loads(content_b)
-    return _contains_transit_stanza(config_a) != _contains_transit_stanza(config_b)
-
-
-def _contains_transit_stanza(config: dict) -> bool:
-    return "seal" in config and "transit" in config["seal"]
-
-
-def config_file_content_matches(existing_content: str, new_content: str) -> bool:
-    """Return whether two Vault config file contents match.
-
-    We check if the retry_join addresses match, and then we check if the rest of the config
-    file matches.
-
-    Returns:
-        bool: Whether the vault config file content matches
-    """
-    existing_config_hcl = hcl.loads(existing_content)
-    new_content_hcl = hcl.loads(new_content)
-    if not existing_config_hcl:
-        logger.info("Existing config file is empty")
-        return existing_config_hcl == new_content_hcl
-    if not new_content_hcl:
-        logger.info("New config file is empty")
-        return existing_config_hcl == new_content_hcl
-
-    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
-    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
-
-    # If there is only one retry join, it is a dict
-    if isinstance(new_retry_joins, dict):
-        new_retry_joins = [new_retry_joins]
-    if isinstance(existing_retry_joins, dict):
-        existing_retry_joins = [existing_retry_joins]
-
-    new_retry_join_api_addresses = {address["leader_api_addr"] for address in new_retry_joins}
-    existing_retry_join_api_addresses = {
-        address["leader_api_addr"] for address in existing_retry_joins
-    }
-
-    return (
-        new_retry_join_api_addresses == existing_retry_join_api_addresses
-        and new_content_hcl == existing_config_hcl
-    )
 
 
 if __name__ == "__main__":  # pragma: no cover
