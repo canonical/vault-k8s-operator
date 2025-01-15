@@ -1,0 +1,12 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b (waiting for exactly 3 units, current : 1)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [allocating] waiting: agent initialising
+  vault-b/2 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [executing] blocked: Please unseal Vault
+  vault-b/2 [executing] blocked: Please unseal Vault
