@@ -1,0 +1,21 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-ey1b  github-pr-4cb92-microk8s  microk8s/localhost  3.6.1    unsupported  22:16:32Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address        Exposed  Message
+vault-k8s           error       3  vault-k8s             0  10.152.183.28  no       hook failed: "config-changed"
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-k8s/0*  error     idle       10.1.53.16         hook failed: "config-changed"
+vault-k8s/1   waiting   executing  10.1.53.23         Waiting for CA certificate to be accessible in the charm
+vault-k8s/2   waiting   executing  10.1.53.24         Waiting for CA certificate to be accessible in the charm
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:949 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-ey1b...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
