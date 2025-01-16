@@ -307,8 +307,8 @@ class VaultCharm(CharmBase):
         if not self.tls.tls_file_pushed_to_workload(File.KEY):
             return
 
-        self._set_pebble_plan()
         self._generate_vault_config_file()
+        self._set_pebble_plan()
         try:
             vault = VaultClient(
                 url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
