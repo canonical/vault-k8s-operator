@@ -1,0 +1,7 @@
+[32mINFO    [0m juju.model:model.py:2284 Deploying local:jammy/vault-k8s-1
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [executing] maintenance: installing charm software
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
