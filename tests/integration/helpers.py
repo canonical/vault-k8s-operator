@@ -62,6 +62,7 @@ async def wait_for_status_message(
     count: int = 1,
     timeout: int = 100,
     cadence: int = 2,
+    unit_name: str | None = None,
 ) -> None:
     """Wait for the correct status messages to appear.
 
@@ -72,16 +73,22 @@ async def wait_for_status_message(
         expected_message: The message that vault units should be setting as a status message
         timeout: Wait time, in seconds, before giving up
         cadence: How often to check the status of the units
+        unit_name: The name of the unit to check the status of
 
     Raises:
         TimeoutError: If the expected amount of statuses weren't found in the given timeout.
     """
     seen = 0
     unit_statuses = []
+    if unit_name and count > 1:
+        raise ValueError("Cannot specify unit name and count > 1")
     while timeout > 0:
         unit_statuses = await get_unit_status_messages(ops_test, app_name=app_name)
         seen = 0
-        for unit_name, unit_status_message in unit_statuses:
+        for current_unit_name, unit_status_message in unit_statuses:
+            if unit_name and not count and current_unit_name == unit_name:
+                if unit_status_message == expected_message:
+                    return
             if unit_status_message == expected_message:
                 seen += 1
 
