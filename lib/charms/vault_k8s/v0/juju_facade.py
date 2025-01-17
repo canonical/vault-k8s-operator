@@ -27,7 +27,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 logger = logging.getLogger(__name__)
 
@@ -720,3 +720,8 @@ class JujuFacade:
     def is_leader(self) -> bool:
         """Check if the unit is leader."""
         return self.charm.unit.is_leader()
+
+    @property
+    def planned_units_for_app(self) -> int:
+        """Return the number of planned units for the application."""
+        return self.charm.app.planned_units()
