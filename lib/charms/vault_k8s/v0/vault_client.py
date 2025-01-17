@@ -172,7 +172,7 @@ class VaultClient:
     def is_available_initialized_and_unsealed(self) -> bool:
         """Return whether Vault is available, initialized and unsealed.
 
-        It surpasses intermittent errors when checking seal status.
+        In case of a transient error, it will return False.
         """
         try:
             return self.is_api_available() and self.is_initialized() and not self.is_sealed()

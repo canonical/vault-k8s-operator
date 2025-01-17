@@ -86,7 +86,7 @@ async def wait_for_status_message(
         unit_statuses = await get_unit_status_messages(ops_test, app_name=app_name)
         seen = 0
         for current_unit_name, unit_status_message in unit_statuses:
-            if unit_name and not count and current_unit_name == unit_name:
+            if unit_name and current_unit_name == unit_name:
                 if unit_status_message == expected_message:
                     return
             if unit_status_message == expected_message:
