@@ -1479,12 +1479,12 @@ class RaftManager:
             raise ManagerError("Bootstrapping a Vault cluster requires exactly one unit")
 
         self._workload.stop(self._service_name)
-        self._create_peers_json(node_id, address)
+        self._push_peers_json(node_id, address)
         self._workload.restart(self._service_name)
 
         logger.info("Vault cluster bootstrapped in Raft mode")
 
-    def _create_peers_json(self, node_id: str, address: str) -> None:
+    def _push_peers_json(self, node_id: str, address: str) -> None:
         """Create the peers.json file for the Vault cluster.
 
         This method will create the peers.json file for the Vault cluster based
