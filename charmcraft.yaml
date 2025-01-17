@@ -151,6 +151,14 @@ actions:
           stored by the charm.
     required: [secret-id] 
 
+  bootstrap-raft:
+    description: >-
+      Bootstraps raft using a peers.json file. This action requires the
+      application to first be scaled to a single unit.  Bootstrapping can help
+      recover when quorum is lost, however, it may cause uncommitted Raft log
+      entries to be committed. See
+      https://developer.hashicorp.com/vault/docs/concepts/integrated-storage#manual-recovery-using-peers-json
+      for more details.
   create-backup:
     description: >-
       Creates a snapshot of the Raft backend and saves it to the S3 storage.
