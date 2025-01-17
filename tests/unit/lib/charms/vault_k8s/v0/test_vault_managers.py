@@ -23,6 +23,7 @@ from charms.vault_k8s.v0.vault_managers import (
     PKIManager,
     PrivateKey,
     ProviderCertificate,
+    RaftManager,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
     VaultKvProvides,
@@ -30,6 +31,7 @@ from charms.vault_k8s.v0.vault_managers import (
 from charms.vault_k8s.v0.vault_s3 import S3Error
 
 from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
+from container import Container
 from tests.unit.certificates import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
@@ -723,3 +725,36 @@ class TestBackupManager:
     ):
         self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
         self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
+
+
+class TestRaftManager:
+    @pytest.fixture(autouse=True)
+    @patch("charms.vault_k8s.v0.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock, monkeypatch: pytest.MonkeyPatch):
+        self.juju_facade = juju_facade_mock.return_value
+        self.juju_facade.is_leader = True
+        self.juju_facade.planned_units_for_app = 1
+        self.charm = MagicMock(spec=VaultCharm)
+        self.workload = MagicMock(spec=Container)
+        self.manager = RaftManager(self.charm, self.workload, "vault", "/vault/raft")
+
+    def test_given_non_leader_when_bootstrap_then_error_raised(self):
+        self.juju_facade.is_leader = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert str(e.value) == "Only the leader unit can bootstrap a Vault cluster"
+
+    def test_given_many_units_when_bootstrap_then_error_raised(self):
+        self.juju_facade.planned_units_for_app = 2
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert str(e.value) == "Bootstrapping a Vault cluster requires exactly one unit"
+
+    def test_given_one_unit_and_leader_when_bootstrap_then_peers_json_created(self):
+        self.manager.bootstrap("my-node", "my-address")
+        self.workload.stop.assert_called_once_with("vault")
+        self.workload.push.assert_called_once_with(
+            "/vault/raft/raft/peers.json",
+            '[{"id": "my-node", "address": "my-address"}]',
+        )
+        self.workload.restart.assert_called_once_with("vault")

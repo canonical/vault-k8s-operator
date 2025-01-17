@@ -28,6 +28,7 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -86,7 +87,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -1447,3 +1448,57 @@ class BackupManager:
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
         return s3_parameters
+
+
+class RaftManager:
+    """Encapsulates the business logic for managing the bootstrap of a Vault cluster in Raft mode."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        workload: WorkloadBase,
+        service_name: str,
+        storage_path: str,
+    ):
+        self._juju_facade = JujuFacade(charm)
+        self._workload = workload
+        self._service_name = service_name
+        self._storage_path = storage_path
+
+    def bootstrap(self, node_id: str, address: str) -> None:
+        """Bootstrap a Vault cluster in Raft mode.
+
+        This method will bootstrap a Vault cluster for a single node, by
+        identifying itself as the sole node in the cluster. Additional units
+        may then be added once the cluster is available.
+        """
+        if not self._juju_facade.is_leader:
+            logger.debug("Only leader unit can bootstrap a Vault cluster")
+            raise ManagerError("Only the leader unit can bootstrap a Vault cluster")
+        if not self._juju_facade.planned_units_for_app == 1:
+            raise ManagerError("Bootstrapping a Vault cluster requires exactly one unit")
+
+        self._workload.stop(self._service_name)
+        self._create_peers_json(node_id, address)
+        self._workload.restart(self._service_name)
+
+        logger.info("Vault cluster bootstrapped in Raft mode")
+
+    def _create_peers_json(self, node_id: str, address: str) -> None:
+        """Create the peers.json file for the Vault cluster.
+
+        This method will create the peers.json file for the Vault cluster based
+        on the ``node_id`` and ``address`` provided.
+        """
+        pass
+        self._workload.push(
+            f"{self._storage_path}/raft/peers.json", self._get_peers_json(node_id, address)
+        )
+
+    def _get_peers_json(self, node_id: str, address: str) -> str:
+        """Return the peers.json file content for bootstrapping raft.
+
+        This method will return the content of the peers.json file based on the
+        ``node_id`` and ``address`` provided.
+        """
+        return json.dumps([{"id": node_id, "address": address}])
