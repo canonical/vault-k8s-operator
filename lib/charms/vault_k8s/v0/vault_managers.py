@@ -458,7 +458,7 @@ class TLSManager(Object):
             raise
 
     def ca_certificate_is_saved(self) -> bool:
-        """Return wether a CA cert and its private key are saved in the charm."""
+        """Return whether a CA cert and its private key are saved in the charm."""
         return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _restart_vault(self) -> None:

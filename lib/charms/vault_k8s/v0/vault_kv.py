@@ -335,7 +335,7 @@ class VaultKvProviderEvents(ops.ObjectEvents):
 
 
 class VaultKvProvides(ops.Object):
-    """Class to be instanciated by the providing side of the relation."""
+    """Class to be instantiated by the providing side of the relation."""
 
     on = VaultKvProviderEvents()  # type: ignore
 
@@ -516,7 +516,7 @@ class VaultKvRequireEvents(ops.ObjectEvents):
 
 
 class VaultKvRequires(ops.Object):
-    """Class to be instanciated by the requiring side of the relation."""
+    """Class to be instantiated by the requiring side of the relation."""
 
     on = VaultKvRequireEvents()  # type: ignore
 
