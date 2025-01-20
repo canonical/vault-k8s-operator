@@ -1,0 +1,5 @@
+[32mINFO    [0m httpx:_client.py:1038 HTTP Request: DELETE https://10.145.253.131:16443/api/v1/namespaces/test-integration-i9n2/pods/vault-k8s-1 "HTTP/1.1 200 OK"
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [executing] blocked: Please unseal Vault
+  vault-k8s/2 [idle] active:
