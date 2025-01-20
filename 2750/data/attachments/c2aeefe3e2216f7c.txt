@@ -1,0 +1,48 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-gpa9  github-pr-cbcc8-microk8s  microk8s/localhost  3.6.1    unsupported  11:01:28Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             1  10.152.183.68   no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.163  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.10         
+vault-b/1     active    executing  10.1.53.4          
+vault-b/2     active    executing  10.1.53.11         
+vault-k8s/0*  active    executing  10.1.53.17         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.24         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 10:38:47 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-gpa9.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x78baa90af8e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-prometheus-k8s-0: 10:54:35 ERROR unit.prometheus-k8s/0.juju-log metrics-endpoint:10: Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:54:37 ERROR unit.prometheus-k8s/0.juju-log metrics-endpoint:10: Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:54:39 ERROR unit.prometheus-k8s/0.juju-log metrics-endpoint:10: Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:54:41 ERROR unit.prometheus-k8s/0.juju-log metrics-endpoint:10: Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:54:43 ERROR unit.prometheus-k8s/0.juju-log metrics-endpoint:10: Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:55:16 ERROR unit.prometheus-k8s/0.juju-log Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 10:55:16 ERROR juju.worker.uniter container "prometheus": WaitNotices error, waiting 1s: cannot communicate with server: Get "http://localhost/v1/notices?timeout=30s": EOF
+controller-0: 10:56:05 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-gpa9/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: 52176e30-7a20-4ad3-9cc8-028f253a1d6c, UID in object meta: 
+unit-vault-b-1: 10:59:26 ERROR unit.vault-b/1.juju-log vault-autounseal-requires:13: Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-gpa9-vault-b/0', 'servers': {'test-integration-gpa9-vault-b/0': {'id': 'test-integration-gpa9-vault-b/0', 'name': 'test-integration-gpa9-vault-b/0', 'address': 'vault-b-0.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 101, 'healthy': True, 'stable_since': '2025-01-20T10:57:43.359457464Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-gpa9-vault-b/1': {'id': 'test-integration-gpa9-vault-b/1', 'name': 'test-integration-gpa9-vault-b/1', 'address': 'vault-b-1.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '855.713697ms', 'last_term': 3, 'last_index': 98, 'healthy': True, 'stable_since': '2025-01-20T10:59:19.360147357Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-gpa9-vault-b/2': {'id': 'test-integration-gpa9-vault-b/2', 'name': 'test-integration-gpa9-vault-b/2', 'address': 'vault-b-2.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '5.125217279s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-20T10:59:21.360455211Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-gpa9-vault-b/0']}
+unit-vault-b-0: 10:59:55 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-gpa9.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x75789f91ee00>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 11:00:38 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-integration-gpa9.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7cd0d5419990>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 11:00:38 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-integration-gpa9.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x729073916020>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 11:00:40 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-gpa9.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x73a8ab02bca0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 11:00:59 ERROR unit.vault-b/0.juju-log Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-gpa9-vault-b/0', 'servers': {'test-integration-gpa9-vault-b/0': {'id': 'test-integration-gpa9-vault-b/0', 'name': 'test-integration-gpa9-vault-b/0', 'address': 'vault-b-0.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 4, 'last_index': 248, 'healthy': True, 'stable_since': '2025-01-20T11:00:58.770409272Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-gpa9-vault-b/1': {'id': 'test-integration-gpa9-vault-b/1', 'name': 'test-integration-gpa9-vault-b/1', 'address': 'vault-b-1.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '7.016848ms', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-20T11:00:58.770409272Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-gpa9-vault-b/2': {'id': 'test-integration-gpa9-vault-b/2', 'name': 'test-integration-gpa9-vault-b/2', 'address': 'vault-b-2.vault-b-endpoints.test-integration-gpa9.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '7.016468ms', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-20T11:00:58.770409272Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-gpa9-vault-b/0', 'test-integration-gpa9-vault-b/1', 'test-integration-gpa9-vault-b/2']}
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-gpa9...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
