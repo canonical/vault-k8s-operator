@@ -144,7 +144,7 @@ class TestVaultK8s:
             await wait_for_status_message(
                 ops_test=ops_test,
                 expected_message="Please authorize charm (see `authorize-charm` action)",
-                count=NUM_VAULT_UNITS,
+                unit_name=f"{APPLICATION_NAME}/{leader_unit_index}",
             )
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(

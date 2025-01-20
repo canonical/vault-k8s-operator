@@ -59,6 +59,9 @@ class TestCharmRemove(VaultCharmFixtures):
     def test_given_service_is_running_when_remove_then_service_is_stopped(self):
         self.mock_vault.configure_mock(
             **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_node_in_raft_peers.return_value": True,
                 "get_num_raft_peers.return_value": 4,
             },
         )
