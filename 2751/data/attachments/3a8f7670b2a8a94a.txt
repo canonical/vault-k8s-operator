@@ -1,0 +1,30 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-7fjv  github-pr-f14d9-microk8s  microk8s/localhost  3.6.2    unsupported  12:00:16Z
+
+App        Version  Status   Scale  Charm      Channel        Rev  Address         Exposed  Message
+loki-k8s   2.9.6    waiting      0  loki-k8s   latest/stable  181  10.152.183.205  no       Waiting for resource limit patch to apply
+vault-b             blocked      1  vault-k8s                   1  10.152.183.130  no       Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s           active       3  vault-k8s                   0  10.152.183.142  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+loki-k8s/0    unknown   lost       10.1.53.45         agent lost, see 'juju show-status-log loki-k8s/0'
+vault-b/0*    blocked   executing  10.1.53.52         Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s/0*  active    idle       10.1.53.17         
+vault-k8s/1   active    idle       10.1.53.25         
+vault-k8s/2   active    idle       10.1.53.24         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 11:45:04 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-7fjv.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7a27bb0e5e40>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 11:46:37 ERROR unit.vault-k8s/3.juju-log vault-peers:0: Raft cluster is not healthy. {'failure_tolerance': 1, 'healthy': False, 'leader': 'test-integration-7fjv-vault-k8s/0', 'servers': {'test-integration-7fjv-vault-k8s/0': {'id': 'test-integration-7fjv-vault-k8s/0', 'name': 'test-integration-7fjv-vault-k8s/0', 'address': 'vault-k8s-0.vault-k8s-endpoints.test-integration-7fjv.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 143, 'healthy': True, 'stable_since': '2025-01-21T11:40:50.77070948Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-7fjv-vault-k8s/1': {'id': 'test-integration-7fjv-vault-k8s/1', 'name': 'test-integration-7fjv-vault-k8s/1', 'address': 'vault-k8s-1.vault-k8s-endpoints.test-integration-7fjv.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '2.581581442s', 'last_term': 3, 'last_index': 141, 'healthy': True, 'stable_since': '2025-01-21T11:42:02.77186382Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-7fjv-vault-k8s/2': {'id': 'test-integration-7fjv-vault-k8s/2', 'name': 'test-integration-7fjv-vault-k8s/2', 'address': 'vault-k8s-2.vault-k8s-endpoints.test-integration-7fjv.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '3.59817607s', 'last_term': 3, 'last_index': 141, 'healthy': True, 'stable_since': '2025-01-21T11:42:04.771141642Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-7fjv-vault-k8s/3': {'id': 'test-integration-7fjv-vault-k8s/3', 'name': 'test-integration-7fjv-vault-k8s/3', 'address': 'vault-k8s-3.vault-k8s-endpoints.test-integration-7fjv.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '1.169026701s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-21T11:46:36.771519923Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-7fjv-vault-k8s/0', 'test-integration-7fjv-vault-k8s/1', 'test-integration-7fjv-vault-k8s/2']}
+controller-0: 11:59:04 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-7fjv/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: a5be0f34-59a5-45e5-aac9-dcebc3f4be31, UID in object meta: 
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:949 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-7fjv...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
