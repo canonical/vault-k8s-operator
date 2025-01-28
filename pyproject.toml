@@ -16,7 +16,7 @@ dependencies = [
     "lightkube-models",
     "ops",
     "opentelemetry-exporter-otlp-proto-http",
-    "pydantic==2.10.4",
+    "pydantic==2.10.6",
     "pytest-interface-tester",
     "pyhcl",
     "requests",
