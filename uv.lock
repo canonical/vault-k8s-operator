@@ -322,7 +322,7 @@ name = "click"
 version = "8.1.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
 wheels = [
@@ -349,7 +349,7 @@ wheels = [
 
 [[package]]
 name = "cosl"
-version = "0.0.48"
+version = "0.0.51"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lightkube" },
@@ -359,9 +359,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/fb/a1c76a24baffe83e0329c2b0aa19bf53f11e284c6aaee20bdca40a1a82c4/cosl-0.0.48.tar.gz", hash = "sha256:f02f540335db8c742cf87ef41891298033e6c2edbcf8cfa2ef2afa378fd3cf42", size = 72029 }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/2e/6b92138c48101f250b69aa4ce08250c57d5c3e7062baf0366e1107da174f/cosl-0.0.51.tar.gz", hash = "sha256:32af380475bba32df7334d53ff16fb93466a169c7433e79a9fef8dbbecfdd43c", size = 74980 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/5e/209d848f49b840e9718d100dd87b9070e017e525229ec82017e3d61140b0/cosl-0.0.48-py3-none-any.whl", hash = "sha256:36b57cdd7f9e143616eddd934a1d95478a5d4610c2ffe036780a9032d6e301ae", size = 58574 },
+    { url = "https://files.pythonhosted.org/packages/58/ae/52562d3c330bcae9aa97de7f4446c392b1978f16927e0eed76c7c6249932/cosl-0.0.51-py3-none-any.whl", hash = "sha256:2ef43a94f0ca130fb4f2af924b75329f3c5e74b5c40ad4036af16713ad7d47d4", size = 60075 },
 ]
 
 [[package]]
@@ -1834,7 +1834,7 @@ requires-dist = [
     { name = "allure-pytest" },
     { name = "boto3" },
     { name = "boto3-stubs", extras = ["s3"] },
-    { name = "cosl" },
+    { name = "cosl", specifier = ">0.0.50" },
     { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },
