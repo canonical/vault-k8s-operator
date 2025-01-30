@@ -2,6 +2,8 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Test charm for vault-kv."""
+
 import logging
 import secrets
 from pathlib import Path
@@ -17,6 +19,7 @@ from ops import main
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.model import ActiveStatus
+
 from vault_client import (
     VaultClient,  # type: ignore[import-not-found]
 )
@@ -31,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 class VaultKVRequirerCharm(CharmBase):
+    """Charm requiring vault-kv for testing."""
+
     def __init__(self, *args: Any):
         super().__init__(*args)
         self.vault_kv = VaultKvRequires(self, "vault-kv", mount_suffix="kv")

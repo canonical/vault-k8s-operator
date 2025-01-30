@@ -1,6 +1,8 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Vault client."""
+
 import logging
 
 import hvac  # type: ignore[import-untyped]
@@ -9,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class VaultClient:
+    """Vault client."""
+
     def __init__(
         self, url: str, ca_certificate: str, approle_role_id: str, approle_secret_id: str
     ):
