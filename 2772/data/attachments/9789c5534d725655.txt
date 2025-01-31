@@ -1,0 +1,41 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-siyw  github-pr-ff689-microk8s  microk8s/localhost  3.6.2    unsupported  15:52:02Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             1  10.152.183.92   no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.148  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.10         
+vault-b/1     active    executing  10.1.53.13         
+vault-b/2     active    executing  10.1.53.4          
+vault-k8s/0*  active    executing  10.1.53.17         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.24         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 15:28:57 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7d06747a5600>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 15:30:26 ERROR unit.vault-k8s/3.juju-log vault-peers:0: Raft cluster is not healthy. {'failure_tolerance': 1, 'healthy': False, 'leader': 'test-integration-siyw-vault-k8s/0', 'servers': {'test-integration-siyw-vault-k8s/0': {'id': 'test-integration-siyw-vault-k8s/0', 'name': 'test-integration-siyw-vault-k8s/0', 'address': 'vault-k8s-0.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 140, 'healthy': True, 'stable_since': '2025-01-31T15:25:38.470101453Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-siyw-vault-k8s/1': {'id': 'test-integration-siyw-vault-k8s/1', 'name': 'test-integration-siyw-vault-k8s/1', 'address': 'vault-k8s-1.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '2.101733576s', 'last_term': 3, 'last_index': 138, 'healthy': True, 'stable_since': '2025-01-31T15:26:44.470818494Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-siyw-vault-k8s/2': {'id': 'test-integration-siyw-vault-k8s/2', 'name': 'test-integration-siyw-vault-k8s/2', 'address': 'vault-k8s-2.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '4.599410355s', 'last_term': 3, 'last_index': 138, 'healthy': True, 'stable_since': '2025-01-31T15:26:46.470414346Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-siyw-vault-k8s/3': {'id': 'test-integration-siyw-vault-k8s/3', 'name': 'test-integration-siyw-vault-k8s/3', 'address': 'vault-k8s-3.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '1.472841206s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-31T15:30:24.470952689Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-siyw-vault-k8s/0', 'test-integration-siyw-vault-k8s/1', 'test-integration-siyw-vault-k8s/2']}
+unit-vault-k8s-1: 15:44:54 ERROR unit.vault-k8s/1.juju-log Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-siyw-vault-k8s/2', 'servers': {'test-integration-siyw-vault-k8s/0': {'id': 'test-integration-siyw-vault-k8s/0', 'name': 'test-integration-siyw-vault-k8s/0', 'address': 'vault-k8s-0.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '6.009589092s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-31T15:44:47.409337198Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-siyw-vault-k8s/1': {'id': 'test-integration-siyw-vault-k8s/1', 'name': 'test-integration-siyw-vault-k8s/1', 'address': 'vault-k8s-1.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '6.00958838s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-31T15:44:47.409337198Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-siyw-vault-k8s/2': {'id': 'test-integration-siyw-vault-k8s/2', 'name': 'test-integration-siyw-vault-k8s/2', 'address': 'vault-k8s-2.vault-k8s-endpoints.test-integration-siyw.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 6, 'last_index': 1602, 'healthy': True, 'stable_since': '2025-01-31T15:44:47.409337198Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-siyw-vault-k8s/2', 'test-integration-siyw-vault-k8s/0', 'test-integration-siyw-vault-k8s/1']}
+controller-0: 15:46:23 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-siyw/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: ed145511-b6a4-472b-b065-2868fe4f94fe, UID in object meta: 
+unit-vault-b-0: 15:50:28 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-siyw.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x77237932ab30>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 15:51:09 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-integration-siyw.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7a625abb4940>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 15:51:10 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-integration-siyw.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x77fd99c5f9d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 15:51:12 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-siyw.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7084475b11b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-siyw...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
