@@ -1,0 +1,39 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-vm9l  github-pr-06061-microk8s  microk8s/localhost  3.6.2    unsupported  20:07:38Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             1  10.152.183.167  no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.89   no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.13         
+vault-b/1     active    executing  10.1.53.11         
+vault-b/2     active    executing  10.1.53.4          
+vault-k8s/0*  active    executing  10.1.53.16         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 19:46:16 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-vm9l.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7e7b2e0b6620>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 20:05:58 ERROR unit.vault-b/1.juju-log vault-autounseal-requires:13: Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-vm9l-vault-b/0', 'servers': {'test-integration-vm9l-vault-b/0': {'id': 'test-integration-vm9l-vault-b/0', 'name': 'test-integration-vm9l-vault-b/0', 'address': 'vault-b-0.vault-b-endpoints.test-integration-vm9l.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 98, 'healthy': True, 'stable_since': '2025-01-31T20:04:10.85903822Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vm9l-vault-b/1': {'id': 'test-integration-vm9l-vault-b/1', 'name': 'test-integration-vm9l-vault-b/1', 'address': 'vault-b-1.vault-b-endpoints.test-integration-vm9l.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '5.254992006s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-31T20:05:52.859579455Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-vm9l-vault-b/2': {'id': 'test-integration-vm9l-vault-b/2', 'name': 'test-integration-vm9l-vault-b/2', 'address': 'vault-b-2.vault-b-endpoints.test-integration-vm9l.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '4.612927498s', 'last_term': 0, 'last_index': 0, 'healthy': False, 'stable_since': '2025-01-31T20:05:52.859579455Z', 'status': 'non-voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-vm9l-vault-b/0']}
+unit-vault-b-0: 20:06:24 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-vm9l.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x77425b616b90>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 20:07:04 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-integration-vm9l.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7d1fea193580>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 20:07:08 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-vm9l.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7a94c69b5930>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 20:07:09 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-integration-vm9l.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x771f1a5b4520>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-vm9l...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
