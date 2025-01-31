@@ -15,7 +15,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,11 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
         return existing_config_hcl == new_content_hcl
 
     new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
-    existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
+
+    try:
+        existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
+    except KeyError:
+        existing_retry_joins = []
 
     # If there is only one retry join, it is a dict
     if isinstance(new_retry_joins, dict):
