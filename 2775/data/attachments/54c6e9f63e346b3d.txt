@@ -1,0 +1,6 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 4)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 4)
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 4)
