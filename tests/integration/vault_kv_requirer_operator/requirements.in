@@ -1,4 +1,0 @@
-ops
-hvac
-pydantic==2.10.1
-pytest-interface-tester

@@ -119,9 +119,7 @@ bases:
 parts:
   charm:
     source: .
-    plugin: charm
-    charm-requirements:
-      - requirements.txt
+    plugin: uv
     build-packages:
       - libffi-dev
       - libssl-dev
@@ -131,7 +129,6 @@ parts:
       - rustup
     override-build: |
       rustup default stable
-      uv export --frozen --no-dev -o requirements.txt
       craftctl default
 
 actions:
