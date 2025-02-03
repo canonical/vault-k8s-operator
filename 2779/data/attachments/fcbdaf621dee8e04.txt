@@ -1,0 +1,6 @@
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [executing] active: 
+[32mINFO    [0m juju.model:model.py:3211 Waiting for model:
+  tls-certificates-requirer/0 [idle] active: Unit certificate is available
