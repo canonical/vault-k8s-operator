@@ -1,0 +1,44 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-mjvb  github-pr-33370-microk8s  microk8s/localhost  3.6.2    unsupported  20:12:36Z
+
+App                        Version  Status      Scale  Charm                      Channel        Rev  Address         Exposed  Message
+loki-k8s                            terminated      0  loki-k8s                   latest/stable  181  10.152.183.167  no       
+self-signed-certificates            unknown         0  self-signed-certificates   latest/edge    238  10.152.183.163  no       
+tls-certificates-requirer           unknown         0  tls-certificates-requirer  latest/stable   93  10.152.183.63   no       
+vault-b                             blocked       1/0  vault-k8s                                   1  10.152.183.205  no       Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s                           error           3  vault-k8s                                   0  10.152.183.250  no       hook failed: "secret-remove"
+vault-kv-requirer-a                 unknown         0  vault-kv-requirer                           0  10.152.183.126  no       
+vault-kv-requirer-b                 unknown         0  vault-kv-requirer                           1  10.152.183.129  no       
+
+Unit          Workload    Agent      Address     Ports  Message
+loki-k8s/0*   terminated  executing  10.1.53.44         (remove) 
+vault-b/0*    blocked     executing  10.1.53.52         Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s/0*  error       idle       10.1.53.17         hook failed: "secret-remove"
+vault-k8s/1   active      idle       10.1.53.25         
+vault-k8s/2   active      idle       10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 19:42:24 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-mjvb.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7cd97361fa00>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 19:42:31 ERROR unit.vault-k8s/1.juju-log Raft cluster is not healthy. {'failure_tolerance': 0, 'healthy': False, 'leader': 'test-integration-mjvb-vault-k8s/0', 'servers': {'test-integration-mjvb-vault-k8s/0': {'id': 'test-integration-mjvb-vault-k8s/0', 'name': 'test-integration-mjvb-vault-k8s/0', 'address': 'vault-k8s-0.vault-k8s-endpoints.test-integration-mjvb.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '0s', 'last_term': 3, 'last_index': 103, 'healthy': True, 'stable_since': '2025-02-03T19:39:43.318387666Z', 'status': 'leader', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-mjvb-vault-k8s/1': {'id': 'test-integration-mjvb-vault-k8s/1', 'name': 'test-integration-mjvb-vault-k8s/1', 'address': 'vault-k8s-1.vault-k8s-endpoints.test-integration-mjvb.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '31.17583866s', 'last_term': 3, 'last_index': 103, 'healthy': False, 'stable_since': '2025-02-03T19:40:41.319490673Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}, 'test-integration-mjvb-vault-k8s/2': {'id': 'test-integration-mjvb-vault-k8s/2', 'name': 'test-integration-mjvb-vault-k8s/2', 'address': 'vault-k8s-2.vault-k8s-endpoints.test-integration-mjvb.svc.cluster.local:8201', 'node_status': 'alive', 'last_contact': '2.663469396s', 'last_term': 3, 'last_index': 103, 'healthy': True, 'stable_since': '2025-02-03T19:40:43.318879764Z', 'status': 'voter', 'version': '1.16.3', 'node_type': 'voter'}}, 'voters': ['test-integration-mjvb-vault-k8s/0', 'test-integration-mjvb-vault-k8s/2', 'test-integration-mjvb-vault-k8s/1']}
+unit-vault-k8s-0: 19:53:36 ERROR juju.worker.uniter.context cannot apply changes: removing secrets: secret "secret:cughpsnmp25c78cbdg20" not found
+unit-vault-k8s-0: 19:53:36 ERROR juju.worker.uniter.operation hook "secret-remove" (via hook dispatching script: dispatch) failed: removing secrets: secret "secret:cughpsnmp25c78cbdg20" not found
+unit-prometheus-k8s-0: 19:58:34 ERROR unit.prometheus-k8s/0.juju-log Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 20:03:57 ERROR unit.prometheus-k8s/0.juju-log Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 20:08:35 ERROR unit.prometheus-k8s/0.juju-log Failed to apply resource limit patch: Unauthorized
+unit-prometheus-k8s-0: 20:09:05 ERROR juju.worker.uniter pebble poll failed for container "prometheus": failed to send pebble-ready event: terminated
+controller-0: 20:11:35 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": the object has been modified; please apply your changes to the latest version and try again
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:949 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-mjvb...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-kv-requirer-a
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-kv-requirer-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications tls-certificates-requirer
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
