@@ -32,7 +32,6 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
@@ -87,7 +86,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -805,17 +804,6 @@ class AutounsealProviderManager:
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
         return [policy for policy in output if policy.startswith(Naming.autounseal_policy_prefix)]
-
-
-@dataclass
-class AutounsealConfigurationDetails:
-    """Credentials required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    token: str
-    ca_cert_path: str
 
 
 class AutounsealRequirerManager:

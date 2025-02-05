@@ -43,6 +43,7 @@ from charms.vault_k8s.v0.vault_client import (
     VaultClientError,
 )
 from charms.vault_k8s.v0.vault_helpers import (
+    AutounsealConfiguration,
     common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
@@ -53,7 +54,6 @@ from charms.vault_k8s.v0.vault_kv import (
     VaultKvProvides,
 )
 from charms.vault_k8s.v0.vault_managers import (
-    AutounsealConfigurationDetails,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -65,7 +65,7 @@ from charms.vault_k8s.v0.vault_managers import (
     TLSManager,
     VaultCertsError,
 )
-from ops import CharmBase, MaintenanceStatus, main
+from ops import CharmBase, MaintenanceStatus, main, pebble
 from ops.charm import (
     ActionEvent,
     CollectStatusEvent,
@@ -331,7 +331,7 @@ class VaultCharm(CharmBase):
 
         if vault.is_active_or_standby() and not vault.is_raft_cluster_healthy():
             # Log if a raft node starts reporting unhealthy
-            logger.error(
+            logger.warning(
                 "Raft cluster is not healthy. %s",
                 vault.get_raft_cluster_state(),
             )
@@ -644,8 +644,6 @@ class VaultCharm(CharmBase):
             for node_api_address in self._get_peer_node_api_addresses()
         ]
 
-        autounseal_configuration_details = self._get_vault_autounseal_configuration()
-
         content = render_vault_config_file(
             config_template_path=CONFIG_TEMPLATE_DIR_PATH,
             config_template_name=CONFIG_TEMPLATE_NAME,
@@ -659,7 +657,7 @@ class VaultCharm(CharmBase):
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
-            autounseal_details=autounseal_configuration_details,
+            autounseal_config=self._get_vault_autounseal_configuration(),
         )
         existing_content = ""
         if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
@@ -677,22 +675,27 @@ class VaultCharm(CharmBase):
                 if self._vault_service_is_running() and self._pebble_plan_is_applied():
                     self._container.restart(self._service_name)
 
-    def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
+    def _get_vault_autounseal_token(self) -> str | None:
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
         if not autounseal_relation_details:
             return None
         autounseal_requirer_manager = AutounsealRequirerManager(
             self, self.vault_autounseal_requires
         )
-        self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
         provider_vault_token = autounseal_requirer_manager.get_provider_vault_token(
             autounseal_relation_details, self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA)
         )
-        return AutounsealConfigurationDetails(
+        return provider_vault_token
+
+    def _get_vault_autounseal_configuration(self) -> AutounsealConfiguration | None:
+        autounseal_relation_details = self.vault_autounseal_requires.get_details()
+        if not autounseal_relation_details:
+            return None
+        self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
+        return AutounsealConfiguration(
             autounseal_relation_details.address,
             autounseal_relation_details.mount_path,
             autounseal_relation_details.key_name,
-            provider_vault_token,
             self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
         )
 
@@ -720,7 +723,7 @@ class VaultCharm(CharmBase):
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
-        plan = self._container.get_plan()
+        plan: pebble.Plan = self._container.get_plan()
         layer = self._vault_layer
         if plan.services != layer.services:
             self._container.add_layer(self._container_name, layer, combine=True)
@@ -763,7 +766,7 @@ class VaultCharm(CharmBase):
     @property
     def _vault_layer(self) -> Layer:
         """Return the pebble layer to start Vault."""
-        return Layer(
+        layer = Layer(
             {
                 "summary": "vault layer",
                 "description": "pebble config layer for vault",
@@ -777,6 +780,12 @@ class VaultCharm(CharmBase):
                 },
             }
         )
+
+        # If we're using autounseal, provide the token to the external vault
+        # service (the autounsealer) as an environment variable
+        if token := self._get_vault_autounseal_token():
+            layer.services["vault"].environment["VAULT_TOKEN"] = token
+        return layer
 
     def _get_peer_node_api_addresses(self) -> List[str]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
