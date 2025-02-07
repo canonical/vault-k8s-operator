@@ -1,0 +1,19 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/jammy/tls-certificates-requirer-93
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/jammy/self-signed-certificates-238
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-1
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [allocating] waiting: installing agent
+  vault-kv-requirer-a/0 [allocating] waiting: installing agent
+  vault-kv-requirer-b/0 [allocating] waiting: installing agent
+  tls-certificates-requirer/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [allocating] waiting: agent initialising
+  vault-kv-requirer-a/0 [executing] active: 
+  vault-kv-requirer-b/0 [allocating] waiting: installing agent
+  tls-certificates-requirer/0 [idle] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  vault-kv-requirer-a/0 [idle] active:

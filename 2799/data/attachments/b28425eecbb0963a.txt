@@ -1,0 +1,39 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-bv78  github-pr-67c20-microk8s  microk8s/localhost  3.6.2    unsupported  13:46:10Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             1  10.152.183.235  no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.186  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    active    executing  10.1.53.13         
+vault-b/1     active    executing  10.1.53.4          
+vault-b/2     active    executing  10.1.53.11         
+vault-k8s/0*  active    executing  10.1.53.17         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.24         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 13:25:03 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-bv78.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x73597a953040>: Failed to establish a new connection: [Errno 111] Connection refused'))
+controller-0: 13:41:31 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-bv78/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: 1ba9633a-da79-471c-a0a0-2275dc8e4cb1, UID in object meta: 
+unit-vault-b-0: 13:45:09 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-bv78.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x790d5b80e740>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 13:45:35 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-integration-bv78.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7771beb8f220>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 13:45:40 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-integration-bv78.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ed939e03280>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 13:45:41 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-integration-bv78.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7562bc18f250>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-bv78...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
