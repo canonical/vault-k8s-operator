@@ -1,0 +1,200 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:929 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-p9cl  github-pr-b3b43-microk8s  microk8s/localhost  3.6.2    unsupported  14:05:09Z
+
+App        Version  Status   Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             blocked    1/0  vault-k8s             1  10.152.183.86   no       Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s           active       3  vault-k8s             0  10.152.183.105  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    blocked   executing  10.1.53.50         Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s/0*  active    idle       10.1.53.17         
+vault-k8s/1   active    idle       10.1.53.25         
+vault-k8s/2   active    idle       10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:935 Juju error logs:
+
+unit-vault-k8s-1: 13:58:39 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-p9cl.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ffb428b7100>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-kv-requirer-a-0: 14:02:30 ERROR unit.vault-kv-requirer-a/0.juju-log Uncaught exception while in charm code:
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connection.py", line 741, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connection.py", line 920, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/ssl_.py", line 460, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/ssl_.py", line 504, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+  File "/usr/lib/python3.10/ssl.py", line 513, in wrap_socket
+    return self.sslsocket_class._create(
+  File "/usr/lib/python3.10/ssl.py", line 1100, in _create
+    self.do_handshake()
+  File "/usr/lib/python3.10/ssl.py", line 1371, in do_handshake
+    self._sslobj.do_handshake()
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/retry.py", line 519, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='10.152.183.105', port=8200): Max retries exceeded with url: /v1/auth/approle/login (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)")))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/charm.py", line 177, in <module>
+    main(VaultKVRequirerCharm)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/__init__.py", line 343, in __call__
+    return _main.main(charm_class=charm_class, use_juju_for_storage=use_juju_for_storage)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 558, in main
+    manager.run()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 543, in run
+    self._emit()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 502, in _emit
+    self._emit_charm_event(self.dispatcher.event_name)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 530, in _emit_charm_event
+    event_to_emit.emit(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 347, in emit
+    framework._emit(event)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 908, in _emit
+    self._reemit(event_path)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 998, in _reemit
+    custom_handler(event)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/charm.py", line 115, in _on_create_secret_action
+    vault = VaultClient(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/vault_client.py", line 20, in __init__
+    self._approle_login(approle_role_id, approle_secret_id)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/vault_client.py", line 24, in _approle_login
+    login_response = self._client.auth.approle.login(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/api/auth_methods/approle.py", line 506, in login
+    return self._adapter.login(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 230, in login
+    response = self.post(url, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 159, in post
+    return self.request("post", url, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 408, in request
+    response = super().request(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 367, in request
+    response = self.session.request(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/adapters.py", line 698, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='10.152.183.105', port=8200): Max retries exceeded with url: /v1/auth/approle/login (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)")))
+unit-vault-kv-requirer-a-0: 14:02:32 ERROR unit.vault-kv-requirer-a/0.juju-log Uncaught exception while in charm code:
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connection.py", line 741, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connection.py", line 920, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/ssl_.py", line 460, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/ssl_.py", line 504, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+  File "/usr/lib/python3.10/ssl.py", line 513, in wrap_socket
+    return self.sslsocket_class._create(
+  File "/usr/lib/python3.10/ssl.py", line 1100, in _create
+    self.do_handshake()
+  File "/usr/lib/python3.10/ssl.py", line 1371, in do_handshake
+    self._sslobj.do_handshake()
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/urllib3/util/retry.py", line 519, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='10.152.183.105', port=8200): Max retries exceeded with url: /v1/auth/approle/login (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)")))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/charm.py", line 177, in <module>
+    main(VaultKVRequirerCharm)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/__init__.py", line 343, in __call__
+    return _main.main(charm_class=charm_class, use_juju_for_storage=use_juju_for_storage)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 558, in main
+    manager.run()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 543, in run
+    self._emit()
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 502, in _emit
+    self._emit_charm_event(self.dispatcher.event_name)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/_main.py", line 530, in _emit_charm_event
+    event_to_emit.emit(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 347, in emit
+    framework._emit(event)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 908, in _emit
+    self._reemit(event_path)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/ops/framework.py", line 998, in _reemit
+    custom_handler(event)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/charm.py", line 142, in _on_get_secret_action
+    vault = VaultClient(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/vault_client.py", line 20, in __init__
+    self._approle_login(approle_role_id, approle_secret_id)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/src/vault_client.py", line 24, in _approle_login
+    login_response = self._client.auth.approle.login(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/api/auth_methods/approle.py", line 506, in login
+    return self._adapter.login(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 230, in login
+    response = self.post(url, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 159, in post
+    return self.request("post", url, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 408, in request
+    response = super().request(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/hvac/adapters.py", line 367, in request
+    response = self.session.request(
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/var/lib/juju/agents/unit-vault-kv-requirer-a-0/charm/venv/lib/python3.10/site-packages/requests/adapters.py", line 698, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='10.152.183.105', port=8200): Max retries exceeded with url: /v1/auth/approle/login (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: IP address mismatch, certificate is not valid for '10.152.183.105'. (_ssl.c:1007)")))
+controller-0: 14:03:49 ERROR juju.worker.caasapplicationprovisioner.runner exited "loki-k8s": getting OCI image resources: unable to fetch OCI image resources for loki-k8s: application "loki-k8s" dying or dead
+unit-prometheus-k8s-0: 14:03:56 ERROR juju.worker.uniter container "prometheus": WaitNotices error, waiting 1s: cannot communicate with server: Get "http://localhost/v1/notices?timeout=30s": EOF
+controller-0: 14:04:09 ERROR juju.worker.caasapplicationprovisioner.runner exited "minio": deleting application "minio": application "minio" not found
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:949 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1041 Resetting model test-integration-p9cl...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1030    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1046 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1017 Forgetting model main...
