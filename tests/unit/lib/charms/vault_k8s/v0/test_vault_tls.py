@@ -208,7 +208,6 @@ class TestCharmTLS:
                 certificate_request=CertificateRequestAttributes(
                     common_name=ingress_address,
                     sans_dns=frozenset({self.fqdn}),
-                    sans_ip=frozenset({ingress_address}),
                     sans_oid=frozenset(),
                     email_address=None,
                     organization=None,

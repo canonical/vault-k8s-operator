@@ -86,7 +86,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -224,7 +224,6 @@ class TLSManager(Object):
         workload: WorkloadBase,
         common_name: str,
         sans_dns: FrozenSet[str] = frozenset(),
-        sans_ip: FrozenSet[str] = frozenset(),
     ):
         """Create a new TLSManager object.
 
@@ -237,7 +236,6 @@ class TLSManager(Object):
             workload: Either a Container or a Machine.
             common_name: The common name of the certificate
             sans_dns: Subject alternative names of the certificate
-            sans_ip: Subject alternative IP addresses of the certificate
         """
         super().__init__(charm, "tls")
         self.charm = charm
@@ -247,7 +245,6 @@ class TLSManager(Object):
         self.tls_directory_path = tls_directory_path
         self.common_name = common_name
         self.sans_dns = sans_dns
-        self.sans_ip = sans_ip
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         if self.mode == TLSMode.TLS_INTEGRATION:
@@ -288,11 +285,7 @@ class TLSManager(Object):
     def _get_certificate_requests(self) -> list[CertificateRequestAttributes]:
         if not self.common_name:
             return []
-        return [
-            CertificateRequestAttributes(
-                common_name=self.common_name, sans_dns=self.sans_dns, sans_ip=self.sans_ip
-            )
-        ]
+        return [CertificateRequestAttributes(common_name=self.common_name, sans_dns=self.sans_dns)]
 
     def _get_mode(self) -> TLSMode:
         """Determine the TLS mode of the charm."""
@@ -339,7 +332,6 @@ class TLSManager(Object):
         unit_private_key, unit_certificate = generate_vault_unit_certificate(
             common_name=self.common_name,
             sans_dns=self.sans_dns,
-            sans_ip=self.sans_ip,
             ca_certificate=ca_certificate,
             ca_private_key=ca_private_key,
         )
@@ -552,7 +544,6 @@ def generate_vault_ca_certificate() -> tuple[str, str]:
 
 def generate_vault_unit_certificate(
     common_name: str,
-    sans_ip: FrozenSet[str],
     sans_dns: FrozenSet[str],
     ca_certificate: str,
     ca_private_key: str,
@@ -561,7 +552,6 @@ def generate_vault_unit_certificate(
 
     Args:
         common_name: Common name of the certificate
-        sans_ip: Subject alternative IP addresses of the certificate
         sans_dns: Subject alternative names of the certificate
         ca_certificate: CA certificate
         ca_private_key: CA private key
@@ -573,7 +563,6 @@ def generate_vault_unit_certificate(
     csr = generate_csr(
         private_key=vault_private_key,
         common_name=common_name,
-        sans_ip=sans_ip,
         sans_dns=sans_dns,
     )
     vault_certificate = generate_certificate(
