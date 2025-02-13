@@ -230,6 +230,7 @@ class TestVaultK8s:
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
+        unit_addresses = [row.get("address") for row in await read_vault_unit_statuses(ops_test)]
         client = hvac.Client(url=f"https://{unit_addresses[0]}:8200", verify=False)
         client.token = root_token
         response = client.sys.read_raft_config()
