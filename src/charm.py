@@ -77,7 +77,6 @@ from ops.model import (
     ActiveStatus,
     BlockedStatus,
     ModelError,
-    Relation,
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
@@ -405,11 +404,11 @@ class VaultCharm(CharmBase):
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
         for relation in relations_without_credentials:
-            relation_address = self._get_relation_api_address(relation)
-            if not relation_address:
-                logger.warning("Relation address not found for relation %s", relation.id)
+            vault_url = self._api_address
+            if not vault_url:
+                logger.warning("Vault URL not found for relation %s", relation.id)
                 continue
-            autounseal_provider_manager.create_credentials(relation, relation_address)
+            autounseal_provider_manager.create_credentials(relation, vault_url)
         autounseal_provider_manager.clean_up_credentials()
 
     def _sync_vault_pki(self, vault: VaultClient) -> None:
@@ -441,7 +440,7 @@ class VaultCharm(CharmBase):
 
         kv_requests = self.vault_kv.get_kv_requests()
         for kv_request in kv_requests:
-            if not (vault_url := self._get_relation_api_address(kv_request.relation)):
+            if not (vault_url := self._api_address):
                 logger.debug("Failed to get Vault URL for relation %s", kv_request.relation.id)
                 continue
             manager.generate_credentials_for_requirer(
@@ -623,15 +622,6 @@ class VaultCharm(CharmBase):
         plan = self._container.get_plan()
         layer = self._vault_layer
         return plan.services == layer.services
-
-    def _get_relation_api_address(self, relation: Relation) -> str | None:
-        """Fetch the api address from relation and returns it.
-
-        Example: "https://10.152.183.20:8200"
-        """
-        if not (ingress_address := self.juju_facade.get_ingress_address(relation=relation)):
-            return None
-        return f"https://{ingress_address}:{self.VAULT_PORT}"
 
     def _generate_vault_config_file(self) -> None:
         """Handle the creation of the Vault config file."""

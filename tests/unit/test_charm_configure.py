@@ -6,6 +6,7 @@
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import hcl
 import ops.testing as testing
@@ -322,6 +323,7 @@ class TestCharmConfigure(VaultCharmFixtures):
 
     # Test KV
 
+    @patch("socket.getfqdn", new=MagicMock(return_value="vault"))
     def test_given_kv_request_when_configure_then_generate_credentials_for_requirer_is_called(
         self,
     ):
