@@ -20,7 +20,7 @@ jobs:
       - name: Fetch Charm Under Test
         uses: actions/download-artifact@v4
         with:
-          name: built-charm
+          name: built-charm-${{ matrix.arch.arch }}
           path: built/
 
       - name: Get Charm Under Test Path
@@ -30,7 +30,7 @@ jobs:
       - name: Fetch KV Requirer Charm
         uses: actions/download-artifact@v4
         with:
-          name: kv-requirer-charm
+          name: kv-requirer-charm-${{ matrix.arch.arch }}
           path: kv-requirer/
 
       - name: Get KV Requirer Charm Path
