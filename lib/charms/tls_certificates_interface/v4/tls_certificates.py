@@ -9,7 +9,7 @@ interface.
 Pre-requisites:
   - Juju >= 3.0
   - cryptography >= 43.0.0
-  - pydantic
+  - pydantic >= 2.0
 
 Learn more on how-to use the TLS Certificates interface library by reading the documentation:
 - https://charmhub.io/tls-certificates-interface/
@@ -32,7 +32,7 @@ from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from ops import BoundEvent, CharmBase, CharmEvents, SecretExpiredEvent
+from ops import BoundEvent, CharmBase, CharmEvents, Secret, SecretExpiredEvent, SecretRemoveEvent
 from ops.framework import EventBase, EventSource, Handle, Object
 from ops.jujuversion import JujuVersion
 from ops.model import (
@@ -52,9 +52,12 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 10
 
-PYDEPS = ["cryptography", "pydantic"]
+PYDEPS = [
+    "cryptography>=43.0.0",
+    "pydantic>=2.0",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +174,7 @@ class _CertificateSigningRequest(BaseModel):
 class _ProviderApplicationData(_DatabagModel):
     """Provider application data model."""
 
-    certificates: List[_Certificate]
+    certificates: List[_Certificate] = []
 
 
 class _RequirerData(_DatabagModel):
@@ -180,7 +183,7 @@ class _RequirerData(_DatabagModel):
     The same model is used for the unit and application data.
     """
 
-    certificate_signing_requests: List[_CertificateSigningRequest]
+    certificate_signing_requests: List[_CertificateSigningRequest] = []
 
 
 class Mode(Enum):
@@ -210,6 +213,27 @@ class PrivateKey:
     def from_string(cls, private_key: str) -> "PrivateKey":
         """Create a PrivateKey object from a private key."""
         return cls(raw=private_key.strip())
+
+    def is_valid(self) -> bool:
+        """Validate that the private key is PEM-formatted, RSA, and at least 2048 bits."""
+        try:
+            key = serialization.load_pem_private_key(
+                self.raw.encode(),
+                password=None,
+            )
+
+            if not isinstance(key, rsa.RSAPrivateKey):
+                logger.warning("Private key is not an RSA key")
+                return False
+
+            if key.key_size < 2048:
+                logger.warning("RSA key size is less than 2048 bits")
+                return False
+
+            return True
+        except ValueError:
+            logger.warning("Invalid private key format")
+            return False
 
 
 @dataclass(frozen=True)
@@ -304,6 +328,37 @@ class Certificate:
             expiry_time=expiry_time,
             validity_start_time=validity_start_time,
         )
+
+    def matches_private_key(self, private_key: PrivateKey) -> bool:
+        """Check if this certificate matches a given private key.
+
+        Args:
+            private_key (PrivateKey): The private key to validate against.
+
+        Returns:
+            bool: True if the certificate matches the private key, False otherwise.
+        """
+        try:
+            cert_object = x509.load_pem_x509_certificate(self.raw.encode())
+            key_object = serialization.load_pem_private_key(
+                private_key.raw.encode(), password=None
+            )
+
+            cert_public_key = cert_object.public_key()
+            key_public_key = key_object.public_key()
+
+            if not isinstance(cert_public_key, rsa.RSAPublicKey):
+                logger.warning("Certificate does not use RSA public key")
+                return False
+
+            if not isinstance(key_public_key, rsa.RSAPublicKey):
+                logger.warning("Private key is not an RSA key")
+                return False
+
+            return cert_public_key.public_numbers() == key_public_key.public_numbers()
+        except Exception as e:
+            logger.warning("Failed to validate certificate and private key match: %s", e)
+            return False
 
 
 @dataclass(frozen=True)
@@ -581,12 +636,14 @@ def generate_private_key(
     """Generate a private key with the RSA algorithm.
 
     Args:
-        key_size (int): Key size in bytes
+        key_size (int): Key size in bits, must be at least 2048 bits
         public_exponent: Public exponent.
 
     Returns:
         PrivateKey: Private Key
     """
+    if key_size < 2048:
+        raise ValueError("Key size must be at least 2048 bits for RSA security")
     private_key = rsa.generate_private_key(
         public_exponent=public_exponent,
         key_size=key_size,
@@ -947,6 +1004,7 @@ class TLSCertificatesRequiresV4(Object):
         certificate_requests: List[CertificateRequestAttributes],
         mode: Mode = Mode.UNIT,
         refresh_events: List[BoundEvent] = [],
+        private_key: Optional[PrivateKey] = None,
     ):
         """Create a new instance of the TLSCertificatesRequiresV4 class.
 
@@ -958,6 +1016,12 @@ class TLSCertificatesRequiresV4(Object):
             mode (Mode): Whether to use unit or app certificates mode. Default is Mode.UNIT.
             refresh_events (List[BoundEvent]): A list of events to trigger a refresh of
               the certificates.
+            private_key (Optional[PrivateKey]): The private key to use for the certificates.
+                If provided, it will be used instead of generating a new one.
+                If the key is not valid an exception will be raised.
+                Using this parameter is discouraged,
+                having to pass around private keys manually can be a security concern.
+                Allowing the library to generate and manage the key is the more secure approach.
         """
         super().__init__(charm, relationship_name)
         if not JujuVersion.from_environ().has_secrets:
@@ -971,9 +1035,13 @@ class TLSCertificatesRequiresV4(Object):
         self.relationship_name = relationship_name
         self.certificate_requests = certificate_requests
         self.mode = mode
+        if private_key and not private_key.is_valid():
+            raise TLSCertificatesError("Invalid private key")
+        self._private_key = private_key
         self.framework.observe(charm.on[relationship_name].relation_created, self._configure)
         self.framework.observe(charm.on[relationship_name].relation_changed, self._configure)
         self.framework.observe(charm.on.secret_expired, self._on_secret_expired)
+        self.framework.observe(charm.on.secret_remove, self._on_secret_remove)
         for event in refresh_events:
             self.framework.observe(event, self._configure)
 
@@ -988,13 +1056,32 @@ class TLSCertificatesRequiresV4(Object):
         if not self._tls_relation_created():
             logger.debug("TLS relation not created yet.")
             return
-        self._generate_private_key()
+        self._ensure_private_key()
+        self._cleanup_certificate_requests()
         self._send_certificate_requests()
         self._find_available_certificates()
-        self._cleanup_certificate_requests()
 
-    def _mode_is_valid(self, mode) -> bool:
+    def _mode_is_valid(self, mode: Mode) -> bool:
         return mode in [Mode.UNIT, Mode.APP]
+
+    def _validate_secret_exists(self, secret: Secret) -> None:
+        secret.get_info()  # Will raise `SecretNotFoundError` if the secret does not exist
+
+    def _on_secret_remove(self, event: SecretRemoveEvent) -> None:
+        """Handle Secret Removed Event."""
+        try:
+            # Ensure the secret exists before trying to remove it, otherwise
+            # the unit could be stuck in an error state. See the docstring of
+            # `remove_revision` and the below issue for more information.
+            # https://github.com/juju/juju/issues/19036
+            self._validate_secret_exists(event.secret)
+            event.secret.remove_revision(event.revision)
+        except SecretNotFoundError:
+            logger.warning(
+                "No such secret %s, nothing to remove",
+                event.secret.label or event.secret.id,
+            )
+            return
 
     def _on_secret_expired(self, event: SecretExpiredEvent) -> None:
         """Handle Secret Expired Event.
@@ -1069,46 +1156,93 @@ class TLSCertificatesRequiresV4(Object):
         raise TLSCertificatesError("Invalid mode")
 
     @property
-    def private_key(self) -> PrivateKey | None:
+    def private_key(self) -> Optional[PrivateKey]:
         """Return the private key."""
+        if self._private_key:
+            return self._private_key
         if not self._private_key_generated():
             return None
         secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
         private_key = secret.get_content(refresh=True)["private-key"]
         return PrivateKey.from_string(private_key)
 
-    def _generate_private_key(self) -> None:
-        if self._private_key_generated():
+    def _ensure_private_key(self) -> None:
+        """Make sure there is a private key to be used.
+
+        It will make sure there is a private key passed by the charm using the private_key
+        parameter or generate a new one otherwise.
+        """
+        # Remove the generated private key
+        # if one has been passed by the charm using the private_key parameter
+        if self._private_key:
+            self._remove_private_key_secret()
             return
-        private_key = generate_private_key()
-        self.charm.unit.add_secret(
-            content={"private-key": str(private_key)},
-            label=self._get_private_key_secret_label(),
-        )
-        logger.info("Private key generated")
+        if self._private_key_generated():
+            logger.debug("Private key already generated")
+            return
+        self._generate_private_key()
 
     def regenerate_private_key(self) -> None:
         """Regenerate the private key.
 
         Generate a new private key, remove old certificate requests and send new ones.
+
+        Raises:
+            TLSCertificatesError: If the private key is passed by the charm using the
+                private_key parameter.
         """
+        if self._private_key:
+            raise TLSCertificatesError(
+                "Private key is passed by the charm through the private_key parameter, "
+                "this function can't be used"
+            )
         if not self._private_key_generated():
             logger.warning("No private key to regenerate")
             return
-        self._regenerate_private_key()
+        self._generate_private_key()
         self._cleanup_certificate_requests()
         self._send_certificate_requests()
 
-    def _regenerate_private_key(self) -> None:
-        secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
-        secret.set_content({"private-key": str(generate_private_key())})
+    def _generate_private_key(self) -> None:
+        """Generate a new private key and store it in a secret.
+
+        This is the case when the private key used is generated by the library.
+            and not passed by the charm using the private_key parameter.
+        """
+        self._store_private_key_in_secret(generate_private_key())
+        logger.info("Private key generated")
 
     def _private_key_generated(self) -> bool:
+        """Check if a private key is stored in a secret.
+
+        This is the case when the private key used is generated by the library.
+        This should not exist when the private key used
+            is passed by the charm using the private_key parameter.
+        """
         try:
-            self.charm.model.get_secret(label=self._get_private_key_secret_label())
-        except (SecretNotFoundError, KeyError):
+            secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
+            secret.get_content(refresh=True)
+            return True
+        except SecretNotFoundError:
             return False
-        return True
+
+    def _store_private_key_in_secret(self, private_key: PrivateKey) -> None:
+        try:
+            secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
+            secret.set_content({"private-key": str(private_key)})
+        except SecretNotFoundError:
+            self.charm.unit.add_secret(
+                content={"private-key": str(private_key)},
+                label=self._get_private_key_secret_label(),
+            )
+
+    def _remove_private_key_secret(self) -> None:
+        """Remove the private key secret."""
+        try:
+            secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
+            secret.remove_all_revisions()
+        except SecretNotFoundError:
+            logger.warning("Private key secret not found, nothing to remove")
 
     def _csr_matches_certificate_request(
         self, certificate_signing_request: CertificateSigningRequest, is_ca: bool
@@ -1238,7 +1372,7 @@ class TLSCertificatesRequiresV4(Object):
 
     def get_assigned_certificate(
         self, certificate_request: CertificateRequestAttributes
-    ) -> Tuple[ProviderCertificate | None, PrivateKey | None]:
+    ) -> Tuple[Optional[ProviderCertificate], Optional[PrivateKey]]:
         """Get the certificate that was assigned to the given certificate request."""
         for requirer_csr in self.get_csrs_from_requirer_relation_data():
             if certificate_request == CertificateRequestAttributes.from_csr(
@@ -1248,7 +1382,9 @@ class TLSCertificatesRequiresV4(Object):
                 return self._find_certificate_in_relation_data(requirer_csr), self.private_key
         return None, None
 
-    def get_assigned_certificates(self) -> Tuple[List[ProviderCertificate], PrivateKey | None]:
+    def get_assigned_certificates(
+        self,
+    ) -> Tuple[List[ProviderCertificate], Optional[PrivateKey]]:
         """Get a list of certificates that were assigned to this or app."""
         assigned_certificates = []
         for requirer_csr in self.get_csrs_from_requirer_relation_data():
@@ -1259,12 +1395,19 @@ class TLSCertificatesRequiresV4(Object):
     def _find_certificate_in_relation_data(
         self, csr: RequirerCertificateRequest
     ) -> Optional[ProviderCertificate]:
-        """Return the certificate that match the given CSR."""
+        """Return the certificate that matches the given CSR, validated against the private key."""
+        if not self.private_key:
+            return None
         for provider_certificate in self.get_provider_certificates():
             if (
                 provider_certificate.certificate_signing_request == csr.certificate_signing_request
                 and provider_certificate.certificate.is_ca == csr.is_ca
             ):
+                if not provider_certificate.certificate.matches_private_key(self.private_key):
+                    logger.warning(
+                        "Certificate does not match the private key. Ignoring invalid certificate."
+                    )
+                    continue
                 return provider_certificate
         return None
 
@@ -1308,7 +1451,7 @@ class TLSCertificatesRequiresV4(Object):
                             logger.debug(
                                 "Secret %s with correct certificate already exists", secret_label
                             )
-                            return
+                            continue
                         secret.set_content(
                             content={
                                 "certificate": str(provider_certificate.certificate),
@@ -1318,6 +1461,7 @@ class TLSCertificatesRequiresV4(Object):
                         secret.set_info(
                             expire=provider_certificate.certificate.expiry_time,
                         )
+                        secret.get_content(refresh=True)
                     except SecretNotFoundError:
                         logger.debug("Creating new secret with label %s", secret_label)
                         secret = self.charm.unit.add_secret(
@@ -1375,9 +1519,9 @@ class TLSCertificatesRequiresV4(Object):
 
     def _get_private_key_secret_label(self) -> str:
         if self.mode == Mode.UNIT:
-            return f"{LIBID}-private-key-{self._get_unit_number()}"
+            return f"{LIBID}-private-key-{self._get_unit_number()}-{self.relationship_name}"
         elif self.mode == Mode.APP:
-            return f"{LIBID}-private-key"
+            return f"{LIBID}-private-key-{self.relationship_name}"
         else:
             raise TLSCertificatesError("Invalid mode. Must be Mode.UNIT or Mode.APP.")
 
