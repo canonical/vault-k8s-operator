@@ -5,8 +5,14 @@ on:
 
 jobs:
   integration-test:
-    runs-on: [self-hosted, linux, X64, xlarge, jammy]
-
+    strategy:
+      matrix:
+        arch:
+          - arch: amd64
+            runner: [self-hosted, linux, X64, xlarge, jammy]
+          - arch: arm64
+            runner: [self-hosted, linux, ARM64, medium, jammy]
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

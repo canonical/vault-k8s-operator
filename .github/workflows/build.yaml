@@ -5,7 +5,14 @@ on:
 
 jobs:
   build-charm-under-test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: [self-hosted, linux, ARM64, medium, jammy]
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +30,19 @@ jobs:
       - name: Archive Charm Under Test
         uses: actions/upload-artifact@v4
         with:
-          name: built-charm
+          name: built-charm-${{ matrix.arch.arch }}
           path: "*.charm"
           retention-days: 5
 
   build-kv-requirer:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: [self-hosted, linux, ARM64, medium, jammy]
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +64,6 @@ jobs:
       - name: Archive KV Requirer Charm
         uses: actions/upload-artifact@v4
         with:
-          name: kv-requirer-charm
+          name: kv-requirer-charm-${{ matrix.arch.arch }}
           path: tests/integration/vault_kv_requirer_operator/*.charm
           retention-days: 5
