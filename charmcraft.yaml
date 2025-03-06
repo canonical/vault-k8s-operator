@@ -85,7 +85,14 @@ requires:
     interface: vault-autounseal
     limit: 1
   ingress:
+    description: |
+      Ingress relation for the vault app (ingress per app).
     interface: ingress
+    limit: 1
+  ingress-per-unit:
+    description: |
+      Ingress relation for the vault units (ingress per unit).
+    interface: ingress_per_unit
     limit: 1
   tls-certificates-access:
     interface: tls-certificates

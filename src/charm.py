@@ -24,6 +24,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
 )
+from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.juju_facade import (
     JujuFacade,
@@ -108,6 +109,8 @@ TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_STORAGE_PATH = "/vault/raft"
+INGRESS_PER_APP_RELATION_NAME = "ingress"
+INGRESS_PER_UNIT_RELATION_NAME = "ingress-per-unit"
 
 
 @trace_charm(
@@ -177,10 +180,19 @@ class VaultCharm(CharmBase):
             sans_dns=frozenset([socket.getfqdn()]),
             sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
         )
-        self.ingress = IngressPerAppRequirer(
+        self.ingress_per_app = IngressPerAppRequirer(
             charm=self,
             port=self.VAULT_PORT,
             strip_prefix=True,
+            scheme=lambda: "https",
+            relation_name=INGRESS_PER_APP_RELATION_NAME,
+        )
+        self.ingress_per_unit = IngressPerUnitRequirer(
+            self,
+            relation_name=INGRESS_PER_UNIT_RELATION_NAME,
+            port=self.VAULT_PORT,
+            strip_prefix=True,
+            redirect_https=True,
             scheme=lambda: "https",
         )
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
