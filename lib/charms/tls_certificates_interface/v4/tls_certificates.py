@@ -52,7 +52,7 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 PYDEPS = [
     "cryptography>=43.0.0",
@@ -190,9 +190,11 @@ class Mode(Enum):
     """Enum representing the mode of the certificate request.
 
     UNIT (default): Request a certificate for the unit.
-        Each unit will have its own private key and certificate.
+        Each unit will manage its private key,
+        certificate signing request and certificate.
     APP: Request a certificate for the application.
-        The private key and certificate will be shared by all units.
+        Only the leader unit will manage the private key, certificate signing request
+        and certificate.
     """
 
     UNIT = 1
@@ -1014,6 +1016,15 @@ class TLSCertificatesRequiresV4(Object):
             certificate_requests (List[CertificateRequestAttributes]):
                 A list with the attributes of the certificate requests.
             mode (Mode): Whether to use unit or app certificates mode. Default is Mode.UNIT.
+                In UNIT mode the requirer will place the csr in the unit relation data.
+                Each unit will manage its private key,
+                certificate signing request and certificate.
+                UNIT mode is for use cases where each unit has its own identity.
+                If you don't know which mode to use, you likely need UNIT.
+                In APP mode the leader unit will place the csr in the app relation databag.
+                APP mode is for use cases where the underlying application needs the certificate
+                for example using it as an intermediate CA to sign other certificates.
+                The certificate can only be accessed by the leader unit.
             refresh_events (List[BoundEvent]): A list of events to trigger a refresh of
               the certificates.
             private_key (Optional[PrivateKey]): The private key to use for the certificates.
