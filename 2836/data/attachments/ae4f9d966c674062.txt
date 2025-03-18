@@ -1,0 +1,21 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:936 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-dr7h  github-pr-06613-microk8s  microk8s/localhost  3.6.4    unsupported  20:58:29Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address        Exposed  Message
+vault-k8s           error     0/3  vault-k8s             0  10.152.183.41  no       unknown container reason "ImagePullBackOff": Back-off pulling image "docker.io/jujusolutions/charm-base:ubuntu-22.04"
+
+Unit         Workload  Agent       Address     Ports  Message
+vault-k8s/0  error     lost        10.1.53.16         unknown container reason "ImagePullBackOff": Back-off pulling image "docker.io/jujusolutions/charm-base:ubuntu-22.04"
+vault-k8s/1  waiting   allocating  10.1.53.23         installing agent
+vault-k8s/2  waiting   allocating  10.1.53.24         installing agent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:942 Juju error logs:
+
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:956 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1048 Resetting model test-integration-dr7h...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1037    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1053 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1024 Forgetting model main...
