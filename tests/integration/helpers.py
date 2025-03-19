@@ -119,6 +119,7 @@ def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mo
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
     client.token = root_token
     ca_cert = client.secrets.pki.read_ca_certificate(mount_point=mount)
+    assert ca_cert, "No CA certificate found"
     loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
     return str(
         loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
