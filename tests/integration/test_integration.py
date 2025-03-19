@@ -34,6 +34,7 @@ APPLICATION_NAME = "vault-k8s"
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
+SELF_SIGNED_CERTIFICATES_REVISION = 263
 VAULT_KV_REQUIRER_1_APPLICATION_NAME = "vault-kv-requirer-a"
 VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
@@ -265,7 +266,8 @@ class TestVaultK8sIntegrationsPart1:
         deploy_self_signed_certificates = ops_test.model.deploy(
             SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
             application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-            channel="edge",
+            channel="1/stable",
+            revision=SELF_SIGNED_CERTIFICATES_REVISION,
         )
         deploy_vault_kv_requirer_1 = ops_test.model.deploy(
             kv_requirer_charm_path,
@@ -617,11 +619,6 @@ class TestVaultK8sIntegrationsPart1:
         assert isinstance(app, Application)
         await app.remove_relation(
             "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
         )
         await ops_test.model.wait_for_idle(
             apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
