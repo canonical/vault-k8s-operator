@@ -1,0 +1,49 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-rkk0  github-pr-183e9-microk8s  microk8s/localhost  3.6.4    unsupported  02:26:56Z
+
+App        Version  Status   Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             blocked    1/0  vault-k8s             1  10.152.183.176  no       Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s           active       3  vault-k8s             0  10.152.183.197  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    blocked   executing  10.1.53.51         Please initialize Vault or integrate with an auto-unseal provider
+vault-k8s/0*  active    idle       10.1.53.17         
+vault-k8s/1   active    idle       10.1.53.25         
+vault-k8s/2   active    idle       10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-1: 02:18:10 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-rkk0.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ff6894172e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 02:19:16 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-5fc8194d-85f3-4730-8266-61b06212cc21: 02:19:16 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 02:19:16 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-3: 02:19:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 02:19:38 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-5fc8194d-85f3-4730-8266-61b06212cc21: 02:21:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 02:21:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 02:21:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-5fc8194d-85f3-4730-8266-61b06212cc21: 02:22:54 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-kv-requirer-b-0: 02:22:54 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.53.35:45504->10.152.183.238:17070: write: connection reset by peer: write tcp 10.1.53.35:45504->10.152.183.238:17070: write: connection reset by peer
+unit-vault-k8s-0: 02:22:56 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 02:22:57 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 02:23:19 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 02:23:20 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 02:23:25 ERROR unit.self-signed-certificates/0.juju-log certificates:3: Relation_changed event does not have a unit.
+unit-vault-k8s-0: 02:23:46 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 02:23:46 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-kv-requirer-b-0: 02:24:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-5fc8194d-85f3-4730-8266-61b06212cc21: 02:24:30 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 02:24:33 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 02:24:34 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 02:24:34 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+controller-0: 02:25:33 ERROR juju.worker.caasapplicationprovisioner.runner exited "prometheus-k8s": getting OCI image resources: unable to fetch OCI image resources for prometheus-k8s: application "prometheus-k8s" dying or dead
+controller-0: 02:26:18 ERROR juju.worker.caasapplicationprovisioner.runner exited "minio": deleting application "minio": application "minio" not found
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-integration-rkk0...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
