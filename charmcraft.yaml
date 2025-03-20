@@ -84,6 +84,7 @@ requires:
   vault-autounseal-requires:
     interface: vault-autounseal
     limit: 1
+    optional: true
   ingress:
     description: |
       Ingress relation for the vault app (ingress per app).
@@ -100,19 +101,24 @@ requires:
     description: |
       Communication between the vault units and from a client to Vault should 
       be done using the certificates provided by this integration.
+    optional: true
   tls-certificates-pki:
     interface: tls-certificates
     limit: 1
     description: |
       Interface to be used to provide Vault with its CA certificate. Vault will
       use this certificate to sign the certificates it issues on the `vault-pki` interface.
+    optional: true
   logging:
     interface: loki_push_api
+    optional: true
   s3-parameters:
     interface: s3
+    optional: true
   tracing:
     interface: tracing
     limit: 1
+    optional: true
 
 type: "charm"
 bases:
