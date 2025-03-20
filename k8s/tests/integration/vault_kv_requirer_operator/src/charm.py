@@ -20,7 +20,7 @@ from ops.framework import EventBase
 from ops.model import ActiveStatus
 
 from lib.juju_facade import JujuFacade, NoSuchStorageError
-from vault_client import (
+from vault import (
     Vault,  # type: ignore[import-not-found]
 )
 
