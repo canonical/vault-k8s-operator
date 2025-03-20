@@ -1,0 +1,55 @@
+name: Integration Tests
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
+
+jobs:
+  integration-tests:
+    runs-on: [self-hosted, linux, X64, jammy, xlarge]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: built-charm
+          path: built/
+
+      - name: Get Charm Under Test Path
+        id: charm-path
+        run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v4
+        with:
+          name: kv-requirer-charm
+          path: kv-requirer/
+
+      - name: Get KV Requirer Charm Path
+        id: kv-requirer-charm-path
+        run: echo "charm_path=$(find kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.6/stable
+          provider: lxd
+          lxd-channel: 5.21/stable
+
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+
+      - name: Run integration tests
+        run: |
+          cd ${{ inputs.path }}
+          tox -e integration -- \
+            --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
+            --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}"

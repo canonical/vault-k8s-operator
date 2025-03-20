@@ -2,6 +2,11 @@ name: Integration tests
 
 on:
   workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
 
 jobs:
   integration-test:
@@ -57,6 +62,7 @@ jobs:
 
       - name: Run integration tests
         run: |
+          cd ${{ inputs.path }}
           tox -e integration -- \
             --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
             --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}" \

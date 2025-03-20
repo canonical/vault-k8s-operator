@@ -54,12 +54,14 @@ jobs:
     uses: ./.github/workflows/build.yaml
     secrets: inherit
     with:
-      path: k8s/
+      path: ./k8s/
 
   k8s-integration-test:
     needs:
       - k8s-build
-    uses: ./.github/workflows/integration-test.yaml
+    uses: ./.github/workflows/k8s-integration-test.yaml
+    with:
+      path: ./k8s/
 
   k8s-publish-charm:
     name: Publish K8s Charm
@@ -69,6 +71,58 @@ jobs:
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      track-name: 1.16
+
+  machine-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
+    with:
+      path: ./machine/
+  
+  machine-grafana-dashboard-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@dev-path
+    with:
+      path: ./machine/src/grafana_dashboards/*
+
+  machine-static-analysis:
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
+    with:
+      path: ./machine/
+
+  machine-unit-tests-with-coverage:
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
+    with:
+      path: ./machine/
+
+  machine-build:
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+    with:
+      path: ./machine/
+  
+  machine-integration-test:
+    needs:
+      - machine-build
+    uses: ./.github/workflows/machine-integration-test.yaml
+    with:
+      path: ./machine/
+
+  machine-publish-charm:
+    name: Publish Machine Charm
+    needs:
+      - machine-lint-report
+      - machine-grafana-dashboard-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+      - machine-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:

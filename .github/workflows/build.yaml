@@ -5,9 +5,8 @@ on:
     inputs:
       path:
         description: Path to the charm's root directory
-        required: false
+        required: true
         type: string
-        default: .
 
 jobs:
   build-charm-under-test:
@@ -50,8 +49,7 @@ jobs:
         run: |
           cp ${{ inputs.path }}lib/charms/vault_k8s/v0/vault_kv.py ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
           cp ${{ inputs.path }}lib//juju_facade.py ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/juju_facade.py
-          cd ${{ inputs.path }}tests/integration/vault_kv_requirer_operator
-          charmcraft pack --verbose
+          charmcraft pack --verbose --project-dir ${{ inputs.path }}tests/integration/vault_kv_requirer_operator
 
       - name: Archive KV Requirer Charm
         uses: actions/upload-artifact@v4
