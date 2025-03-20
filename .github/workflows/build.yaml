@@ -23,11 +23,8 @@ jobs:
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
 
-      - name: Change to the charm's root directory
-        run: cd ${{ github.event.inputs.path }}
-
       - name: Build charm under test
-        run: charmcraft pack --verbose
+        run: charmcraft pack --verbose --project-dir ${{ github.event.inputs.path }}
 
       - name: Archive Charm Under Test
         uses: actions/upload-artifact@v4
@@ -53,7 +50,7 @@ jobs:
         run: |
           cp ${{ github.event.inputs.path }}lib/charms/vault_k8s/v0/vault_kv.py ${{ github.event.inputs.path }}tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
           cp ${{ github.event.inputs.path }}lib//juju_facade.py ${{ github.event.inputs.path }}tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/juju_facade.py
-          cd tests/integration/vault_kv_requirer_operator
+          cd ${{ github.event.inputs.path }}tests/integration/vault_kv_requirer_operator
           charmcraft pack --verbose
 
       - name: Archive KV Requirer Charm
