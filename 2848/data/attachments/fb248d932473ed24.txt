@@ -1,0 +1,84 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:936 Model status:
+
+Model                  Controller                Cloud/Region        Version  SLA          Timestamp
+test-integration-5hys  github-pr-2f4a2-microk8s  microk8s/localhost  3.6.4    unsupported  11:32:52Z
+
+App        Version  Status   Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             blocked    1/0  vault-k8s             1  10.152.183.248  no       Please authorize charm (see `authorize-charm` action)
+vault-k8s           active       3  vault-k8s             0  10.152.183.252  no       
+
+Unit          Workload  Agent      Address     Ports  Message
+vault-b/0*    blocked   executing  10.1.53.53         Please authorize charm (see `authorize-charm` action)
+vault-k8s/0*  active    executing  10.1.53.16         
+vault-k8s/1   active    executing  10.1.53.25         
+vault-k8s/2   active    executing  10.1.53.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:942 Juju error logs:
+
+unit-vault-k8s-1: 11:13:27 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-integration-5hys.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7eac48900760>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 11:14:33 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:14:33 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:14:33 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-3: 11:14:54 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 11:15:04 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:16:42 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:17:04 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:17:04 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-kv-requirer-b-0: 11:18:09 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:18:14 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:18:14 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 11:18:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 11:18:37 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 11:18:40 ERROR unit.self-signed-certificates/0.juju-log certificates:3: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 11:18:42 ERROR unit.self-signed-certificates/0.juju-log certificates:3: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 11:18:44 ERROR unit.self-signed-certificates/0.juju-log certificates:3: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:18:46 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:18:47 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.53.23:55464->10.152.183.86:17070: write: connection reset by peer: write tcp 10.1.53.23:55464->10.152.183.86:17070: write: connection reset by peer
+unit-vault-k8s-0: 11:18:48 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-tls-certificates-requirer-0: 11:19:07 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:19:15 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:19:15 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:19:47 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:19:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:19:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 11:20:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 11:20:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 11:20:36 ERROR unit.self-signed-certificates/0.juju-log certificates:5: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 11:20:39 ERROR unit.self-signed-certificates/0.juju-log certificates:5: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 11:20:42 ERROR unit.self-signed-certificates/0.juju-log certificates:5: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 11:20:43 ERROR unit.self-signed-certificates/0.juju-log certificates:5: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:20:45 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:20:45 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:24:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 11:24:50 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 11:24:50 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:24:57 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.53.9:32782->10.152.183.86:17070: write: connection reset by peer: write tcp 10.1.53.9:32782->10.152.183.86:17070: write: connection reset by peer
+unit-vault-k8s-0: 11:24:57 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:27:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:27:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:28:46 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 11:28:54 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:29:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:29:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-loki-k8s-0: 11:29:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+application-minio: 11:29:37 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-s3-integrator-0: 11:30:10 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:30:20 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.53.16:35744->10.152.183.86:17070: write: connection reset by peer: write tcp 10.1.53.16:35744->10.152.183.86:17070: write: connection reset by peer
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:30:20 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-loki-k8s-0: 11:30:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+controller-0: 11:30:25 ERROR juju.worker.caasunitprovisioner stopping application worker for minio: Operation cannot be fulfilled on statefulsets.apps "minio": StorageError: invalid object, Code: 4, Key: /registry/statefulsets/test-integration-5hys/minio, ResourceVersion: 0, AdditionalErrorMsg: Precondition failed: UID in precondition: de45cc5e-7442-4d01-b7ce-9a88c1c8c7b4, UID in object meta: 
+unit-prometheus-k8s-0: 11:30:42 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 11:30:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-9501cc38-1a32-41a7-8bb6-c37dafe2bf69: 11:31:10 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 11:31:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-b-0: 11:31:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-b-0: 11:32:31 ERROR unit.vault-b/0.juju-log The token provided is not valid when authorizing charm.
+unit-vault-b-0: 11:32:39 ERROR unit.vault-b/0.juju-log The token provided is not valid when authorizing charm.
+unit-vault-b-0: 11:32:46 ERROR unit.vault-b/0.juju-log The token provided is not valid when authorizing charm.
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:956 juju-crashdump finished [0]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1048 Resetting model test-integration-5hys...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1037    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1037    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1053 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1024 Forgetting model main...
