@@ -1,0 +1,9 @@
+[32mINFO    [0m pytest_operator.plugin:plugin.py:753 Adding model github-pr-ee436-microk8s:test-integration-grp3 on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:jammy/vault-k8s-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 0)
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: agent initialising
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
