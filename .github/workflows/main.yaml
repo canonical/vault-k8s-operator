@@ -14,24 +14,23 @@ jobs:
   lib-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
     with:
-      path: .
-  
+      path: ./
 
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
     with:
       path: k8s/
-  
+
   lib-static-analysis:
     name: Static analysis
     uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
     with:
-      path: .
-  
+      path: ./
+
   lib-unit-tests-with-coverage:
     uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
     with:
-      path: .
+      path: ./
 
   k8s-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@dev-path
