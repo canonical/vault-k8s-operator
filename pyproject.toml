@@ -20,7 +20,7 @@ dependencies = [
     "pytest-interface-tester",
     "pyhcl",
     "requests",
-    "rpds-py==0.22.3",
+    "rpds-py==0.23.1",
 ]
 
 [dependency-groups]
