@@ -24,7 +24,7 @@ jobs:
         run: sudo snap install charmcraft --classic
 
       - name: Build charm under test
-        run: charmcraft pack --verbose --project-dir ${{ github.event.inputs.path }}
+        run: charmcraft pack --verbose --project-dir ${{ inputs.path }}
 
       - name: Archive Charm Under Test
         uses: actions/upload-artifact@v4
