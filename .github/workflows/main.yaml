@@ -11,40 +11,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+  lib-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
+    with:
+      path: .
+  
 
-  grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
-
-  static-analysis:
+  k8s-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
+    with:
+      path: k8s/
+  
+  lib-static-analysis:
     name: Static analysis
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
+    with:
+      path: .
+  
+  lib-unit-tests-with-coverage:
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
+    with:
+      path: .
 
-  unit-tests-with-coverage:
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+  k8s-grafana-dashboard-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@dev-path
+    with:
+      path: k8s/
 
-  build:
+  k8s-static-analysis:
+    name: Static analysis
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
+    with:
+      path: k8s/
+
+  k8s-unit-tests-with-coverage:
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
+    with:
+      path: k8s/
+
+  k8s-build:
     needs:
-      - lint-report
-      - static-analysis
-      - unit-tests-with-coverage
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
     uses: ./.github/workflows/build.yaml
     secrets: inherit
 
-  integration-test:
+  k8s-integration-test:
     needs:
-      - build
+      - k8s-build
     uses: ./.github/workflows/integration-test.yaml
 
-  publish-charm:
-    name: Publish Charm
+  k8s-publish-charm:
+    name: Publish K8s Charm
     needs:
-      - lint-report
-      - grafana-dashboard-lint-report
-      - static-analysis
-      - unit-tests-with-coverage
-      - integration-test
+      - k8s-lint-report
+      - k8s-grafana-dashboard-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+      - k8s-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:

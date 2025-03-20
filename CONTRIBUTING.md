@@ -1,62 +1,18 @@
 # Contributing
 
-To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
+This repository contains the source code for the `vault-k8s` and `vault` charms. If you want to contribute to one of these charms, you can find the contributing guidelines in the charm's directory.
 
-This project uses `uv`. You can install it on Ubuntu with:
+## Common code between the Machine and K8s charms
+
+The Vault machine and K8s charms share a lot of common code. This common code is stored in the `lib` directory and then vendored into the `src/lib` directory of each charm. Vendoring is done using:
 
 ```shell
-sudo snap install --classic astral-uv
+tox -e vendor-libs
 ```
 
-You can create an environment for development with `uv`:
+You can run lint and unit tests on the common code using:
 
 ```shell
-uv sync
-source .venv/bin/activate
-```
-
-## Testing
-
-This project uses `tox` for managing test environments. It can be installed
-with:
-
-```shell
-uv tool install tox --with tox-uv
-```
-
-There are some pre-configured environments that can be used for linting
-and formatting code when you're preparing contributions to the charm:
-
-```shell
-tox run -e format        # update your code according to linting rules
-tox run -e lint          # code style
-tox run -e static        # static type checking
-tox run -e unit          # unit tests
-tox                      # runs 'format', 'lint', 'static', and 'unit' environments
-```
-
-### Running the integration tests locally
-
-To run the integration tests locally, you will need to have a Juju controller
-on `microk8s` active.
-
-First, you need to build the `vault-k8s` charm, as well as the test `vault-kv-requirer` charm. From the project root, run the following commands:
-
-```shell
-charmcraft pack
-charmcraft pack --project-dir tests/integration/vault_kv_requirer_operator/
-```
-
-Then, you can run the integration tests with:
-
-```shell
-tox -e integration -- --charm_path ./vault-k8s_ubuntu-22.04-amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_ubuntu-22.04-amd64.charm
-```
-
-## Build the charm
-
-Build the charm in this git repository using:
-
-```shell
-charmcraft pack
+tox -e lint
+tox -e unit
 ```

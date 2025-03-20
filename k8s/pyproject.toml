@@ -1,6 +1,6 @@
 [project]
-name = "vault-libs"
-version = "0.0.0"
+name = "vault-k8s-operator"
+version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
@@ -21,12 +21,22 @@ dependencies = [
     "pyhcl",
     "requests",
     "rpds-py==0.23.1",
+]
+
+[dependency-groups]
+test = [
     "coverage[toml]",
     "juju",
     "pytest",
     "pytest-operator",
     "pytest-asyncio==0.21.2",
     "ops[testing]",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+    "types-hvac",
 ]
 
 # Testing tools configuration
@@ -81,5 +91,5 @@ max-complexity = 10
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
 [tool.pyright]
-include = ["lib/"]
+include = ["src/", "lib/charms/vault_k8s/"]
 reportMissingParameterType = true

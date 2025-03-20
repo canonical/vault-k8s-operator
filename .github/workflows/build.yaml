@@ -2,6 +2,12 @@ name: Build
 
 on:
   workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: false
+        type: string
+        default: .
 
 jobs:
   build-charm-under-test:
@@ -16,6 +22,9 @@ jobs:
 
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
+
+      - name: Change to the charm's root directory
+        run: cd ${{ github.event.inputs.path }}
 
       - name: Build charm under test
         run: charmcraft pack --verbose
@@ -42,8 +51,8 @@ jobs:
 
       - name: Build KV Requirer charm
         run: |
-          cp lib/charms/vault_k8s/v0/vault_kv.py tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
-          cp lib/charms/vault_k8s/v0/juju_facade.py tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/juju_facade.py
+          cp k8s/lib/charms/vault_k8s/v0/vault_kv.py k8s/tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
+          cp k8s/lib//juju_facade.py k8s/tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/juju_facade.py
           cd tests/integration/vault_kv_requirer_operator
           charmcraft pack --verbose
 
