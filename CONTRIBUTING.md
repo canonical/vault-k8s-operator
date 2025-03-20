@@ -4,7 +4,7 @@ This repository contains the source code for the `vault-k8s` and `vault` charms.
 
 ## Common code between the Machine and K8s charms
 
-The Vault machine and K8s charms share a lot of common code. This common code is stored in the `lib` directory and then vendored into the `src/lib` directory of each charm. Vendoring is done using:
+The Vault machine and K8s charms share a lot of code. This common code is stored in the `lib` directory and then vendored into the `src/lib` directory of each charm. You can perform vendoring using:
 
 ```shell
 tox -e vendor-libs
