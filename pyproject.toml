@@ -22,11 +22,12 @@ dependencies = [
     "requests",
     "rpds-py==0.23.1",
     "coverage[toml]",
-    "juju",
     "pytest",
-    "pytest-operator",
-    "pytest-asyncio==0.21.2",
     "ops[testing]",
+    "codespell",
+    "pyright",
+    "ruff",
+    "types-hvac",
 ]
 
 # Testing tools configuration
