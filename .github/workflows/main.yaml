@@ -56,6 +56,8 @@ jobs:
       - k8s-unit-tests-with-coverage
     uses: ./.github/workflows/build.yaml
     secrets: inherit
+    with:
+      path: k8s/
 
   k8s-integration-test:
     needs:
