@@ -50,7 +50,7 @@ charmcraft pack --project-dir tests/integration/vault_kv_requirer_operator/
 Then, you can run the integration tests with:
 
 ```shell
-tox -e integration -- --charm_path ./vault-k8s_ubuntu-22.04-amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_ubuntu-22.04-amd64.charm
+tox -e integration -- --charm_path ./vault-k8s_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm
 ```
 
 ## Build the charm

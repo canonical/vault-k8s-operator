@@ -36,7 +36,7 @@ from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
 
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
 )
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -401,13 +401,15 @@ class TLSManager(Object):
         """Send the existing CA cert in the workload to all relations."""
         if ca := self.pull_tls_file_from_workload(File.CA):
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
-                self.certificate_transfer.set_certificate(
-                    certificate="", ca=ca, chain=[], relation_id=relation.id
+                self.certificate_transfer.add_certificates(
+                    certificates=set(ca), relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
         else:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
-                self.certificate_transfer.remove_certificate(relation.id)
+                # self.certificate_transfer.remove_certificate(
+                #     relation_id=relation.id
+                # ) TO DO
                 logger.info("Removed CA cert from relation %s", relation.id)
 
     def get_tls_file_path_in_workload(self, file: File) -> str:

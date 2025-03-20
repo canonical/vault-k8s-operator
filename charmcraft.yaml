@@ -40,7 +40,7 @@ resources:
   vault-image:
     type: oci-image
     description: OCI image for Vault
-    upstream-source: ghcr.io/canonical/vault:1.16.3
+    upstream-source: ghcr.io/canonical/vault:1.17.6
 
 storage:
   vault-raft:
@@ -121,13 +121,9 @@ requires:
     optional: true
 
 type: "charm"
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "22.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "22.04"
+base: ubuntu@24.04
+platforms:
+  amd64:
 
 parts:
   charm:

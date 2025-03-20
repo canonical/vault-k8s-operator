@@ -24,7 +24,7 @@ from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
-CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v0.certificate_transfer"
+CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
 VAULT_MANAGERS_PATH = "charms.vault_k8s.v0.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
@@ -583,9 +583,9 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_api_available")
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
-    @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
+    @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.add_certificates")
     def test_given_ca_cert_exists_when_certificate_transfer_relation_joins_then_ca_cert_is_advertised(
-        self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
+        self, add_certificates: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
     ):
         is_api_available.return_value = True
         is_sealed.return_value = False
@@ -651,10 +651,8 @@ class TestCharmTLS:
 
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
-            set_certificate.assert_called_once_with(
-                certificate="",
-                ca="some ca",
-                chain=[],
+            add_certificates.assert_called_once_with(
+                certificates=set("some ca"),
                 relation_id=cert_transfer_relation.id,
             )
 
@@ -666,9 +664,9 @@ class TestCharmTLS:
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_api_available")
     @patch("charms.vault_k8s.v0.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
-    @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
+    @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.add_certificates")
     def test_given_ca_cert_is_not_stored_when_certificate_transfer_relation_joins_then_ca_cert_is_not_advertised(
-        self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
+        self, add_certificates: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
     ):
         is_api_available.return_value = True
         is_sealed.return_value = False
@@ -714,4 +712,4 @@ class TestCharmTLS:
 
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
-            set_certificate.assert_not_called()
+            add_certificates.assert_not_called()

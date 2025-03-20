@@ -50,4 +50,4 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.16
+      track-name: 1.17
