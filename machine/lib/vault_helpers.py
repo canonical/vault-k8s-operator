@@ -1,23 +1,13 @@
 """This library contains helper function used when configuring the Vault service."""
 
 import logging
-from dataclasses import dataclass
 from typing import Dict, List
 
 import hcl
+from lib.vault_managers import AutounsealConfigurationDetails
 from jinja2 import Environment, FileSystemLoader
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class AutounsealConfiguration:
-    """Details required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    ca_cert_path: str
 
 
 def common_name_config_is_valid(common_name: str) -> bool:
@@ -38,7 +28,7 @@ def render_vault_config_file(
     raft_storage_path: str,
     node_id: str,
     retry_joins: List[Dict[str, str]],
-    autounseal_config: AutounsealConfiguration | None = None,
+    autounseal_details: AutounsealConfigurationDetails | None = None,
 ) -> str:
     """Render the Vault config file."""
     jinja2_environment = Environment(loader=FileSystemLoader(config_template_path))
@@ -54,10 +44,11 @@ def render_vault_config_file(
         raft_storage_path=raft_storage_path,
         node_id=node_id,
         retry_joins=retry_joins,
-        autounseal_address=autounseal_config.address if autounseal_config else None,
-        autounseal_mount_path=autounseal_config.mount_path if autounseal_config else None,
-        autounseal_key_name=autounseal_config.key_name if autounseal_config else None,
-        autounseal_ca_cert_path=autounseal_config.ca_cert_path if autounseal_config else None,
+        autounseal_address=autounseal_details.address if autounseal_details else None,
+        autounseal_key_name=autounseal_details.key_name if autounseal_details else None,
+        autounseal_mount_path=autounseal_details.mount_path if autounseal_details else None,
+        autounseal_token=autounseal_details.token if autounseal_details else None,
+        autounseal_tls_ca_cert=autounseal_details.ca_cert_path if autounseal_details else None,
     )
     return content
 
