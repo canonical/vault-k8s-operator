@@ -20,7 +20,9 @@ from ops.framework import EventBase
 from ops.model import ActiveStatus
 
 from lib.juju_facade import JujuFacade, NoSuchStorageError
-from vault_client import Vault  # type: ignore[import]
+from vault_client import (
+    Vault,  # type: ignore[import-not-found]
+)
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
 VAULT_KV_SECRET_LABEL = "vault-kv"
