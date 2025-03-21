@@ -18,7 +18,7 @@ from lib.vault_client import (
     VaultClient,
 )
 
-TEST_PATH = "./tests/unit"
+TEST_PATH = "./tests/unit/lib"
 
 
 @patch("hvac.api.auth_methods.token.Token.lookup_self")
