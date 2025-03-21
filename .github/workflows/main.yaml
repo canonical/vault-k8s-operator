@@ -49,7 +49,8 @@ jobs:
     uses: ./.github/workflows/k8s-integration-test.yaml
     with:
       path: ./k8s/
-      artifact-name: built-k8s-charm
+      vault-charm-artifact-name: built-k8s-charm
+      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
   k8s-publish-charm:
     name: Publish K8s Charm
@@ -104,7 +105,8 @@ jobs:
     uses: ./.github/workflows/machine-integration-test.yaml
     with:
       path: ./machine/
-      artifact-name: built-machine-charm
+      vault-charm-artifact-name: built-machine-charm
+      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
 
   machine-publish-charm:
     name: Publish Machine Charm
