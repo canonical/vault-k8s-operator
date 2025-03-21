@@ -7,8 +7,6 @@ from unittest.mock import patch
 import ops.testing as testing
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
-
-from charm import VaultOperatorCharm
 from vault.vault_client import VaultClient
 from vault.vault_managers import (
     AutounsealProviderManager,
@@ -19,6 +17,8 @@ from vault.vault_managers import (
     RaftManager,
     TLSManager,
 )
+
+from charm import VaultOperatorCharm
 
 
 class VaultCharmFixtures:
