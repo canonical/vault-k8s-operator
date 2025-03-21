@@ -40,7 +40,8 @@ jobs:
     secrets: inherit
     with:
       path: ./k8s/
-      artifact-name: built-k8s-charm
+      vault-charm-artifact-name: built-k8s-charm
+      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
   k8s-integration-test:
     needs:
@@ -94,8 +95,9 @@ jobs:
     secrets: inherit
     with:
       path: ./machine/
-      artifact-name: built-machine-charm
-  
+      vault-charm-artifact-name: built-machine-charm
+      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+
   machine-integration-test:
     needs:
       - machine-build

@@ -7,8 +7,12 @@ on:
         description: Path to the charm's root directory
         required: true
         type: string
-      artifact-name:
-        description: Name of the artifact to be uploaded
+      vault-charm-artifact-name:
+        description: Name of the artifact to be uploaded for the vault charm
+        required: true
+        type: string
+      kv-requirer-charm-artifact-name:
+        description: Name of the artifact to be uploaded for the kv-requirer charm
         required: true
         type: string
 
@@ -32,7 +36,7 @@ jobs:
       - name: Archive Charm Under Test
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.artifact-name }}
+          name: ${{ inputs.vault-charm-artifact-name }}
           path: "*.charm"
           retention-days: 5
 
@@ -58,6 +62,6 @@ jobs:
       - name: Archive KV Requirer Charm
         uses: actions/upload-artifact@v4
         with:
-          name: kv-requirer-charm
-          path: ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/*.charm
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: "*.charm"
           retention-days: 5

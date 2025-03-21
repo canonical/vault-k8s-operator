@@ -7,8 +7,12 @@ on:
         description: Path to the charm's root directory
         required: true
         type: string
-      artifact-name:
-        description: Name of the artifact to be downloaded
+      vault-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the vault charm
+        required: true
+        type: string
+      kv-requirer-charm-artifact-name:
+        description: Name of the artifact to be uploaded for the kv-requirer charm
         required: true
         type: string
 
@@ -21,7 +25,7 @@ jobs:
       - name: Fetch Charm Under Test
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.artifact-name }}
+          name: ${{ inputs.vault-charm-artifact-name }}
           path: built/
 
       - name: Get Charm Under Test Path
@@ -31,7 +35,7 @@ jobs:
       - name: Fetch KV Requirer Charm
         uses: actions/download-artifact@v4
         with:
-          name: kv-requirer-charm
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: kv-requirer/
 
       - name: Get KV Requirer Charm Path
