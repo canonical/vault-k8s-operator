@@ -7,5 +7,5 @@ This repository contains the source code for the `vault-k8s` and `vault` charms.
 The Vault machine and K8s charms share a lot of code. The K8s charm owns this common code and you can fetch this code into the Machine charm using:
 
 ```shell
-tox -e vendor-machine-libs
+make vendor-libs
 ```

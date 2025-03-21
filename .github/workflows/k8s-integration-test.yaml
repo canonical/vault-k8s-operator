@@ -70,10 +70,12 @@ jobs:
 
       - name: Run integration tests
         run: |
+          mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
+          mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
           cd ${{ inputs.path }}
           tox -e integration -- \
-            --charm_path="${{ steps.charm-path.outputs.charm_path }}" \
-            --kv_requirer_charm_path="${{ steps.kv-requirer-charm-path.outputs.charm_path }}" \
+            --charm_path=./vault.charm \
+            --kv_requirer_charm_path=./kv-requirer.charm \
             --alluredir allure-results
 
       - name: Load test report history
