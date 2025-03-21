@@ -1,0 +1,65 @@
+name: Integration Tests
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
+      vault-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the vault charm
+        required: true
+        type: string
+      kv-requirer-charm-artifact-name:
+        description: Name of the artifact to be uploaded for the kv-requirer charm
+        required: true
+        type: string
+
+jobs:
+  integration-tests:
+    runs-on: [self-hosted, linux, X64, jammy, xlarge]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+
+      - name: Get Charm Under Test Path
+        id: charm-path
+        run: echo "charm_path=$(find ${{ inputs.path }}built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: ${{ inputs.path }}kv-requirer/
+
+      - name: Get KV Requirer Charm Path
+        id: kv-requirer-charm-path
+        run: echo "charm_path=$(find ${{ inputs.path }}kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.6/stable
+          provider: lxd
+          lxd-channel: 5.21/stable
+
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+
+      - name: Run integration tests
+        run: |
+          mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
+          mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
+          cd ${{ inputs.path }}
+          tox -e integration -- \
+            --charm_path=./vault.charm \
+            --kv_requirer_charm_path=./kv-requirer.charm

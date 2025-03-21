@@ -1,0 +1,94 @@
+[project]
+name = "vault-operator"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "boto3",
+    "boto3-stubs[s3]",
+    "cosl",
+    "cryptography",
+    "jinja2",
+    "jsonschema",
+    "ops",
+    "psutil",
+    "pyhcl",
+    "pyopenssl",
+    "pytest-interface-tester",
+    "rpds-py==0.23.1",
+    "hvac",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "juju",
+    "pytest",
+    "pytest-asyncio==0.21.2",
+    "pytest-dependency",
+    "pytest-operator",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+]
+
+# Testing tools configuration
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+# Linting tools configuration
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "C",
+    "N",
+    "D",
+    "I001",
+    "G001",  # Logging statement uses str.format
+    "G002",  # Logging statement uses %
+    "G003",  # Logging statement uses +
+    "G004",  # Logging statement uses an f-string
+]
+extend-ignore = [
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+    "D107",
+    "E501",
+]
+per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
+
+[tool.pyright]
+executionEnvironments = [
+  { root = "src" },
+  { root = "tests"}
+]
+reportMissingParameterType = true

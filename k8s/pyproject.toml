@@ -1,0 +1,95 @@
+[project]
+name = "vault-k8s-operator"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "allure-pytest",
+    "boto3",
+    "boto3-stubs[s3]",
+    "cosl>0.0.50",
+    "cryptography",
+    "hvac",
+    "jinja2",
+    "jsonschema",
+    "lightkube",
+    "lightkube-models",
+    "ops",
+    "opentelemetry-exporter-otlp-proto-http",
+    "pydantic==2.10.6",
+    "pytest-interface-tester",
+    "pyhcl",
+    "requests",
+    "rpds-py==0.23.1",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "juju",
+    "pytest",
+    "pytest-operator",
+    "pytest-asyncio==0.21.2",
+    "ops[testing]",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+    "types-hvac",
+]
+
+# Testing tools configuration
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+# Linting tools configuration
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "C",
+    "N",
+    "D",
+    "I001",
+    "G001",  # Logging statement uses str.format
+    "G002",  # Logging statement uses %
+    "G003",  # Logging statement uses +
+    "G004",  # Logging statement uses an f-string
+]
+extend-ignore = [
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+]
+ignore = ["E501", "D107"]
+per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
+
+[tool.pyright]
+include = ["src/", "lib/charms/vault_k8s/", "lib/vault/"]
+reportMissingParameterType = true
