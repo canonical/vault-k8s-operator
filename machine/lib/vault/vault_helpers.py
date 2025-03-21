@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List
 
 import hcl
-from lib.vault_managers import AutounsealConfigurationDetails
+from vault.vault_managers import AutounsealConfigurationDetails
 from jinja2 import Environment, FileSystemLoader
 
 logger = logging.getLogger(__name__)

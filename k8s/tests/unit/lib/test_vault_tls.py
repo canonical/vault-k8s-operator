@@ -18,14 +18,14 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 from ops.model import WaitingStatus
+from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
-from lib.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
 CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v0.certificate_transfer"
-VAULT_MANAGERS_PATH = "lib.vault_managers"
+VAULT_MANAGERS_PATH = "vault.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
 
@@ -72,12 +72,12 @@ class TestCharmTLS:
             "Waiting for CA certificate to be accessible in the charm"
         )
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_unit_is_leader_and_ca_certificate_not_generated_when_configure_then_ca_certificate_is_generated(
         self,
     ):
@@ -140,12 +140,12 @@ class TestCharmTLS:
             assert open(cert_path).read().startswith("-----BEGIN CERTIFICATE-----")
             assert open(private_key_path).read().startswith("-----BEGIN RSA PRIVATE KEY-----")
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_certificate_access_relation_when_relation_changed_then_new_request_is_created(
         self,
     ):
@@ -220,12 +220,12 @@ class TestCharmTLS:
                 )
             )
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_certificate_access_relation_when_cert_available_then_new_cert_saved(
         self,
     ):
@@ -309,12 +309,12 @@ class TestCharmTLS:
             assert open(ca_cert_path).read() == str(ca_certificate)
             assert open(cert_path).read() == str(certificate)
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_certificate_access_relation_when_relation_left_then_previous_state_restored(
         self, patch_generate_certificate: MagicMock
@@ -388,12 +388,12 @@ class TestCharmTLS:
             assert os.path.exists(ca_cert_path)
             assert open(ca_cert_path).read() == str(certificate)
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_self_signed_certificates_already_created_when_update_status_then_new_certificates_are_not_generated(
         self,
     ):
@@ -475,12 +475,12 @@ class TestCharmTLS:
             assert os.stat(temp_dir + "/cert.pem").st_mtime == modification_time_cert_pem
             assert os.stat(temp_dir + "/ca.pem").st_mtime == modification_time_ca_pem
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
     def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
@@ -575,14 +575,14 @@ class TestCharmTLS:
             with open(temp_dir + "/cert.pem", "r") as f:
                 assert f.read() == str(self_signed_certificate)
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed")
-    @patch("lib.vault_client.VaultClient.is_active_or_standby", new=Mock)
-    @patch("lib.vault_client.VaultClient.authenticate", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available")
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed")
+    @patch("vault.vault_client.VaultClient.is_active_or_standby", new=Mock)
+    @patch("vault.vault_client.VaultClient.authenticate", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available")
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
     def test_given_ca_cert_exists_when_certificate_transfer_relation_joins_then_ca_cert_is_advertised(
         self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock
@@ -658,14 +658,14 @@ class TestCharmTLS:
                 relation_id=cert_transfer_relation.id,
             )
 
-    @patch("lib.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_active", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_sealed")
-    @patch("lib.vault_client.VaultClient.is_active_or_standby", new=Mock)
-    @patch("lib.vault_client.VaultClient.authenticate", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("lib.vault_client.VaultClient.is_api_available")
-    @patch("lib.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed")
+    @patch("vault.vault_client.VaultClient.is_active_or_standby", new=Mock)
+    @patch("vault.vault_client.VaultClient.authenticate", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available")
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{CERTIFICATE_TRANSFER_LIB_PATH}.CertificateTransferProvides.set_certificate")
     def test_given_ca_cert_is_not_stored_when_certificate_transfer_relation_joins_then_ca_cert_is_not_advertised(
         self, set_certificate: MagicMock, is_api_available: MagicMock, is_sealed: MagicMock

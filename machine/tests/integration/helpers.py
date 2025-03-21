@@ -14,7 +14,7 @@ from juju.errors import JujuError
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
-from vault import Vault
+from vault import Vault  # type: ignore[import]
 
 # Vault status codes, see
 # https://developer.hashicorp.com/vault/api-docs/system/health for more details

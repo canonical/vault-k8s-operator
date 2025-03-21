@@ -4,8 +4,8 @@
 
 import ops.testing as testing
 import pytest
+from vault.vault_client import AuditDeviceType, VaultClientError
 
-from lib.vault_client import AuditDeviceType, VaultClientError
 from tests.unit.fixtures import MockBinding, VaultCharmFixtures
 
 

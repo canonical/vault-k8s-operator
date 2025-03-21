@@ -46,18 +46,16 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import ChangeError, Layer, PathError
-
-from container import Container
-from lib.juju_facade import (
+from vault.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
     SecretRemovedError,
 )
-from lib.vault_autounseal import (
+from vault.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from lib.vault_client import (
+from vault.vault_client import (
     AppRole,
     AuditDeviceType,
     SecretsBackend,
@@ -65,14 +63,14 @@ from lib.vault_client import (
     VaultClient,
     VaultClientError,
 )
-from lib.vault_helpers import (
+from vault.vault_helpers import (
     AutounsealConfiguration,
     common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
     seal_type_has_changed,
 )
-from lib.vault_managers import (
+from vault.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -84,6 +82,8 @@ from lib.vault_managers import (
     TLSManager,
     VaultCertsError,
 )
+
+from container import Container
 
 logger = logging.getLogger(__name__)
 

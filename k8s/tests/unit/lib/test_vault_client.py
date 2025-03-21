@@ -9,8 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 from hvac.exceptions import Forbidden, InternalServerError
-
-from lib.vault_client import (
+from vault.vault_client import (
     AppRole,
     AuditDeviceType,
     SecretsBackend,

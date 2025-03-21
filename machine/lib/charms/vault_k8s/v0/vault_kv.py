@@ -124,7 +124,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, MutableMapping
 
 import ops
-from lib.juju_facade import (
+from lib.vault.juju_facade import (
     JujuFacade,
     NoSuchRelationError,
     NotLeaderError,

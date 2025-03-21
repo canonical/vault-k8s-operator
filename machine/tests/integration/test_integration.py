@@ -12,7 +12,7 @@ import yaml
 from cryptography import x509
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
-from vault import Vault
+from vault import Vault  # type: ignore[import]
 
 from tests.integration.helpers import (
     deploy_if_not_exists,

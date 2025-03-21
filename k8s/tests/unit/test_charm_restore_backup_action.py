@@ -6,8 +6,8 @@
 import ops.testing as testing
 import pytest
 import requests
+from vault.vault_managers import ManagerError
 
-from lib.vault_managers import ManagerError
 from tests.unit.fixtures import VaultCharmFixtures
 
 

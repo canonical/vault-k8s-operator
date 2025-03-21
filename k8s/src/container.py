@@ -7,8 +7,7 @@
 from typing import TextIO
 
 from ops import Container as OpsContainer
-
-from lib.vault_managers import WorkloadBase
+from vault.vault_managers import WorkloadBase
 
 
 class Container(WorkloadBase):

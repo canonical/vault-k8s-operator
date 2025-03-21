@@ -16,9 +16,9 @@ from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
-from vault import Vault
+from vault import Vault  # type: ignore[import]
 
-from lib.juju_facade import JujuFacade, NoSuchStorageError
+from lib.vault.juju_facade import JujuFacade, NoSuchStorageError
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
 VAULT_KV_SECRET_LABEL = "vault-kv"

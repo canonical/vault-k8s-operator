@@ -19,6 +19,7 @@ from ops.model import (
     Unit,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -196,10 +197,7 @@ class JujuFacade:
         return tuple(secret_content.get(key, None) for key in keys)
 
     def _add_app_secret(
-        self,
-        content: dict[str, str],
-        label: str | None = None,
-        description: str | None = None,
+        self, content: dict[str, str], label: str | None = None, description: str | None = None
     ) -> Secret:
         """Add a secret to the application."""
         try:
@@ -210,10 +208,7 @@ class JujuFacade:
             raise SecretValidationError(e) from e
 
     def _add_unit_secret(
-        self,
-        content: dict[str, str],
-        label: str | None = None,
-        description: str | None = None,
+        self, content: dict[str, str], label: str | None = None, description: str | None = None
     ) -> Secret:
         """Add a secret to the unit."""
         try:
@@ -251,8 +246,7 @@ class JujuFacade:
         try:
             if latest_content == content:
                 logger.info(
-                    "Secret %s already has the requested content, skipping",
-                    label or secret.id,
+                    "Secret %s already has the requested content, skipping", label or secret.id
                 )
                 return secret
             logger.info("Setting secret content to %s", label or secret.id)
@@ -279,11 +273,7 @@ class JujuFacade:
             SecretValidationError
         """
         return self._set_secret_content(
-            content=content,
-            label=label,
-            id=id,
-            unit_or_app="app",
-            description=description,
+            content=content, label=label, id=id, unit_or_app="app", description=description
         )
 
     def set_unit_secret_content(
@@ -302,11 +292,7 @@ class JujuFacade:
             SecretValidationError
         """
         return self._set_secret_content(
-            content=content,
-            label=label,
-            id=id,
-            unit_or_app="unit",
-            description=description,
+            content=content, label=label, id=id, unit_or_app="unit", description=description
         )
 
     def set_secret_label(self, new_label: str, label: str, id: str | None = None) -> None:

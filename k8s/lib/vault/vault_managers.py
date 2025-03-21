@@ -32,7 +32,6 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
@@ -55,29 +54,30 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from lib.juju_facade import (
+from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from ops import CharmBase, EventBase, Object, Relation
+from ops.pebble import PathError
+
+from vault.juju_facade import (
     FacadeError,
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
     TransientJujuError,
 )
-from lib.vault_autounseal import (
+from vault.vault_autounseal import (
     AutounsealDetails,
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from lib.vault_client import (
+from vault.vault_client import (
     AppRole,
     SecretsBackend,
     Token,
     VaultClient,
     VaultClientError,
 )
-from charms.vault_k8s.v0.vault_kv import VaultKvProvides
-from lib.vault_s3 import S3, S3Error
-from ops import CharmBase, EventBase, Object, Relation
-from ops.pebble import PathError
+from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
@@ -447,7 +447,7 @@ class TLSManager(Object):
             raise
 
     def ca_certificate_is_saved(self) -> bool:
-        """Return wether a CA cert and its private key are saved in the charm."""
+        """Return whether a CA cert and its private key are saved in the charm."""
         return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _restart_vault(self) -> None:
@@ -794,17 +794,6 @@ class AutounsealProviderManager:
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
         return [policy for policy in output if policy.startswith(Naming.autounseal_policy_prefix)]
-
-
-@dataclass
-class AutounsealConfigurationDetails:
-    """Credentials required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    token: str
-    ca_cert_path: str
 
 
 class AutounsealRequirerManager:

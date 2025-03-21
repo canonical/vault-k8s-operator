@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 
-from lib.vault_helpers import (
+from vault.vault_helpers import (
     config_file_content_matches,
     seal_type_has_changed,
 )

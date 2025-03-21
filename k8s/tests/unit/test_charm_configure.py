@@ -10,11 +10,11 @@ from pathlib import Path
 import hcl
 import ops.testing as testing
 from ops.pebble import Layer
-
-from lib.vault_autounseal import AutounsealDetails
-from lib.vault_client import (
+from vault.vault_autounseal import AutounsealDetails
+from vault.vault_client import (
     AppRole,
 )
+
 from tests.unit.certificates import (
     generate_example_provider_certificate,
 )

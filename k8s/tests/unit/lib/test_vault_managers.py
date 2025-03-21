@@ -3,19 +3,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
-
-from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
-from container import Container
-from lib.juju_facade import NoSuchSecretError, SecretRemovedError
-from lib.vault_autounseal import AutounsealDetails
-from lib.vault_client import (
+from vault.juju_facade import NoSuchSecretError, SecretRemovedError
+from vault.vault_autounseal import AutounsealDetails
+from vault.vault_client import (
     AuthMethod,
     SecretsBackend,
     VaultClient,
     VaultClientError,
 )
-from lib.vault_client import Certificate as VaultClientCertificate
-from lib.vault_managers import (
+from vault.vault_client import Certificate as VaultClientCertificate
+from vault.vault_managers import (
     AUTOUNSEAL_POLICY,
     AutounsealProviderManager,
     AutounsealRequirerManager,
@@ -31,7 +28,10 @@ from lib.vault_managers import (
     TLSCertificatesRequiresV4,
     VaultKvProvides,
 )
-from lib.vault_s3 import S3Error
+from vault.vault_s3 import S3Error
+
+from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
+from container import Container
 from tests.unit.certificates import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
@@ -55,8 +55,8 @@ class TestAutounsealRequirerManager:
             (None, False, "new token"),  # Token is not set
         ],
     )
-    @patch("lib.vault_managers.VaultClient")
-    @patch("lib.vault_managers.JujuFacade")
+    @patch("vault.vault_managers.VaultClient")
+    @patch("vault.vault_managers.JujuFacade")
     def test_when_get_vault_configuration_details_called_then_details_are_retrieved_correctly(
         self,
         juju_facade_mock: MagicMock,
@@ -134,7 +134,7 @@ class TestAutounsealProviderManager:
         assert secret_id == "secret_id"
         provides.set_autounseal_data.assert_called_once()
 
-    @patch("lib.vault_managers.JujuFacade")
+    @patch("vault.vault_managers.JujuFacade")
     def test_given_orphaned_credentials_when_clean_up_credentials_then_credentials_removed_and_keys_marked_deletion_allowed(
         self, juju_facade_mock: MagicMock
     ):
@@ -163,7 +163,7 @@ class TestAutounsealProviderManager:
 
 class TestKVManager:
     @pytest.fixture(autouse=True)
-    @patch("lib.vault_managers.JujuFacade")
+    @patch("vault.vault_managers.JujuFacade")
     def setup(self, juju_facade_mock: MagicMock):
         self.juju_facade = juju_facade_mock.return_value
         self.charm = MagicMock(spec=VaultCharm)
@@ -524,7 +524,7 @@ class TestPKIManager:
 
 class TestBackupManager:
     @pytest.fixture(autouse=True)
-    @patch("lib.vault_managers.JujuFacade")
+    @patch("vault.vault_managers.JujuFacade")
     def setup(self, juju_facade_mock: MagicMock, monkeypatch: pytest.MonkeyPatch):
         """Configure the test environment for the happy path.
 
@@ -534,7 +534,7 @@ class TestBackupManager:
         self.juju_facade.is_leader = True
         self.juju_facade.relation_exists.return_value = True
         self.s3_class = MagicMock()
-        monkeypatch.setattr("lib.vault_managers.S3", self.s3_class)
+        monkeypatch.setattr("vault.vault_managers.S3", self.s3_class)
         self.s3 = self.s3_class.return_value
         self.s3.get_object_key_list.return_value = [
             "vault-backup-my-model-1",
@@ -729,7 +729,7 @@ class TestBackupManager:
 
 class TestRaftManager:
     @pytest.fixture(autouse=True)
-    @patch("lib.vault_managers.JujuFacade")
+    @patch("vault.vault_managers.JujuFacade")
     def setup(self, juju_facade_mock: MagicMock, monkeypatch: pytest.MonkeyPatch):
         self.juju_facade = juju_facade_mock.return_value
         self.juju_facade.is_leader = True

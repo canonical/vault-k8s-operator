@@ -6,12 +6,10 @@ from unittest.mock import patch
 import ops.testing as testing
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
-
-from charm import VaultCharm
-from lib.vault_client import (
+from vault.vault_client import (
     VaultClient,
 )
-from lib.vault_managers import (
+from vault.vault_managers import (
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -19,6 +17,8 @@ from lib.vault_managers import (
     PKIManager,
     TLSManager,
 )
+
+from charm import VaultCharm
 
 
 class VaultCharmFixtures:

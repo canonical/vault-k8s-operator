@@ -75,7 +75,8 @@ from ops import (
     RelationDataContent,
 )
 from pydantic import BaseModel, Field, ValidationError
-from lib.juju_facade import (
+
+from vault.juju_facade import (
     JujuFacade,
     MultipleRelationsFoundError,
     NoRemoteAppError,

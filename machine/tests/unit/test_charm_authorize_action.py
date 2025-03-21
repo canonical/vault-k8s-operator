@@ -7,7 +7,7 @@ import ops.testing as testing
 import pytest
 from ops.testing import ActionFailed
 
-from lib.vault_client import AuditDeviceType
+from vault.vault_client import AuditDeviceType
 from tests.unit.fixtures import VaultCharmFixtures
 
 

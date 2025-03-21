@@ -9,7 +9,7 @@ import ops.testing as testing
 from charms.operator_libs_linux.v2.snap import Snap
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
-from lib.vault_client import VaultClientError
+from vault.vault_client import VaultClientError
 from tests.unit.fixtures import VaultCharmFixtures
 
 

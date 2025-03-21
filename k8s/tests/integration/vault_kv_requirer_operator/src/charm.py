@@ -19,7 +19,7 @@ from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.model import ActiveStatus
 
-from lib.juju_facade import JujuFacade, NoSuchStorageError
+from lib.vault.juju_facade import JujuFacade, NoSuchStorageError
 from vault import (
     Vault,  # type: ignore[import-not-found]
 )

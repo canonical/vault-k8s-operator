@@ -14,7 +14,7 @@ from typing import TextIO
 import psutil
 from charms.operator_libs_linux.v2 import snap
 
-from lib.vault_managers import WorkloadBase
+from vault.vault_managers import WorkloadBase
 
 logger = logging.getLogger(__name__)
 
