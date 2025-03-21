@@ -2,8 +2,8 @@
 # See LICENSE file for licensing details.
 
 ROOT_DIR := $(CURDIR)
-K8S_CHARM_LIB := $(ROOT_DIR)/k8s/lib
-MACHINE_CHARM_LIB := $(ROOT_DIR)/machine/lib
+K8S_CHARM_LIB := $(ROOT_DIR)/k8s/lib/vault
+MACHINE_CHARM_LIB := $(ROOT_DIR)/machine/lib/vault
 
 .PHONY: vendor-libs
 
