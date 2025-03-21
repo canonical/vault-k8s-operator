@@ -14,7 +14,7 @@ For more information, including guides, integrations, and configuration options,
 ## Workloads:
 
 - OCI Image: [ghcr.io/canonical/vault](https://github.com/canonical/vault-rock)
-- Snap: [ghcr.io/canonical/vault](https://snapcraft.io/vault)
+- Snap: https://snapcraft.io/vault
 
 ## Project & Community
 
