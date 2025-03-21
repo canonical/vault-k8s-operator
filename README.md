@@ -5,14 +5,16 @@
 
 Vault is a tool for securely managing secrets used in modern computing (e.g. passwords, certificates, API keys).
 
-The Vault Operators deploy and initializes Vault on Kubernetes and Machine models, and runs in high availability mode using the Raft backend.
+The Vault Operators deploy and initialize Vault on Kubernetes and Machine models. They run in high availability mode using the Raft backend.
 
-For more information including guides, integrations, configuration options, see [Vault's Charmhub page](https://charmhub.io/vault-k8s).
+For more information, including guides, integrations, and configuration options, see the respective charm's Charmhub page:
+- [Vault K8s](https://charmhub.io/vault-k8s)
+- [Vault](https://charmhub.io/vault)
 
 ## Workloads:
 
 - OCI Image: [ghcr.io/canonical/vault](https://github.com/canonical/vault-rock)
-- Snap: ghcr.io/canonical/vault
+- Snap: [ghcr.io/canonical/vault](https://snapcraft.io/vault)
 
 ## Project & Community
 
