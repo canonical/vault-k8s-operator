@@ -26,21 +26,21 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
-          path: built/
+          path: ${{ inputs.path }}built/
 
       - name: Get Charm Under Test Path
         id: charm-path
-        run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+        run: echo "charm_path=$(find ${{ inputs.path }}built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
 
       - name: Fetch KV Requirer Charm
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
-          path: kv-requirer/
+          path: ${{ inputs.path }}kv-requirer/
 
       - name: Get KV Requirer Charm Path
         id: kv-requirer-charm-path
-        run: echo "charm_path=$(find kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+        run: echo "charm_path=$(find ${{ inputs.path }}kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
