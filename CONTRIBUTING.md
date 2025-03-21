@@ -9,3 +9,5 @@ The Vault machine and K8s charms share a lot of code. The K8s charm owns this co
 ```shell
 make vendor-libs
 ```
+
+This command will copy the code from the k8s charm's `lib/vault/` directory to the machine charm's `lib/vault/` directory.
