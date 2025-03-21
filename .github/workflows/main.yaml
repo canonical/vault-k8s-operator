@@ -61,11 +61,12 @@ jobs:
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@dev-path
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
       track-name: 1.16
+      artifact-name: built-k8s-charm
 
   machine-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
@@ -122,3 +123,4 @@ jobs:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
       track-name: 1.16
+      artifact-name: built-machine-charm
