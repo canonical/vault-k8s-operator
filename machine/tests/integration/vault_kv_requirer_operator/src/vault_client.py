@@ -8,7 +8,7 @@ import hvac
 logger = logging.getLogger(__name__)
 
 
-class Vault:
+class VaultClient:
     def __init__(
         self, url: str, ca_certificate: str, approle_role_id: str, approle_secret_id: str
     ):

@@ -10,7 +10,7 @@ import hvac  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
-class Vault:
+class VaultClient:
     """Vault client."""
 
     def __init__(

@@ -39,6 +39,7 @@ PEER_RELATION_NAME = "vault-peers"
 INGRESS_RELATION_NAME = "ingress"
 HAPROXY_APPLICATION_NAME = "haproxy"
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
+SELF_SIGNED_CERTIFICATES_REVISION = 263
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 NUM_VAULT_UNITS = 3
@@ -139,7 +140,10 @@ async def self_signed_certificates_idle(ops_test: OpsTest) -> Task:
     async def deploy_self_signed_certificates(ops_test: OpsTest) -> None:
         assert ops_test.model
         await deploy_if_not_exists(
-            ops_test.model, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME, channel="edge"
+            ops_test.model,
+            SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+            channel="1/stable",
+            revision=SELF_SIGNED_CERTIFICATES_REVISION,
         )
         async with ops_test.fast_forward(fast_interval="60s"):
             await ops_test.model.wait_for_idle(
@@ -236,6 +240,7 @@ def get_vault_pki_intermediate_ca_common_name(
         token=root_token,
     )
     ca_cert = vault.client.secrets.pki.read_ca_certificate(mount_point=mount)
+    assert ca_cert, "No CA certificate found"
     loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
     return str(
         loaded_certificate.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value  # type: ignore[reportAttributeAccessIssue]
