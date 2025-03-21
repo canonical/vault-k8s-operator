@@ -17,12 +17,6 @@ use them.
 
 ## Getting Started
 
-From a charm directory, fetch the library using `charmcraft`:
-
-```shell
-charmcraft fetch-lib charms.vault_k8s.v0.vault_autounseal
-```
-
 ### Provider charm
 
 The provider charm is the charm that provides a Vault instance that can be
@@ -66,15 +60,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, MutableMapping
 
-from vault.juju_facade import (
-    JujuFacade,
-    MultipleRelationsFoundError,
-    NoRemoteAppError,
-    NoSuchRelationError,
-    NoSuchSecretError,
-    SecretRemovedError,
-    TransientJujuError,
-)
 from interface_tester import DataBagSchema
 from ops import (
     CharmBase,
@@ -91,16 +76,15 @@ from ops import (
 )
 from pydantic import BaseModel, Field, ValidationError
 
-# The unique Charmhub library identifier, never change it
-LIBID = "c33e0a12506444e2b644ac2893ac9394"
-
-# Increment this major API version when introducing breaking changes
-LIBAPI = 0
-
-# Increment this PATCH version before using `charmcraft publish-lib` or reset
-# to 0 if you are raising the major API version
-LIBPATCH = 6
-
+from vault.juju_facade import (
+    JujuFacade,
+    MultipleRelationsFoundError,
+    NoRemoteAppError,
+    NoSuchRelationError,
+    NoSuchSecretError,
+    SecretRemovedError,
+    TransientJujuError,
+)
 
 AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX = "vault-autounseal-credentials-"
 
