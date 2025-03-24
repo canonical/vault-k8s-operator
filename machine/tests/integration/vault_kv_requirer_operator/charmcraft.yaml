@@ -31,17 +31,11 @@ bases:
 parts:
   charm:
     source: .
-    plugin: uv
+    charm-python-packages:
+      - setuptools==77.0.3
     build-packages:
-      - libffi-dev
-      - libssl-dev
-      - pkg-config
-    build-snaps:
-      - astral-uv
-      - rustup
-    override-build: |
-      rustup default stable
-      craftctl default
+      - rustc
+      - cargo
 
 actions:
   create-secret:
