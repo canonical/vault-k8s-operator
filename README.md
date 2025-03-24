@@ -1,20 +1,24 @@
-# Vault Operator (Kubernetes)
+# Vault Operators (Kubernetes and Machine)
 
 [![CharmHub Badge](https://charmhub.io/vault-k8s/badge.svg)](https://charmhub.io/vault-k8s)
+[![CharmHub Badge](https://charmhub.io/vault/badge.svg)](https://charmhub.io/vault)
 
 Vault is a tool for securely managing secrets used in modern computing (e.g. passwords, certificates, API keys).
 
-The Vault Operator deploys and initializes Vault on Kubernetes, and runs in high availability mode using the Raft backend.
+The Vault Operators deploy and initialize Vault on Kubernetes and Machine models. They run in high availability mode using the Raft backend.
 
-For more information including guides, integrations, configuration options, see [Vault's Charmhub page](https://charmhub.io/vault-k8s).
+For more information, including guides, integrations, and configuration options, see the respective charm's Charmhub page:
+- [Vault K8s](https://charmhub.io/vault-k8s)
+- [Vault](https://charmhub.io/vault)
 
-## OCI Images
+## Workloads:
 
-- Vault: [ghcr.io/canonical/vault](https://github.com/canonical/vault-rock)
+- OCI Image: [ghcr.io/canonical/vault](https://github.com/canonical/vault-rock)
+- Snap: https://snapcraft.io/vault
 
 ## Project & Community
 
-Vault Operator is an open source project that warmly welcomes community contributions, suggestions, fixes, and constructive feedback.
+Vault Operators are open source projects that warmly welcomes community contributions, suggestions, fixes, and constructive feedback.
 
 - To contribute to the code Please see [CONTRIBUTING.md](/CONTRIBUTING.md) and the [Juju SDK docs](https://juju.is/docs/sdk) for guidelines and best practices.
 - Raise software issues or feature requests in [GitHub](https://github.com/canonical/vault-k8s-operator/issues)

@@ -11,43 +11,116 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-report:
+  k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    with:
+      path: ./k8s/
 
-  grafana-dashboard-lint-report:
+  k8s-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    with:
+      path: ./k8s/src/grafana_dashboards/*
 
-  static-analysis:
-    name: Static analysis
+  k8s-static-analysis:
     uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    with:
+      path: ./k8s/
 
-  unit-tests-with-coverage:
+  k8s-unit-tests-with-coverage:
     uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    with:
+      path: ./k8s/
 
-  build:
+  k8s-build:
     needs:
-      - lint-report
-      - static-analysis
-      - unit-tests-with-coverage
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
     uses: ./.github/workflows/build.yaml
     secrets: inherit
+    with:
+      path: ./k8s/
+      vault-charm-artifact-name: built-k8s-charm
+      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
-  integration-test:
+  k8s-integration-test:
     needs:
-      - build
-    uses: ./.github/workflows/integration-test.yaml
+      - k8s-build
+    uses: ./.github/workflows/k8s-integration-test.yaml
+    with:
+      path: ./k8s/
+      vault-charm-artifact-name: built-k8s-charm
+      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
-  publish-charm:
-    name: Publish Charm
+  k8s-publish-charm:
+    name: Publish K8s Charm
     needs:
-      - lint-report
-      - grafana-dashboard-lint-report
-      - static-analysis
-      - unit-tests-with-coverage
-      - integration-test
+      - k8s-lint-report
+      - k8s-grafana-dashboard-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+      - k8s-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
       track-name: 1.16
+      artifact-name: built-k8s-charm
+
+  machine-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    with:
+      path: ./machine/
+  
+  machine-grafana-dashboard-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    with:
+      path: ./machine/src/grafana_dashboards/*
+
+  machine-static-analysis:
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    with:
+      path: ./machine/
+
+  machine-unit-tests-with-coverage:
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    with:
+      path: ./machine/
+
+  machine-build:
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+    with:
+      path: ./machine/
+      vault-charm-artifact-name: built-machine-charm
+      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+
+  machine-integration-test:
+    needs:
+      - machine-build
+    uses: ./.github/workflows/machine-integration-test.yaml
+    with:
+      path: ./machine/
+      vault-charm-artifact-name: built-machine-charm
+      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+
+  machine-publish-charm:
+    name: Publish Machine Charm
+    needs:
+      - machine-lint-report
+      - machine-grafana-dashboard-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+      - machine-integration-test
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      track-name: 1.16
+      artifact-name: built-machine-charm

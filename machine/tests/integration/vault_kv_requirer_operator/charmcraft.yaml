@@ -1,0 +1,64 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: vault-kv-requirer
+
+summary: Vault KV Requirer
+description: Vault KV Requirer
+
+assumes:
+  - juju >= 3.1
+
+requires:
+  vault-kv:
+    interface: vault-kv
+    limit: 1
+
+storage:
+  certs:
+    type: filesystem
+    minimum-size: 5M
+
+type: "charm"
+bases:
+  - build-on:
+    - name: "ubuntu"
+      channel: "22.04"
+    run-on:
+    - name: "ubuntu"
+      channel: "22.04"
+
+parts:
+  charm:
+    source: .
+    plugin: uv
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
+    build-snaps:
+      - astral-uv
+      - rustup
+    override-build: |
+      rustup default stable
+      craftctl default
+
+actions:
+  create-secret:
+    description: Creates a secret in Vault
+    params:
+      key:
+        description: The key to create
+        type: string
+      value:
+        description: The value to create
+        type: string
+    required: [key, value]
+
+  get-secret:
+    description: Gets a secret from Vault
+    params:
+      key:
+        description: The key to get
+        type: string
+    required: [key]
