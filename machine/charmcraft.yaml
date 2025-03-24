@@ -94,11 +94,7 @@ bases:
 parts:
   charm:
     source: .
-    plugin: charm
-    charm-python-packages:
-      - setuptools==77.0.3
-    charm-requirements:
-      - requirements.txt
+    plugin: uv
     build-packages:
       - libffi-dev
       - libssl-dev
@@ -108,7 +104,6 @@ parts:
       - rustup
     override-build: |
       rustup default stable
-      uv export --frozen --no-dev -o requirements.txt
       craftctl default
 
 config:
