@@ -124,11 +124,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, MutableMapping
 
 import ops
-from lib.vault.juju_facade import (
-    JujuFacade,
-    NoSuchRelationError,
-    NotLeaderError,
-)
 from interface_tester.schema_base import DataBagSchema  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, Json, ValidationError
 
@@ -140,7 +135,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 15
+LIBPATCH = 16
 
 PYDEPS = ["pydantic", "pytest-interface-tester"]
 
@@ -335,7 +330,7 @@ class VaultKvProviderEvents(ops.ObjectEvents):
 
 
 class VaultKvProvides(ops.Object):
-    """Class to be instanciated by the providing side of the relation."""
+    """Class to be instantiated by the providing side of the relation."""
 
     on = VaultKvProviderEvents()  # type: ignore
 
@@ -344,15 +339,15 @@ class VaultKvProvides(ops.Object):
         charm: ops.CharmBase,
         relation_name: str,
     ) -> None:
+        self.charm = charm
         super().__init__(charm, relation_name)
-        self.juju_facade = JujuFacade(charm)
         self.relation_name = relation_name
         self.framework.observe(
-            charm.on[relation_name].relation_changed,
+            self.charm.on[relation_name].relation_changed,
             self._on_relation_changed,
         )
         self.framework.observe(
-            charm.on[relation_name].relation_departed,
+            self.charm.on[relation_name].relation_departed,
             self._on_vault_kv_relation_departed,
         )
 
@@ -365,22 +360,21 @@ class VaultKvProvides(ops.Object):
         if event.app is None:
             logger.debug("No remote application yet")
             return
-        app_data = event.relation.data.get(event.app, {})
-        if not event.unit:
-            logger.debug("No unit in relation changed event")
-            return
-        unit_data = event.relation.data.get(event.unit, {})
-        if not is_requirer_data_valid(app_data, unit_data):
-            logger.debug("Invalid data from unit %r", event.unit.name)
-            return
-        self.on.new_vault_kv_client_attached.emit(
-            relation=event.relation,
-            app_name=event.app.name,
-            unit_name=event.unit.name,
-            mount_suffix=app_data.get("mount_suffix"),
-            egress_subnets=get_egress_subnets_list_from_relation_data(unit_data),
-            nonce=unit_data.get("nonce"),
-        )
+        app_data = event.relation.data[event.app]
+        for unit in event.relation.units:
+            if not is_requirer_data_valid(app_data, event.relation.data[unit]):
+                logger.debug("Invalid data from unit %r", unit.name)
+                continue
+            self.on.new_vault_kv_client_attached.emit(
+                relation=event.relation,
+                app_name=event.app.name,
+                unit_name=unit.name,
+                mount_suffix=event.relation.data[event.app]["mount_suffix"],
+                egress_subnets=get_egress_subnets_list_from_relation_data(
+                    event.relation.data[unit]
+                ),
+                nonce=event.relation.data[unit]["nonce"],
+            )
 
     def _on_vault_kv_relation_departed(self, event: ops.RelationDepartedEvent):
         """Handle relation departed."""
@@ -389,6 +383,9 @@ class VaultKvProvides(ops.Object):
 
     def remove_unit_credentials(self, relation: ops.Relation, nonce: str | Iterable[str]):
         """Remove nonce(s) from the relation."""
+        if not self.charm.unit.is_leader():
+            return
+
         if isinstance(nonce, str):
             nonce = [nonce]
 
@@ -397,39 +394,32 @@ class VaultKvProvides(ops.Object):
         for n in nonce:
             credentials.pop(n, None)
 
-        try:
-            self.juju_facade.set_app_relation_data(
-                name=self.relation_name,
-                relation=relation,
-                data={"credentials": json.dumps(credentials, sort_keys=True)},
-            )
-        except NotLeaderError:
-            return
+        relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
 
     def get_credentials(self, relation: ops.Relation) -> dict:
         """Get the unit credentials from the app relation data and load it as a dict."""
-        return json.loads(
-            self.juju_facade.get_app_relation_data(
-                name=self.relation_name,
-                relation=relation,
-            ).get("credentials", "{}")
-        )
+        return json.loads(relation.data[self.charm.app].get("credentials", "{}"))
 
     def get_kv_requests(self, relation_id: int | None = None) -> List[KVRequest]:
         """Get all KV requests for the relation."""
         kv_requests: List[KVRequest] = []
-        relations = self.juju_facade.get_active_relations(self.relation_name, relation_id)
+        relations = (
+            [
+                relation
+                for relation in self.model.relations.get(self.relation_name, [])
+                if relation.id == relation_id
+            ]
+            if relation_id is not None
+            else self.model.relations.get(self.relation_name, [])
+        )
         for relation in relations:
-            app_data = self.juju_facade.get_remote_app_relation_data(
-                self.relation_name, relation.id
-            )
+            assert isinstance(relation.app, ops.Application)
+            if not relation.active:
+                continue
+            app_data = relation.data[relation.app]
             for unit in relation.units:
-                unit_data = self.juju_facade.get_remote_unit_relation_data(
-                    name=self.relation_name,
-                    id=relation.id,
-                    unit=unit,
-                )
-                if not is_requirer_data_valid(app_data, unit_data):
+                unit_data = relation.data[unit]
+                if not is_requirer_data_valid(app_data=app_data, unit_data=unit_data):
                     continue
                 kv_requests.append(
                     KVRequest(
@@ -453,21 +443,17 @@ class VaultKvProvides(ops.Object):
         credentials_juju_secret_id: str,
     ):
         """Set the kv data on the relation."""
+        if not self.charm.unit.is_leader():
+            return
+        if not relation.active:
+            logger.warning("Relation is not active")
+            return
         credentials = self.get_credentials(relation)
         credentials[nonce] = credentials_juju_secret_id
-        try:
-            self.juju_facade.set_app_relation_data(
-                name=self.relation_name,
-                id=relation.id,
-                data={
-                    "mount": mount,
-                    "ca_certificate": ca_certificate,
-                    "vault_url": vault_url,
-                    "credentials": json.dumps(credentials, sort_keys=True),
-                },
-            )
-        except NotLeaderError:
-            return
+        relation.data[self.charm.app]["credentials"] = json.dumps(credentials, sort_keys=True)
+        relation.data[self.charm.app]["vault_url"] = vault_url
+        relation.data[self.charm.app]["ca_certificate"] = ca_certificate
+        relation.data[self.charm.app]["mount"] = mount
 
 
 class VaultKvBaseEvent(ops.RelationEvent):
@@ -516,7 +502,7 @@ class VaultKvRequireEvents(ops.ObjectEvents):
 
 
 class VaultKvRequires(ops.Object):
-    """Class to be instanciated by the requiring side of the relation."""
+    """Class to be instantiated by the requiring side of the relation."""
 
     on = VaultKvRequireEvents()  # type: ignore
 
@@ -528,7 +514,6 @@ class VaultKvRequires(ops.Object):
     ) -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
-        self.juju_facade = JujuFacade(charm)
         self.relation_name = relation_name
         self.mount_suffix = mount_suffix
         self.framework.observe(
@@ -554,22 +539,13 @@ class VaultKvRequires(ops.Object):
         Set the secret backend in the application databag if we are the leader.
         Emit the connected event.
         """
-        try:
-            relations = self.juju_facade.get_relations(self.relation_name)
-        except NoSuchRelationError:
-            return
+        relations = self.charm.model.relations.get(self.relation_name, [])
         if not relations:
             return
+
         for relation in relations:
-            try:
-                self.juju_facade.set_app_relation_data(
-                    name=self.relation_name,
-                    relation=relation,
-                    data={"mount_suffix": self.mount_suffix},
-                )
-            except NotLeaderError:
-                logger.debug("Not leader, not setting mount_suffix")
-                pass
+            if self.charm.unit.is_leader():
+                relation.data[self.charm.app]["mount_suffix"] = self.mount_suffix
             self.on.connected.emit(
                 relation.id,
                 relation.name,
@@ -614,11 +590,8 @@ class VaultKvRequires(ops.Object):
         """
         if isinstance(egress_subnet, str):
             egress_subnet = [egress_subnet]
-        self.juju_facade.set_unit_relation_data(
-            name=self.relation_name,
-            relation=relation,
-            data={"egress_subnet": ",".join(egress_subnet), "nonce": nonce},
-        )
+        relation.data[self.charm.unit]["egress_subnet"] = ",".join(egress_subnet)
+        relation.data[self.charm.unit]["nonce"] = nonce
 
     def get_vault_url(self, relation: ops.Relation) -> str | None:
         """Return the vault_url from the relation."""

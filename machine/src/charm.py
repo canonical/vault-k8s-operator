@@ -30,6 +30,15 @@ from ops import ActionEvent, BlockedStatus, ErrorStatus
 from ops.charm import CharmBase, CollectStatusEvent, RemoveEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, Relation, WaitingStatus
+from vault.juju_facade import (
+    JujuFacade,
+    NoSuchSecretError,
+    SecretRemovedError,
+)
+from vault.vault_autounseal import (
+    VaultAutounsealProvides,
+    VaultAutounsealRequires,
+)
 from vault.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -37,6 +46,12 @@ from vault.vault_client import (
     Token,
     VaultClient,
     VaultClientError,
+)
+from vault.vault_helpers import (
+    common_name_config_is_valid,
+    config_file_content_matches,
+    render_vault_config_file,
+    seal_type_has_changed,
 )
 from vault.vault_managers import (
     AutounsealConfigurationDetails,
@@ -52,21 +67,6 @@ from vault.vault_managers import (
     VaultCertsError,
 )
 
-from lib.vault.juju_facade import (
-    JujuFacade,
-    NoSuchSecretError,
-    SecretRemovedError,
-)
-from lib.vault.vault_autounseal import (
-    VaultAutounsealProvides,
-    VaultAutounsealRequires,
-)
-from lib.vault.vault_helpers import (
-    common_name_config_is_valid,
-    config_file_content_matches,
-    render_vault_config_file,
-    seal_type_has_changed,
-)
 from machine import Machine
 
 logger = logging.getLogger(__name__)
