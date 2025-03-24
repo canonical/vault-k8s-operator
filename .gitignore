@@ -14,7 +14,9 @@ __pycache__/
 
 *.pem
 k8s/tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/*
+k8s/tests/integration/vault_kv_requirer_operator/lib/vault/juju_facade.py
 machine/tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/*
+machine/tests/integration/vault_kv_requirer_operator/lib/vault/juju_facade.py
 .charm_tracing_buffer.raw
 
 # Ignore allure report and results if running locally

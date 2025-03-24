@@ -12,22 +12,22 @@ concurrency:
 
 jobs:
   k8s-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./k8s/
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-static-analysis:
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
     with:
       path: ./k8s/
 
   k8s-unit-tests-with-coverage:
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
     with:
       path: ./k8s/
 
@@ -61,7 +61,7 @@ jobs:
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -69,22 +69,22 @@ jobs:
       artifact-name: built-k8s-charm
 
   machine-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./machine/
   
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-static-analysis:
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
     with:
       path: ./machine/
 
   machine-unit-tests-with-coverage:
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
     with:
       path: ./machine/
 
@@ -118,7 +118,7 @@ jobs:
       - machine-unit-tests-with-coverage
       - machine-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@dev-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:

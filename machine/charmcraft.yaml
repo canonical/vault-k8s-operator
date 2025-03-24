@@ -17,9 +17,9 @@ links:
   website:
     - https://charmhub.io/vault
   source:
-    - https://github.com/canonical/vault-operator
+    - https://github.com/canonical/vault-k8s-operator
   issues:
-    - https://github.com/canonical/vault-operator/issues
+    - https://github.com/canonical/vault-k8s-operator/issues
   documentation: https://discourse.charmhub.io/t/vault-operator-machine/12983
 
 assumes:
