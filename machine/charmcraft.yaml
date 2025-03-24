@@ -95,6 +95,8 @@ parts:
   charm:
     source: .
     plugin: charm
+    charm-python-packages:
+      - setuptools==77.0.3
     charm-requirements:
       - requirements.txt
     build-packages:

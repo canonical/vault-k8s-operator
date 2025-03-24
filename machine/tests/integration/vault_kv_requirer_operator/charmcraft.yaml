@@ -30,6 +30,8 @@ bases:
 
 parts:
   charm:
+    charm-python-packages:
+      - setuptools==77.0.3
     build-packages:
       - rustc
       - cargo
