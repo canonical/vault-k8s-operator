@@ -1,0 +1,11 @@
+[project]
+name = "vault-kv-requirer"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "ops",
+    "hvac",
+    "pydantic==2.9.2",
+    "pytest-interface-tester",
+]
