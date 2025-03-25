@@ -73,7 +73,7 @@ async def deployed_vault(ops_test: OpsTest, request: pytest.FixtureRequest):
         resources=resources,
         application_name=APPLICATION_NAME,
         trust=True,
-        series="jammy",
+        series="noble",
         num_units=NUM_VAULT_UNITS,
     )
     await ops_test.model.wait_for_idle(
@@ -879,7 +879,7 @@ class TestVaultK8sIntegrationsPart3:
             resources=resources,
             application_name="vault-b",
             trust=True,
-            series="jammy",
+            series="noble",
             num_units=1,
             config={"common_name": "example.com"},
         )

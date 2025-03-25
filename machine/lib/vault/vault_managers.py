@@ -37,7 +37,7 @@ from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
 
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
 )
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -55,6 +55,10 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from ops import CharmBase, EventBase, Object, Relation
+from ops.pebble import PathError
+
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -74,11 +78,7 @@ from vault.vault_client import (
     VaultClient,
     VaultClientError,
 )
-from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from vault.vault_s3 import S3, S3Error
-from ops import CharmBase, EventBase, Object, Relation
-from ops.pebble import PathError
-
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
@@ -392,13 +392,13 @@ class TLSManager(Object):
         """Send the existing CA cert in the workload to all relations."""
         if ca := self.pull_tls_file_from_workload(File.CA):
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
-                self.certificate_transfer.set_certificate(
-                    certificate="", ca=ca, chain=[], relation_id=relation.id
+                self.certificate_transfer.add_certificates(
+                    certificates=set(ca), relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
         else:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
-                self.certificate_transfer.remove_certificate(relation.id)
+                self.certificate_transfer.remove_all_certificates(relation_id=relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
 
     def get_tls_file_path_in_workload(self, file: File) -> str:
@@ -448,7 +448,7 @@ class TLSManager(Object):
             raise
 
     def ca_certificate_is_saved(self) -> bool:
-        """Return wether a CA cert and its private key are saved in the charm."""
+        """Return whether a CA cert and its private key are saved in the charm."""
         return self.ca_certificate_secret_exists() or self.tls_file_pushed_to_workload(File.CA)
 
     def _restart_vault(self) -> None:
@@ -795,7 +795,6 @@ class AutounsealProviderManager:
     def _get_existing_policies(self) -> list[str]:
         output = self._client.list("sys/policy")
         return [policy for policy in output if policy.startswith(Naming.autounseal_policy_prefix)]
-
 
 @dataclass
 class AutounsealConfigurationDetails:
