@@ -10,6 +10,12 @@ on:
           - edge -> beta
           - beta -> candidate
           - candidate -> stable
+      charm:
+        type: choice
+        description: Charm to promote
+        options:
+          - k8s
+          - machine
 
 jobs:
   promote:
@@ -35,6 +41,7 @@ jobs:
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
+          charm-path: ./${{ github.event.inputs.charm }}
           base-channel: 22.04
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
