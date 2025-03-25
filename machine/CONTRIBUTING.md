@@ -17,8 +17,7 @@ source .venv/bin/activate
 
 ## Testing
 
-This project uses `tox` for managing test environments. It can be installed
-with:
+This project uses `tox` for managing test environments. It can be installed with:
 
 ```shell
 uv tool install tox --with tox-uv
