@@ -60,7 +60,8 @@ jobs:
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@dev-publish-path
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -118,7 +119,7 @@ jobs:
       - machine-unit-tests-with-coverage
       - machine-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@dev-publish-path
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
