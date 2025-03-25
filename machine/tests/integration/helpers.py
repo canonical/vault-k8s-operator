@@ -258,6 +258,7 @@ async def deploy_if_not_exists(
     config: dict | None = None,
     channel: str | None = None,
     revision: int | None = None,
+    series: str | None = None,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -268,6 +269,7 @@ async def deploy_if_not_exists(
                 config=config,
                 channel=channel,
                 revision=revision,
+                series=series,
             )
         except JujuError as e:
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)

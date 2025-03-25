@@ -1912,7 +1912,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyhcl" },
     { name = "pytest-interface-tester" },
-    { name = "requests" },
     { name = "rpds-py" },
 ]
 
@@ -1946,10 +1945,9 @@ requires-dist = [
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "ops" },
-    { name = "pydantic", specifier = "==2.10.6" },
+    { name = "pydantic", specifier = "<3.0" },
     { name = "pyhcl" },
     { name = "pytest-interface-tester" },
-    { name = "requests" },
     { name = "rpds-py", specifier = "==0.23.1" },
 ]
 

@@ -19,14 +19,10 @@ storage:
     type: filesystem
     minimum-size: 5M
 
-type: "charm"
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "22.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "22.04"
+type: charm
+base: ubuntu@24.04
+platforms:
+  amd64:
 
 parts:
   charm:

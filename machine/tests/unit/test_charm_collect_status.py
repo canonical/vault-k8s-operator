@@ -132,7 +132,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         self,
     ):
         self.mock_snap_cache.return_value = {
-            "vault": MagicMock(spec=Snap, revision="1.16/stable", services={})
+            "vault": MagicMock(spec=Snap, revision="1.17/stable", services={})
         }
         self.mock_tls.configure_mock(
             **{
@@ -162,7 +162,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -198,7 +198,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -236,7 +236,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -276,7 +276,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -316,7 +316,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -356,7 +356,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -398,7 +398,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(
@@ -440,7 +440,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     ):
         self.mock_snap_cache.return_value = {
             "vault": MagicMock(
-                spec=Snap, revision="1.16/stable", services={"vaultd": {"active": True}}
+                spec=Snap, revision="1.17/stable", services={"vaultd": {"active": True}}
             )
         }
         self.mock_tls.configure_mock(

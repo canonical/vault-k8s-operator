@@ -20,24 +20,29 @@ storage:
     type: filesystem
     minimum-size: 5M
 
-type: "charm"
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "22.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "22.04"
+type: charm
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+platforms:
+  amd64:
 
 parts:
   charm:
     source: .
-    plugin: uv
+    plugin: charm
+    charm-requirements:
+      - requirements.txt
     build-packages:
-      - rustc
-      - cargo
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
     build-snaps:
       - astral-uv
+      - rustup
+    override-build: |
+      rustup default stable
+      uv export --frozen --no-dev -o requirements.txt
+      craftctl default
 
 actions:
   create-secret:
