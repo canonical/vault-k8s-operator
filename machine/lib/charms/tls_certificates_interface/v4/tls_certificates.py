@@ -32,7 +32,7 @@ from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from ops import BoundEvent, CharmBase, CharmEvents, SecretExpiredEvent, SecretRemoveEvent
+from ops import BoundEvent, CharmBase, CharmEvents, Secret, SecretExpiredEvent, SecretRemoveEvent
 from ops.framework import EventBase, EventSource, Handle, Object
 from ops.jujuversion import JujuVersion
 from ops.model import (
@@ -52,7 +52,7 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 12
 
 PYDEPS = [
     "cryptography>=43.0.0",
@@ -190,9 +190,11 @@ class Mode(Enum):
     """Enum representing the mode of the certificate request.
 
     UNIT (default): Request a certificate for the unit.
-        Each unit will have its own private key and certificate.
+        Each unit will manage its private key,
+        certificate signing request and certificate.
     APP: Request a certificate for the application.
-        The private key and certificate will be shared by all units.
+        Only the leader unit will manage the private key, certificate signing request
+        and certificate.
     """
 
     UNIT = 1
@@ -402,12 +404,17 @@ class CertificateSigningRequest:
         )
         locality_name = csr_object.subject.get_attributes_for_oid(NameOID.LOCALITY_NAME)
         organization_name = csr_object.subject.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+        organizational_unit = csr_object.subject.get_attributes_for_oid(
+            NameOID.ORGANIZATIONAL_UNIT_NAME
+        )
         email_address = csr_object.subject.get_attributes_for_oid(NameOID.EMAIL_ADDRESS)
         try:
             sans = csr_object.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
             sans_dns = frozenset(sans.get_values_for_type(x509.DNSName))
             sans_ip = frozenset([str(san) for san in sans.get_values_for_type(x509.IPAddress)])
-            sans_oid = frozenset([str(san) for san in sans.get_values_for_type(x509.RegisteredID)])
+            sans_oid = frozenset(
+                [san.dotted_string for san in sans.get_values_for_type(x509.RegisteredID)]
+            )
         except x509.ExtensionNotFound:
             sans = frozenset()
             sans_dns = frozenset()
@@ -422,6 +429,7 @@ class CertificateSigningRequest:
             else None,
             locality_name=str(locality_name[0].value) if locality_name else None,
             organization=str(organization_name[0].value) if organization_name else None,
+            organizational_unit=str(organizational_unit[0].value) if organizational_unit else None,
             email_address=str(email_address[0].value) if email_address else None,
             sans_dns=sans_dns,
             sans_ip=sans_ip,
@@ -1014,6 +1022,15 @@ class TLSCertificatesRequiresV4(Object):
             certificate_requests (List[CertificateRequestAttributes]):
                 A list with the attributes of the certificate requests.
             mode (Mode): Whether to use unit or app certificates mode. Default is Mode.UNIT.
+                In UNIT mode the requirer will place the csr in the unit relation data.
+                Each unit will manage its private key,
+                certificate signing request and certificate.
+                UNIT mode is for use cases where each unit has its own identity.
+                If you don't know which mode to use, you likely need UNIT.
+                In APP mode the leader unit will place the csr in the app relation databag.
+                APP mode is for use cases where the underlying application needs the certificate
+                for example using it as an intermediate CA to sign other certificates.
+                The certificate can only be accessed by the leader unit.
             refresh_events (List[BoundEvent]): A list of events to trigger a refresh of
               the certificates.
             private_key (Optional[PrivateKey]): The private key to use for the certificates.
@@ -1064,9 +1081,17 @@ class TLSCertificatesRequiresV4(Object):
     def _mode_is_valid(self, mode: Mode) -> bool:
         return mode in [Mode.UNIT, Mode.APP]
 
+    def _validate_secret_exists(self, secret: Secret) -> None:
+        secret.get_info()  # Will raise `SecretNotFoundError` if the secret does not exist
+
     def _on_secret_remove(self, event: SecretRemoveEvent) -> None:
         """Handle Secret Removed Event."""
         try:
+            # Ensure the secret exists before trying to remove it, otherwise
+            # the unit could be stuck in an error state. See the docstring of
+            # `remove_revision` and the below issue for more information.
+            # https://github.com/juju/juju/issues/19036
+            self._validate_secret_exists(event.secret)
             event.secret.remove_revision(event.revision)
         except SecretNotFoundError:
             logger.warning(
