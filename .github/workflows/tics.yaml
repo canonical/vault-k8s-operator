@@ -1,0 +1,12 @@
+name: TICS Static Analysis
+
+on:
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  analyze:
+    # this workflow doesn't exist yet, but including this file will allow me to test with the `workflow_dispatch` event
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-charm.yaml@v0
+    secrets:
+      TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
+
