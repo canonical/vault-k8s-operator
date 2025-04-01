@@ -1,12 +1,23 @@
-name: TICS Static Analysis
+name: TiCS Static Analysis
 
 on:
+  schedule:
+    - cron: '0 3 * * 0' # Every Sunday at 3 am
   workflow_dispatch: # Allows manual triggering
 
 jobs:
-  analyze:
-    # this workflow doesn't exist yet, but including this file will allow me to test with the `workflow_dispatch` event
-    uses: canonical/identity-credentials-workflows/.github/workflows/tics-charm.yaml@v0
+  analyze-k8s:
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v0
+    with:
+      project: vault-k8s-operator
+      dir: k8s
     secrets:
       TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
 
+  analyze-machine:
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v0
+    with:
+      project: vault-operator
+      dir: machine
+    secrets:
+      TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
