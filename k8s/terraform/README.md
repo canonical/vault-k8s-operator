@@ -8,7 +8,7 @@ The base module is not intended to be deployed in separation (it is possible tho
 
 ## Getting Started
 
-**Pre-requisites**
+### Pre-requisites
 
 The following tools needs to be installed and should be running in the environment. Please [set up your environment][set-up-environment] before deployment.
 
@@ -16,6 +16,8 @@ The following tools needs to be installed and should be running in the environme
 - Juju
 - Juju controller bootstrapped onto the K8s cluster
 - Terraform
+
+### Deploying Vault K8s
 
 On the host machine create a new directory called terraform:
 
@@ -97,8 +99,6 @@ resource "juju_integration" "vault-kv-integration" {
 - **variables.tf** - Allows customization of the deployment. Except for exposing the deployment options (Juju model name, channel or application name) also models the charm configuration.
 - **output.tf** - Responsible for integrating the module with other Terraform modules, primarily by defining potential integration endpoints (charm integrations), but also by exposing the application name.
 - **versions.tf** - Defines the Terraform provider.
-
-## Useful links
 
 [Terraform]: https://www.terraform.io/
 [Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
