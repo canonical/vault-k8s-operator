@@ -52,7 +52,7 @@ resource "juju_model" "demo" {
 module "vault-k8s" {
   source = "git::https://github.com/canonical/vault-k8s-operator//k8s/terraform"
   
-  model = "demo"
+  model      = juju_model.demo.name
 }
 EOF
 ```
