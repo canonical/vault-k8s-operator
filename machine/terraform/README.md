@@ -2,7 +2,7 @@
 
 This folder contains a base [Terraform][Terraform] module for the `vault` charm.
 
-The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm deployment onto any Kubernetes environment managed by [Juju][Juju].
+The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm deployment onto any Machine environment managed by [Juju][Juju].
 
 The base module is not intended to be deployed in separation (it is possible though), but should rather serve as a building block for higher level modules.
 
