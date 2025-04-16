@@ -48,9 +48,4 @@ variable "units" {
   type        = number
   default     = 1
 
-  validation {
-    condition     = var.units == 1
-    error_message = "Scaling is not supported for this charm."
-  }
-
 }
