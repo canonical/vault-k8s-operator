@@ -118,6 +118,11 @@ config:
         The common name that will be used by Vault as an intermediate CA. This will only be used when the charm is 
         configured to use a Vault PKI backend through the `vault-pki` relation.
         The charm will only issue certificates for the subdomains under the `common_name` specified.
+    log_level:
+      type: string
+      default: "info"
+      description: >-
+        The log verbosity level. Supported values (in order of descending detail) are trace, debug, info, warn, and error.
 
 actions:
   authorize-charm:

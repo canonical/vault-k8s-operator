@@ -244,6 +244,9 @@ class VaultCharm(CharmBase):
                 )
             )
             return
+        if not self._log_level_is_valid(self._get_log_level()):
+            event.add_status(BlockedStatus("log_level config is not valid"))
+            return
         if not self._container.can_connect():
             event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
             return
@@ -319,6 +322,8 @@ class VaultCharm(CharmBase):
         if not self.tls.tls_file_pushed_to_workload(File.CERT):
             return
         if not self.tls.tls_file_pushed_to_workload(File.KEY):
+            return
+        if not self._log_level_is_valid(self._get_log_level()):
             return
 
         self._generate_vault_config_file()
@@ -670,6 +675,7 @@ class VaultCharm(CharmBase):
             node_id=self._node_id,
             retry_joins=retry_joins,
             autounseal_config=self._get_vault_autounseal_configuration(),
+            log_level=self._get_log_level(),
         )
         existing_content = ""
         if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
@@ -686,6 +692,16 @@ class VaultCharm(CharmBase):
                 # If the plan was not applied, the service will restart anyway when applying the new plan
                 if self._vault_service_is_running() and self._pebble_plan_is_applied():
                     self._container.restart(self._service_name)
+
+    def _get_log_level(self) -> str:
+        """Return the log level config."""
+        log_level = self.config.get("log_level")
+        if not log_level or not isinstance(log_level, str):
+            raise ValueError("Invalid config log_level")
+        return log_level
+
+    def _log_level_is_valid(self, log_level: str) -> bool:
+        return log_level in ["trace", "debug", "info", "warn", "error"]
 
     def _get_vault_autounseal_token(self) -> str | None:
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
