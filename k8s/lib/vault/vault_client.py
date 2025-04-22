@@ -477,6 +477,18 @@ class VaultClient:
             max_ttl,
         )
 
+    def create_or_update_acme_role(self, role: str, mount: str, max_ttl: str) -> None:
+        """Create a role for the ACME backend or update it if it already exists."""
+        self._client.secrets.pki.create_or_update_role(
+            name=role,
+            mount_point=mount,
+            extra_params={
+                "allow_any_name": True,
+                "allow_subdomains": True,
+                "max_ttl": max_ttl,
+            },
+        )
+
     def is_pki_role_created(self, role: str, mount: str) -> bool:
         """Check if the role is created for the PKI backend."""
         try:
@@ -588,6 +600,16 @@ class VaultClient:
     def delete_policy(self, name: str) -> None:
         """Delete the policy with the given name."""
         return self._client.sys.delete_policy(name)
+
+    def set_urls(
+        self, mount: str, issuing_certificates: List[str], crl_distribution_points: List[str]
+    ) -> None:
+        """Set the URLs for the ACME backend."""
+        self._client.secrets.pki.set_urls(
+            mount_point=mount,
+            issuing_certificates=issuing_certificates,
+            crl_distribution_points=crl_distribution_points,
+        )
 
 
 def generate_pem_bundle(certificate: str, private_key: str) -> str:

@@ -71,6 +71,7 @@ from vault.vault_helpers import (
     seal_type_has_changed,
 )
 from vault.vault_managers import (
+    AcmeManager,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -101,8 +102,12 @@ KV_RELATION_NAME = "vault-kv"
 LOG_FORWARDING_RELATION_NAME = "logging"
 PEER_RELATION_NAME = "vault-peers"
 PKI_MOUNT = "charm-pki"
+ACME_MOUNT = "charm-acme"
 PKI_RELATION_NAME = "vault-pki"
+ACME_RELATION_NAME = "vault-acme"
+TLS_CERTIFICATES_ACME_RELATION_NAME = "tls-certificates-acme"
 PKI_ROLE_NAME = "charm"
+ACME_ROLE_NAME = "charm"
 PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 S3_RELATION_NAME = "s3-parameters"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
@@ -140,6 +145,13 @@ class VaultCharm(CharmBase):
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
+            certificate_requests=certificate_requests,
+            mode=Mode.APP,
+            refresh_events=[self.on.config_changed],
+        )
+        self.tls_certificates_acme = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
             certificate_requests=certificate_requests,
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
@@ -347,6 +359,17 @@ class VaultCharm(CharmBase):
                 "Raft cluster is not healthy. %s",
                 vault.get_raft_cluster_state(),
             )
+        common_name = self.juju_facade.get_string_config("common_name")
+        acme_manager = AcmeManager(
+            charm=self,
+            vault_client=vault,
+            mount_point=ACME_MOUNT,
+            tls_certificates_acme=self.tls_certificates_acme,
+            certificate_request_attributes=self._get_certificate_request(common_name),
+            role_name=ACME_ROLE_NAME,
+            vault_address=self._api_address,
+        )
+        acme_manager.configure()
 
     def _on_remove(self, event: RemoveEvent):
         """Handle remove charm event.

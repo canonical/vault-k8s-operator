@@ -104,6 +104,18 @@ path "sys/internal/ui/mounts/{mount}" {{
 """
 
 
+def calculate_certificates_ttl(certificate: Certificate) -> int:
+    """Calculate the maximum allowed validity of certificates issued by Vault.
+
+    The current implementation returns half the validity of the CA certificate.
+    """
+    if not certificate.expiry_time or not certificate.validity_start_time:
+        raise ValueError("Invalid CA certificate with no expiry time or validity start time")
+    ca_validity_time = certificate.expiry_time - certificate.validity_start_time
+    ca_validity_seconds = ca_validity_time.total_seconds()
+    return int(ca_validity_seconds / 2)
+
+
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
 
@@ -899,9 +911,9 @@ class PKIManager:
             certificate_request=self._certificate_request_attributes
         )
         if not provider_certificate:
-            logger.debug("No intermediate CA certificate available")
+            logger.debug("No intermediate CA certificate available for Vault PKI")
         if not private_key:
-            logger.debug("No private key available")
+            logger.debug("No private key available for Vault PKI")
         return provider_certificate, private_key
 
     def _get_vault_service_ca_certificate(self) -> Certificate | None:
@@ -981,7 +993,7 @@ class PKIManager:
             private_key=str(private_key),
             mount=self._mount_point,
         )
-        issued_certificates_validity = PKIManager.calculate_pki_certificates_ttl(
+        issued_certificates_validity = calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
         if not self._vault_client.is_common_name_allowed_in_pki_role(
@@ -1050,9 +1062,7 @@ class PKIManager:
         provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
         if not provider_certificate:
             return
-        allowed_cert_validity = PKIManager.calculate_pki_certificates_ttl(
-            provider_certificate.certificate
-        )
+        allowed_cert_validity = calculate_certificates_ttl(provider_certificate.certificate)
         certificate = self._vault_client.sign_pki_certificate_signing_request(
             mount=self._mount_point,
             role=self._role_name,
@@ -1073,18 +1083,6 @@ class PKIManager:
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
         )
-
-    @staticmethod
-    def calculate_pki_certificates_ttl(certificate: Certificate) -> int:
-        """Calculate the maximum allowed validity of certificates issued by PKI.
-
-        The current implementation returns half the validity of the CA certificate.
-        """
-        if not certificate.expiry_time or not certificate.validity_start_time:
-            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
-        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
-        ca_validity_seconds = ca_validity_time.total_seconds()
-        return int(ca_validity_seconds / 2)
 
 
 class KVManager:
@@ -1480,3 +1478,72 @@ class RaftManager:
         ``node_id`` and ``address`` provided.
         """
         return json.dumps([{"id": node_id, "address": address}])
+
+
+class AcmeManager:
+    """Encapsulates the business logic for managing the ACME engine in Vault."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        vault_client: VaultClient,
+        mount_point: str,
+        tls_certificates_acme: TLSCertificatesRequiresV4,
+        certificate_request_attributes: CertificateRequestAttributes,
+        role_name: str,
+        vault_address: str,
+    ):
+        self._charm = charm
+        self._vault_client = vault_client
+        self._mount_point = mount_point
+        self._tls_certificates_acme = tls_certificates_acme
+        self._certificate_request_attributes = certificate_request_attributes
+        self._role_name = role_name
+        self._vault_address = vault_address
+
+    def _get_acme_intermediate_ca_from_relation(
+        self,
+    ) -> tuple[ProviderCertificate | None, PrivateKey | None]:
+        """Get the intermediate CA certificate and private key from the relation data.
+
+        This is the CA certificate that the provider charm has issued to Vault.
+        """
+        provider_certificate, private_key = self._tls_certificates_acme.get_assigned_certificate(
+            certificate_request=self._certificate_request_attributes
+        )
+        if not provider_certificate:
+            logger.debug("No intermediate CA certificate available for Vault ACME")
+        if not private_key:
+            logger.debug("No private key available for Vault ACME")
+        return provider_certificate, private_key
+
+    def _enable_acme(self) -> None:
+        self._vault_client.write(path=f"{self._mount_point}/config/acme", data={"enabled": True})
+
+    def configure(self) -> None:
+        """Configure the ACME engine in Vault."""
+        self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
+        certificate_from_provider, private_key = self._get_acme_intermediate_ca_from_relation()
+        if not certificate_from_provider or not private_key:
+            return
+        self._vault_client.import_ca_certificate_and_key(
+            certificate=str(certificate_from_provider.certificate),
+            private_key=str(private_key),
+            mount=self._mount_point,
+        )
+        self._vault_client.set_urls(
+            issuing_certificates=[f"{self._vault_address}/v1/pki/ca"],
+            crl_distribution_points=[f"{self._vault_address}/v1/pki/crl"],
+            mount=self._mount_point,
+        )
+        self._vault_client.write(
+            path=f"{self._mount_point}/config/cluster",
+            data={"path": self._vault_address},
+        )
+        self._enable_acme()
+        max_ttl = calculate_certificates_ttl(certificate_from_provider.certificate)
+        self._vault_client.create_or_update_acme_role(
+            role=self._role_name,
+            max_ttl=f"{max_ttl}s",
+            mount=self._mount_point,
+        )
