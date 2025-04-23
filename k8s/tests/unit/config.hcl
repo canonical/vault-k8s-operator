@@ -7,6 +7,7 @@ storage "raft" {
     leader_ca_cert_file = "/vault/certs/ca.pem"
   }
   }
+log_level = info
 listener "tcp" {
   telemetry {
     unauthenticated_metrics_access = true

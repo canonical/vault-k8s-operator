@@ -11,6 +11,16 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
+    def test_given_invalid_log_level_config_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        state_in = testing.State(
+            config={"log_level": "not valid"},
+        )
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus("log_level config is not valid")
+
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
         container = testing.Container(
             name="vault",
