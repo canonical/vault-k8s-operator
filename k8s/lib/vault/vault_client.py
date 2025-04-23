@@ -607,10 +607,20 @@ class VaultClient:
         """Set the URLs for the ACME backend."""
         self._client.secrets.pki.set_urls(
             mount_point=mount,
-            issuing_certificates=issuing_certificates,
-            crl_distribution_points=crl_distribution_points,
+            params={
+                "issuing_certificates": issuing_certificates,
+                "crl_distribution_points": crl_distribution_points,
+            },
         )
 
+    def tune_pki_backend(self, mount: str) -> None:
+        """Tune the PKI backend."""
+        self._client.sys.tune_mount_configuration(
+            path=mount,
+            **{
+                'allowed_response_headers': ['Location', 'Replay-Nonce', 'Link']
+            }
+        )
 
 def generate_pem_bundle(certificate: str, private_key: str) -> str:
     """Generate a PEM bundle from a certificate and private key."""

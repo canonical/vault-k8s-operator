@@ -1531,6 +1531,9 @@ class AcmeManager:
             private_key=str(private_key),
             mount=self._mount_point,
         )
+        self._vault_client.tune_pki_backend(
+            mount=self._mount_point,
+        )
         self._vault_client.set_urls(
             issuing_certificates=[f"{self._vault_address}/v1/pki/ca"],
             crl_distribution_points=[f"{self._vault_address}/v1/pki/crl"],
