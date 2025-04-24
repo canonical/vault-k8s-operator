@@ -3,6 +3,7 @@ storage "raft" {
   path= "/var/snap/vault/common/raft"
   node_id = "whatever-vault/0"
   }
+log_level = "info"
 listener "tcp" {
   telemetry {
     unauthenticated_metrics_access = true

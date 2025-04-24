@@ -8,6 +8,7 @@ build/
 .coverage
 __pycache__/
 *.py[cod]
+*.xml
 
 .idea/
 .vscode

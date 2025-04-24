@@ -38,6 +38,7 @@ def render_vault_config_file(
     raft_storage_path: str,
     node_id: str,
     retry_joins: List[Dict[str, str]],
+    log_level: str,
     autounseal_config: AutounsealConfiguration | None = None,
 ) -> str:
     """Render the Vault config file."""
@@ -54,6 +55,7 @@ def render_vault_config_file(
         raft_storage_path=raft_storage_path,
         node_id=node_id,
         retry_joins=retry_joins,
+        log_level=log_level,
         autounseal_address=autounseal_config.address if autounseal_config else None,
         autounseal_mount_path=autounseal_config.mount_path if autounseal_config else None,
         autounseal_key_name=autounseal_config.key_name if autounseal_config else None,

@@ -9,6 +9,7 @@ storage "raft" {
   }
   {% endfor %}
 }
+log_level = "{{ log_level }}"
 listener "tcp" {
   telemetry {
     unauthenticated_metrics_access = true
