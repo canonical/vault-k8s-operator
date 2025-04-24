@@ -14,7 +14,7 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
-    def test_given_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
+    def test_given_pki_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
         self,
     ):
         tls_relation = testing.Relation(
@@ -30,6 +30,24 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == BlockedStatus(
             "Common name is not set in the charm config, cannot configure PKI secrets engine"
+        )
+
+    def test_given_acme_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={"common_name": ""},
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Common name is not set in the charm config, cannot configure ACME server"
         )
 
     def test_given_peer_relation_not_created_when_collect_unit_status_then_status_is_waiting(self):

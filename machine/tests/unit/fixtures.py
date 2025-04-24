@@ -16,6 +16,7 @@ from vault.vault_managers import (
     PKIManager,
     RaftManager,
     TLSManager,
+    ACMEManager,
 )
 
 from charm import VaultOperatorCharm
@@ -42,6 +43,9 @@ class VaultCharmFixtures:
             ).return_value
             self.mock_pki_manager = stack.enter_context(
                 patch("charm.PKIManager", autospec=PKIManager)
+            ).return_value
+            self.mock_acme_manager = stack.enter_context(
+                patch("charm.ACMEManager", autospec=ACMEManager)
             ).return_value
             self.mock_s3_requirer = stack.enter_context(
                 patch("charm.S3Requirer", autospec=S3Requirer)
