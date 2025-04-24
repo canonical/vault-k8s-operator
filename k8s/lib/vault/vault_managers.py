@@ -105,18 +105,6 @@ path "sys/internal/ui/mounts/{mount}" {{
 """
 
 
-def get_vault_service_ca_certificate(client: VaultClient, mount: str) -> Certificate | None:
-    """Get the current CA certificate from the Vault service."""
-    try:
-        intermediate_ca_cert = client.get_intermediate_ca(mount=mount)
-        if not intermediate_ca_cert:
-            return None
-        return Certificate.from_string(intermediate_ca_cert)
-    except (VaultClientError, TLSCertificatesError) as e:
-        logger.error("Failed to get current CA certificate: %s", e)
-        return None
-
-
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
 
@@ -660,6 +648,17 @@ class _PKIUtils:
         self._vault_client = vault_client
         self._mount_point = mount_point
 
+    def get_vault_service_ca_certificate(self) -> Certificate | None:
+        """Get the current intermediate CA certificate from the Vault service."""
+        try:
+            intermediate_ca_cert = self._vault_client.get_intermediate_ca(mount=self._mount_point)
+            if not intermediate_ca_cert:
+                return None
+            return Certificate.from_string(intermediate_ca_cert)
+        except (VaultClientError, TLSCertificatesError) as e:
+            logger.error("Failed to get current CA certificate: %s", e)
+            return None
+
     def make_latest_issuer_default(self):
         """Make the latest PKI issuer the default issuer.
 
@@ -1008,9 +1007,7 @@ class PKIManager:
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             return
-        vault_service_ca_certificate = get_vault_service_ca_certificate(
-            self._vault_client, self._mount_point
-        )
+        vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
         if (
             vault_service_ca_certificate
             and vault_service_ca_certificate == certificate_from_provider.certificate
@@ -1542,13 +1539,12 @@ class ACMEManager:
         return provider_certificate, private_key
 
     def _configure_intermediate_ca_certificate(self) -> None:
+        """Configure the intermediate CA certificate for the ACME server in Vault."""
         certificate_from_provider, private_key = self._get_acme_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             raise ManagerError("No intermediate CA certificate available for Vault ACME")
 
-        vault_service_ca_certificate = get_vault_service_ca_certificate(
-            self._vault_client, self._mount_point
-        )
+        vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
         if (
             vault_service_ca_certificate
             and vault_service_ca_certificate == certificate_from_provider.certificate
@@ -1573,6 +1569,7 @@ class ACMEManager:
         )
 
     def _configure_acme_role(self) -> None:
+        """Configure the ACME role in Vault."""
         certificate_from_provider, _ = self._get_acme_intermediate_ca_from_relation()
         if not certificate_from_provider:
             logger.debug("No intermediate CA certificate available for Vault ACME")
@@ -1588,6 +1585,7 @@ class ACMEManager:
             )
 
     def _enable_acme(self) -> None:
+        """Configure ACME to be enabled in Vault."""
         self._vault_client.write(path=f"{self._mount_point}/config/acme", data={"enabled": True})
 
     def make_latest_acme_issuer_default(self):
@@ -1595,7 +1593,7 @@ class ACMEManager:
         self._pki_utils.make_latest_issuer_default()
 
     def configure(self) -> None:
-        """Configure the ACME engine in Vault."""
+        """Configure the ACME server in Vault."""
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can configure ACME")
             return
@@ -1614,7 +1612,7 @@ class ACMEManager:
 
         self._configure_acme_role()
 
-        self._vault_client.tune_pki_backend(
+        self._vault_client.allow_acme_headers(
             mount=self._mount_point,
         )
         self._vault_client.set_urls(

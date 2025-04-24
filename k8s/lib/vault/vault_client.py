@@ -613,8 +613,8 @@ class VaultClient:
             },
         )
 
-    def tune_pki_backend(self, mount: str) -> None:
-        """Tune the PKI backend."""
+    def allow_acme_headers(self, mount: str) -> None:
+        """Allow the ACME headers to be returned by the Vault server."""
         self._client.sys.tune_mount_configuration(
             path=mount, **{"allowed_response_headers": ["Location", "Replay-Nonce", "Link"]}
         )

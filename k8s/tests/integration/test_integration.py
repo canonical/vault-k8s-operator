@@ -4,8 +4,8 @@
 import asyncio
 import json
 import logging
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import hvac
@@ -473,7 +473,7 @@ class TestVaultK8sIntegrationsPart1:
             status="active",
             timeout=1000,
         )
-        assert await verify_acme_configured(ops_test, APP_NAME)
+        assert await verify_acme_configured(ops_test, APPLICATION_NAME)
 
     @pytest.mark.abort_on_fail
     async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
@@ -1211,7 +1211,9 @@ async def read_vault_unit_statuses(
 
 
 async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
-    leader_unit_index, _, _ = deployed_vault_initialized_leader
+    assert ops_test.model
+    leader_unit = await get_leader_unit(ops_test.model, app_name)
+    leader_unit_index = int(leader_unit.name.split("/")[-1])
     unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
     leader_ip = unit_addresses[leader_unit_index]
     url = f"https://{leader_ip}:8200/v1/charm-acme/acme/directory"
@@ -1223,11 +1225,11 @@ async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
             if response.status_code == 200 and "newNonce" in response.json():
                 return True
         except (requests.RequestException, ValueError) as e:
-            logger.warning("ACME check attempt %s/%s failed: %s", attempt+1, retry_count, str(e))
-            
+            logger.warning("ACME check attempt %s/%s failed: %s", attempt + 1, retry_count, str(e))
+
         if attempt < retry_count - 1:
             time.sleep(5)
-            
+
     return False
 
 

@@ -649,7 +649,6 @@ class TestACMEManager:
     def test_given_intermediate_certificate_when_configure_then_role_created(
         self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
     ):
-        # TODO, change this mock
         vault_certificate, _ = generate_example_provider_certificate(
             self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
         )
@@ -677,7 +676,6 @@ class TestACMEManager:
     def test_given_intermediate_certificate_when_configure_then_backend_configured(
         self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
     ):
-        # TODO, change this mock
         vault_certificate, _ = generate_example_provider_certificate(
             self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
         )
@@ -694,7 +692,7 @@ class TestACMEManager:
         ]
         self.vault.write.assert_has_calls(expected_write_calls, any_order=True)
 
-        self.vault.tune_pki_backend.assert_called_once_with(mount=self.mount_point)
+        self.vault.allow_acme_headers.assert_called_once_with(mount=self.mount_point)
 
         self.vault.set_urls.assert_called_once_with(
             mount=self.mount_point,
