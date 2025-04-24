@@ -55,7 +55,7 @@ class VaultCharmFixtures:
             ).return_value
 
             self.mock_socket_fqdn = stack.enter_context(patch("socket.getfqdn"))
-            self.mock_pki_requirer_get_assigned_certificate = stack.enter_context(
+            self.mock_get_requirer_assigned_certificate = stack.enter_context(
                 patch("charm.TLSCertificatesRequiresV4.get_assigned_certificate")
             )
             self.mock_pki_requirer_renew_certificate = stack.enter_context(

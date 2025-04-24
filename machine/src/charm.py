@@ -54,6 +54,8 @@ from vault.vault_helpers import (
     seal_type_has_changed,
 )
 from vault.vault_managers import (
+    TLS_CERTIFICATES_ACME_RELATION_NAME,
+    ACMEManager,
     AutounsealConfigurationDetails,
     AutounsealProviderManager,
     AutounsealRequirerManager,
@@ -95,6 +97,8 @@ VAULT_CONFIG_PATH = "/var/snap/vault/common"
 VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
+ACME_MOUNT = "charm-acme"
+ACME_ROLE_NAME = "charm-acme"
 VAULT_PORT = 8200
 VAULT_SNAP_CHANNEL = "1.17/stable"
 VAULT_SNAP_NAME = "vault"
@@ -146,6 +150,13 @@ class VaultOperatorCharm(CharmBase):
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
+            certificate_requests=certificate_requests,
+            mode=Mode.APP,
+            refresh_events=[self.on.config_changed],
+        )
+        self.tls_certificates_acme = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
             certificate_requests=certificate_requests,
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
@@ -407,6 +418,15 @@ class VaultOperatorCharm(CharmBase):
                 )
             )
             return
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_ACME_RELATION_NAME
+        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
+            event.add_status(
+                BlockedStatus(
+                    "Common name is not set in the charm config, cannot configure ACME server"
+                )
+            )
+            return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             event.add_status(WaitingStatus("Waiting for peer relation"))
             return
@@ -496,6 +516,7 @@ class VaultOperatorCharm(CharmBase):
         if not vault:
             return
         self._configure_pki_secrets_engine(vault)
+        self._configure_acme_server(vault)
         self._sync_vault_autounseal(vault)
         self._sync_vault_kv(vault)
         self._sync_vault_pki(vault)
@@ -739,6 +760,22 @@ class VaultOperatorCharm(CharmBase):
         )
         manager.configure()
 
+    def _configure_acme_server(self, vault: VaultClient) -> None:
+        common_name = self.juju_facade.get_string_config("common_name")
+        if not common_name:
+            logger.warning("Common name is not set in the charm config")
+            return
+        manager = ACMEManager(
+            charm=self,
+            vault_client=vault,
+            mount_point=ACME_MOUNT,
+            tls_certificates_acme=self.tls_certificates_acme,
+            certificate_request_attributes=self._get_certificate_request(common_name),
+            role_name=ACME_ROLE_NAME,
+            vault_address=f"https://{self._ingress_address}:{VAULT_PORT}",
+        )
+        manager.configure()
+
     def _get_default_lease_ttl(self) -> str:
         """Return the default lease ttl config."""
         default_lease_ttl = self.config.get("default_lease_ttl")
@@ -947,6 +984,15 @@ class VaultOperatorCharm(CharmBase):
         Example of node id: "vault-0"
         """
         return f"{self.model.name}-{self.unit.name}"
+
+    @property
+    def _ingress_address(self) -> str | None:
+        """Fetch the ingress address from peer relation and returns it.
+
+        Returns:
+            str: Ingress address
+        """
+        return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
 
 
 if __name__ == "__main__":  # pragma: nocover

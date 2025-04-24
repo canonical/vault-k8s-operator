@@ -157,7 +157,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             relation_id=pki_relation.id,
             validity=timedelta(hours=24),
         )
-        self.mock_pki_requirer_get_assigned_certificate.return_value = (
+        self.mock_get_requirer_assigned_certificate.return_value = (
             provider_certificate,
             private_key,
         )

@@ -74,6 +74,13 @@ requires:
       Interface to be used to provide Vault with its CA certificate. Vault will
       use this certificate to sign the certificates it issues on the `vault-pki` interface.
     optional: true
+  tls-certificates-acme:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Interface to be used to provide Vault with and intermediate CA certificate for the ACME server.
+      Vault will use this certificate to sign the certificates it issues using the ACME protocol.
+    optional: true
   s3-parameters:
     interface: s3
     optional: true
