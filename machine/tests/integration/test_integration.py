@@ -3,11 +3,13 @@
 # See LICENSE file for licensing details.
 
 import logging
+import time
 from asyncio import Task, create_task, gather
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import pytest
+import requests
 import yaml
 from cryptography import x509
 from juju.application import Application
@@ -343,6 +345,30 @@ async def get_leader_vault_client(ops_test: OpsTest, app_name: str) -> Vault:
     return Vault(url=vault_url, ca_file_location=await ca_file_location)
 
 
+async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    leader = await get_leader(app)
+    assert leader
+    leader_ip = leader.public_address
+    url = f"https://{leader_ip}:8200/v1/charm-acme/acme/directory"
+
+    retry_count = 12
+    for attempt in range(retry_count):
+        try:
+            response = requests.get(url, verify=False)
+            if response.status_code == 200 and "newNonce" in response.json():
+                return True
+        except (requests.RequestException, ValueError) as e:
+            logger.warning("ACME check attempt %s/%s failed: %s", attempt + 1, retry_count, str(e))
+
+        if attempt < retry_count - 1:
+            time.sleep(5)
+
+    return False
+
+
 async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str, str]:
     """Initialize the leader vault unit and return the root token and unseal key.
 
@@ -674,6 +700,38 @@ async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is
     )
 
     assert action_output["value"] == secret_value
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.dependency()
+async def test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured(
+    ops_test: OpsTest, vault_authorized: Task, self_signed_certificates_idle: Task
+):
+    assert ops_test.model
+    await vault_authorized
+    await self_signed_certificates_idle
+
+    vault_app = get_app(ops_test.model)
+    common_name = UNMATCHING_COMMON_NAME
+    common_name_config = {
+        "common_name": common_name,
+    }
+    await vault_app.set_config(common_name_config)
+    if not has_relation(vault_app, "tls-certificates-acme"):
+        await ops_test.model.integrate(
+            relation1=f"{APP_NAME}:tls-certificates-acme",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+        status="active",
+    )
+    assert await verify_acme_configured(ops_test, APP_NAME)
 
 
 @pytest.mark.abort_on_fail

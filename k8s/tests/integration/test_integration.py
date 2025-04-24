@@ -5,10 +5,12 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+import time
 from typing import Any, Dict, List, Tuple
 
 import hvac
 import pytest
+import requests
 import yaml
 from juju.action import Action
 from juju.application import Application
@@ -449,6 +451,29 @@ class TestVaultK8sIntegrationsPart1:
         )
 
         assert action_output["value"] == secret_value
+
+    @pytest.mark.abort_on_fail
+    async def test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured(
+        self, ops_test: OpsTest, deploy_requiring_charms: None
+    ):
+        assert ops_test.model
+        vault_app = ops_test.model.applications[APPLICATION_NAME]
+        assert vault_app
+        common_name = "unmatching-the-requirer.com"
+        common_name_config = {
+            "common_name": common_name,
+        }
+        await vault_app.set_config(common_name_config)
+        await ops_test.model.integrate(
+            relation1=f"{APPLICATION_NAME}:tls-certificates-acme",
+            relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+        )
+        assert await verify_acme_configured(ops_test, APP_NAME)
 
     @pytest.mark.abort_on_fail
     async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active(
@@ -1183,6 +1208,27 @@ async def read_vault_unit_statuses(
             }
         )
     return output
+
+
+async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
+    leader_unit_index, _, _ = deployed_vault_initialized_leader
+    unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+    leader_ip = unit_addresses[leader_unit_index]
+    url = f"https://{leader_ip}:8200/v1/charm-acme/acme/directory"
+
+    retry_count = 12
+    for attempt in range(retry_count):
+        try:
+            response = requests.get(url, verify=False)
+            if response.status_code == 200 and "newNonce" in response.json():
+                return True
+        except (requests.RequestException, ValueError) as e:
+            logger.warning("ACME check attempt %s/%s failed: %s", attempt+1, retry_count, str(e))
+            
+        if attempt < retry_count - 1:
+            time.sleep(5)
+            
+    return False
 
 
 def unseal_vault(endpoint: str, root_token: str, unseal_key: str):
