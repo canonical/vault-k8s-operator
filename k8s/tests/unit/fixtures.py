@@ -10,6 +10,7 @@ from vault.vault_client import (
     VaultClient,
 )
 from vault.vault_managers import (
+    ACMEManager,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -35,12 +36,13 @@ class VaultCharmFixtures:
             ) as mock_autounseal_requirer_manager,
             patch("charm.KVManager", autospec=KVManager) as mock_kv_manager,
             patch("charm.PKIManager", autospec=PKIManager) as mock_pki_manager,
+            patch("charm.ACMEManager", autospec=ACMEManager) as mock_acme_manager,
             patch("charm.S3Requirer", autospec=S3Requirer) as mock_s3_requirer,
             patch("charm.BackupManager", autospec=BackupManager) as mock_backup_manager,
             patch("socket.getfqdn") as mock_socket_fqdn,
             patch(
                 "charm.TLSCertificatesRequiresV4.get_assigned_certificate"
-            ) as mock_pki_requirer_get_assigned_certificate,
+            ) as mock_get_requirer_assigned_certificate,
             patch(
                 "charm.TLSCertificatesRequiresV4.renew_certificate"
             ) as mock_pki_requirer_renew_certificate,
@@ -75,14 +77,13 @@ class VaultCharmFixtures:
             )
             self.mock_kv_manager = mock_kv_manager.return_value
             self.mock_pki_manager = mock_pki_manager.return_value
+            self.mock_acme_manager = mock_acme_manager.return_value
             self.mock_s3_requirer = mock_s3_requirer.return_value
             self.mock_backup_manager = mock_backup_manager.return_value
 
             # When we want to mock the callable, we use the mock directly
             self.mock_socket_fqdn = mock_socket_fqdn
-            self.mock_pki_requirer_get_assigned_certificate = (
-                mock_pki_requirer_get_assigned_certificate
-            )
+            self.mock_get_requirer_assigned_certificate = mock_get_requirer_assigned_certificate
             self.mock_pki_requirer_renew_certificate = mock_pki_requirer_renew_certificate
             self.mock_pki_provider_get_outstanding_certificate_requests = (
                 mock_pki_provider_get_outstanding_certificate_requests

@@ -616,11 +616,9 @@ class VaultClient:
     def tune_pki_backend(self, mount: str) -> None:
         """Tune the PKI backend."""
         self._client.sys.tune_mount_configuration(
-            path=mount,
-            **{
-                'allowed_response_headers': ['Location', 'Replay-Nonce', 'Link']
-            }
+            path=mount, **{"allowed_response_headers": ["Location", "Replay-Nonce", "Link"]}
         )
+
 
 def generate_pem_bundle(certificate: str, private_key: str) -> str:
     """Generate a PEM bundle from a certificate and private key."""

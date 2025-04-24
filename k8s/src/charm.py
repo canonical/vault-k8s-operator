@@ -71,7 +71,9 @@ from vault.vault_helpers import (
     seal_type_has_changed,
 )
 from vault.vault_managers import (
-    AcmeManager,
+    TLS_CERTIFICATES_ACME_RELATION_NAME,
+    TLS_CERTIFICATES_PKI_RELATION_NAME,
+    ACMEManager,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -104,13 +106,10 @@ PEER_RELATION_NAME = "vault-peers"
 PKI_MOUNT = "charm-pki"
 ACME_MOUNT = "charm-acme"
 PKI_RELATION_NAME = "vault-pki"
-ACME_RELATION_NAME = "vault-acme"
-TLS_CERTIFICATES_ACME_RELATION_NAME = "tls-certificates-acme"
 PKI_ROLE_NAME = "charm"
 ACME_ROLE_NAME = "charm"
 PROMETHEUS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 S3_RELATION_NAME = "s3-parameters"
-TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CONFIG_FILE_PATH = "/vault/config/vault.hcl"
 VAULT_STORAGE_PATH = "/vault/raft"
@@ -256,6 +255,15 @@ class VaultCharm(CharmBase):
                 )
             )
             return
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_ACME_RELATION_NAME
+        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
+            event.add_status(
+                BlockedStatus(
+                    "Common name is not set in the charm config, cannot configure ACME server"
+                )
+            )
+            return
         if not self._container.can_connect():
             event.add_status(WaitingStatus("Waiting to be able to connect to vault unit"))
             return
@@ -349,6 +357,7 @@ class VaultCharm(CharmBase):
         if not vault.is_active_or_standby():
             return
         self._configure_pki_secrets_engine(vault)
+        self._configure_acme_server(vault)
         self._sync_vault_autounseal(vault)
         self._sync_vault_kv(vault)
         self._sync_vault_pki(vault)
@@ -359,17 +368,6 @@ class VaultCharm(CharmBase):
                 "Raft cluster is not healthy. %s",
                 vault.get_raft_cluster_state(),
             )
-        common_name = self.juju_facade.get_string_config("common_name")
-        acme_manager = AcmeManager(
-            charm=self,
-            vault_client=vault,
-            mount_point=ACME_MOUNT,
-            tls_certificates_acme=self.tls_certificates_acme,
-            certificate_request_attributes=self._get_certificate_request(common_name),
-            role_name=ACME_ROLE_NAME,
-            vault_address=self._api_address,
-        )
-        acme_manager.configure()
 
     def _on_remove(self, event: RemoveEvent):
         """Handle remove charm event.
@@ -412,6 +410,22 @@ class VaultCharm(CharmBase):
             PKI_ROLE_NAME,
             self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
+        )
+        manager.configure()
+
+    def _configure_acme_server(self, vault: VaultClient) -> None:
+        common_name = self.juju_facade.get_string_config("common_name")
+        if not common_name:
+            logger.warning("Common name is not set in the charm config")
+            return
+        manager = ACMEManager(
+            charm=self,
+            vault_client=vault,
+            mount_point=ACME_MOUNT,
+            tls_certificates_acme=self.tls_certificates_acme,
+            certificate_request_attributes=self._get_certificate_request(common_name),
+            role_name=ACME_ROLE_NAME,
+            vault_address=f"https://{self._ingress_address}:{self.VAULT_PORT}",
         )
         manager.configure()
 
