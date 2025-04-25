@@ -28,11 +28,11 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
+from dataclasses import dataclass
 import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
@@ -83,6 +83,7 @@ from vault.vault_s3 import S3, S3Error
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
+TLS_CERTIFICATES_ACME_RELATION_NAME = "tls-certificates-acme"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
 
 VAULT_CA_SUBJECT = "Vault self signed CA"
@@ -103,7 +104,6 @@ path "sys/internal/ui/mounts/{mount}" {{
   capabilities = ["read"]
 }}
 """
-
 
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
@@ -641,6 +641,94 @@ class Naming:
         return f"{mount_path}-{unit_name_dash}"
 
 
+class _PKIUtils:
+    """Encapsulates some common util functions among PKIManager and ACMEManager."""
+
+    def __init__(self, vault_client: VaultClient, mount_point: str):
+        self._vault_client = vault_client
+        self._mount_point = mount_point
+
+    def get_vault_service_ca_certificate(self) -> Certificate | None:
+        """Get the current intermediate CA certificate from the Vault service."""
+        try:
+            intermediate_ca_cert = self._vault_client.get_intermediate_ca(mount=self._mount_point)
+            if not intermediate_ca_cert:
+                return None
+            return Certificate.from_string(intermediate_ca_cert)
+        except (VaultClientError, TLSCertificatesError) as e:
+            logger.error("Failed to get current CA certificate: %s", e)
+        return None
+
+    def make_latest_issuer_default(self):
+        """Make the latest PKI issuer the default issuer.
+
+        This ensures that the latest issuer we have created is used for signing
+        certificates.
+        """
+        try:
+            first_issuer = self._vault_client.list_pki_issuers(mount=self._mount_point)[0]
+        except (VaultClientError, IndexError) as e:
+            logger.error("Failed to get the first issuer: %s", e)
+            return
+        try:
+            issuers_config = self._vault_client.read(path=f"{self._mount_point}/config/issuers")
+            if issuers_config and not issuers_config["default_follows_latest_issuer"]:
+                logger.debug("Updating issuers config")
+                self._vault_client.write(
+                    path=f"{self._mount_point}/config/issuers",
+                    data={
+                        "default_follows_latest_issuer": True,
+                        "default": first_issuer,
+                    },
+                )
+        except (TypeError, KeyError):
+            logger.error("Issuers config is not yet created")
+
+    def calculate_certificates_ttl(self, certificate: Certificate) -> int:
+        """Calculate the maximum allowed validity of certificates issued by Vault.
+
+        The current implementation returns half the validity of the CA certificate.
+        """
+        if not certificate.expiry_time or not certificate.validity_start_time:
+            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
+        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
+        ca_validity_seconds = ca_validity_time.total_seconds()
+        return int(ca_validity_seconds / 2)
+
+    def intermediate_ca_exceeds_role_ttl(
+        self, intermediate_ca_certificate: Certificate, current_ttl: int
+    ) -> bool:
+        """Check if the intermediate CA's remaining validity exceeds the role's max TTL.
+
+        Vault PKI enforces that issued certificates cannot outlast their signing CA.
+        This method ensures that the intermediate CA's remaining validity period
+        is longer than the maximum TTL allowed for certificates issued by this role.
+        """
+        if (
+            not current_ttl
+            or not intermediate_ca_certificate.expiry_time
+            or not intermediate_ca_certificate.validity_start_time
+        ):
+            return False
+        certificate_validity = (
+            intermediate_ca_certificate.expiry_time
+            - intermediate_ca_certificate.validity_start_time
+        )
+        certificate_validity_seconds = certificate_validity.total_seconds()
+        return certificate_validity_seconds > current_ttl
+
+
+@dataclass
+class AutounsealConfigurationDetails:
+    """Credentials required for configuring auto-unseal on Vault."""
+
+    address: str
+    mount_path: str
+    key_name: str
+    token: str
+    ca_cert_path: str
+
+
 class AutounsealProviderManager:
     """Encapsulates the auto-unseal functionality.
 
@@ -796,16 +884,6 @@ class AutounsealProviderManager:
         output = self._client.list("sys/policy")
         return [policy for policy in output if policy.startswith(Naming.autounseal_policy_prefix)]
 
-@dataclass
-class AutounsealConfigurationDetails:
-    """Credentials required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    token: str
-    ca_cert_path: str
-
 
 class AutounsealRequirerManager:
     """Encapsulates the auto-unseal functionality from the Requirer Perspective.
@@ -898,6 +976,7 @@ class PKIManager:
         self._vault_pki = vault_pki
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
+        self._pki_utils = _PKIUtils(vault_client, mount_point)
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -910,44 +989,10 @@ class PKIManager:
             certificate_request=self._certificate_request_attributes
         )
         if not provider_certificate:
-            logger.debug("No intermediate CA certificate available")
+            logger.debug("No intermediate CA certificate available for Vault PKI")
         if not private_key:
-            logger.debug("No private key available")
+            logger.debug("No private key available for Vault PKI")
         return provider_certificate, private_key
-
-    def _get_vault_service_ca_certificate(self) -> Certificate | None:
-        """Get the current CA certificate from the Vault service."""
-        try:
-            intermediate_ca_cert = self._vault_client.get_intermediate_ca(mount=self._mount_point)
-            if not intermediate_ca_cert:
-                return None
-            return Certificate.from_string(intermediate_ca_cert)
-        except (VaultClientError, TLSCertificatesError) as e:
-            logger.error("Failed to get current CA certificate: %s", e)
-            return None
-
-    def _intermediate_ca_exceeds_role_ttl(self, intermediate_ca_certificate: Certificate) -> bool:
-        """Check if the intermediate CA's remaining validity exceeds the role's max TTL.
-
-        Vault PKI enforces that issued certificates cannot outlast their signing CA.
-        This method ensures that the intermediate CA's remaining validity period
-        is longer than the maximum TTL allowed for certificates issued by this role.
-        """
-        current_ttl = self._vault_client.get_role_max_ttl(
-            role=self._role_name, mount=self._mount_point
-        )
-        if (
-            not current_ttl
-            or not intermediate_ca_certificate.expiry_time
-            or not intermediate_ca_certificate.validity_start_time
-        ):
-            return False
-        certificate_validity = (
-            intermediate_ca_certificate.expiry_time
-            - intermediate_ca_certificate.validity_start_time
-        )
-        certificate_validity_seconds = certificate_validity.total_seconds()
-        return certificate_validity_seconds > current_ttl
 
     def configure(self):
         """Enable the PKI backend and update the PKI role in Vault.
@@ -973,12 +1018,17 @@ class PKIManager:
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             return
-        vault_service_ca_certificate = self._get_vault_service_ca_certificate()
+        vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
         if (
             vault_service_ca_certificate
             and vault_service_ca_certificate == certificate_from_provider.certificate
         ):
-            if not self._intermediate_ca_exceeds_role_ttl(vault_service_ca_certificate):
+            current_ttl = self._vault_client.get_role_max_ttl(
+                role=self._role_name, mount=self._mount_point
+            )
+            if current_ttl and not self._pki_utils.intermediate_ca_exceeds_role_ttl(
+                vault_service_ca_certificate, current_ttl
+            ):
                 self._tls_certificates_pki.renew_certificate(
                     certificate_from_provider,
                 )
@@ -992,7 +1042,7 @@ class PKIManager:
             private_key=str(private_key),
             mount=self._mount_point,
         )
-        issued_certificates_validity = PKIManager.calculate_pki_certificates_ttl(
+        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
         if not self._vault_client.is_common_name_allowed_in_pki_role(
@@ -1011,29 +1061,8 @@ class PKIManager:
         self.make_latest_pki_issuer_default()
 
     def make_latest_pki_issuer_default(self):
-        """Make the latest PKI issuer the default issuer.
-
-        This ensures that the latest issuer we have created is used for signing
-        certificates.
-        """
-        try:
-            first_issuer = self._vault_client.list_pki_issuers(mount=self._mount_point)[0]
-        except (VaultClientError, IndexError) as e:
-            logger.error("Failed to get the first issuer: %s", e)
-            return
-        try:
-            issuers_config = self._vault_client.read(path=f"{self._mount_point}/config/issuers")
-            if issuers_config and not issuers_config["default_follows_latest_issuer"]:
-                logger.debug("Updating issuers config")
-                self._vault_client.write(
-                    path=f"{self._mount_point}/config/issuers",
-                    data={
-                        "default_follows_latest_issuer": True,
-                        "default": first_issuer,
-                    },
-                )
-        except (TypeError, KeyError):
-            logger.error("Issuers config is not yet created")
+        """Make the latest issuer the default issuer."""
+        self._pki_utils.make_latest_issuer_default()
 
     def sync(self):
         """Sync the state of the PKI backend with the TLS certificates relations.
@@ -1061,7 +1090,7 @@ class PKIManager:
         provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
         if not provider_certificate:
             return
-        allowed_cert_validity = PKIManager.calculate_pki_certificates_ttl(
+        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
             provider_certificate.certificate
         )
         certificate = self._vault_client.sign_pki_certificate_signing_request(
@@ -1084,18 +1113,6 @@ class PKIManager:
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
         )
-
-    @staticmethod
-    def calculate_pki_certificates_ttl(certificate: Certificate) -> int:
-        """Calculate the maximum allowed validity of certificates issued by PKI.
-
-        The current implementation returns half the validity of the CA certificate.
-        """
-        if not certificate.expiry_time or not certificate.validity_start_time:
-            raise ValueError("Invalid CA certificate with no expiry time or validity start time")
-        ca_validity_time = certificate.expiry_time - certificate.validity_start_time
-        ca_validity_seconds = ca_validity_time.total_seconds()
-        return int(ca_validity_seconds / 2)
 
 
 class KVManager:
@@ -1491,3 +1508,132 @@ class RaftManager:
         ``node_id`` and ``address`` provided.
         """
         return json.dumps([{"id": node_id, "address": address}])
+
+
+class ACMEManager:
+    """Encapsulates the business logic for managing the ACME engine in Vault."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        vault_client: VaultClient,
+        mount_point: str,
+        tls_certificates_acme: TLSCertificatesRequiresV4,
+        certificate_request_attributes: CertificateRequestAttributes,
+        role_name: str,
+        vault_address: str,
+    ):
+        self._charm = charm
+        self._juju_facade = JujuFacade(charm)
+        self._vault_client = vault_client
+        self._mount_point = mount_point
+        self._tls_certificates_acme = tls_certificates_acme
+        self._certificate_request_attributes = certificate_request_attributes
+        self._role_name = role_name
+        self._vault_address = vault_address
+        self._pki_utils = _PKIUtils(vault_client, mount_point)
+
+    def _get_acme_intermediate_ca_from_relation(
+        self,
+    ) -> tuple[ProviderCertificate | None, PrivateKey | None]:
+        """Get the intermediate CA certificate and private key from the relation data.
+
+        This is the CA certificate that the provider charm has issued to Vault.
+        """
+        provider_certificate, private_key = self._tls_certificates_acme.get_assigned_certificate(
+            certificate_request=self._certificate_request_attributes
+        )
+        if not provider_certificate:
+            logger.debug("No intermediate CA certificate available for Vault ACME")
+        if not private_key:
+            logger.debug("No private key available for Vault ACME")
+        return provider_certificate, private_key
+
+    def _configure_intermediate_ca_certificate(self) -> None:
+        """Configure the intermediate CA certificate for the ACME server in Vault."""
+        certificate_from_provider, private_key = self._get_acme_intermediate_ca_from_relation()
+        if not certificate_from_provider or not private_key:
+            raise ManagerError("No intermediate CA certificate available for Vault ACME")
+
+        vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+        if (
+            vault_service_ca_certificate
+            and vault_service_ca_certificate == certificate_from_provider.certificate
+        ):
+            current_ttl = self._vault_client.get_role_max_ttl(
+                role=self._role_name, mount=self._mount_point
+            )
+            if current_ttl and not self._pki_utils.intermediate_ca_exceeds_role_ttl(
+                vault_service_ca_certificate, current_ttl
+            ):
+                self._tls_certificates_acme.renew_certificate(
+                    certificate_from_provider,
+                )
+                logger.debug("Renewing ACME intermediate CA certificate")
+                raise ManagerError("Renewing ACME intermediate CA certificate")
+            logger.debug("ACME intermediate CA certificate already set")
+            raise ManagerError("ACME intermediate CA certificate already set")
+        self._vault_client.import_ca_certificate_and_key(
+            certificate=str(certificate_from_provider.certificate),
+            private_key=str(private_key),
+            mount=self._mount_point,
+        )
+
+    def _configure_acme_role(self) -> None:
+        """Configure the ACME role in Vault."""
+        certificate_from_provider, _ = self._get_acme_intermediate_ca_from_relation()
+        if not certificate_from_provider:
+            logger.debug("No intermediate CA certificate available for Vault ACME")
+            return
+        max_ttl = self._pki_utils.calculate_certificates_ttl(certificate_from_provider.certificate)
+        if max_ttl != self._vault_client.get_role_max_ttl(
+            role=self._role_name, mount=self._mount_point
+        ):
+            self._vault_client.create_or_update_acme_role(
+                role=self._role_name,
+                max_ttl=f"{max_ttl}s",
+                mount=self._mount_point,
+            )
+
+    def _enable_acme(self) -> None:
+        """Configure ACME to be enabled in Vault."""
+        self._vault_client.write(path=f"{self._mount_point}/config/acme", data={"enabled": True})
+
+    def make_latest_acme_issuer_default(self):
+        """Make the latest issuer the default issuer."""
+        self._pki_utils.make_latest_issuer_default()
+
+    def configure(self) -> None:
+        """Configure the ACME server in Vault."""
+        if not self._juju_facade.is_leader:
+            logger.debug("Only leader unit can configure ACME")
+            return
+        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_ACME_RELATION_NAME):
+            logger.debug(
+                "No TLS relation exists to configure ACME server: `%s`",
+                TLS_CERTIFICATES_ACME_RELATION_NAME,
+            )
+            return
+        self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
+
+        try:
+            self._configure_intermediate_ca_certificate()
+        except ManagerError:
+            return
+
+        self._configure_acme_role()
+
+        self._vault_client.allow_acme_headers(
+            mount=self._mount_point,
+        )
+        self._vault_client.set_urls(
+            issuing_certificates=[f"{self._vault_address}/v1/pki/ca"],
+            crl_distribution_points=[f"{self._vault_address}/v1/pki/crl"],
+            mount=self._mount_point,
+        )
+        self._vault_client.write(
+            path=f"{self._mount_point}/config/cluster",
+            data={"path": f"{self._vault_address}/v1/{self._mount_point}"},
+        )
+        self._enable_acme()
+        self.make_latest_acme_issuer_default()

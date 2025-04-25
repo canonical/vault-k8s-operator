@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -14,6 +14,7 @@ from vault.vault_client import (
 from vault.vault_client import Certificate as VaultClientCertificate
 from vault.vault_managers import (
     AUTOUNSEAL_POLICY,
+    ACMEManager,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -519,6 +520,184 @@ class TestPKIManager:
                 ca=provider_certificate.certificate,
                 chain=provider_certificate.chain,
             )
+        )
+
+
+class TestACMEManager:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.charm = MagicMock(spec=VaultCharm)
+        self.vault = MagicMock(spec=VaultClient)
+        self.mount_point = "acme-charm"
+        self.tls_certificates_acme = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.certificate_request_attributes = CertificateRequestAttributes(
+            common_name="common_name",
+            is_ca=True,
+        )
+        self.role_name = "acme-charm-role"
+        self.vault_address = "https://vault:8200"
+        self.acme_manager = ACMEManager(
+            self.charm,
+            self.vault,
+            self.mount_point,
+            self.tls_certificates_acme,
+            self.certificate_request_attributes,
+            self.role_name,
+            self.vault_address,
+        )
+
+    @pytest.fixture
+    def one_issuer(self) -> str:
+        self.vault.list_pki_issuers.return_value = ["issuer"]
+        return "issuer"
+
+    @pytest.fixture
+    def no_issuer(self):
+        self.vault.list_pki_issuers.return_value = []
+
+    @pytest.fixture
+    def issuer_is_default(self, one_issuer: str):
+        self.vault.read.return_value = {
+            "data": {"default_follows_latest_issuer": True, "default": one_issuer}
+        }
+
+    @pytest.fixture
+    def issuer_is_not_default(self, one_issuer: str):
+        self.vault.read.return_value = {
+            "default_follows_latest_issuer": False,
+            "default": one_issuer,
+        }
+
+    @pytest.fixture
+    def assigned_certificate_and_key(self) -> tuple[ProviderCertificate, PrivateKey]:
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.tls_certificates_acme.get_assigned_certificate.return_value = (
+            provider_certificate,
+            private_key,
+        )
+        return (provider_certificate, private_key)
+
+    def test_given_no_acme_issuers_when_make_latest_acme_issuer_default_then_no_vault_error_is_raised_but_error_is_logged(
+        self, caplog: pytest.LogCaptureFixture, no_issuer: None
+    ):
+        # Ensure no error is raised
+        self.acme_manager.make_latest_acme_issuer_default()
+
+        assert is_error_logged(caplog, "Failed to get the first issuer")
+
+    def test_given_existing_acme_issuers_when_make_latest_acme_issuer_default_then_config_written_to_path(
+        self, issuer_is_not_default: None
+    ):
+        self.acme_manager.make_latest_acme_issuer_default()
+
+        self.vault.write.assert_called_with(
+            path=f"{self.mount_point}/config/issuers",
+            data={
+                "default_follows_latest_issuer": True,
+                "default": "issuer",
+            },
+        )
+
+    def test_given_issuers_config_already_updated_when_make_latest_acme_issuer_default_then_config_not_written(
+        self, issuer_is_default: None
+    ):
+        self.acme_manager.make_latest_acme_issuer_default()
+        self.vault.write.assert_not_called()
+
+    def test_given_intermediate_certificate_expires_before_issued_certificates_when_configure_then_certificate_is_renewed(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        provider_certificate, _ = assigned_certificate_and_key
+
+        self.vault.get_intermediate_ca.return_value = str(provider_certificate.certificate)
+
+        # This is how long certificates issued by ACME will be valid for. We
+        # make it 25 hours, because the intermediate (provider) certificate is valid for 24.
+        self.vault.get_role_max_ttl.return_value = 25 * SECONDS_IN_HOUR
+
+        self.acme_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.PKI, self.mount_point
+        )
+        self.tls_certificates_acme.renew_certificate.assert_called_once_with(provider_certificate)
+
+    def test_given_new_certificate_issued_when_configure_then_certificates_replaced(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        # Return a different certificate from Vault, to emulate the situation
+        # where a new certificate has been issued.
+        vault_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.vault.get_intermediate_ca.return_value = str(vault_certificate.certificate)
+
+        self.acme_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.PKI, self.mount_point
+        )
+
+        self.vault.import_ca_certificate_and_key.assert_called_once_with(
+            certificate=str(assigned_certificate_and_key[0].certificate),
+            private_key=str(assigned_certificate_and_key[1]),
+            mount=self.mount_point,
+        )
+
+    def test_given_intermediate_certificate_when_configure_then_role_created(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        vault_certificate, _ = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.vault.get_intermediate_ca.return_value = str(vault_certificate.certificate)
+
+        self.acme_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.PKI, self.mount_point
+        )
+
+        validity = (
+            assigned_certificate_and_key[0].certificate.expiry_time
+            - assigned_certificate_and_key[0].certificate.validity_start_time
+        )
+        validity_in_seconds = validity.total_seconds()
+        # This is how the manager currently calculates the max_ttl.
+        max_ttl = int(validity_in_seconds / 2)
+        self.vault.create_or_update_acme_role.assert_called_once_with(
+            mount=self.mount_point,
+            role=self.role_name,
+            max_ttl=f"{max_ttl}s",
+        )
+
+    def test_given_intermediate_certificate_when_configure_then_backend_configured(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        vault_certificate, _ = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.vault.get_intermediate_ca.return_value = str(vault_certificate.certificate)
+
+        self.acme_manager.configure()
+
+        expected_write_calls = [
+            call.write(
+                path=f"{self.mount_point}/config/cluster",
+                data={"path": f"{self.vault_address}/v1/{self.mount_point}"},
+            ),
+            call.write(path=f"{self.mount_point}/config/acme", data={"enabled": True}),
+        ]
+        self.vault.write.assert_has_calls(expected_write_calls, any_order=True)
+
+        self.vault.allow_acme_headers.assert_called_once_with(mount=self.mount_point)
+
+        self.vault.set_urls.assert_called_once_with(
+            mount=self.mount_point,
+            issuing_certificates=[f"{self.vault_address}/v1/pki/ca"],
+            crl_distribution_points=[f"{self.vault_address}/v1/pki/crl"],
         )
 
 

@@ -164,7 +164,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 relation_id=pki_relation.id,
                 validity=timedelta(hours=24),
             )
-            self.mock_pki_requirer_get_assigned_certificate.return_value = (
+            self.mock_get_requirer_assigned_certificate.return_value = (
                 provider_certificate,
                 private_key,
             )
@@ -172,6 +172,68 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_pki_manager.configure.assert_called_once()
+
+    # Test ACME
+
+    def test_given_certificate_available_when_configure_then_acme_server_is_configured(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_vault.configure_mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "get_intermediate_ca.return_value": "",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            vault_config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+            )
+            acme_relation = testing.Relation(
+                endpoint="tls-certificates-acme",
+                interface="tls-certificates",
+            )
+            approle_secret = testing.Secret(
+                label="vault-approle-auth-details",
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
+            )
+            state_in = testing.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, acme_relation],
+                config={
+                    "common_name": "myhostname.com",
+                },
+            )
+            provider_certificate, private_key = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=acme_relation.id,
+                validity=timedelta(hours=24),
+            )
+            self.mock_get_requirer_assigned_certificate.return_value = (
+                provider_certificate,
+                private_key,
+            )
+
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
+            self.mock_acme_manager.configure.assert_called_once()
 
     # Test Auto unseal
 

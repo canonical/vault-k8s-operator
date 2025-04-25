@@ -9,6 +9,7 @@ import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from vault.vault_client import VaultClient
 from vault.vault_managers import (
+    ACMEManager,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -43,6 +44,9 @@ class VaultCharmFixtures:
             self.mock_pki_manager = stack.enter_context(
                 patch("charm.PKIManager", autospec=PKIManager)
             ).return_value
+            self.mock_acme_manager = stack.enter_context(
+                patch("charm.ACMEManager", autospec=ACMEManager)
+            ).return_value
             self.mock_s3_requirer = stack.enter_context(
                 patch("charm.S3Requirer", autospec=S3Requirer)
             ).return_value
@@ -55,7 +59,7 @@ class VaultCharmFixtures:
             ).return_value
 
             self.mock_socket_fqdn = stack.enter_context(patch("socket.getfqdn"))
-            self.mock_pki_requirer_get_assigned_certificate = stack.enter_context(
+            self.mock_get_requirer_assigned_certificate = stack.enter_context(
                 patch("charm.TLSCertificatesRequiresV4.get_assigned_certificate")
             )
             self.mock_pki_requirer_renew_certificate = stack.enter_context(
