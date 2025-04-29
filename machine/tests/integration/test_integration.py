@@ -12,7 +12,6 @@ import yaml
 from cryptography import x509
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
-from vault import Vault  # type: ignore[import]
 
 from tests.integration.helpers import (
     deploy_if_not_exists,
@@ -29,6 +28,7 @@ from tests.integration.helpers import (
     wait_for_certificate_to_be_provided,
     wait_for_status_message,
 )
+from tests.integration.vault import Vault
 
 logger = logging.getLogger(__name__)
 

@@ -32,7 +32,6 @@ seal "transit" {
   disable_renewal = "false"
   key_name        = "{{ autounseal_key_name }}"
   mount_path      = "{{ autounseal_mount_path }}"
-  token           = "{{ autounseal_token }}"
   tls_ca_cert     = "{{ autounseal_tls_ca_cert }}"
 }
 {% endif %}
