@@ -8,8 +8,10 @@
 import json
 import logging
 import socket
+import subprocess
 from contextlib import contextmanager
 from datetime import datetime
+from textwrap import dedent
 from typing import Any, Dict, List
 
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -48,6 +50,7 @@ from vault.vault_client import (
     VaultClientError,
 )
 from vault.vault_helpers import (
+    AutounsealConfiguration,
     common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
@@ -56,7 +59,6 @@ from vault.vault_helpers import (
 from vault.vault_managers import (
     TLS_CERTIFICATES_ACME_RELATION_NAME,
     ACMEManager,
-    AutounsealConfigurationDetails,
     AutounsealProviderManager,
     AutounsealRequirerManager,
     BackupManager,
@@ -87,6 +89,8 @@ PEER_RELATION_NAME = "vault-peers"
 PKI_RELATION_NAME = "vault-pki"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
+SYSTEMD_DROP_IN_DIR = "/etc/systemd/system/snap.vault.vaultd.service.d"
+SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CHARM_POLICY_NAME = "charm-access"
@@ -849,10 +853,72 @@ class VaultOperatorCharm(CharmBase):
 
     def _start_vault_service(self) -> None:
         """Start the Vault service."""
+        self._sync_autounseal_token_with_systemd()
+
         snap_cache = snap.SnapCache()
         vault_snap = snap_cache[VAULT_SNAP_NAME]
         vault_snap.start(services=["vaultd"])
         logger.debug("Vault service started")
+
+    def _sync_autounseal_token_with_systemd(self) -> None:
+        """Add or remove the systemd drop-in file for the Vault service.
+
+        This file is used to set the VAULT_TOKEN environment variable for the
+        external Vault service when using auto-unseal.
+
+        If no token is available, the file is removed.
+        """
+        token = self._get_vault_autounseal_token()
+        if not token:
+            logger.debug("No auto-unseal token available")
+            self.machine.remove_path(SYSTEMD_DROP_IN_FILE_PATH)
+            return
+
+        # Write the encrypted token to a drop-in file
+        if self._generate_systemd_drop_in_file(token):
+            # Reload systemd to pick up the changes
+            subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
+
+    def _generate_systemd_drop_in_file(self, external_vault_token: str) -> bool:
+        """Create the systemd drop-in file for the Vault service.
+
+        This file is a bit like an overlay, and adds some extra configuration
+        to the service.
+
+        Returns:
+            True if the file was created or updated, False if it already
+            contains the token.
+        """
+        if not self.machine.exists(path=SYSTEMD_DROP_IN_DIR):
+            self.machine.make_dir(path=SYSTEMD_DROP_IN_DIR)
+        if not self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
+            logger.info("Creating systemd drop-in file for Vault service")
+            self.machine.push(
+                path=SYSTEMD_DROP_IN_FILE_PATH,
+                source=self._get_systemd_drop_in_content(external_vault_token),
+            )
+            return True
+        # Read the existing content and see if it contains the token
+        drop_in_file = self.machine.pull(path=SYSTEMD_DROP_IN_FILE_PATH)
+        for line in drop_in_file:
+            if line.startswith("Environment="):
+                if f"VAULT_TOKEN={external_vault_token}" in line:
+                    logger.debug("Systemd drop-in file already contains the token")
+                    return False
+
+        logger.info("Updating systemd drop-in file with new token")
+        self.machine.push(
+            path=SYSTEMD_DROP_IN_FILE_PATH,
+            source=self._get_systemd_drop_in_content(external_vault_token),
+        )
+        return True
+
+    def _get_systemd_drop_in_content(self, external_vault_token: str) -> str:
+        """Get the content for the systemd drop-in file."""
+        return dedent(f"""\
+            [Service]
+            Environment=VAULT_TOKEN={external_vault_token}
+        """)
 
     def _generate_vault_config_file(self) -> None:
         """Create the Vault config file and push it to the Machine."""
@@ -881,7 +947,7 @@ class VaultOperatorCharm(CharmBase):
             raft_storage_path=VAULT_STORAGE_PATH,
             node_id=self._node_id,
             retry_joins=retry_joins,
-            autounseal_details=autounseal_configuration_details,
+            autounseal_config=autounseal_configuration_details,
             log_level=self._get_log_level(),
         )
         existing_content = ""
@@ -899,25 +965,36 @@ class VaultOperatorCharm(CharmBase):
             # the changes. SIGHUP is currently only supported as a beta feature
             # for the enterprise version in Vault 1.16+
             if seal_type_has_changed(existing_content, content):
-                if self._vault_service_is_running():
-                    self.machine.restart(VAULT_SNAP_NAME)
+                self._restart_vault_service()
 
-    def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
+    def _restart_vault_service(self) -> None:
+        """Restart the Vault service."""
+        if self._vault_service_is_running():
+            self._sync_autounseal_token_with_systemd()
+            self.machine.restart(VAULT_SNAP_NAME)
+            logger.debug("Vault service restarted")
+
+    def _get_vault_autounseal_token(self) -> str | None:
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
         if not autounseal_relation_details:
             return None
         autounseal_requirer_manager = AutounsealRequirerManager(
             self, self.vault_autounseal_requires
         )
-        self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
         provider_vault_token = autounseal_requirer_manager.get_provider_vault_token(
             autounseal_relation_details, self.tls.get_tls_file_path_in_charm(File.AUTOUNSEAL_CA)
         )
-        return AutounsealConfigurationDetails(
+        return provider_vault_token
+
+    def _get_vault_autounseal_configuration(self) -> AutounsealConfiguration | None:
+        autounseal_relation_details = self.vault_autounseal_requires.get_details()
+        if not autounseal_relation_details:
+            return None
+        self.tls.push_autounseal_ca_cert(autounseal_relation_details.ca_certificate)
+        return AutounsealConfiguration(
             autounseal_relation_details.address,
             autounseal_relation_details.mount_path,
             autounseal_relation_details.key_name,
-            provider_vault_token,
             self.tls.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA),
         )
 
