@@ -7,7 +7,6 @@ from pytest_operator.plugin import OpsTest
 
 from tests.integration.constants import APP_NAME, JUJU_FAST_INTERVAL, NUM_VAULT_UNITS
 from tests.integration.helpers import (
-    ActionFailedError,
     authorize_charm,
     deploy_vault_and_wait,
     get_ca_cert_file_location,
@@ -41,10 +40,7 @@ async def vault_authorized(ops_test: OpsTest, vault_unsealed: Task) -> Task:
     root_token, key = await vault_unsealed
 
     async def authorize():
-        try:
-            await authorize_charm(ops_test, root_token)
-        except ActionFailedError:
-            logger.warning("Failed to authorize charm")
+        await authorize_charm(ops_test, root_token)
         return root_token, key
 
     return create_task(authorize())

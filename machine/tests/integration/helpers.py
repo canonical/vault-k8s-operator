@@ -67,7 +67,7 @@ async def authorize_charm(
         action_uuid=authorize_action.entity_id, wait=120
     )
     if not result or "result" not in result:
-        raise ActionFailedError("Failed to authorize charm")
+        raise ActionFailedError(f"Failed to authorize charm. Result: {result}")
     logger.info("Authorization result: %s", result)
     return result
 

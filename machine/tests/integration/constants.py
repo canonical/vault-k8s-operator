@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-APP_NAME = METADATA["name"]
+APP_NAME: str = METADATA["name"]
 GRAFANA_AGENT_APPLICATION_NAME = "grafana-agent"
 PEER_RELATION_NAME = "vault-peers"
 INGRESS_RELATION_NAME = "ingress"
@@ -22,4 +22,8 @@ MATCHING_COMMON_NAME = "example.com"
 UNMATCHING_COMMON_NAME = "unmatching-the-requirer.com"
 VAULT_PKI_REQUIRER_REVISION = 93
 
-JUJU_FAST_INTERVAL = "10s"
+# There is a dependency here on the `idle_period` we use in `wait_for_idle()`.
+# This value should be greater than the `idle_period` used, otherwise the
+# `wait_for_idle` function may catch the charm executing the `update-status`
+# hook and reset the timer.
+JUJU_FAST_INTERVAL = "20s"
