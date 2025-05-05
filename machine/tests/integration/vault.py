@@ -4,12 +4,14 @@
 
 """Vault helper functions."""
 
+import asyncio
 import logging
 import time
 from os.path import abspath
 from typing import Tuple
 
 import hvac
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ class Vault:
         response = self.client.sys.read_health_status()
         return response.status_code == VAULT_STATUS_ACTIVE
 
-    def wait_for_node_to_be_unsealed(self) -> None:
+    async def wait_for_node_to_be_unsealed(self) -> None:
         """Wait for the vault unit to be unsealed.
 
         Args:
@@ -68,10 +70,14 @@ class Vault:
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            time.sleep(5)
-            if not self.is_sealed():
-                logger.info("Vault unit is unsealed.")
-                return
+            await asyncio.sleep(5)
+            try:
+                if not self.is_sealed():
+                    logger.info("Vault unit is unsealed.")
+                    return
+            except requests.exceptions.ConnectionError:
+                logger.debug("Vault is not yet available. Waiting...")
+                continue
         raise TimeoutError("Timed out waiting for vault to be unsealed.")
 
     def unseal(self, unseal_key: str) -> None:
@@ -87,7 +93,7 @@ class Vault:
         self.client.sys.submit_unseal_key(unseal_key)
         logger.info("Unsealed vault unit: %s.", self.url)
 
-    def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
+    async def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
         """Wait for the specified number of units to join the raft cluster.
 
         Args:
@@ -99,7 +105,7 @@ class Vault:
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            time.sleep(5)
+            await asyncio.sleep(5)
             response = self.client.sys.read_raft_config()
             servers = response["data"]["config"]["servers"]
             current_num_voters = sum(1 for server in servers if server.get("voter", False))

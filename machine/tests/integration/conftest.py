@@ -3,8 +3,19 @@
 # See LICENSE file for licensing details.
 
 import os
+from pathlib import Path
 
 import pytest
+
+pytest_plugins = (
+    "tests.integration.charm_states.grafana",
+    "tests.integration.charm_states.ha_proxy",
+    "tests.integration.charm_states.s3_integrator",
+    "tests.integration.charm_states.self_signed_certificates",
+    "tests.integration.charm_states.vault",
+    "tests.integration.charm_states.vault_kv_requirer",
+    "tests.integration.charm_states.vault_pki_requirer",
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -44,3 +55,13 @@ def pytest_configure(config: pytest.Config) -> None:
         pytest.exit(f"The path specified does not exist: {charm_path}")
     if not os.path.exists(kv_requirer_charm_path):
         pytest.exit(f"The path specified does not exist: {kv_requirer_charm_path}")
+
+
+@pytest.fixture(scope="session")
+def vault_charm_path(request: pytest.FixtureRequest) -> Path:
+    return Path(str(request.config.getoption("--charm_path"))).resolve()
+
+
+@pytest.fixture(scope="session")
+def kv_requirer_charm_path(request: pytest.FixtureRequest) -> Path:
+    return Path(str(request.config.getoption("--kv_requirer_charm_path"))).resolve()

@@ -87,8 +87,8 @@ max-complexity = 10
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
 [tool.pyright]
-executionEnvironments = [
-  { root = "src" },
-  { root = "tests"}
+include = [
+    "src/**",
+    "tests/**",
 ]
 reportMissingParameterType = true
