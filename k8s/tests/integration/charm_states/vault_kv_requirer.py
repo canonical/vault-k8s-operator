@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import VAULT_KV_REQUIRER_APPLICATION_NAME
+from tests.integration.config import JUJU_FAST_INTERVAL, VAULT_KV_REQUIRER_1_APPLICATION_NAME
 from tests.integration.helpers import deploy_if_not_exists
 
 
@@ -15,11 +15,11 @@ async def vault_kv_requirer_1_idle(ops_test: OpsTest, kv_requirer_charm_path: Pa
     async def deploy_kv_requirer(ops_test: OpsTest) -> None:
         assert ops_test.model
         await deploy_if_not_exists(
-            ops_test.model, VAULT_KV_REQUIRER_APPLICATION_NAME, charm_path=kv_requirer_charm_path
+            ops_test.model, VAULT_KV_REQUIRER_1_APPLICATION_NAME, charm_path=kv_requirer_charm_path
         )
-        async with ops_test.fast_forward(fast_interval="60s"):
+        async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
             await ops_test.model.wait_for_idle(
-                apps=[VAULT_KV_REQUIRER_APPLICATION_NAME],
+                apps=[VAULT_KV_REQUIRER_1_APPLICATION_NAME],
             )
 
     return create_task(deploy_kv_requirer(ops_test))
