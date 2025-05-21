@@ -442,10 +442,8 @@ class TLSManager(Object):
         try:
             file_path = self.get_tls_file_path_in_charm(file)
             return os.path.exists(file_path)
-        except VaultCertsError:
+        except (VaultCertsError, TransientJujuError):
             return False
-        except TransientJujuError:
-            raise
 
     def ca_certificate_is_saved(self) -> bool:
         """Return whether a CA cert and its private key are saved in the charm."""
