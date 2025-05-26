@@ -630,7 +630,11 @@ class JujuFacade:
         storages = self.charm.model.storages
         if not storages[storage_name]:
             raise NoSuchStorageError(f"Storage {storage_name} not found")
-        return storages[storage_name][0].location
+        try:
+            return storages[storage_name][0].location
+        except ModelError as e:
+            logger.error("Error getting storage location for %s: %s", storage_name, e)
+            raise TransientJujuError(e) from e
 
     def get_binding(
         self,

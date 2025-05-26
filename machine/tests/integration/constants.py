@@ -25,5 +25,5 @@ VAULT_PKI_REQUIRER_REVISION = 93
 # There is a dependency here on the `idle_period` we use in `wait_for_idle()`.
 # This value should be greater than the `idle_period` used, otherwise the
 # `wait_for_idle` function may catch the charm executing the `update-status`
-# hook and reset the timer.
+# hook and reset the timer. `idle_period` default is 15s.
 JUJU_FAST_INTERVAL = "20s"

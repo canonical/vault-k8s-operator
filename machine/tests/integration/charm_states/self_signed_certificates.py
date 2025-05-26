@@ -4,6 +4,7 @@ import pytest
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.constants import (
+    JUJU_FAST_INTERVAL,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     SELF_SIGNED_CERTIFICATES_REVISION,
 )
@@ -22,7 +23,7 @@ async def self_signed_certificates_idle(ops_test: OpsTest) -> Task:
             channel="1/stable",
             revision=SELF_SIGNED_CERTIFICATES_REVISION,
         )
-        async with ops_test.fast_forward(fast_interval="60s"):
+        async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
             await ops_test.model.wait_for_idle(
                 apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             )

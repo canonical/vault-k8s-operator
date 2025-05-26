@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -50,3 +51,24 @@ def pytest_configure(config: pytest.Config) -> None:
         pytest.exit(f"The path specified for the charm under test does not exist: {charm_path}")
     if not os.path.exists(kv_requirer_charm_path):
         pytest.exit(f"The path specified for KV Requirer does not exist: {kv_requirer_charm_path}")
+
+
+@pytest.fixture(scope="session")
+def vault_charm_path(request: pytest.FixtureRequest) -> Path:
+    return Path(str(request.config.getoption("--charm_path"))).resolve()
+
+
+@pytest.fixture(scope="session")
+def kv_requirer_charm_path(request: pytest.FixtureRequest) -> Path:
+    return Path(str(request.config.getoption("--kv_requirer_charm_path"))).resolve()
+
+
+@pytest.fixture(scope="session")
+def pki_requirer_charm_path(request: pytest.FixtureRequest) -> Path | None:
+    pki_requirer_charm_path = request.config.getoption("--pki_requirer_charm_path")
+    return Path(str(pki_requirer_charm_path)).resolve() if pki_requirer_charm_path else None
+
+
+@pytest.fixture(scope="session")
+def skip_deploy(request: pytest.FixtureRequest) -> bool:
+    return bool(request.config.getoption("--no-deploy"))
