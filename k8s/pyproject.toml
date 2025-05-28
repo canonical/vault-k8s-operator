@@ -1,7 +1,7 @@
 [project]
 name = "vault-k8s-operator"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.13.3"
 
 dependencies = [
     "allure-pytest",
@@ -16,11 +16,11 @@ dependencies = [
     "lightkube-models",
     "ops",
     "opentelemetry-exporter-otlp-proto-http",
-    "pydantic==2.10.6",
+    "pydantic==2.11.5",
     "pytest-interface-tester",
     "pyhcl",
     "requests",
-    "rpds-py==0.23.1",
+    "rpds-py==0.25.1",
 ]
 
 [dependency-groups]
