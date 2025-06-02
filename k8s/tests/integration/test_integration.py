@@ -1190,7 +1190,7 @@ async def read_vault_unit_statuses(
     """
     status_tuple = await ops_test.juju("status")
     if status_tuple[0] != 0:
-        raise Exception
+        raise ValueError(f"Got invalid status_tuple: {status_tuple}")
     output = []
     for row in status_tuple[1].split("\n"):
         if not row.startswith(f"{app_name}/"):
