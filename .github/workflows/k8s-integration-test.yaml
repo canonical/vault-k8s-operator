@@ -101,7 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: juju-crashdump-${{ matrix.suite }}
-          path: juju-crashdump-*.tar.xz
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
 
   aggregate-integration-results:
     name: Aggregate integration test results
