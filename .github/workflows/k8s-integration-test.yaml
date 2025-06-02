@@ -83,6 +83,38 @@ jobs:
             --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
             --alluredir allure-results \
             -k "${{ matrix.suite }}"
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.suite }}
+          path: ${{ inputs.path }}/allure-results
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charmcraft-logs-${{ matrix.suite }}
+          path: /home/runner/.local/state/charmcraft/log/*.log
+
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-crashdump-${{ matrix.suite }}
+          path: juju-crashdump-*.tar.xz
+
+  aggregate-integration-results:
+    name: Aggregate integration test results
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: always()
+    steps:
+      - name: Download all Allure results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
       - name: Load test report history
         uses: actions/checkout@v4
         if: always()
@@ -104,26 +136,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
-      - name: Archive charmcraft logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: charmcraft-logs-${{ matrix.suite }}
-          path: /home/runner/.local/state/charmcraft/log/*.log
-
-      - name: Archive juju crashdump
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: juju-crashdump-${{ matrix.suite }}
-          path: juju-crashdump-*.tar.xz
-
-  aggregate-integration-results:
-    name: Aggregate integration test results
-    runs-on: ubuntu-latest
-    needs: [integration-tests]
-    if: always()
-    steps:
       - name: Check matrix job conclusions
         run: |
           # The 'needs' context contains the results of the jobs listed in 'needs:'
