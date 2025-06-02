@@ -340,6 +340,8 @@ class VaultCharm(CharmBase):
         except TransientJujuError:
             # We get a transient error when the storage is not yet attached.
             return
+        self._set_peer_relation_node_api_address()
+
         if not vault.is_available_initialized_and_unsealed():
             return
         if not self._authenticate_vault_client(vault):
@@ -680,7 +682,7 @@ class VaultCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._get_peer_node_api_addresses()
+            for node_api_address in self._other_peer_node_api_addresses()
         ]
 
         content = render_vault_config_file(
@@ -785,7 +787,7 @@ class VaultCharm(CharmBase):
 
         This may not be the Vault service running on this unit.
         """
-        for address in self._get_peer_node_api_addresses():
+        for address in self._get_peer_relation_node_api_addresses():
             try:
                 vault = VaultClient(
                     address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -837,11 +839,34 @@ class VaultCharm(CharmBase):
             layer.services["vault"].environment["VAULT_TOKEN"] = token
         return layer
 
-    def _get_peer_node_api_addresses(self) -> List[str]:
+    def _set_peer_relation_node_api_address(self) -> None:
+        """Set the unit address in the peer relation."""
+        assert self._api_address
+        self.juju_facade.set_unit_relation_data(
+            data={"node_api_address": self._api_address},
+            name=PEER_RELATION_NAME,
+        )
+
+    def _get_peer_relation_node_api_addresses(self) -> List[str]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
+        peer_relation_data = self.juju_facade.get_remote_units_relation_data(
+            name=PEER_RELATION_NAME,
+        )
         return [
-            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
-            for i in range(self.app.planned_units())
+            databag["node_api_address"]
+            for databag in peer_relation_data
+            if "node_api_address" in databag
+        ]
+
+    def _other_peer_node_api_addresses(self) -> List[str]:
+        """Return the list of other peer unit addresses.
+
+        We exclude our own unit address from the list.
+        """
+        return [
+            node_api_address
+            for node_api_address in self._get_peer_relation_node_api_addresses()
+            if node_api_address != self._api_address
         ]
 
     @property
