@@ -86,6 +86,9 @@ class VaultCharmFixtures:
             self.mock_kv_provides_set_kv_data = stack.enter_context(
                 patch("charm.VaultKvProvides.set_kv_data")
             )
+            self.mock_subprocess_run = stack.enter_context(
+                patch("charm.subprocess.run", autospec=True)
+            )
             self.mock_snap_cache = stack.enter_context(patch("charm.snap.SnapCache"))
             yield
 
