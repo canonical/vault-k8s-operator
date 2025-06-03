@@ -26,35 +26,14 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 )
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_kv import (
-    VaultKvClientDetachedEvent,
-    VaultKvProvides,
-)
+from charms.vault_k8s.v0.vault_kv import VaultKvClientDetachedEvent, VaultKvProvides
 from ops import CharmBase, MaintenanceStatus, main, pebble
-from ops.charm import (
-    ActionEvent,
-    CollectStatusEvent,
-    InstallEvent,
-    RemoveEvent,
-)
+from ops.charm import ActionEvent, CollectStatusEvent, InstallEvent, RemoveEvent
 from ops.framework import EventBase
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    ModelError,
-    Relation,
-    WaitingStatus,
-)
+from ops.model import ActiveStatus, BlockedStatus, ModelError, Relation, WaitingStatus
 from ops.pebble import ChangeError, Layer, PathError
-from vault.juju_facade import (
-    JujuFacade,
-    NoSuchSecretError,
-    SecretRemovedError,
-)
-from vault.vault_autounseal import (
-    VaultAutounsealProvides,
-    VaultAutounsealRequires,
-)
+from vault.juju_facade import JujuFacade, NoSuchSecretError, SecretRemovedError, TransientJujuError
+from vault.vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
 from vault.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -286,9 +265,13 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
-        vault = VaultClient(
-            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
-        )
+        try:
+            vault = VaultClient(
+                url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+            )
+        except TransientJujuError:
+            event.add_status(WaitingStatus("Waiting for storage to be available"))
+            return
         if not vault.is_api_available():
             event.add_status(WaitingStatus("Waiting for vault to be available"))
             return
@@ -353,6 +336,9 @@ class VaultCharm(CharmBase):
             )
         except VaultCertsError as e:
             logger.error("Failed to get TLS file path: %s", e)
+            return
+        except TransientJujuError:
+            # We get a transient error when the storage is not yet attached.
             return
         if not vault.is_available_initialized_and_unsealed():
             return

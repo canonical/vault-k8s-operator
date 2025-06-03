@@ -34,6 +34,25 @@ tox run -e unit          # unit tests
 tox                      # runs 'format', 'lint', 'static', and 'unit' environments
 ```
 
+You can also run the integration tests locally. This requires a working Juju controller and the `charmcraft` tool installed, as well as building the charm first. The integration tests are run using `tox`. You can run them with:
+
+```shell
+tox run -e integration -- --charm_path ./vault_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm
+```
+
+Or, to run a specific test suite:
+
+```shell
+tox run -e integration -- --charm_path ./vault_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm -k test_autounseal.py
+```
+
+Or, to run a specific test:
+
+```shell
+tox run -e integration -- --charm_path ./vault_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm -k test_given_vault_is_deployed_when_integrate_another_vault_then_autounseal_activated
+```
+
+
 ## Build the charm
 
 Build the charm in this git repository using:
