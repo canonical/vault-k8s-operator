@@ -1,0 +1,58 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [executing] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model          Controller                Cloud/Region        Version  SLA          Timestamp
+test-cos-cdnb  github-pr-d9e0a-microk8s  microk8s/localhost  3.6.6    unsupported  01:13:45Z
+
+App             Version  Status  Scale  Charm           Channel        Rev  Address         Exposed  Message
+loki-k8s        2.9.6    active      1  loki-k8s        latest/stable  190  10.152.183.182  no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  latest/stable  234  10.152.183.44   no       
+vault-k8s                active      3  vault-k8s                        0  10.152.183.108  no       
+
+Unit               Workload  Agent  Address      Ports  Message
+loki-k8s/0*        active    idle   10.1.249.31         
+prometheus-k8s/0*  active    idle   10.1.249.30         
+vault-k8s/0*       active    idle   10.1.249.16         
+vault-k8s/1        active    idle   10.1.249.27         
+vault-k8s/2        active    idle   10.1.249.24         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-0: 01:10:04 ERROR unit.vault-k8s/0.juju-log vault-peers:0: Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:10:05 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:10:07 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:10:10 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:10:10 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-1: 01:10:26 ERROR unit.vault-k8s/1.juju-log vault-peers:0: Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/1" not provisioned
+
+unit-vault-k8s-1: 01:10:28 ERROR unit.vault-k8s/1.juju-log Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/1" not provisioned
+
+unit-vault-k8s-1: 01:10:30 ERROR unit.vault-k8s/1.juju-log Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/1" not provisioned
+
+unit-vault-k8s-1: 01:10:55 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-55135b67-fde9-4a30-8c36-a10aa02d3c2c: 01:10:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 01:11:11 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.249.24:49342->10.152.183.222:17070: write: connection reset by peer
+unit-vault-k8s-0: 01:11:11 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.249.16:34186->10.152.183.222:17070: write: connection reset by peer: write tcp 10.1.249.16:34186->10.152.183.222:17070: write: connection reset by peer
+model-55135b67-fde9-4a30-8c36-a10aa02d3c2c: 01:13:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 01:13:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-cos-cdnb...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications prometheus-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...

@@ -1,0 +1,46 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-1
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model         Controller                Cloud/Region        Version  SLA          Timestamp
+test-kv-wirz  github-pr-d9e0a-microk8s  microk8s/localhost  3.6.6    unsupported  01:13:57Z
+
+App                  Version  Status  Scale  Charm              Channel  Rev  Address         Exposed  Message
+vault-k8s                     active      3  vault-k8s                     0  10.152.183.69   no       
+vault-kv-requirer-a           active      1  vault-kv-requirer             0  10.152.183.148  no       
+vault-kv-requirer-b           active      1  vault-kv-requirer             1  10.152.183.220  no       
+
+Unit                    Workload  Agent  Address      Ports  Message
+vault-k8s/0*            active    idle   10.1.249.16         
+vault-k8s/1             active    idle   10.1.249.25         
+vault-k8s/2             active    idle   10.1.249.24         
+vault-kv-requirer-a/0*  active    idle   10.1.249.27         
+vault-kv-requirer-b/0*  active    idle   10.1.249.29         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-0: 01:09:33 ERROR unit.vault-k8s/0.juju-log vault-peers:0: Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:09:35 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/0" for option -s: getting filesystem attachment info: filesystem attachment "0" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 01:12:40 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 01:12:40 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-4536f133-9a95-4351-8d0a-fd2f3bb1a301: 01:12:40 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 01:12:55 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-kv-wirz...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-kv-requirer-a
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-kv-requirer-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
