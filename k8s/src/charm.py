@@ -10,7 +10,8 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 import json
 import logging
 import socket
-from typing import Any, List
+from itertools import chain
+from typing import Any, Generator
 
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -327,7 +328,15 @@ class VaultCharm(CharmBase):
             return
         if not self._log_level_is_valid(self._get_log_level()):
             return
+        # If we are not the leader, we need to wait until the leader
+        # has shared its address in the peer relation to be able to
+        # join the cluster.
+        if not self.juju_facade.is_leader:
+            if next(self._get_peer_relation_node_api_addresses(), None) is None:
+                logger.debug("Not leader and no peers, waiting for a peer")
+                return
 
+        self._set_peer_relation_node_api_address()
         self._generate_vault_config_file()
         self._set_pebble_plan()
         try:
@@ -340,7 +349,6 @@ class VaultCharm(CharmBase):
         except TransientJujuError:
             # We get a transient error when the storage is not yet attached.
             return
-        self._set_peer_relation_node_api_address()
 
         if not vault.is_available_initialized_and_unsealed():
             return
@@ -682,7 +690,7 @@ class VaultCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._other_peer_node_api_addresses()
+            for node_api_address in self._get_peer_relation_node_api_addresses()
         ]
 
         content = render_vault_config_file(
@@ -787,7 +795,7 @@ class VaultCharm(CharmBase):
 
         This may not be the Vault service running on this unit.
         """
-        for address in self._get_peer_relation_node_api_addresses():
+        for address in chain((self._api_address,), self._get_peer_relation_node_api_addresses()):
             try:
                 vault = VaultClient(
                     address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -847,27 +855,14 @@ class VaultCharm(CharmBase):
             name=PEER_RELATION_NAME,
         )
 
-    def _get_peer_relation_node_api_addresses(self) -> List[str]:
+    def _get_peer_relation_node_api_addresses(self) -> Generator[str, Any, Any]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
         peer_relation_data = self.juju_facade.get_remote_units_relation_data(
             name=PEER_RELATION_NAME,
         )
-        return [
-            databag["node_api_address"]
-            for databag in peer_relation_data
-            if "node_api_address" in databag
-        ]
-
-    def _other_peer_node_api_addresses(self) -> List[str]:
-        """Return the list of other peer unit addresses.
-
-        We exclude our own unit address from the list.
-        """
-        return [
-            node_api_address
-            for node_api_address in self._get_peer_relation_node_api_addresses()
-            if node_api_address != self._api_address
-        ]
+        for databag in peer_relation_data:
+            if "node_api_address" in databag:
+                yield databag["node_api_address"]
 
     @property
     def _node_id(self) -> str:
