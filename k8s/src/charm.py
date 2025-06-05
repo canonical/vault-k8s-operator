@@ -47,6 +47,7 @@ from vault.vault_helpers import (
     common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
+    seal_type_has_changed,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATES_ACME_RELATION_NAME,
@@ -707,10 +708,14 @@ class VaultCharm(CharmBase):
 
         if not config_file_content_matches(existing_content=existing_content, new_content=content):
             self._push_config_file_to_workload(content=content)
-            # Before restarting Vault, check if the pebble plan is applied
-            # If the plan was not applied, the service will restart anyway when applying the new plan
-            if self._vault_service_is_running() and self._pebble_plan_is_applied():
-                self._container.restart(self._service_name)
+            # If the seal type has changed, we need to restart Vault to apply
+            # the changes. SIGHUP is currently only supported as a beta feature
+            # for the enterprise version in Vault 1.16+
+            if seal_type_has_changed(existing_content, content):
+                # Before restarting Vault, check if the pebble plan is applied
+                # If the plan was not applied, the service will restart anyway when applying the new plan
+                if self._vault_service_is_running() and self._pebble_plan_is_applied():
+                    self._container.restart(self._service_name)
 
     def _get_log_level(self) -> str:
         """Return the log level config."""
