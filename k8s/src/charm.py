@@ -26,35 +26,14 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 )
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from charms.vault_k8s.v0.vault_kv import (
-    VaultKvClientDetachedEvent,
-    VaultKvProvides,
-)
+from charms.vault_k8s.v0.vault_kv import VaultKvClientDetachedEvent, VaultKvProvides
 from ops import CharmBase, MaintenanceStatus, main, pebble
-from ops.charm import (
-    ActionEvent,
-    CollectStatusEvent,
-    InstallEvent,
-    RemoveEvent,
-)
+from ops.charm import ActionEvent, CollectStatusEvent, InstallEvent, RemoveEvent
 from ops.framework import EventBase
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    ModelError,
-    Relation,
-    WaitingStatus,
-)
+from ops.model import ActiveStatus, BlockedStatus, ModelError, Relation, WaitingStatus
 from ops.pebble import ChangeError, Layer, PathError
-from vault.juju_facade import (
-    JujuFacade,
-    NoSuchSecretError,
-    SecretRemovedError,
-)
-from vault.vault_autounseal import (
-    VaultAutounsealProvides,
-    VaultAutounsealRequires,
-)
+from vault.juju_facade import JujuFacade, NoSuchSecretError, SecretRemovedError, TransientJujuError
+from vault.vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
 from vault.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -286,9 +265,13 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate to be shared"))
             return
-        vault = VaultClient(
-            url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
-        )
+        try:
+            vault = VaultClient(
+                url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+            )
+        except TransientJujuError:
+            event.add_status(WaitingStatus("Waiting for storage to be available"))
+            return
         if not vault.is_api_available():
             event.add_status(WaitingStatus("Waiting for vault to be available"))
             return
@@ -344,7 +327,14 @@ class VaultCharm(CharmBase):
             return
         if not self._log_level_is_valid(self._get_log_level()):
             return
+        # If we are not the leader, we need to wait until the leader
+        # has shared its address in the peer relation to be able to
+        # join the cluster.
+        if not self.juju_facade.is_leader:
+            if len(self._other_peer_node_api_addresses()) == 0:
+                return
 
+        self._set_peer_relation_node_api_address()
         self._generate_vault_config_file()
         self._set_pebble_plan()
         try:
@@ -354,6 +344,10 @@ class VaultCharm(CharmBase):
         except VaultCertsError as e:
             logger.error("Failed to get TLS file path: %s", e)
             return
+        except TransientJujuError:
+            # We get a transient error when the storage is not yet attached.
+            return
+
         if not vault.is_available_initialized_and_unsealed():
             return
         if not self._authenticate_vault_client(vault):
@@ -694,7 +688,7 @@ class VaultCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._get_peer_node_api_addresses()
+            for node_api_address in self._other_peer_node_api_addresses()
         ]
 
         content = render_vault_config_file(
@@ -799,7 +793,7 @@ class VaultCharm(CharmBase):
 
         This may not be the Vault service running on this unit.
         """
-        for address in self._get_peer_node_api_addresses():
+        for address in self._get_peer_relation_node_api_addresses():
             try:
                 vault = VaultClient(
                     address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -851,11 +845,34 @@ class VaultCharm(CharmBase):
             layer.services["vault"].environment["VAULT_TOKEN"] = token
         return layer
 
-    def _get_peer_node_api_addresses(self) -> List[str]:
+    def _set_peer_relation_node_api_address(self) -> None:
+        """Set the unit address in the peer relation."""
+        assert self._api_address
+        self.juju_facade.set_unit_relation_data(
+            data={"node_api_address": self._api_address},
+            name=PEER_RELATION_NAME,
+        )
+
+    def _get_peer_relation_node_api_addresses(self) -> List[str]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
+        peer_relation_data = self.juju_facade.get_remote_units_relation_data(
+            name=PEER_RELATION_NAME,
+        )
         return [
-            f"https://{self.app.name}-{i}.{socket.getfqdn().split('.', 1)[-1]}:{self.VAULT_PORT}"
-            for i in range(self.app.planned_units())
+            databag["node_api_address"]
+            for databag in peer_relation_data
+            if "node_api_address" in databag
+        ]
+
+    def _other_peer_node_api_addresses(self) -> List[str]:
+        """Return the list of other peer unit addresses.
+
+        We exclude our own unit address from the list.
+        """
+        return [
+            node_api_address
+            for node_api_address in self._get_peer_relation_node_api_addresses()
+            if node_api_address != self._api_address
         ]
 
     @property

@@ -17,13 +17,7 @@ from typing import List, MutableMapping, Protocol
 
 import hvac
 import requests
-from hvac.exceptions import (
-    Forbidden,
-    InternalServerError,
-    InvalidPath,
-    InvalidRequest,
-    VaultError,
-)
+from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, InvalidRequest, VaultError
 from requests.exceptions import ConnectionError, RequestException
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
