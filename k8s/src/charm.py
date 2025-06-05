@@ -327,7 +327,14 @@ class VaultCharm(CharmBase):
             return
         if not self._log_level_is_valid(self._get_log_level()):
             return
+        # If we are not the leader, we need to wait until the leader
+        # has shared its address in the peer relation to be able to
+        # join the cluster.
+        if not self.juju_facade.is_leader:
+            if len(self._other_peer_node_api_addresses()) == 0:
+                return
 
+        self._set_peer_relation_node_api_address()
         self._generate_vault_config_file()
         self._set_pebble_plan()
         try:
@@ -340,7 +347,6 @@ class VaultCharm(CharmBase):
         except TransientJujuError:
             # We get a transient error when the storage is not yet attached.
             return
-        self._set_peer_relation_node_api_address()
 
         if not vault.is_available_initialized_and_unsealed():
             return
