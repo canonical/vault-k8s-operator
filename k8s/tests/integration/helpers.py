@@ -24,7 +24,6 @@ from pytest_operator.plugin import OpsTest
 from tests.integration.config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
-    NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     VAULT_RESOURCES,
 )
@@ -93,7 +92,6 @@ def crash_pod(name: str, namespace: str) -> None:
 async def get_leader_unit(model: Model, application_name: str) -> Unit:
     """Return the leader unit for the given application."""
     for unit in model.units.values():
-        assert unit
         if unit.application == application_name and await unit.is_leader_from_status():
             return unit
     raise RuntimeError(f"Leader unit for `{application_name}` not found.")
@@ -221,7 +219,6 @@ def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
 
 async def get_leader(app: Application) -> Unit:
     for unit in app.units:
-        assert isinstance(unit, Unit)
         if await unit.is_leader_from_status():
             return unit
     raise Exception("Leader unit not found.")
@@ -276,23 +273,6 @@ async def is_initialized(vault: Vault) -> bool:
     return vault.is_initialized()
 
 
-async def unseal_all_vault_units_and_wait(
-    ops_test: OpsTest, unseal_key: str, token: str, ca_file_name: str | None = None
-) -> None:
-    """Unseal all the vault units and wait for them to be unsealed."""
-    assert ops_test.model
-    logger.info("Unsealing all vault units...")
-
-    await unseal_all_vault_units(ops_test, unseal_key, token, ca_file_name)
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        )
-    logger.info("All vault units unsealed.")
-
-
 async def authorize_charm_and_wait(
     ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME
 ) -> Any | Dict:
@@ -326,18 +306,15 @@ async def unseal_all_vault_units(
     """Unseal all the vault units."""
     assert ops_test.model
     app = ops_test.model.applications[APPLICATION_NAME]
-    assert isinstance(app, Application)
 
     # We need to unseal the leader first, since this is the one we initialized.
     leader = await get_leader(app)
-    assert isinstance(leader, Unit)
     vault = await get_vault_client(ops_test, leader.name, unseal_key, ca_file_name)
     if vault.is_sealed():
         vault.unseal(unseal_key)
     await vault.wait_for_node_to_be_unsealed()
 
     for unit in app.units:
-        assert isinstance(unit, Unit)
         vault = await get_vault_client(ops_test, unit.name, token, ca_file_name)
         await unseal_vault_unit(vault, unseal_key)
         await vault.wait_for_node_to_be_unsealed()
@@ -474,7 +451,7 @@ async def get_ca_cert_file_location(
 ) -> str | None:
     """Get the location of the CA certificate file."""
     assert ops_test.model
-    app = get_app(ops_test.model, app_name)
+    app = ops_test.model.applications[app_name]
     if not has_relation(app, "tls-certificates-access"):
         return None
     action_output = await run_get_ca_certificate_action(ops_test)
@@ -484,17 +461,6 @@ async def get_ca_cert_file_location(
     with open(ca_file_location, mode="w+") as ca_file:
         ca_file.write(ca_certificate)
     return ca_file_location
-
-
-def get_app(model: Model, app_name: str = APPLICATION_NAME) -> Application:
-    """Get the application by name.
-
-    Abstracts some of the boilerplate code needed to get the application caused
-    by the type stubs in pytest_operator being non-committal.
-    """
-    app = model.applications[app_name]
-    assert isinstance(app, Application)
-    return app
 
 
 def has_relation(app: Application, relation_name: str) -> bool:
@@ -525,7 +491,6 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
     self_signed_certificates_unit = ops_test.model.units[
         f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
     ]
-    assert isinstance(self_signed_certificates_unit, Unit)
     action = await self_signed_certificates_unit.run_action(
         action_name="get-ca-certificate",
     )

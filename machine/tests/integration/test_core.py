@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from asyncio import Task, gather
 
@@ -13,7 +14,6 @@ from tests.integration.constants import (
 from tests.integration.helpers import (
     ActionFailedError,
     authorize_charm,
-    get_app,
     get_ca_cert_file_location,
     get_leader_unit_address,
     unseal_all_vault_units,
@@ -30,7 +30,7 @@ async def test_given_charm_deployed_then_status_blocked(
     assert ops_test.model
     await vault_idle_blocked
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     assert vault_app.status == "blocked"
 
 
@@ -46,9 +46,12 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
         relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
         relation2=f"{APP_NAME}:tls-certificates-access",
     )
-    async with ops_test.fast_forward(fast_interval="60s"):
-        await ops_test.model.wait_for_idle(apps=[APP_NAME])
-        await ops_test.model.wait_for_idle(apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME])
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME]
+            ),
+        )
     vault_ip = await get_leader_unit_address(ops_test)
     vault_url = f"https://{vault_ip}:8200"
     ca_file_location = await get_ca_cert_file_location(ops_test)
@@ -77,7 +80,7 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
     vault.unseal(unseal_key)
     await vault.wait_for_node_to_be_unsealed()
     assert vault.is_active()
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await unseal_all_vault_units(ops_test, ca_file_location, unseal_key)
         try:
             await authorize_charm(ops_test, root_token)
@@ -103,7 +106,7 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         root_token, unseal_key = await vault_unsealed
     num_units = NUM_VAULT_UNITS + 1
-    app = get_app(ops_test.model)
+    app = ops_test.model.applications[APP_NAME]
     await app.add_unit(count=1)
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -122,7 +125,7 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
     )
     vault.unseal(unseal_key=unseal_key)
     await vault.wait_for_node_to_be_unsealed()
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             timeout=1000,
@@ -143,9 +146,9 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
     await vault_authorized
     assert ops_test.model
 
-    new_unit = get_app(ops_test.model).units[-1]
+    new_unit = ops_test.model.applications[APP_NAME].units[-1]
     await new_unit.remove()
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             timeout=1000,

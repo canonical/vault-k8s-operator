@@ -5,7 +5,6 @@ from collections import namedtuple
 from pathlib import Path
 
 import pytest
-from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.config import (
@@ -65,12 +64,11 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[S3_INTEGRATOR_APPLICATION_NAME, MINIO_APPLICATION_NAME],
-            timeout=120,
+            timeout=120,  # These should be quick to deploy
         ),
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
     )
@@ -83,6 +81,7 @@ async def test_given_application_is_deployed_and_related_to_s3_integrator_when_c
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
+    # TODO: Why are we using status here? Can we use ops_test.model.applications directly?
     status = await ops_test.model.get_status()
     minio_app = status.applications[MINIO_APPLICATION_NAME]
     assert minio_app
@@ -119,8 +118,6 @@ async def test_given_application_is_deployed_and_related_to_s3_integrator_when_c
         timeout=1000,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
-    vault = ops_test.model.applications[APPLICATION_NAME]
-    assert isinstance(vault, Application)
     create_backup_action_output = await run_create_backup_action(ops_test)
     assert create_backup_action_output["backup-id"], create_backup_action_output
 
@@ -141,8 +138,6 @@ async def test_given_application_is_deployed_and_backup_created_when_list_backup
         timeout=1000,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
-    vault = ops_test.model.applications[APPLICATION_NAME]
-    assert isinstance(vault, Application)
     list_backups_action_output = await run_list_backups_action(ops_test)
     assert list_backups_action_output["backup-ids"]
 
@@ -163,8 +158,6 @@ async def test_given_application_is_deployed_and_backup_created_when_restore_bac
         timeout=1000,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
-    vault = ops_test.model.applications[APPLICATION_NAME]
-    assert isinstance(vault, Application)
     list_backups_action_output = await run_list_backups_action(ops_test)
     backup_id = json.loads(list_backups_action_output["backup-ids"])[0]
     # In this test we are not using the correct unsealed keys and root token.

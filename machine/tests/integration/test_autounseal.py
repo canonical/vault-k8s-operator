@@ -26,21 +26,20 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
     ops_test: OpsTest,
     vault_authorized: Task,
     self_signed_certificates_idle: Task,
-    request: pytest.FixtureRequest,
     vault_charm_path: Path,
 ):
+    # Arrange
     assert ops_test.model
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
         await vault_authorized
         await self_signed_certificates_idle
 
-    await ops_test.model.deploy(
-        vault_charm_path,
-        application_name="vault-b",
-        trust=True,
-        num_units=1,
-    )
-    async with ops_test.fast_forward(fast_interval="60s"):
+        await ops_test.model.deploy(
+            vault_charm_path,
+            application_name="vault-b",
+            trust=True,
+            num_units=1,
+        )
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
             status="blocked",
@@ -53,12 +52,11 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
         relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
     )
 
-    ###
-
+    # Act
     await ops_test.model.integrate(
         f"{APP_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires"
     )
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=["vault-b"], status="blocked", wait_for_exact_units=1, idle_period=5
         )
@@ -81,6 +79,9 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
             await authorize_charm(ops_test, root_token, "vault-b")
         except ActionFailedError:
             logger.warning("Failed to authorize charm")
+
+    # Assert
+    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
             status="active",

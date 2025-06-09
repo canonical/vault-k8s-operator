@@ -4,7 +4,7 @@ import pytest
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.constants import APP_NAME, NUM_VAULT_UNITS, S3_INTEGRATOR_APPLICATION_NAME
-from tests.integration.helpers import get_app, get_leader_unit, has_relation
+from tests.integration.helpers import get_leader_unit, has_relation
 
 
 async def run_s3_integrator_sync_credentials_action(
@@ -97,7 +97,7 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
     await vault_authorized
     await s3_integrator_idle
 
-    s3_integrator = get_app(ops_test.model, S3_INTEGRATOR_APPLICATION_NAME)
+    s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
     await run_s3_integrator_sync_credentials_action(
         ops_test,
         secret_key="Dummy secret key",
@@ -114,7 +114,7 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
         status="active",
         timeout=1000,
     )
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     if not has_relation(vault_app, "s3-parameters"):
         await ops_test.model.integrate(
             relation1=APP_NAME,
@@ -127,6 +127,8 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
     create_backup_action_output = await run_create_backup_action(ops_test)
+    # FIXME: The action return code is always 0. This test doesn't work as expected.
+    # We aren't even deploying minio.
     assert create_backup_action_output.get("return-code") == 0
 
 
@@ -138,7 +140,7 @@ async def test_given_vault_integrated_with_s3_when_list_backups_then_action_succ
     await s3_integrator_idle
     assert ops_test.model
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     if not has_relation(vault_app, "s3-parameters"):
         await ops_test.model.integrate(
             relation1=APP_NAME,
@@ -156,6 +158,8 @@ async def test_given_vault_integrated_with_s3_when_list_backups_then_action_succ
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
     list_backups_action_output = await run_list_backups_action(ops_test)
+    # FIXME: The action return code is always 0. This test doesn't work as expected.
+    # We aren't even deploying minio.
     assert list_backups_action_output.get("return-code") == 0
 
 
@@ -171,7 +175,7 @@ async def test_given_vault_integrated_with_s3_when_restore_backup_then_action_su
     await s3_integrator_idle
     await self_signed_certificates_idle
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     if not has_relation(vault_app, "s3-parameters"):
         await ops_test.model.integrate(
             relation1=APP_NAME,
@@ -185,4 +189,6 @@ async def test_given_vault_integrated_with_s3_when_restore_backup_then_action_su
     backup_id = "dummy-backup-id"
 
     backup_action_output = await run_restore_backup_action(ops_test, backup_id)
+    # FIXME: The action return code is always 0. This test doesn't work as expected.
+    # We aren't even deploying minio.
     assert backup_action_output.get("return-code") == 0

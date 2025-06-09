@@ -4,8 +4,6 @@ from collections import namedtuple
 from pathlib import Path
 
 import pytest
-from juju.action import Action
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.config import (
@@ -68,13 +66,11 @@ async def deploy(
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
         ops_test.model.wait_for_idle(
             apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
-            timeout=600,
         ),
     )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
@@ -88,7 +84,6 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
     assert ops_test.model
 
     vault_app = ops_test.model.applications[APPLICATION_NAME]
-    assert vault_app
     common_name = "unmatching-the-requirer.com"
     common_name_config = {
         "common_name": common_name,
@@ -150,7 +145,6 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
     assert ops_test.model
 
     vault_app = ops_test.model.applications[APPLICATION_NAME]
-    assert vault_app
     common_name = "example.com"
     common_name_config = {
         "common_name": common_name,
@@ -202,10 +196,8 @@ async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """
     assert ops_test.model
     tls_requirer_unit = ops_test.model.units[f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"]
-    assert isinstance(tls_requirer_unit, Unit)
     action = await tls_requirer_unit.run_action(
         action_name="get-certificate",
     )
-    assert isinstance(action, Action)
     action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=240)
     return action_output

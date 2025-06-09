@@ -54,12 +54,10 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         ops_test.model.wait_for_idle(
             apps=[PROMETHEUS_APPLICATION_NAME, LOKI_APPLICATION_NAME],
             raise_on_error=False,  # Prometheus-k8s can fail on deploy sometimes
-            timeout=600,
         ),
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
     )

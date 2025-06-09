@@ -8,7 +8,6 @@ from tests.integration.constants import (
     JUJU_FAST_INTERVAL,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
 )
-from tests.integration.helpers import get_app
 
 
 async def test_given_haproxy_deployed_when_integrated_then_status_is_active(
@@ -22,7 +21,7 @@ async def test_given_haproxy_deployed_when_integrated_then_status_is_active(
     await self_signed_certificates_idle
     await vault_authorized
 
-    haproxy_app = get_app(ops_test.model, HAPROXY_APPLICATION_NAME)
+    haproxy_app = ops_test.model.applications[HAPROXY_APPLICATION_NAME]
     external_hostname = "haproxy"
     await haproxy_app.set_config({"external-hostname": external_hostname})
 

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from juju.application import Application
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.config import (
@@ -182,7 +181,6 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
         )
 
     vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
-    assert isinstance(vault_leader_unit, Unit)
     action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
     await action.wait()
     initial_ca_cert = action.results["stdout"]
@@ -226,13 +224,11 @@ async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self
     assert ops_test.model
 
     vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
-    assert isinstance(vault_leader_unit, Unit)
     action = await vault_leader_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
     await action.wait()
     initial_ca_cert = action.results
 
     app = ops_test.model.applications[APPLICATION_NAME]
-    assert isinstance(app, Application)
     await app.remove_relation(
         "tls-certificates-access", f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates"
     )

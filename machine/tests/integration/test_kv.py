@@ -3,8 +3,12 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import APP_NAME, VAULT_KV_REQUIRER_APPLICATION_NAME
-from tests.integration.helpers import get_app, get_leader_unit, has_relation
+from tests.integration.constants import (
+    APP_NAME,
+    JUJU_FAST_INTERVAL,
+    VAULT_KV_REQUIRER_APPLICATION_NAME,
+)
+from tests.integration.helpers import get_leader_unit, has_relation
 
 
 @pytest.mark.dependency
@@ -16,13 +20,13 @@ async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_t
     await vault_authorized
     await vault_kv_requirer_idle
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     if not has_relation(vault_app, "vault-kv"):
         await ops_test.model.integrate(
             relation1=f"{APP_NAME}:vault-kv",
             relation2=f"{VAULT_KV_REQUIRER_APPLICATION_NAME}:vault-kv",
         )
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME, VAULT_KV_REQUIRER_APPLICATION_NAME],
             status="active",

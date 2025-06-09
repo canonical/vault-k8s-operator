@@ -9,11 +9,12 @@ from pytest_operator.plugin import OpsTest
 
 from tests.integration.constants import (
     APP_NAME,
+    JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     UNMATCHING_COMMON_NAME,
 )
-from tests.integration.helpers import get_app, get_leader, has_relation
+from tests.integration.helpers import get_leader, has_relation
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,8 @@ async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
             logger.warning("ACME check attempt %s/%s failed: %s", attempt + 1, retry_count, str(e))
 
         if attempt < retry_count - 1:
-            await asyncio.sleep(5)
+            fast_interval_in_seconds = int(JUJU_FAST_INTERVAL[:-1])
+            await asyncio.sleep(fast_interval_in_seconds)
 
     return False
 
@@ -51,7 +53,7 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
     await vault_authorized
     await self_signed_certificates_idle
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     common_name = UNMATCHING_COMMON_NAME
     common_name_config = {
         "common_name": common_name,
@@ -62,13 +64,19 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
             relation1=f"{APP_NAME}:tls-certificates-acme",
             relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
         )
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-        status="active",
-    )
-    assert await verify_acme_configured(ops_test, APP_NAME)
+    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
+        asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="active",
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+                status="active",
+                wait_for_exact_units=1,  # self-signed certificates app
+            ),
+        )
+        # FIXME: This seems to rely on the reconcile loop -- at least in some
+        # cases, so we wait in fast forward
+        assert await verify_acme_configured(ops_test, APP_NAME)

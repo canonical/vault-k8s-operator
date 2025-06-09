@@ -83,7 +83,6 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
     )
@@ -99,7 +98,6 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
     assert ops_test.model
 
     vault_app = ops_test.model.applications[APPLICATION_NAME]
-    assert vault_app
     common_name = "unmatching-the-requirer.com"
     common_name_config = {
         "common_name": common_name,

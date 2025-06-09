@@ -53,13 +53,11 @@ async def deploy(
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
         ops_test.model.wait_for_idle(
             apps=[VAULT_KV_REQUIRER_1_APPLICATION_NAME],
             status="active",
-            timeout=600,
         ),
     )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
@@ -92,7 +90,6 @@ async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is
     secret_key = "test-key"
     secret_value = "test-value"
     vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_1_APPLICATION_NAME]
-    assert isinstance(vault_kv_application, Application)
     vault_kv_unit = vault_kv_application.units[0]
     vault_kv_create_secret_action = await vault_kv_unit.run_action(
         action_name="create-secret",
@@ -124,7 +121,6 @@ async def test_given_vault_kv_requirer_related_and_requirer_pod_crashes_when_cre
     secret_value = "test-value"
     assert ops_test.model
     vault_kv_application = ops_test.model.applications[VAULT_KV_REQUIRER_1_APPLICATION_NAME]
-    assert isinstance(vault_kv_application, Application)
     vault_kv_unit = vault_kv_application.units[0]
     k8s_namespace = ops_test.model.name
 

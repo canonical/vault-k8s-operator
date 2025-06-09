@@ -4,7 +4,6 @@ from collections import namedtuple
 from pathlib import Path
 
 import pytest
-from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.config import (
@@ -32,7 +31,6 @@ from tests.integration.vault import Vault
 logger = logging.getLogger(__name__)
 
 root_token_vault_b = ""
-recovery_key_vault_b = ""
 
 VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
@@ -66,16 +64,14 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
 
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="blocked",
-            timeout=600,
-            wait_for_exact_units=1,
-        ),
-        ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="blocked",
-            timeout=600,
             wait_for_exact_units=NUM_VAULT_UNITS,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=["vault-b"],
+            status="blocked",
+            wait_for_exact_units=1,
         ),
     )
 
@@ -88,7 +84,7 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
-    global root_token_vault_b, recovery_key_vault_b
+    global root_token_vault_b
 
     await ops_test.model.integrate(
         f"{APPLICATION_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires"
@@ -104,9 +100,7 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
             app_name="vault-b",
         )
 
-        root_token_vault_b, recovery_key_vault_b = await initialize_vault_leader(
-            ops_test, "vault-b"
-        )
+        root_token_vault_b, _ = await initialize_vault_leader(ops_test, "vault-b")
         await wait_for_status_message(
             ops_test=ops_test,
             expected_message="Please authorize charm (see `authorize-charm` action)",
@@ -127,7 +121,6 @@ async def test_given_vault_b_is_deployed_and_unsealed_when_scale_up_then_status_
     assert ops_test.model
 
     app = ops_test.model.applications["vault-b"]
-    assert isinstance(app, Application)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await app.scale(1)
         await ops_test.model.wait_for_idle(
@@ -149,8 +142,6 @@ async def test_given_vault_b_is_deployed_and_unsealed_when_all_units_crash_then_
 ):
     assert ops_test.model
 
-    app = ops_test.model.applications["vault-b"]
-    assert isinstance(app, Application)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],

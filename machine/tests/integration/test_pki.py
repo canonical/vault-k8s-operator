@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import Task
 
 import pytest
@@ -5,6 +6,7 @@ from pytest_operator.plugin import OpsTest
 
 from tests.integration.constants import (
     APP_NAME,
+    JUJU_FAST_INTERVAL,
     MATCHING_COMMON_NAME,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -12,7 +14,6 @@ from tests.integration.constants import (
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
 from tests.integration.helpers import (
-    get_app,
     get_leader_unit_address,
     get_vault_pki_intermediate_ca_common_name,
     has_relation,
@@ -31,7 +32,7 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
     await vault_authorized
     await self_signed_certificates_idle
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     common_name = UNMATCHING_COMMON_NAME
     common_name_config = {
         "common_name": common_name,
@@ -42,15 +43,12 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
             relation1=f"{APP_NAME}:tls-certificates-pki",
             relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
         )
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-        status="active",
-    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+            wait_for_exact_units=NUM_VAULT_UNITS + 1,  # +1 for the self-signed certificates unit
+        )
 
 
 @pytest.mark.abort_on_fail
@@ -70,15 +68,12 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
         relation1=f"{APP_NAME}:vault-pki",
         relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
     )
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
-        status="active",
-    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
+            status="active",
+            wait_for_exact_units=NUM_VAULT_UNITS + 1,  # +1 for the vault pki requirer unit
+        )
 
     leader_unit_address = await get_leader_unit_address(ops_test)
     current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
@@ -105,23 +100,24 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
     root_token, _ = await vault_authorized
     await vault_pki_requirer_idle
 
-    vault_app = get_app(ops_test.model)
+    vault_app = ops_test.model.applications[APP_NAME]
     common_name = MATCHING_COMMON_NAME
     common_name_config = {
         "common_name": common_name,
     }
     await vault_app.set_config(common_name_config)
-    async with ops_test.fast_forward(fast_interval="60s"):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            timeout=1000,
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="blocked",
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+                status="blocked",
+                wait_for_exact_units=1,
+            ),
         )
         await wait_for_status_message(
             ops_test,

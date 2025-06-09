@@ -26,9 +26,6 @@ from tests.integration.constants import (
 )
 from tests.integration.vault import Vault
 
-# Vault status codes, see
-# https://developer.hashicorp.com/vault/api-docs/system/health for more details
-
 logger = logging.getLogger(__name__)
 
 
@@ -102,17 +99,6 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
     return root_token, key
 
 
-def get_app(model: Model, app_name: str = APP_NAME) -> Application:
-    """Get the application by name.
-
-    Abstracts some of the boilerplate code needed to get the application caused
-    by the type stubs in pytest_operator being non-committal.
-    """
-    app = model.applications[app_name]
-    assert isinstance(app, Application)
-    return app
-
-
 def has_relation(app: Application, relation_name: str) -> bool:
     """Check if the application has the relation with the given name.
 
@@ -130,7 +116,7 @@ def has_relation(app: Application, relation_name: str) -> bool:
 async def get_ca_cert_file_location(ops_test: OpsTest, app_name: str = APP_NAME) -> str | None:
     """Get the location of the CA certificate file."""
     assert ops_test.model
-    app = get_app(ops_test.model, app_name)
+    app = ops_test.model.applications[app_name]
     if not has_relation(app, "tls-certificates-access"):
         return None
     action_output = await run_get_ca_certificate_action(ops_test)
@@ -266,6 +252,7 @@ async def get_unit_status_messages(
         A list of tuples with the unit name in the first entry, and the status
         message in the second
     """
+    # TODO: Can we use ops_test.model.get_status() instead?
     return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", app_name)
     if return_code:
         raise RuntimeError(stderr)
@@ -340,7 +327,6 @@ async def deploy_vault_and_wait(
 async def get_leader_unit_address(ops_test: OpsTest) -> str:
     assert ops_test.model
     app = ops_test.model.applications[APP_NAME]
-    assert isinstance(app, Application)
     leader = await get_leader(app)
     assert leader and leader.public_address
     return leader.public_address
