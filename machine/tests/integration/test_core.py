@@ -40,7 +40,7 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
 ):
     """To test that Vault is actually running when the charm is active."""
     assert ops_test.model
-    asyncio.gather(vault_idle_blocked, self_signed_certificates_idle)
+    await asyncio.gather(vault_idle_blocked, self_signed_certificates_idle)
 
     await ops_test.model.integrate(
         relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
