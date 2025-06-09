@@ -65,7 +65,7 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
             relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
         )
     async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        asyncio.gather(
+        await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
                 status="active",

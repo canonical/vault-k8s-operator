@@ -47,7 +47,7 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
         relation2=f"{APP_NAME}:tls-certificates-access",
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        asyncio.gather(
+        await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
                 wait_for_exact_units=NUM_VAULT_UNITS,

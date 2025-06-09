@@ -136,7 +136,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
-      - name: Check matrix job conclusions
+      - name: Check matrix job results
         run: |
           # The 'needs' context contains the results of the jobs listed in 'needs:'
           job_result="${{ needs.integration-tests.result }}"

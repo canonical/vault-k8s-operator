@@ -93,7 +93,7 @@ jobs:
     needs: [integration-tests]
     if: always()
     steps:
-      - name: Check matrix job conclusions
+      - name: Check matrix job results
         run: |
           # The 'needs' context contains the results of the jobs listed in 'needs:'
           job_result="${{ needs.integration-tests.result }}"

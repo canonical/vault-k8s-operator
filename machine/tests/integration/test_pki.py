@@ -69,7 +69,7 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
         relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        asyncio.gather(
+        await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
                 status="blocked",
@@ -114,7 +114,7 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
     }
     await vault_app.set_config(common_name_config)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        asyncio.gather(
+        await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
                 status="blocked",
