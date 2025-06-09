@@ -84,7 +84,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: juju-crashdump-${{ matrix.suite }}
+          name: juju-crashdump-machine-${{ matrix.suite }}
           path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
 
   aggregate-integration-results:
