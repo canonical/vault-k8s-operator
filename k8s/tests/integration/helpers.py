@@ -38,51 +38,6 @@ class ActionFailedError(Exception):
     pass
 
 
-def retry(
-    exceptions: tuple | None = None,
-    attempts: int = 3,
-    wait_time: timedelta | float | None = None,
-):
-    """Retry decorator.
-
-    Args:
-        exceptions: Exceptions to retry on.
-        attempts: Number of attempts to retry.
-        wait_time: Time to wait between attempts.
-    """
-    wait_time_s = (
-        wait_time.total_seconds()
-        if isinstance(wait_time, timedelta)
-        else wait_time
-        if wait_time
-        else 0
-    )
-
-    def decorator(func: Callable):
-        async def wrapper(*args: Any, **kwargs: Any):
-            for attempt in range(attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except Exception as e:
-                    if exceptions and not isinstance(e, exceptions):
-                        logger.info(
-                            "Not retrying, exception type %s not in %s", type(e), exceptions
-                        )
-                        raise e
-                    if attempt == attempts - 1:
-                        import pdb
-
-                        pdb.set_trace()
-                        raise e
-                    if wait_time:
-                        logger.info("Retrying in %s seconds...", wait_time_s)
-                        await asyncio.sleep(wait_time_s)
-
-        return wrapper
-
-    return decorator
-
-
 def crash_pod(name: str, namespace: str) -> None:
     """Simulate a pod crash by deleting the pod."""
     k8s = KubernetesClient()
@@ -123,6 +78,7 @@ def get_first(d: dict) -> Any:
 
 async def get_unit_address(ops_test: OpsTest, unit_name: str) -> str:
     """Get the address of a unit."""
+    # TODO: Can we use `ops_test.model.get_status()` instead?
     return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", unit_name)
     if return_code:
         raise RuntimeError(stderr)
@@ -249,7 +205,7 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
     vault = Vault(
         url=vault_url, ca_file_location=await get_ca_cert_file_location(ops_test, app_name)
     )
-    if not await is_initialized(vault):
+    if not vault.is_initialized():
         root_token, key = vault.initialize()
         await ops_test.model.add_secret(
             f"root-token-key-{app_name}", [f"root-token={root_token}", f"key={key}"]
@@ -260,17 +216,6 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
     root_token, key = await get_vault_token_and_unseal_key(ops_test.model, app_name=app_name)
     logger.info("Vault is already initialized")
     return root_token, key
-
-
-@retry(
-    exceptions=(requests.exceptions.ConnectionError,),
-    wait_time=5,
-    attempts=5,
-)
-async def is_initialized(vault: Vault) -> bool:
-    """Check if the vault unit is initialized."""
-    # TODO: add note about why we are retrying on ConnectionError here
-    return vault.is_initialized()
 
 
 async def authorize_charm_and_wait(
@@ -316,30 +261,8 @@ async def unseal_all_vault_units(
 
     for unit in app.units:
         vault = await get_vault_client(ops_test, unit.name, token, ca_file_name)
-        await unseal_vault_unit(vault, unseal_key)
+        vault.unseal(unseal_key)
         await vault.wait_for_node_to_be_unsealed()
-
-
-async def unseal_vault_unit(vault: Vault, unseal_key: str) -> None:
-    """Unseal a vault, handle cases where it is temporarily unreachable.
-
-    Args:
-        vault: The Vault instance to unseal
-        unseal_key: The unseal key for the vault
-    """
-    # TODO: replace with retry decorator
-    count = 0
-    while count < 10:
-        count += 1
-        try:
-            if not vault.is_sealed():
-                return
-            vault.unseal(unseal_key)
-            return
-        except requests.exceptions.ConnectionError:
-            logger.warning("Failed to connect to vault unit %s. Waiting...", vault.url)
-            await asyncio.sleep(5)
-    raise Exception("Timed out waiting for vault unit to be reachable.")
 
 
 async def authorize_charm(

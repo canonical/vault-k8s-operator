@@ -25,7 +25,6 @@ from tests.integration.helpers import (
     get_vault_token_and_unseal_key,
     initialize_vault_leader,
     unseal_all_vault_units,
-    unseal_vault_unit,
     wait_for_status_message,
 )
 from tests.integration.vault import Vault
@@ -98,7 +97,7 @@ async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers
         url=f"https://{unit_address}:8200",
         token=deploy.root_token,
     )
-    await unseal_vault_unit(vault, deploy.unseal_key)
+    vault.unseal(deploy.unseal_key)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
@@ -127,7 +126,7 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
     ]
     assert len(sealed) == 1
     vault = await get_vault_client(ops_test, sealed[0], deploy.root_token)
-    await unseal_vault_unit(vault, deploy.unseal_key)
+    vault.unseal(deploy.unseal_key)
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(

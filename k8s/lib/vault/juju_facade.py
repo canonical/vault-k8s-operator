@@ -633,7 +633,10 @@ class JujuFacade:
         try:
             return storages[storage_name][0].location
         except ModelError as e:
-            logger.error("Error getting storage location for %s: %s", storage_name, e)
+            # This shouldn't happen, but it does. Possibly a bug in Juju.
+            # The storage "exists" on the model, but it hasn't been provisioned
+            # yet, so when we try to access the location, it raises an error.
+            logger.warning("Error getting storage location for %s: %s", storage_name, e)
             raise TransientJujuError(e) from e
 
     def get_binding(
