@@ -69,10 +69,17 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
         relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            wait_for_exact_units=NUM_VAULT_UNITS + 1,  # +1 for the vault pki requirer unit
+        asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="blocked",
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+                status="active",
+                wait_for_exact_units=1,
+            ),
         )
 
     leader_unit_address = await get_leader_unit_address(ops_test)

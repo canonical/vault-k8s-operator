@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from asyncio import Task, gather
+from asyncio import Task
 
 import pytest
 from pytest_operator.plugin import OpsTest
@@ -40,7 +40,7 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
 ):
     """To test that Vault is actually running when the charm is active."""
     assert ops_test.model
-    await gather(vault_idle_blocked, self_signed_certificates_idle)
+    asyncio.gather(vault_idle_blocked, self_signed_certificates_idle)
 
     await ops_test.model.integrate(
         relation1=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
@@ -49,12 +49,15 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         asyncio.gather(
             ops_test.model.wait_for_idle(
-                apps=[APP_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME]
+                apps=[APP_NAME],
+                wait_for_exact_units=NUM_VAULT_UNITS,
             ),
+            ops_test.model.wait_for_idle(apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME]),
         )
     vault_ip = await get_leader_unit_address(ops_test)
     vault_url = f"https://{vault_ip}:8200"
     ca_file_location = await get_ca_cert_file_location(ops_test)
+    assert ca_file_location
     vault = Vault(url=vault_url, ca_file_location=ca_file_location)
     assert not vault.is_initialized()
 

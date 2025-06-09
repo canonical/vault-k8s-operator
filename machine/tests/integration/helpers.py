@@ -142,7 +142,6 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
     self_signed_certificates_unit = ops_test.model.units[
         f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
     ]
-    assert isinstance(self_signed_certificates_unit, Unit)
     action = await self_signed_certificates_unit.run_action(
         action_name="get-ca-certificate",
     )
@@ -151,7 +150,6 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
 
 async def get_leader(app: Application) -> Unit:
     for unit in app.units:
-        assert isinstance(unit, Unit)
         if await unit.is_leader_from_status():
             return unit
     raise Exception("Leader unit not found.")
@@ -163,11 +161,9 @@ async def unseal_all_vault_units(
     """Unseal all the vault units."""
     assert ops_test.model
     app = ops_test.model.applications[APP_NAME]
-    assert isinstance(app, Application)
 
     # We need to unseal the leader first, since this is the one we initialized.
     leader = await get_leader(app)
-    assert isinstance(leader, Unit)
     unit_address = leader.public_address
     assert unit_address
     vault = Vault(url=f"https://{unit_address}:8200")
@@ -176,7 +172,6 @@ async def unseal_all_vault_units(
     await vault.wait_for_node_to_be_unsealed()
 
     for unit in app.units:
-        assert isinstance(unit, Unit)
         unit_address = unit.public_address
         assert unit_address
         vault = Vault(url=f"https://{unit_address}:8200", ca_file_location=ca_file_name)
@@ -216,7 +211,6 @@ async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """
     assert ops_test.model
     tls_requirer_unit = ops_test.model.units[f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"]
-    assert isinstance(tls_requirer_unit, Unit)
     action = await tls_requirer_unit.run_action(
         action_name="get-certificate",
     )
