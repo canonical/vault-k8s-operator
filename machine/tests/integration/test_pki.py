@@ -44,10 +44,17 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
             relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
         )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-            wait_for_exact_units=NUM_VAULT_UNITS + 1,  # +1 for the self-signed certificates unit
+        await asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="active",
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+                status="active",
+                wait_for_exact_units=1,
+            ),
         )
 
 
