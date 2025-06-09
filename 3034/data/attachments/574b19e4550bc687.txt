@@ -1,0 +1,53 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/1 [idle] active: 
+  vault-b/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model                 Controller                Cloud/Region        Version  SLA          Timestamp
+test-autounseal-dfvo  github-pr-b22a5-microk8s  microk8s/localhost  3.6.7    unsupported  16:49:54Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-b             active      3  vault-k8s             0  10.152.183.18   no       
+vault-k8s           active      3  vault-k8s             0  10.152.183.253  no       
+
+Unit          Workload  Agent  Address      Ports  Message
+vault-b/0*    active    idle   10.1.249.41         
+vault-b/1     active    idle   10.1.249.42         
+vault-b/2     active    idle   10.1.249.40         
+vault-k8s/0*  active    idle   10.1.249.22         
+vault-k8s/1   active    idle   10.1.249.28         
+vault-k8s/2   active    idle   10.1.249.29         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-0: 16:44:06 ERROR unit.vault-k8s/0.juju-log vault-peers:1: Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 16:44:07 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-0: 16:44:08 ERROR unit.vault-k8s/0.juju-log Error getting storage location for certs: ERROR invalid value "certs/4" for option -s: getting filesystem attachment info: filesystem attachment "4" on "unit vault-k8s/0" not provisioned
+
+unit-vault-k8s-1: 16:44:20 ERROR unit.vault-k8s/1.juju-log vault-peers:1: Error getting storage location for certs: ERROR invalid value "certs/8" for option -s: getting filesystem attachment info: filesystem attachment "8" on "unit vault-k8s/1" not provisioned
+
+unit-vault-k8s-1: 16:44:22 ERROR unit.vault-k8s/1.juju-log Error getting storage location for certs: ERROR invalid value "certs/8" for option -s: getting filesystem attachment info: filesystem attachment "8" on "unit vault-k8s/1" not provisioned
+
+unit-vault-k8s-2: 16:44:23 ERROR unit.vault-k8s/2.juju-log vault-peers:1: Error getting storage location for certs: ERROR invalid value "certs/12" for option -s: getting filesystem attachment info: filesystem attachment "12" on "unit vault-k8s/2" not provisioned
+
+unit-vault-b-0: 16:48:21 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-autounseal-dfvo.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa597ef8500>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-2: 16:48:46 ERROR unit.vault-b/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-2.vault-b-endpoints.test-autounseal-dfvo.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f5c87fbfb90>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-0: 16:48:47 ERROR unit.vault-b/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-0.vault-b-endpoints.test-autounseal-dfvo.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f16e44a12b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-b-1: 16:48:55 ERROR unit.vault-b/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-b-1.vault-b-endpoints.test-autounseal-dfvo.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f147ff32d20>: Failed to establish a new connection: [Errno 111] Connection refused'))
+model-17cec162-5cfa-47f8-8691-94fc5c9aecbb: 16:49:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 16:49:06 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 16:49:07 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.249.28:54202->10.152.183.60:17070: write: connection reset by peer: write tcp 10.1.249.28:54202->10.152.183.60:17070: write: connection reset by peer
+unit-vault-k8s-2: 16:49:18 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-autounseal-dfvo...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
