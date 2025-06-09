@@ -5,12 +5,10 @@ import asyncio
 import logging
 import time
 from base64 import b64decode
-from datetime import timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import hvac
-import requests
 import yaml
 from cryptography import x509
 from juju.application import Application
