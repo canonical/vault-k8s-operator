@@ -3,7 +3,7 @@ from asyncio import Task, create_task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import (
+from tests.integration.config import (
     MATCHING_COMMON_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_REVISION,

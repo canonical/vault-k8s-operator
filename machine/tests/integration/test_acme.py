@@ -7,7 +7,7 @@ import requests
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import (
+from tests.integration.config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,

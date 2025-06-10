@@ -3,7 +3,7 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import APP_NAME, NUM_VAULT_UNITS, S3_INTEGRATOR_APPLICATION_NAME
+from tests.integration.config import APP_NAME, NUM_VAULT_UNITS, S3_INTEGRATOR_APPLICATION_NAME
 from tests.integration.helpers import get_leader_unit, has_relation
 
 

@@ -3,11 +3,7 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import (
-    APP_NAME,
-    GRAFANA_AGENT_APPLICATION_NAME,
-    JUJU_FAST_INTERVAL,
-)
+from tests.integration.config import APP_NAME, GRAFANA_AGENT_APPLICATION_NAME, JUJU_FAST_INTERVAL
 
 
 @pytest.mark.abort_on_fail

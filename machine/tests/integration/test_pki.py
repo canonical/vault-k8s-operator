@@ -4,7 +4,7 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import (
+from tests.integration.config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     MATCHING_COMMON_NAME,

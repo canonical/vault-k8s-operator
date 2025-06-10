@@ -2,7 +2,7 @@ from asyncio import Task
 
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import (
+from tests.integration.config import (
     APP_NAME,
     HAPROXY_APPLICATION_NAME,
     JUJU_FAST_INTERVAL,

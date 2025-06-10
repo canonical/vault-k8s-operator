@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.constants import APP_NAME, JUJU_FAST_INTERVAL, NUM_VAULT_UNITS
+from tests.integration.config import APP_NAME, JUJU_FAST_INTERVAL, NUM_VAULT_UNITS
 from tests.integration.helpers import (
     authorize_charm,
     deploy_vault_and_wait,
