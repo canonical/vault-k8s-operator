@@ -13,6 +13,7 @@ from tests.integration.config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
     SELF_SIGNED_CERTIFICATES_REVISION,
 )
 from tests.integration.helpers import (
@@ -72,7 +73,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     await ops_test.model.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-        channel="1/stable",
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
         revision=SELF_SIGNED_CERTIFICATES_REVISION,
     )
     await asyncio.gather(
