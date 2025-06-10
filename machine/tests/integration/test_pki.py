@@ -79,7 +79,7 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
         await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
-                status="blocked",
+                status="active",
                 wait_for_exact_units=NUM_VAULT_UNITS,
             ),
             ops_test.model.wait_for_idle(
@@ -124,12 +124,12 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
         await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APP_NAME],
-                status="blocked",
+                status="active",
                 wait_for_exact_units=NUM_VAULT_UNITS,
             ),
             ops_test.model.wait_for_idle(
                 apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
-                status="blocked",
+                status="active",
                 wait_for_exact_units=1,
             ),
         )
