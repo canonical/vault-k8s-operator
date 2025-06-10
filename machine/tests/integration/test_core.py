@@ -10,6 +10,7 @@ from tests.integration.config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
 )
 from tests.integration.helpers import (
     ActionFailedError,
@@ -92,7 +93,7 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
     await vault.wait_for_raft_nodes(expected_num_nodes=NUM_VAULT_UNITS)
@@ -115,7 +116,6 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
-            timeout=1000,
             wait_for_exact_units=num_units,
         )
 
@@ -131,7 +131,7 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
             status="active",
         )
 
@@ -154,7 +154,7 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
             status="active",
             wait_for_exact_units=NUM_VAULT_UNITS,
         )

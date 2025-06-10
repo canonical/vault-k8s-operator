@@ -43,7 +43,6 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
         await ops_test.model.wait_for_idle(
             apps=["vault-b"],
             status="blocked",
-            timeout=1000,
             wait_for_exact_units=1,
         )
 

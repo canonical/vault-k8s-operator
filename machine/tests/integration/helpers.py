@@ -9,7 +9,6 @@ from base64 import b64decode
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-import requests
 import yaml
 from cryptography import x509
 from juju.application import Application
@@ -175,29 +174,8 @@ async def unseal_all_vault_units(
         unit_address = unit.public_address
         assert unit_address
         vault = Vault(url=f"https://{unit_address}:8200", ca_file_location=ca_file_name)
-        await unseal_vault_unit(vault, unseal_key)
+        vault.unseal(unseal_key)
         await vault.wait_for_node_to_be_unsealed()
-
-
-async def unseal_vault_unit(vault: Vault, unseal_key: str) -> None:
-    """Unseal a vault, handle cases where it is temporarily unreachable.
-
-    Args:
-        vault: The Vault instance to unseal
-        unseal_key: The unseal key for the vault
-    """
-    count = 0
-    while count < 10:
-        count += 1
-        try:
-            if not vault.is_sealed():
-                return
-            vault.unseal(unseal_key)
-            return
-        except requests.exceptions.ConnectionError:
-            logger.warning("Failed to connect to vault unit %s. Waiting...", vault.url)
-            await asyncio.sleep(5)
-    raise Exception("Timed out waiting for vault unit to be reachable.")
 
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:

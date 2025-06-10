@@ -7,6 +7,7 @@ from tests.integration.config import (
     HAPROXY_APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
 )
 
 
@@ -34,7 +35,7 @@ async def test_given_haproxy_deployed_when_integrated_then_status_is_active(
         await ops_test.model.wait_for_idle(
             apps=[HAPROXY_APPLICATION_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
         )
 
     await ops_test.model.integrate(
@@ -46,5 +47,5 @@ async def test_given_haproxy_deployed_when_integrated_then_status_is_active(
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME, HAPROXY_APPLICATION_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
         )

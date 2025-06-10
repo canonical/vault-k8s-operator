@@ -10,6 +10,7 @@ from tests.integration.config import (
     MATCHING_COMMON_NAME,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
     UNMATCHING_COMMON_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
@@ -138,7 +139,7 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
             expected_message="Unit certificate is available",
             app_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
             count=1,
-            timeout=300,
+            timeout=SHORT_TIMEOUT,
         )
 
     leader_unit_address = await get_leader_unit_address(ops_test)

@@ -3,7 +3,12 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import APP_NAME, NUM_VAULT_UNITS, S3_INTEGRATOR_APPLICATION_NAME
+from tests.integration.config import (
+    APP_NAME,
+    NUM_VAULT_UNITS,
+    S3_INTEGRATOR_APPLICATION_NAME,
+    SHORT_TIMEOUT,
+)
 from tests.integration.helpers import get_leader_unit, has_relation
 
 
@@ -112,7 +117,7 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
     await ops_test.model.wait_for_idle(
         apps=[S3_INTEGRATOR_APPLICATION_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
     vault_app = ops_test.model.applications[APP_NAME]
     if not has_relation(vault_app, "s3-parameters"):
@@ -123,7 +128,7 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
     create_backup_action_output = await run_create_backup_action(ops_test)
@@ -149,12 +154,12 @@ async def test_given_vault_integrated_with_s3_when_list_backups_then_action_succ
         await ops_test.model.wait_for_idle(
             apps=[S3_INTEGRATOR_APPLICATION_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
         )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
     list_backups_action_output = await run_list_backups_action(ops_test)
@@ -184,7 +189,7 @@ async def test_given_vault_integrated_with_s3_when_restore_backup_then_action_su
         await ops_test.model.wait_for_idle(
             apps=[S3_INTEGRATOR_APPLICATION_NAME],
             status="active",
-            timeout=1000,
+            timeout=SHORT_TIMEOUT,
         )
     backup_id = "dummy-backup-id"
 

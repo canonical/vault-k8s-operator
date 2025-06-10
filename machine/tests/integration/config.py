@@ -2,6 +2,10 @@ from pathlib import Path
 
 import yaml
 
+SHORT_TIMEOUT = (
+    60 * 2
+)  # How long to wait for apps to settle after integrating them, or configuring them. These events should be quick.
+
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME: str = METADATA["name"]
 GRAFANA_AGENT_APPLICATION_NAME = "grafana-agent"

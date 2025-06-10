@@ -32,12 +32,7 @@ test = [
     "pytest-operator",
     "pytest-asyncio==0.21.2",
 ]
-dev = [
-    "codespell",
-    "pyright",
-    "ruff",
-    "types-hvac",
-]
+dev = ["codespell", "pyright", "ruff", "types-hvac"]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -63,10 +58,10 @@ select = [
     "N",
     "D",
     "I001",
-    "G001",  # Logging statement uses str.format
-    "G002",  # Logging statement uses %
-    "G003",  # Logging statement uses +
-    "G004",  # Logging statement uses an f-string
+    "G001", # Logging statement uses str.format
+    "G002", # Logging statement uses %
+    "G003", # Logging statement uses +
+    "G004", # Logging statement uses an f-string
 ]
 extend-ignore = [
     "D203",
@@ -82,7 +77,7 @@ extend-ignore = [
     "D413",
 ]
 ignore = ["E501", "D107"]
-per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+per-file-ignores = { "tests/*" = ["D100", "D101", "D102", "D103", "D104"] }
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -91,12 +86,7 @@ max-complexity = 10
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
 [tool.pyright]
-include = [
-    "src/",
-    "lib/charms/",
-    "lib/vault/",
-    "tests/",
-]
+include = ["src/", "lib/", "tests/"]
 ignore = [ # We want these files to be analyzed, but not type-checked
     "lib/charms/certificate_transfer_interface/",
     "lib/charms/data_platform_libs/",
