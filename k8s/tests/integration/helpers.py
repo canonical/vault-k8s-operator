@@ -304,7 +304,7 @@ async def authorize_charm(
             attempts,
         )
         await asyncio.sleep(5)
-    logging.error("Failed to authorize charm")
+    logger.error("Failed to authorize charm")
     raise ActionFailedError("Failed to authorize charm")
 
 
