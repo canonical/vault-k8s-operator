@@ -49,12 +49,9 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     resources = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}
     await ops_test.model.deploy(
         vault_charm_path,
-        resources=resources,
         application_name="vault-b",
-        trust=True,
-        series="noble",
         num_units=1,
-        config={"common_name": "example.com"},
+        resources=resources,
     )
     await deploy_vault(
         ops_test,
