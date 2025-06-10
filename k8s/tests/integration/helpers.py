@@ -190,6 +190,10 @@ async def get_vault_token_and_unseal_key(
 async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str, str]:
     """Initialize the leader vault unit and return the root token and unseal key.
 
+    Also adds the root token and unseal key to the model secrets so they can be
+    retrieved if tests are run multiple times with a single deploy
+    (`--no-deploy) or for debugging in the case of a failure.
+
     Returns:
         Tuple[str, str]: Root token and unseal key
     """
