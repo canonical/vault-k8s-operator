@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import pdb
 from collections import namedtuple
 from pathlib import Path
 
@@ -50,7 +49,6 @@ async def verify_acme_configured(ops_test: OpsTest, app_name: str) -> bool:
             fast_interval_in_seconds = int(JUJU_FAST_INTERVAL[:-1])
             await asyncio.sleep(fast_interval_in_seconds)
 
-    pdb.set_trace()
     return False
 
 
