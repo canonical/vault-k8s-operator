@@ -11,6 +11,7 @@ from tests.integration.config import (
     LOKI_APPLICATION_NAME,
     NUM_VAULT_UNITS,
     PROMETHEUS_APPLICATION_NAME,
+    SHORT_TIMEOUT,
 )
 from tests.integration.helpers import (
     deploy_vault,
@@ -75,9 +76,9 @@ async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_st
         relation2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
     )
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME, APPLICATION_NAME],
+        apps=[APPLICATION_NAME, PROMETHEUS_APPLICATION_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
 
 
@@ -93,5 +94,5 @@ async def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_acti
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME, LOKI_APPLICATION_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )

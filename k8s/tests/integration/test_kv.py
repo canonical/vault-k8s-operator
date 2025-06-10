@@ -11,6 +11,7 @@ from tests.integration.config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
+    SHORT_TIMEOUT,
     VAULT_KV_REQUIRER_1_APPLICATION_NAME,
     VAULT_KV_REQUIRER_2_APPLICATION_NAME,
 )
@@ -78,7 +79,7 @@ async def test_given_vault_kv_requirer_deployed_when_vault_kv_relation_created_t
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, VAULT_KV_REQUIRER_1_APPLICATION_NAME],
             status="active",
-            timeout=180,
+            timeout=SHORT_TIMEOUT,
         )
 
 
@@ -132,7 +133,6 @@ async def test_given_vault_kv_requirer_related_and_requirer_pod_crashes_when_cre
     await ops_test.model.wait_for_idle(
         apps=[VAULT_KV_REQUIRER_1_APPLICATION_NAME],
         status="active",
-        timeout=1000,
         wait_for_exact_units=1,
     )
 
@@ -179,7 +179,7 @@ async def test_given_multiple_kv_requirers_related_when_secrets_created_then_sec
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, VAULT_KV_REQUIRER_2_APPLICATION_NAME],
             status="active",
-            timeout=60,
+            timeout=SHORT_TIMEOUT,
         )
     secret_key = "test-key-2"
     secret_value = "test-value-2"

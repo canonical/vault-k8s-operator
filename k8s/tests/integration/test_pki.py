@@ -11,6 +11,7 @@ from tests.integration.config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_REVISION,
 )
@@ -97,7 +98,7 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
-            timeout=180,
+            timeout=SHORT_TIMEOUT,
         )
 
 
@@ -116,13 +117,13 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
             ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
-                timeout=180,
+                timeout=SHORT_TIMEOUT,
                 wait_for_exact_units=NUM_VAULT_UNITS,
             ),
             ops_test.model.wait_for_idle(
                 apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
                 status="active",
-                timeout=180,
+                timeout=SHORT_TIMEOUT,
                 wait_for_exact_units=1,
             ),
         )
@@ -154,13 +155,13 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=60,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
         ops_test.model.wait_for_idle(
             apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
             status="active",
-            timeout=60,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=1,
         ),
     )

@@ -281,6 +281,7 @@ async def authorize_charm(
         secret = await get_model_secret_id(ops_test, f"approle-token-{app_name}")
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
+    # TODO: I have never seen this help. Should we remove it?
     for attempt in range(1, attempts + 1):
         authorize_action = await leader_unit.run_action(
             action_name="authorize-charm",
@@ -299,7 +300,7 @@ async def authorize_charm(
             attempts,
         )
         await asyncio.sleep(5)
-    logging.error("Failed to authorize charm with secret id %s", secret_id)
+    logging.error("Failed to authorize charm")
     raise ActionFailedError("Failed to authorize charm")
 
 
@@ -327,10 +328,22 @@ async def deploy_if_not_exists(
                 resources=resources,
             )
         except JujuError as e:
+            # This could be because the charm is already deployed, so we ignore it.
+            # We may want to handle this more specifically in the future.
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)
 
 
 async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[str]:
+    """Get a Juju secret from the model and return the specified fields.
+
+    Ops doesn't provide a way to get the secret values, so we have to do it a
+    little more manually.
+
+    Args:
+        model (Model): The Juju model to get the secret from.
+        label (str): The label of the secret to get.
+        fields (List[str]): The fields to return from the secret.
+    """
     secrets = await model.list_secrets(show_secrets=True)
     secret = next(secret for secret in secrets if secret.label == label)
 
@@ -347,24 +360,6 @@ async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_units: int) -> N
         num_units=num_units,
         resources=VAULT_RESOURCES,
     )
-
-
-async def deploy_vault_and_wait(
-    ops_test: OpsTest,
-    charm_path: Path,
-    num_units: int,
-    status: str | None = None,
-) -> None:
-    await deploy_vault(ops_test, charm_path, num_units)
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        assert ops_test.model
-        await ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            wait_for_at_least_units=num_units,
-            timeout=1000,
-            status=status,
-        )
-        logger.info("Vault deployed and idle.")
 
 
 async def get_ca_cert_file_location(
@@ -422,10 +417,7 @@ async def initialize_unseal_authorize_vault(ops_test: OpsTest, app_name: str) ->
     assert ops_test.model
     root_token, unseal_key = await initialize_vault_leader(ops_test, app_name)
     leader = await get_leader_unit(ops_test.model, app_name)
-    leader_unit_address = await get_unit_address(ops_test, leader.name)
-
-    vault_url = f"https://{leader_unit_address}:8200"
-    vault = Vault(url=vault_url, token=root_token)
+    vault = await get_vault_client(ops_test, leader.name, root_token)
     assert vault.is_sealed()
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):

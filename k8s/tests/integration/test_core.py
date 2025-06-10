@@ -12,13 +12,13 @@ from tests.integration.config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
 )
 from tests.integration.helpers import (
     authorize_charm_and_wait,
     crash_pod,
-    deploy_vault_and_wait,
+    deploy_vault,
     get_leader_unit,
-    get_unit_address,
     get_unit_status_messages,
     get_vault_ca_certificate,
     get_vault_client,
@@ -27,7 +27,6 @@ from tests.integration.helpers import (
     unseal_all_vault_units,
     wait_for_status_message,
 )
-from tests.integration.vault import Vault
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +45,15 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
             APPLICATION_NAME,
         )
         return VaultInit(root_token, key)
-    await deploy_vault_and_wait(
+    await deploy_vault(
         ops_test,
         charm_path=vault_charm_path,
         num_units=NUM_VAULT_UNITS,
+    )
+
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        wait_for_at_least_units=NUM_VAULT_UNITS,
         status="blocked",
     )
 
@@ -63,11 +67,7 @@ async def test_given_vault_deployed_and_initialized_when_unsealed_and_authorized
 ):
     assert ops_test.model
     leader = await get_leader_unit(ops_test.model, APPLICATION_NAME)
-    leader_unit_address = await get_unit_address(ops_test, leader.name)
-    vault = Vault(
-        url=f"https://{leader_unit_address}:8200",
-        token=deploy.root_token,
-    )
+    vault = await get_vault_client(ops_test, leader.name, deploy.root_token)
     assert vault.is_sealed()
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
@@ -92,17 +92,13 @@ async def test_given_application_is_deployed_when_pod_crashes_then_unit_recovers
         timeout=300,
         unit_name=crashed_unit_name,
     )
-    unit_address = await get_unit_address(ops_test, crashed_unit_name)
-    vault = Vault(
-        url=f"https://{unit_address}:8200",
-        token=deploy.root_token,
-    )
+    vault = await get_vault_client(ops_test, crashed_unit_name, deploy.root_token)
     vault.unseal(deploy.unseal_key)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=300,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=NUM_VAULT_UNITS,
         )
 
@@ -132,7 +128,7 @@ async def test_given_application_is_deployed_when_scale_up_then_status_is_active
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=60,
+            timeout=SHORT_TIMEOUT,
             wait_for_exact_units=num_units,
         )
 
@@ -152,7 +148,7 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
         status="active",
-        timeout=300,
+        timeout=SHORT_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
@@ -176,7 +172,6 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
         await ops_test.model.wait_for_idle(
             apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
             status="active",
-            timeout=1000,
         )
 
     vault_leader_unit = ops_test.model.units[f"{APPLICATION_NAME}/0"]
@@ -194,12 +189,12 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
             ops_test.model.wait_for_idle(
                 apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
                 status="active",
-                timeout=300,
+                timeout=SHORT_TIMEOUT,
             ),
             ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="blocked",
-                timeout=300,
+                timeout=SHORT_TIMEOUT,
             ),
         )
 
@@ -212,7 +207,7 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=300,
+            timeout=SHORT_TIMEOUT,
         )
 
 
@@ -237,12 +232,12 @@ async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self
             ops_test.model.wait_for_idle(
                 apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
                 status="active",
-                timeout=300,
+                timeout=SHORT_TIMEOUT,
             ),
             ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="blocked",
-                timeout=300,
+                timeout=SHORT_TIMEOUT,
             ),
         )
 
@@ -255,5 +250,5 @@ async def test_given_vault_deployed_when_tls_access_relation_destroyed_then_self
         await ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
             status="active",
-            timeout=300,
+            timeout=SHORT_TIMEOUT,
         )

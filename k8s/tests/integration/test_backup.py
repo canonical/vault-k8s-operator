@@ -14,6 +14,7 @@ from tests.integration.config import (
     MINIO_S3_SECRET_KEY,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
+    SHORT_TIMEOUT,
 )
 from tests.integration.helpers import (
     deploy_vault,
@@ -106,7 +107,7 @@ async def test_given_application_is_deployed_and_related_to_s3_integrator_when_c
     await ops_test.model.wait_for_idle(
         apps=[S3_INTEGRATOR_APPLICATION_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
     await ops_test.model.integrate(
         relation1=APPLICATION_NAME,
@@ -115,7 +116,7 @@ async def test_given_application_is_deployed_and_related_to_s3_integrator_when_c
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
         status="active",
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
     create_backup_action_output = await run_create_backup_action(ops_test)
@@ -127,16 +128,18 @@ async def test_given_application_is_deployed_and_backup_created_when_list_backup
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
-    await ops_test.model.wait_for_idle(
-        apps=[S3_INTEGRATOR_APPLICATION_NAME],
-        status="active",
-        timeout=1000,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="active",
-        timeout=1000,
-        wait_for_exact_units=NUM_VAULT_UNITS,
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[S3_INTEGRATOR_APPLICATION_NAME],
+            status="active",
+            timeout=SHORT_TIMEOUT,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=SHORT_TIMEOUT,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        ),
     )
     list_backups_action_output = await run_list_backups_action(ops_test)
     assert list_backups_action_output["backup-ids"]
@@ -147,16 +150,18 @@ async def test_given_application_is_deployed_and_backup_created_when_restore_bac
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
-    await ops_test.model.wait_for_idle(
-        apps=[S3_INTEGRATOR_APPLICATION_NAME],
-        status="active",
-        timeout=1000,
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="active",
-        timeout=1000,
-        wait_for_exact_units=NUM_VAULT_UNITS,
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[S3_INTEGRATOR_APPLICATION_NAME],
+            status="active",
+            timeout=SHORT_TIMEOUT,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            timeout=SHORT_TIMEOUT,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        ),
     )
     list_backups_action_output = await run_list_backups_action(ops_test)
     backup_id = json.loads(list_backups_action_output["backup-ids"])[0]
