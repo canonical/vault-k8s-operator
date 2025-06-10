@@ -269,8 +269,8 @@ class VaultCharm(CharmBase):
             vault = VaultClient(
                 url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
             )
-        except TransientJujuError:
-            event.add_status(WaitingStatus("Waiting for storage to be available"))
+        except TransientJujuError as e:
+            event.add_status(WaitingStatus(e.message))
             return
         if not vault.is_api_available():
             event.add_status(WaitingStatus("Waiting for vault to be available"))

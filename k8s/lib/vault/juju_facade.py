@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 class FacadeError(Exception):
     """Base class for custom errors raised by this library."""
 
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
 
 class TransientJujuError(FacadeError):
     """Exception raised for transient Juju errors like ModelError."""
@@ -637,7 +641,7 @@ class JujuFacade:
             # The storage "exists" on the model, but it hasn't been provisioned
             # yet, so when we try to access the location, it raises an error.
             logger.warning("Error getting storage location for %s: %s", storage_name, e)
-            raise TransientJujuError(e) from e
+            raise TransientJujuError(f"`{storage_name}` has not been provisioned yet") from e
 
     def get_binding(
         self,

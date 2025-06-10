@@ -424,7 +424,6 @@ class TLSManager(Object):
             raise VaultCertsError()
         except TransientJujuError:
             # This can happen if the storage is not attached yet
-            logger.warning("`certs` storage not attached, it may still be provisioning.")
             raise
         return f"{storage_location}/{file.name.lower()}.pem"
 
