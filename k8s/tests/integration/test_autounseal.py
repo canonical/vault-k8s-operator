@@ -30,8 +30,6 @@ from tests.integration.vault import Vault
 
 logger = logging.getLogger(__name__)
 
-root_token_vault_b = ""
-
 VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
@@ -81,7 +79,6 @@ async def test_given_vault_is_deployed_when_integrate_another_vault_then_autouns
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
-    global root_token_vault_b
 
     await ops_test.model.integrate(
         f"{APPLICATION_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires"
@@ -145,6 +142,7 @@ async def test_given_vault_b_is_deployed_and_unsealed_when_all_units_crash_then_
             status="active",
             wait_for_exact_units=3,
         )
+
     k8s_namespace = ops_test.model.name
     crash_pod(name="vault-b-0", namespace=k8s_namespace)
     crash_pod(name="vault-b-1", namespace=k8s_namespace)
@@ -157,6 +155,7 @@ async def test_given_vault_b_is_deployed_and_unsealed_when_all_units_crash_then_
         )
         leader_unit = await get_leader_unit(ops_test.model, "vault-b")
     leader_unit_address = await get_unit_address(ops_test=ops_test, unit_name=leader_unit.name)
+    root_token_vault_b, _ = await get_vault_token_and_unseal_key(ops_test.model, "vault-b")
     vault = Vault(
         url=f"https://{leader_unit_address}:8200",
         token=root_token_vault_b,
@@ -181,6 +180,7 @@ async def test_given_vault_b_is_deployed_and_unsealed_when_auth_token_goes_bad_t
     )
     leader_unit = await get_leader_unit(ops_test.model, "vault-b")
     leader_unit_address = await get_unit_address(ops_test=ops_test, unit_name=leader_unit.name)
+    root_token_vault_b, _ = await get_vault_token_and_unseal_key(ops_test.model, "vault-b")
 
     revoke_token(
         token_to_revoke=auth_token,
