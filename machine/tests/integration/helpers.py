@@ -2,39 +2,100 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import asyncio
 import logging
 import time
 from base64 import b64decode
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import yaml
+from cryptography import x509
 from juju.application import Application
 from juju.errors import JujuError
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
-from vault import Vault  # type: ignore[import]
 
-# Vault status codes, see
-# https://developer.hashicorp.com/vault/api-docs/system/health for more details
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-APP_NAME = METADATA["name"]
-SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
-VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+from tests.integration.config import (
+    APP_NAME,
+    JUJU_FAST_INTERVAL,
+    SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    VAULT_PKI_REQUIRER_APPLICATION_NAME,
+)
+from tests.integration.vault import Vault
 
 logger = logging.getLogger(__name__)
 
 
-def get_app(model: Model, app_name: str = APP_NAME) -> Application:
-    """Get the application by name.
+class ActionFailedError(Exception):
+    """Exception raised when an action fails."""
 
-    Abstracts some of the boilerplate code needed to get the application caused
-    by the type stubs in pytest_operator being non-committal.
+    pass
+
+
+async def authorize_charm(
+    ops_test: OpsTest, root_token: str, app_name: str = APP_NAME
+) -> Any | Dict:
+    """Authorize the charm to interact with Vault.
+
+    Returns:
+        Action output
     """
-    app = model.applications[app_name]
+    assert ops_test.model
+
+    assert isinstance(app := ops_test.model.applications[app_name], Application)
+    if app.status == "active":
+        logger.info("The charm is already active, skipping authorization.")
+        return
+    logger.info("Authorizing the charm `%s` to interact with Vault.", app_name)
+    secret = await ops_test.model.add_secret(f"approle-token-{app_name}", [f"token={root_token}"])
+    secret_id = secret.split(":")[-1]
+    await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
+    leader_unit = await get_leader_unit(ops_test.model, app_name)
+    authorize_action = await leader_unit.run_action(
+        action_name="authorize-charm",
+        **{
+            "secret-id": secret_id,
+        },
+    )
+    result = await ops_test.model.get_action_output(
+        action_uuid=authorize_action.entity_id, wait=120
+    )
+    if not result or "result" not in result:
+        raise ActionFailedError(f"Failed to authorize charm. Result: {result}")
+    logger.info("Authorization result: %s", result)
+    return result
+
+
+async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str, str]:
+    """Initialize the leader vault unit and return the root token and unseal key.
+
+    Returns:
+        Tuple[str, str]: Root token and unseal key
+    """
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
     assert isinstance(app, Application)
-    return app
+    leader = await get_leader(app)
+    assert leader
+    leader_ip = leader.public_address
+    vault_url = f"https://{leader_ip}:8200"
+
+    vault = Vault(
+        url=vault_url, ca_file_location=await get_ca_cert_file_location(ops_test, app_name)
+    )
+    if not vault.is_initialized():
+        root_token, key = vault.initialize()
+        await ops_test.model.add_secret(
+            f"root-token-key-{app_name}", [f"root-token={root_token}", f"key={key}"]
+        )
+        return root_token, key
+
+    root_token, key = await get_juju_secret(
+        ops_test.model, label=f"root-token-key-{app_name}", fields=["root-token", "key"]
+    )
+    return root_token, key
 
 
 def has_relation(app: Application, relation_name: str) -> bool:
@@ -54,7 +115,7 @@ def has_relation(app: Application, relation_name: str) -> bool:
 async def get_ca_cert_file_location(ops_test: OpsTest, app_name: str = APP_NAME) -> str | None:
     """Get the location of the CA certificate file."""
     assert ops_test.model
-    app = get_app(ops_test.model, app_name)
+    app = ops_test.model.applications[app_name]
     if not has_relation(app, "tls-certificates-access"):
         return None
     action_output = await run_get_ca_certificate_action(ops_test)
@@ -80,7 +141,6 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
     self_signed_certificates_unit = ops_test.model.units[
         f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
     ]
-    assert isinstance(self_signed_certificates_unit, Unit)
     action = await self_signed_certificates_unit.run_action(
         action_name="get-ca-certificate",
     )
@@ -89,7 +149,6 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
 
 async def get_leader(app: Application) -> Unit:
     for unit in app.units:
-        assert isinstance(unit, Unit)
         if await unit.is_leader_from_status():
             return unit
     raise Exception("Leader unit not found.")
@@ -101,26 +160,22 @@ async def unseal_all_vault_units(
     """Unseal all the vault units."""
     assert ops_test.model
     app = ops_test.model.applications[APP_NAME]
-    assert isinstance(app, Application)
 
     # We need to unseal the leader first, since this is the one we initialized.
     leader = await get_leader(app)
-    assert isinstance(leader, Unit)
     unit_address = leader.public_address
     assert unit_address
     vault = Vault(url=f"https://{unit_address}:8200")
     if vault.is_sealed():
         vault.unseal(unseal_key)
-    vault.wait_for_node_to_be_unsealed()
+    await vault.wait_for_node_to_be_unsealed()
 
     for unit in app.units:
-        assert isinstance(unit, Unit)
         unit_address = unit.public_address
         assert unit_address
         vault = Vault(url=f"https://{unit_address}:8200", ca_file_location=ca_file_name)
-        if vault.is_sealed():
-            vault.unseal(unseal_key)
-        vault.wait_for_node_to_be_unsealed()
+        vault.unseal(unseal_key)
+        await vault.wait_for_node_to_be_unsealed()
 
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
@@ -134,7 +189,6 @@ async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """
     assert ops_test.model
     tls_requirer_unit = ops_test.model.units[f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"]
-    assert isinstance(tls_requirer_unit, Unit)
     action = await tls_requirer_unit.run_action(
         action_name="get-certificate",
     )
@@ -149,7 +203,7 @@ async def wait_for_certificate_to_be_provided(ops_test: OpsTest) -> None:
         action_output = await run_get_certificate_action(ops_test)
         if action_output.get("certificate", None) is not None:
             return
-        time.sleep(10)
+        await asyncio.sleep(10)
     raise TimeoutError("Timed out waiting for certificate to be provided.")
 
 
@@ -170,6 +224,7 @@ async def get_unit_status_messages(
         A list of tuples with the unit name in the first entry, and the status
         message in the second
     """
+    # TODO: Can we use ops_test.model.get_status() instead?
     return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", app_name)
     if return_code:
         raise RuntimeError(stderr)
@@ -213,7 +268,7 @@ async def wait_for_status_message(
 
         if seen == count:
             return
-        time.sleep(cadence)
+        await asyncio.sleep(cadence)
         timeout -= cadence
 
     raise TimeoutError(
@@ -231,7 +286,7 @@ async def deploy_vault_and_wait(
     ops_test: OpsTest, charm_path: Path, num_units: int, status: str | None = None
 ) -> None:
     await deploy_vault(ops_test, charm_path, num_units)
-    async with ops_test.fast_forward(fast_interval="60s"):
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
@@ -244,7 +299,6 @@ async def deploy_vault_and_wait(
 async def get_leader_unit_address(ops_test: OpsTest) -> str:
     assert ops_test.model
     app = ops_test.model.applications[APP_NAME]
-    assert isinstance(app, Application)
     leader = await get_leader(app)
     assert leader and leader.public_address
     return leader.public_address
@@ -280,3 +334,18 @@ async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[s
     secret = next(secret for secret in secrets if secret.label == label)
 
     return [b64decode(secret.value.data[field]).decode("utf-8") for field in fields]
+
+
+def get_vault_pki_intermediate_ca_common_name(
+    root_token: str, unit_address: str, mount: str
+) -> str:
+    vault = Vault(
+        url=f"https://{unit_address}:8200",
+        token=root_token,
+    )
+    ca_cert: str = vault.client.secrets.pki.read_ca_certificate(mount_point=mount)
+    assert ca_cert, "No CA certificate found"
+    loaded_certificate = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
+    return str(
+        loaded_certificate.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+    )

@@ -17,47 +17,45 @@ on:
         type: string
 
 jobs:
-  integration-test:
-    runs-on: [self-hosted, linux, X64, xlarge, jammy]
-
+  integration-matrix:
+    name: Define Integration tests matrix
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate matrix list
+        id: suites
+        run: |
+          cd ${{ inputs.path }}
+          list="$(find tests/integration -name 'test_*.py' -printf '%f\n' | jq -r -ncR '[inputs]')"
+          echo "suites=$list"
+          echo "suites=$list" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch Charm Under Test
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.vault-charm-artifact-name }}
-          path: ${{ inputs.path }}built/
-
-      - name: Get Charm Under Test Path
-        id: charm-path
-        run: echo "charm_path=$(find ${{ inputs.path }}built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
-
-      - name: Fetch KV Requirer Charm
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.kv-requirer-charm-artifact-name }}
-          path: ${{ inputs.path }}kv-requirer/
-
-      - name: Get KV Requirer Charm Path
-        id: kv-requirer-charm-path
-        run: echo "charm_path=$(find ${{ inputs.path }}kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
-
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [integration-matrix]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
           channel: 1.31-strict/stable
           juju-channel: 3.6/stable
-          lxd-channel: 5.21/stable
 
       - name: Install UV and Tox
         run: |
           pipx uninstall tox
           sudo snap install astral-uv --classic
           uv tool install tox --with tox-uv --force
-
       - name: Enable Metallb
         run: |
           IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
@@ -67,17 +65,56 @@ jobs:
           RANGE="$START_IP-$END_IP"
           echo "RANGE=$RANGE" >> $GITHUB_OUTPUT
           /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:$RANGE"
-
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
       - name: Run integration tests
+        working-directory: ${{ inputs.path }}
         run: |
-          mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
-          mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
-          cd ${{ inputs.path }}
           tox -e integration -- \
-            --charm_path=./vault.charm \
-            --kv_requirer_charm_path=./kv-requirer.charm \
-            --alluredir allure-results
+            --charm_path=./built/vault-k8s_amd64.charm \
+            --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
+            --alluredir allure-results \
+            -k "${{ matrix.suite }}"
 
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.suite }}
+          path: ${{ inputs.path }}/allure-results
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charmcraft-logs-${{ matrix.suite }}
+          path: /home/runner/.local/state/charmcraft/log/*.log
+
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-crashdump-k8s-${{ matrix.suite }}
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
+
+  aggregate-integration-results:
+    name: Aggregate integration test results
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: always()
+    steps:
+      - name: Download all Allure results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
       - name: Load test report history
         uses: actions/checkout@v4
         if: always()
@@ -99,17 +136,17 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+      - name: Check matrix job results
+        run: |
+          # The 'needs' context contains the results of the jobs listed in 'needs:'
+          job_result="${{ needs.integration-tests.result }}"
 
-      - name: Archive charmcraft logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: charmcraft-logs
-          path: /home/runner/.local/state/charmcraft/log/*.log
+          echo "Result of $job_result"
 
-      - name: Archive juju crashdump
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: juju-crashdump
-          path: juju-crashdump-*.tar.xz
+          if [ "$job_result" == "success" ] || [ "$job_result" == "skipped" ]; then
+            echo "Jobs concluded with success or skips."
+            exit 0
+          else
+            echo "Jobs concluded with '$job_result'."
+            exit 1
+          fi

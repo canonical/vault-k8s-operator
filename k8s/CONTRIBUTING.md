@@ -47,11 +47,21 @@ charmcraft pack
 charmcraft pack --project-dir tests/integration/vault_kv_requirer_operator/
 ```
 
-Then, you can run the integration tests with:
+The integration tests are run using `tox`. You can run them with:
 
 ```shell
-tox -e integration -- --charm_path ./vault-k8s_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm
+tox run -e integration -- --charm_path ./vault-k8s_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm -k test_autounseal.py
 ```
+
+Where the `-k` argument is the test suite you want to run.
+
+Or, to run a specific test:
+
+```shell
+tox run -e integration -- --charm_path ./vault-k8s_amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_amd64.charm -k test_given_vault_is_deployed_when_integrate_another_vault_then_autounseal_activated
+```
+
+At this time, each integration test suite must be run separately.
 
 ## Build the charm
 

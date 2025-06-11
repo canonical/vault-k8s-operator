@@ -129,3 +129,18 @@ class Vault:
             )
             return
         raise TimeoutError("Timed out waiting for nodes to be part of the raft cluster.")
+
+    def number_of_raft_nodes(self) -> int:
+        """Get the number of nodes in the raft cluster.
+
+        Args:
+            endpoint (str): The endpoint of the Vault unit
+            token (str): The root token
+            ca_file_location (str): The path to the CA file
+
+        Returns:
+            int: The number of nodes in the raft cluster
+        """
+        response = self.client.sys.read_raft_config()
+        servers = response["data"]["config"]["servers"]
+        return len(servers)

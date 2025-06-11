@@ -17,31 +17,33 @@ on:
         type: string
 
 jobs:
-  integration-tests:
-    runs-on: [self-hosted, linux, X64, jammy, xlarge]
+  integration-matrix:
+    name: Define Integration tests matrix
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate matrix list
+        id: suites
+        run: |
+          cd ${{ inputs.path }}
+          list="$(find tests/integration -name 'test_*.py' -printf '%f\n' | jq -r -ncR '[inputs]')"
+          echo "suites=$list"
+          echo "suites=$list" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch Charm Under Test
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.vault-charm-artifact-name }}
-          path: ${{ inputs.path }}built/
-
-      - name: Get Charm Under Test Path
-        id: charm-path
-        run: echo "charm_path=$(find ${{ inputs.path }}built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
-
-      - name: Fetch KV Requirer Charm
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.kv-requirer-charm-artifact-name }}
-          path: ${{ inputs.path }}kv-requirer/
-
-      - name: Get KV Requirer Charm Path
-        id: kv-requirer-charm-path
-        run: echo "charm_path=$(find ${{ inputs.path }}kv-requirer/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
-
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [integration-matrix]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -54,12 +56,54 @@ jobs:
           pipx uninstall tox
           sudo snap install astral-uv --classic
           uv tool install tox --with tox-uv --force
-
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
       - name: Run integration tests
+        working-directory: ${{ inputs.path }}
         run: |
-          mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
-          mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
-          cd ${{ inputs.path }}
           tox -e integration -- \
-            --charm_path=./vault.charm \
-            --kv_requirer_charm_path=./kv-requirer.charm
+            --charm_path=./built/vault_amd64.charm \
+            --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
+            -k "${{ matrix.suite }}"
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charmcraft-logs-${{ matrix.suite }}
+          path: /home/runner/.local/state/charmcraft/log/*.log
+
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-crashdump-machine-${{ matrix.suite }}
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
+
+  aggregate-integration-results:
+    name: Aggregate integration test results
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: always()
+    steps:
+      - name: Check matrix job results
+        run: |
+          # The 'needs' context contains the results of the jobs listed in 'needs:'
+          job_result="${{ needs.integration-tests.result }}"
+
+          echo "Result of $job_result"
+
+          if [ "$job_result" == "success" ] || [ "$job_result" == "skipped" ]; then
+            echo "Jobs concluded with success or skips."
+            exit 0
+          else
+            echo "Jobs concluded with '$job_result'."
+            exit 1
+          fi

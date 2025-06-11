@@ -9,20 +9,14 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from charms.vault_k8s.v0.vault_kv import (
-    VaultKvConnectedEvent,
-    VaultKvReadyEvent,
-    VaultKvRequires,
-)
+from charms.vault_k8s.v0.vault_kv import VaultKvConnectedEvent, VaultKvReadyEvent, VaultKvRequires
 from ops import main
 from ops.charm import ActionEvent, CharmBase
 from ops.framework import EventBase
 from ops.model import ActiveStatus
 from vault.juju_facade import JujuFacade, NoSuchStorageError
 
-from vault_client import (
-    VaultClient,  # type: ignore[import-not-found]
-)
+from vault_client import VaultClient
 
 NONCE_SECRET_LABEL = "vault-kv-nonce"
 VAULT_KV_SECRET_LABEL = "vault-kv"
