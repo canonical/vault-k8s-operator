@@ -134,6 +134,7 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
     create_backup_action_output = await run_create_backup_action(ops_test)
     # FIXME: The action return code is always 0. This test doesn't work as expected.
     # We aren't even deploying minio.
+    # https://github.com/canonical/vault-k8s-operator/issues/653
     assert create_backup_action_output.get("return-code") == 0
 
 
@@ -165,6 +166,7 @@ async def test_given_vault_integrated_with_s3_when_list_backups_then_action_succ
     list_backups_action_output = await run_list_backups_action(ops_test)
     # FIXME: The action return code is always 0. This test doesn't work as expected.
     # We aren't even deploying minio.
+    # https://github.com/canonical/vault-k8s-operator/issues/653
     assert list_backups_action_output.get("return-code") == 0
 
 
@@ -195,5 +197,6 @@ async def test_given_vault_integrated_with_s3_when_restore_backup_then_action_su
 
     backup_action_output = await run_restore_backup_action(ops_test, backup_id)
     # FIXME: The action return code is always 0. This test doesn't work as expected.
-    # We aren't even deploying minio.
+    # We areon't even deploying minio.
+    # https://github.com/canonical/vault-k8s-operator/issues/653
     assert backup_action_output.get("return-code") == 0

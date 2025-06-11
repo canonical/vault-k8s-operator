@@ -142,7 +142,7 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
 
     vault = await get_vault_client(ops_test, app.units[-1].name, deploy.root_token)
 
-    assert await vault.number_of_raft_nodes() == NUM_VAULT_UNITS + 1
+    assert vault.number_of_raft_nodes() == NUM_VAULT_UNITS + 1
 
     await app.scale(NUM_VAULT_UNITS)
     await ops_test.model.wait_for_idle(
@@ -153,7 +153,7 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
     )
 
     vault = await get_vault_client(ops_test, app.units[0].name, deploy.root_token)
-    assert await vault.number_of_raft_nodes() == NUM_VAULT_UNITS
+    assert vault.number_of_raft_nodes() == NUM_VAULT_UNITS
 
 
 @pytest.mark.abort_on_fail

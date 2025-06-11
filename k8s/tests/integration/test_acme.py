@@ -115,4 +115,5 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
         )
         # FIXME: This seems to rely on the reconcile loop -- at least in some
         # cases, so we wait in fast forward
+        # https://warthogs.atlassian.net/browse/TLSENG-766
         assert await verify_acme_configured(ops_test, APPLICATION_NAME)

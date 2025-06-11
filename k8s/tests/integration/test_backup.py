@@ -82,7 +82,6 @@ async def test_given_application_is_deployed_and_related_to_s3_integrator_when_c
     ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
-    # TODO: Why are we using status here? Can we use ops_test.model.applications directly?
     status = await ops_test.model.get_status()
     minio_app = status.applications[MINIO_APPLICATION_NAME]
     assert minio_app

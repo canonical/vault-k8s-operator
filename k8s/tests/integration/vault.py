@@ -130,8 +130,7 @@ class Vault:
             return
         raise TimeoutError("Timed out waiting for nodes to be part of the raft cluster.")
 
-    # TODO: Does this need to be async?
-    async def number_of_raft_nodes(self) -> int:
+    def number_of_raft_nodes(self) -> int:
         """Get the number of nodes in the raft cluster.
 
         Args:
