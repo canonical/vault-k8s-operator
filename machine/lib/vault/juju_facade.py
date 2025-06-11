@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from itertools import chain
 from pathlib import Path
-from typing import List, Literal, cast
+from typing import Any, List, Literal, cast
 
 from ops.charm import CharmBase
 from ops.model import (
@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 class FacadeError(Exception):
     """Base class for custom errors raised by this library."""
 
-    def __init__(self, message: str):
-        super().__init__(message)
-        self.message = message
+    def __init__(self, message: Any = None, *args: Any) -> None:
+        super().__init__(message, *args)
+        self.message = str(message) if message is not None else ""
 
 
 class TransientJujuError(FacadeError):
