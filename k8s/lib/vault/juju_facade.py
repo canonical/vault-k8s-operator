@@ -539,6 +539,8 @@ class JujuFacade:
             if not name:
                 raise ValueError("Either relation or relation_name must be provided")
             relation = self.get_relation(name, id) if id else self.get_relation_by_name(name)
+        logger.error("%s", relation.units)
+        logger.error("%s", relation.data)
         return [relation.data.get(unit, {}) for unit in relation.units]
 
     def _set_relation_data(

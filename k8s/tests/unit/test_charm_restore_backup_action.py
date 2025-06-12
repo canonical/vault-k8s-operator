@@ -12,7 +12,7 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 
 class TestCharmRestoreBackupAction(VaultCharmFixtures):
-    def test_given_manager_raises_error_when_restore_backup_then_action_fails(self):
+    def test_given_manager_raises_error_when_list_backup_then_action_fails(self):
         self.mock_s3_requirer.configure_mock(
             **{
                 "get_s3_connection_info.return_value": {
@@ -40,6 +40,9 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
             name="vault",
             can_connect=True,
         )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
         s3_relation = testing.Relation(
             endpoint="s3-parameters",
             interface="s3",
@@ -47,12 +50,8 @@ class TestCharmRestoreBackupAction(VaultCharmFixtures):
         state_in = testing.State(
             containers=[container],
             leader=True,
-            relations=[s3_relation],
+            relations=[peer_relation, s3_relation],
             secrets=[approle_secret],
-        )
-        self.ctx.run(
-            self.ctx.on.action("restore-backup", params={"backup-id": "my-backup-id"}),
-            state_in,
         )
 
         with pytest.raises(testing.ActionFailed) as e:
