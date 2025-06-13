@@ -865,6 +865,7 @@ class VaultOperatorCharm(CharmBase):
             logger.debug("No auto-unseal token available")
             try:
                 self.machine.remove_path(SYSTEMD_DROP_IN_FILE_PATH)
+                logger.info("Removed systemd drop-in file since token is no longer set")
             except ValueError:
                 pass
             return
