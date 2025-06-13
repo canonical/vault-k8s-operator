@@ -28,7 +28,6 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
-from dataclasses import dataclass
 import json
 import logging
 import os
@@ -71,13 +70,7 @@ from vault.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from vault.vault_client import (
-    AppRole,
-    SecretsBackend,
-    Token,
-    VaultClient,
-    VaultClientError,
-)
+from vault.vault_client import AppRole, SecretsBackend, Token, VaultClient, VaultClientError
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -104,6 +97,7 @@ path "sys/internal/ui/mounts/{mount}" {{
   capabilities = ["read"]
 }}
 """
+
 
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
@@ -422,12 +416,14 @@ class TLSManager(Object):
             str: path
         Raises:
             VaultCertsError: If the CA certificate is not found
+            TransientJujuError: If the storage is not attached yet
         """
         try:
             storage_location = self.juju_facade.get_storage_location("certs")
         except NoSuchStorageError:
             raise VaultCertsError()
         except TransientJujuError:
+            # This can happen if the storage is not attached yet
             raise
         return f"{storage_location}/{file.name.lower()}.pem"
 
@@ -442,10 +438,8 @@ class TLSManager(Object):
         try:
             file_path = self.get_tls_file_path_in_charm(file)
             return os.path.exists(file_path)
-        except VaultCertsError:
+        except (VaultCertsError, TransientJujuError):
             return False
-        except TransientJujuError:
-            raise
 
     def ca_certificate_is_saved(self) -> bool:
         """Return whether a CA cert and its private key are saved in the charm."""
@@ -657,7 +651,7 @@ class _PKIUtils:
             return Certificate.from_string(intermediate_ca_cert)
         except (VaultClientError, TLSCertificatesError) as e:
             logger.error("Failed to get current CA certificate: %s", e)
-        return None
+            return None
 
     def make_latest_issuer_default(self):
         """Make the latest PKI issuer the default issuer.
@@ -716,17 +710,6 @@ class _PKIUtils:
         )
         certificate_validity_seconds = certificate_validity.total_seconds()
         return certificate_validity_seconds > current_ttl
-
-
-@dataclass
-class AutounsealConfigurationDetails:
-    """Credentials required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    token: str
-    ca_cert_path: str
 
 
 class AutounsealProviderManager:
