@@ -57,7 +57,6 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
-
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -155,7 +154,11 @@ class WorkloadBase(ABC):
 
     @abstractmethod
     def remove_path(self, path: str, recursive: bool = False) -> None:
-        """Remove file or directory from the workload."""
+        """Remove file or directory from the workload.
+
+        Raises:
+            ValueError: If the path is not absolute, or the path does not exist.
+        """
         pass
 
     @abstractmethod
@@ -651,7 +654,7 @@ class _PKIUtils:
             return Certificate.from_string(intermediate_ca_cert)
         except (VaultClientError, TLSCertificatesError) as e:
             logger.error("Failed to get current CA certificate: %s", e)
-            return None
+        return None
 
     def make_latest_issuer_default(self):
         """Make the latest PKI issuer the default issuer.
@@ -1619,4 +1622,6 @@ class ACMEManager:
             data={"path": f"{self._vault_address}/v1/{self._mount_point}"},
         )
         self._enable_acme()
+        self.make_latest_acme_issuer_default()
+        self.make_latest_acme_issuer_default()
         self.make_latest_acme_issuer_default()
