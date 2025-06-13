@@ -28,7 +28,6 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
-from dataclasses import dataclass
 import json
 import logging
 import os
@@ -58,7 +57,6 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
-
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -71,13 +69,7 @@ from vault.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from vault.vault_client import (
-    AppRole,
-    SecretsBackend,
-    Token,
-    VaultClient,
-    VaultClientError,
-)
+from vault.vault_client import AppRole, SecretsBackend, Token, VaultClient, VaultClientError
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -104,6 +96,7 @@ path "sys/internal/ui/mounts/{mount}" {{
   capabilities = ["read"]
 }}
 """
+
 
 class LogAdapter(logging.LoggerAdapter):
     """Adapter for the logger to prepend a prefix to all log lines."""
@@ -161,7 +154,11 @@ class WorkloadBase(ABC):
 
     @abstractmethod
     def remove_path(self, path: str, recursive: bool = False) -> None:
-        """Remove file or directory from the workload."""
+        """Remove file or directory from the workload.
+
+        Raises:
+            ValueError: If the path is not absolute, or the path does not exist.
+        """
         pass
 
     @abstractmethod
@@ -422,12 +419,14 @@ class TLSManager(Object):
             str: path
         Raises:
             VaultCertsError: If the CA certificate is not found
+            TransientJujuError: If the storage is not attached yet
         """
         try:
             storage_location = self.juju_facade.get_storage_location("certs")
         except NoSuchStorageError:
             raise VaultCertsError()
         except TransientJujuError:
+            # This can happen if the storage is not attached yet
             raise
         return f"{storage_location}/{file.name.lower()}.pem"
 
@@ -442,10 +441,8 @@ class TLSManager(Object):
         try:
             file_path = self.get_tls_file_path_in_charm(file)
             return os.path.exists(file_path)
-        except VaultCertsError:
+        except (VaultCertsError, TransientJujuError):
             return False
-        except TransientJujuError:
-            raise
 
     def ca_certificate_is_saved(self) -> bool:
         """Return whether a CA cert and its private key are saved in the charm."""
@@ -716,17 +713,6 @@ class _PKIUtils:
         )
         certificate_validity_seconds = certificate_validity.total_seconds()
         return certificate_validity_seconds > current_ttl
-
-
-@dataclass
-class AutounsealConfigurationDetails:
-    """Credentials required for configuring auto-unseal on Vault."""
-
-    address: str
-    mount_path: str
-    key_name: str
-    token: str
-    ca_cert_path: str
 
 
 class AutounsealProviderManager:
@@ -1636,4 +1622,6 @@ class ACMEManager:
             data={"path": f"{self._vault_address}/v1/{self._mount_point}"},
         )
         self._enable_acme()
+        self.make_latest_acme_issuer_default()
+        self.make_latest_acme_issuer_default()
         self.make_latest_acme_issuer_default()

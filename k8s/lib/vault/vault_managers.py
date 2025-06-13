@@ -504,7 +504,7 @@ class TLSManager(Object):
         """
         try:
             self.workload.remove_path(path=self.get_tls_file_path_in_workload(file))
-        except PathError:
+        except ValueError:
             pass
         logger.debug("Removed %s file from workload.", file.name)
 
@@ -651,7 +651,7 @@ class _PKIUtils:
             return Certificate.from_string(intermediate_ca_cert)
         except (VaultClientError, TLSCertificatesError) as e:
             logger.error("Failed to get current CA certificate: %s", e)
-            return None
+        return None
 
     def make_latest_issuer_default(self):
         """Make the latest PKI issuer the default issuer.
