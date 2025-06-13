@@ -296,9 +296,8 @@ async def deploy_vault_and_wait(
         )
 
 
-async def get_leader_unit_address(ops_test: OpsTest) -> str:
-    assert ops_test.model
-    app = ops_test.model.applications[APP_NAME]
+async def get_leader_unit_address(model: Model, app_name: str = APP_NAME) -> str:
+    app = model.applications[app_name]
     leader = await get_leader(app)
     assert leader and leader.public_address
     return leader.public_address
@@ -313,6 +312,7 @@ async def deploy_if_not_exists(
     channel: str | None = None,
     revision: int | None = None,
     series: str | None = None,
+    trust: bool = False,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -324,6 +324,7 @@ async def deploy_if_not_exists(
                 channel=channel,
                 revision=revision,
                 series=series,
+                trust=trust,
             )
         except JujuError as e:
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)

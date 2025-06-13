@@ -1,15 +1,20 @@
+import asyncio
 from asyncio import Task
 
 import pytest
+from juju.model import ApplicationStatus, UnitStatus
 from pytest_operator.plugin import OpsTest
 
 from tests.integration.config import (
     APP_NAME,
+    MINIO_APPLICATION_NAME,
+    MINIO_S3_ACCESS_KEY,
+    MINIO_S3_SECRET_KEY,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
     SHORT_TIMEOUT,
 )
-from tests.integration.helpers import get_leader_unit, has_relation
+from tests.integration.helpers import get_leader_unit, get_leader_unit_address, has_relation
 
 
 async def run_s3_integrator_sync_credentials_action(
@@ -99,17 +104,17 @@ async def test_given_vault_integrated_with_s3_when_create_backup_then_action_suc
     ops_test: OpsTest, vault_authorized: Task, s3_integrator_idle: Task
 ):
     assert ops_test.model
-    await vault_authorized
-    await s3_integrator_idle
+    await asyncio.gather(vault_authorized, s3_integrator_idle)
 
     s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
     await run_s3_integrator_sync_credentials_action(
         ops_test,
-        secret_key="Dummy secret key",
-        access_key="Dummy access key",
+        access_key=MINIO_S3_ACCESS_KEY,
+        secret_key=MINIO_S3_SECRET_KEY,
     )
+
     s3_config = {
-        "endpoint": "http://minio-dummy:9000",
+        "endpoint": f"https://10.202.128.62:8555",
         "bucket": "test-bucket",
         "region": "local",
     }

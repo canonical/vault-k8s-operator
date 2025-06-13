@@ -72,7 +72,9 @@ class S3:
                     "max_attempts": 1,
                 },
             )
-            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint, config=custom_config)
+            self.s3 = self.session.resource(
+                "s3", endpoint_url=self.endpoint, config=custom_config, verify=False
+            )
         except (ClientError, BotoCoreError, ValueError) as e:
             raise S3Error(f"Error creating session: {e}")
 
