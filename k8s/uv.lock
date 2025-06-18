@@ -1080,7 +1080,7 @@ wheels = [
 [[package]]
 name = "ops"
 version = "2.23.0.dev0"
-source = { git = "https://github.com/canonical/operator?rev=25f38f33b2944543a404c7161f8df8c7d3beb654#25f38f33b2944543a404c7161f8df8c7d3beb654" }
+source = { git = "https://github.com/tonyandrewmeyer/operator?branch=fix-unit-injection#d9907ba8f4c1a826897073c7f9adfbaad2f95f74" }
 dependencies = [
     { name = "importlib-metadata" },
     { name = "opentelemetry-api" },
@@ -1096,7 +1096,7 @@ testing = [
 [[package]]
 name = "ops-scenario"
 version = "7.23.0.dev0"
-source = { git = "https://github.com/canonical/operator?subdirectory=testing&rev=25f38f33b2944543a404c7161f8df8c7d3beb654#25f38f33b2944543a404c7161f8df8c7d3beb654" }
+source = { git = "https://github.com/tonyandrewmeyer/operator?subdirectory=testing&branch=fix-unit-injection#d9907ba8f4c1a826897073c7f9adfbaad2f95f74" }
 dependencies = [
     { name = "ops" },
     { name = "pyyaml" },
@@ -1933,7 +1933,7 @@ requires-dist = [
     { name = "lightkube" },
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "ops", git = "https://github.com/canonical/operator?rev=25f38f33b2944543a404c7161f8df8c7d3beb654" },
+    { name = "ops", git = "https://github.com/tonyandrewmeyer/operator?branch=fix-unit-injection" },
     { name = "pydantic", specifier = "==2.10.6" },
     { name = "pyhcl" },
     { name = "pytest-interface-tester" },
@@ -1951,7 +1951,7 @@ dev = [
 test = [
     { name = "coverage", extras = ["toml"] },
     { name = "juju" },
-    { name = "ops", extras = ["testing"], git = "https://github.com/canonical/operator?rev=25f38f33b2944543a404c7161f8df8c7d3beb654" },
+    { name = "ops", extras = ["testing"], git = "https://github.com/tonyandrewmeyer/operator?branch=fix-unit-injection" },
     { name = "pytest" },
     { name = "pytest-asyncio", specifier = "==0.21.2" },
     { name = "pytest-operator" },
