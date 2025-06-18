@@ -36,7 +36,7 @@ dev = ["codespell", "pyright", "ruff", "types-hvac"]
 
 # This block should be removed once a release > 2.22.0 of Ops is released
 [tool.uv.sources]
-ops = { git = "https://github.com/canonical/operator", rev = "25f38f33b2944543a404c7161f8df8c7d3beb654" }
+ops = { git = "https://github.com/tonyandrewmeyer/operator", branch = "fix-unit-injection" }
 
 # Testing tools configuration
 [tool.coverage.run]
