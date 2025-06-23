@@ -419,6 +419,7 @@ class VaultCharm(CharmBase):
         )
         manager.configure()
 
+    # Yazan
     def _get_certificate_request(self, common_name: str) -> CertificateRequestAttributes:
         return CertificateRequestAttributes(
             common_name=common_name,

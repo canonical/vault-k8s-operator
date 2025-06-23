@@ -401,6 +401,7 @@ class VaultClient:
             mount_point=mount,
         )
 
+    # Yazan
     def sign_pki_certificate_signing_request(
         self,
         mount: str,
@@ -545,6 +546,7 @@ class VaultClient:
             return 0
         return len(raft_config["data"]["config"]["servers"])
 
+    # Yazan
     def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
         """Return whether the provided common name is in the list of domains allowed by the specified PKI role."""
         try:
