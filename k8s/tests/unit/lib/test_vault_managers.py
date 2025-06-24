@@ -367,15 +367,23 @@ class TestPKIManager:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.allowed_domains = ["common_name"]
+        self.allow_subdomains = False
+        self.allow_wildcard_certificates = True
+        self.allow_any_name = False
 
         self.pki_manager = PKIManager(
-            self.charm,
-            self.vault,
-            self.certificate_request_attributes,
-            self.mount_point,
-            self.role_name,
-            self.vault_pki,
-            self.tls_certificates_pki,
+            charm=self.charm,
+            vault_client=self.vault,
+            certificate_request_attributes=self.certificate_request_attributes,
+            mount_point=self.mount_point,
+            role_name=self.role_name,
+            vault_pki=self.vault_pki,
+            tls_certificates_pki=self.tls_certificates_pki,
+            allowed_domains=self.allowed_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
         )
 
     @pytest.fixture
@@ -472,14 +480,15 @@ class TestPKIManager:
             SecretsBackend.PKI, self.mount_point
         )
 
-        self.vault_pki.revoke_all_certificates.assert_called_once()
-
         # Certificates are issued for half the time the provider certificate is valid for
         self.vault.create_or_update_pki_charm_role.assert_called_once_with(
             allowed_domains=self.certificate_request_attributes.common_name,
             mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{12 * SECONDS_IN_HOUR}s",
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
         )
 
     def test_given_outstanding_requests_when_sync_then_certificates_issued(

@@ -209,55 +209,54 @@ config:
       description: >-
         The log verbosity level. Supported values (in order of descending detail) are trace, debug, info, warn, and error.
     pki_ca_common_name:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will automatically generate a common name.
     pki_ca_sans_dns:
-      type: str
-      description: >- 
-      Comma-separated list of DNS names for the CA certificate.
-      The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
-      Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA. If not set,
-      the Vault charm will automatically generate subject alternative names.
+      type: string
+      description: >-
+        Comma-separated list of DNS names for the CA certificate.
+        The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
+        Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA. If not set,
+        the Vault charm will automatically generate subject alternative names.
     pki_ca_country_name:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
     pki_ca_state_or_province_name:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
     pki_ca_locality_name:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
     pki_ca_organization:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
     pki_ca_organizational_unit:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
     pki_ca_email_address:
-      type: str
+      type: string
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will request a CA certificate without this attribute.
-
     pki_allowed_domains:
       type: string
       description: >-
@@ -271,7 +270,7 @@ config:
         Specifies if clients can request certificates with common names that are subdomains of the common name in the `allowed_domains` list.
         This includes wildcard subdomains.
         For example, an allowed_domains value of `example.com` with this option set to `true` will allow `foo.example.com` and `fou.bar.example.com` as well as `*.example.com`.
-    allow_wildcard_certificates:
+    pki_allow_wildcard_certificates:
       type: boolean
       default: true
       description: >-

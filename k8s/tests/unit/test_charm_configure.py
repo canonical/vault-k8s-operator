@@ -156,7 +156,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret],
                 relations=[peer_relation, pki_relation],
                 config={
-                    "common_name": "myhostname.com",
+                    "pki_ca_common_name": "myhostname.com",
                 },
             )
             provider_certificate, private_key = generate_example_provider_certificate(
@@ -218,7 +218,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret],
                 relations=[peer_relation, acme_relation],
                 config={
-                    "common_name": "myhostname.com",
+                    "pki_ca_common_name": "myhostname.com",
                 },
             )
             provider_certificate, private_key = generate_example_provider_certificate(
@@ -313,7 +313,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             leader=True,
             secrets=[approle_secret],
             relations=[peer_relation, vault_autounseal_relation],
-            config={"common_name": "myhostname.com"},
+            config={"pki_ca_common_name": "myhostname.com"},
         )
 
         self.ctx.run(self.ctx.on.pebble_ready(container), state_in)

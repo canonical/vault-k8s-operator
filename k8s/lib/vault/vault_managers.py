@@ -34,7 +34,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from typing import FrozenSet, MutableMapping, TextIO
+from typing import FrozenSet, List, MutableMapping, TextIO
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
@@ -936,6 +936,10 @@ class PKIManager:
         certificate_request_attributes: CertificateRequestAttributes,
         mount_point: str,
         role_name: str,
+        allowed_domains: List[str],
+        allow_subdomains: bool,
+        allow_wildcard_certificates: bool,
+        allow_any_name: bool,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4,
     ):
@@ -960,6 +964,14 @@ class PKIManager:
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
         self._pki_utils = _PKIUtils(vault_client, mount_point)
+        self._allowed_domains = allowed_domains if allowed_domains else [certificate_request_attributes.common_name]
+        self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
+        self._allow_wildcard_certificates = (
+            allow_wildcard_certificates
+            if allow_wildcard_certificates is not None
+            else True
+        )
+        self._allow_any_name = allow_any_name if allow_any_name is not None else False
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1019,7 +1031,7 @@ class PKIManager:
                 return
             logger.debug("CA certificate already set in the PKI secrets engine")
             return
-        self._vault_pki.revoke_all_certificates()
+
         self._vault_client.import_ca_certificate_and_key(
             certificate=str(certificate_from_provider.certificate),
             private_key=str(private_key),
@@ -1028,18 +1040,26 @@ class PKIManager:
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
-        if not self._vault_client.is_common_name_allowed_in_pki_role(
+
+        if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
-            common_name=self._certificate_request_attributes.common_name,
+            allowed_domains=self._allowed_domains,
+            allow_subdomains=self._allow_subdomains,
+            allow_wildcard_certificates=self._allow_wildcard_certificates,
+            allow_any_name=self._allow_any_name,
         ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
+            allowed_domains_str = ",".join(self._allowed_domains)
             self._vault_client.create_or_update_pki_charm_role(
-                allowed_domains=self._certificate_request_attributes.common_name,
+                allowed_domains=allowed_domains_str,
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
+                allow_subdomains=self._allow_subdomains,
+                allow_wildcard_certificates=self._allow_wildcard_certificates,
+                allow_any_name=self._allow_any_name,
             )
         self.make_latest_pki_issuer_default()
 

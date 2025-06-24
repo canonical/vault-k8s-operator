@@ -25,6 +25,22 @@ def common_name_config_is_valid(common_name: str) -> bool:
     return common_name != ""
 
 
+def sans_dns_config_is_valid(sans_dns: str) -> bool:
+    """Return whether the config value for the sans dns is valid."""
+    if not sans_dns:
+        return True
+    dns_names = [name.strip() for name in sans_dns.split(",")]
+    return all(name for name in dns_names)
+
+
+def allowed_domains_config_is_valid(allowed_domains: str) -> bool:
+    """Return whether the config value for the allowed domains is valid."""
+    if not allowed_domains:
+        return True
+    dns_names = [name.strip() for name in allowed_domains.split(",")]
+    return all(name for name in dns_names)
+
+
 def render_vault_config_file(
     config_template_path: str,
     config_template_name: str,

@@ -401,7 +401,6 @@ class VaultClient:
             mount_point=mount,
         )
 
-    # Yazan
     def sign_pki_certificate_signing_request(
         self,
         mount: str,
@@ -443,7 +442,14 @@ class VaultClient:
             return None
 
     def create_or_update_pki_charm_role(
-        self, role: str, allowed_domains: str, max_ttl: str, mount: str
+        self,
+        role: str,
+        allowed_domains: str,
+        max_ttl: str,
+        mount: str,
+        allow_subdomains: bool,
+        allow_wildcard_certificates: bool,
+        allow_any_name: bool,
     ) -> None:
         """Create a role for the PKI backend or update it if it already exists.
 
@@ -455,14 +461,19 @@ class VaultClient:
                 Should be a string in the format of a number with a unit such as
                 "120m", "10h" or "90d".
             mount: The mount point of the PKI backend for which the role will be created.
+            allow_subdomains: Whether to allow issuing certificates for subdomains.
+            allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
+            allow_any_name: Whether to allow issuing certificates for any name.
         """
         self._client.secrets.pki.create_or_update_role(
             name=role,
             mount_point=mount,
             extra_params={
                 "allowed_domains": allowed_domains,
-                "allow_subdomains": True,
                 "max_ttl": max_ttl,
+                "allow_subdomains": allow_subdomains,
+                "allow_wildcard_certificates": allow_wildcard_certificates,
+                "allow_any_name": allow_any_name,
             },
         )
         logger.info(
@@ -470,6 +481,9 @@ class VaultClient:
             role,
             allowed_domains,
             max_ttl,
+            allow_subdomains,
+            allow_wildcard_certificates,
+            allow_any_name,
         )
 
     def create_or_update_acme_role(self, role: str, mount: str, max_ttl: str) -> None:
@@ -546,7 +560,6 @@ class VaultClient:
             return 0
         return len(raft_config["data"]["config"]["servers"])
 
-    # Yazan
     def is_common_name_allowed_in_pki_role(self, role: str, mount: str, common_name: str) -> bool:
         """Return whether the provided common name is in the list of domains allowed by the specified PKI role."""
         try:
@@ -556,6 +569,37 @@ class VaultClient:
         except InvalidPath:
             logger.warning("Role does not exist on the specified path.")
             return False
+
+    def role_config_matches_given_config(
+        self,
+        role: str,
+        mount: str,
+        allowed_domains: List[str],
+        allow_subdomains: bool,
+        allow_wildcard_certificates: bool,
+        allow_any_name: bool,
+    ) -> bool:
+        """Return whether the role config matches the charm config."""
+        matches = True
+        try:
+            role_data = self._client.secrets.pki.read_role(name=role, mount_point=mount).get(
+                "data", {}
+            )
+            if not all(
+                common_name in role_data.get("allowed_domains", [])
+                for common_name in allowed_domains
+            ):
+                matches = False
+            if role_data.get("allow_subdomains") != allow_subdomains:
+                matches = False
+            if role_data.get("allow_wildcard_certificates") != allow_wildcard_certificates:
+                matches = False
+            if role_data.get("allow_any_name") != allow_any_name:
+                matches = False
+        except InvalidPath:
+            logger.warning("Role does not exist on the specified path.")
+            return False
+        return matches
 
     def get_role_max_ttl(self, role: str, mount: str) -> int | None:
         """Get the max ttl for the specified PKI role in seconds."""

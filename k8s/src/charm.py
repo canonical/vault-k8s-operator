@@ -44,9 +44,11 @@ from vault.vault_client import (
 )
 from vault.vault_helpers import (
     AutounsealConfiguration,
+    allowed_domains_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
     render_vault_config_file,
+    sans_dns_config_is_valid,
     seal_type_has_changed,
 )
 from vault.vault_managers import (
@@ -118,19 +120,19 @@ class VaultCharm(CharmBase):
             charm=self,
             relationship_name=PKI_RELATION_NAME,
         )
-        common_name = self.juju_facade.get_string_config("common_name")
-        certificate_requests = [self._get_certificate_request(common_name)] if common_name else []
+        pki_certificate_request = self._get_pki_certificate_request()
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
-            certificate_requests=certificate_requests,
+            certificate_requests=[pki_certificate_request] if pki_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
+        # TODO
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
-            certificate_requests=certificate_requests,
+            certificate_requests=[CertificateRequestAttributes(common_name=self.juju_facade.get_string_config("common_name"), is_ca=True)],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
@@ -225,15 +227,30 @@ class VaultCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
-        if self.juju_facade.relation_exists(
-            TLS_CERTIFICATES_PKI_RELATION_NAME
-        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
-            event.add_status(
-                BlockedStatus(
-                    "Common name is not set in the charm config, cannot configure PKI secrets engine"
+        if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+            if not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
+                event.add_status(
+                    BlockedStatus(
+                        "Common name is not set in the charm config, cannot configure PKI secrets engine"
+                    )
                 )
-            )
-            return
+                return
+            if not allowed_domains_config_is_valid(
+                self.juju_facade.get_string_config("pki_allowed_domains")
+            ):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for allowed_domains is not valid, it must be a comma separated list"
+                    )
+                )
+                return
+            if not sans_dns_config_is_valid(self.juju_facade.get_string_config("pki_sans_dns")):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for sans_dns is not valid, it must be a comma separated list"
+                    )
+                )
+                return
         if self.juju_facade.relation_exists(
             TLS_CERTIFICATES_ACME_RELATION_NAME
         ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
@@ -388,20 +405,67 @@ class VaultCharm(CharmBase):
         KVManager.remove_unit_credentials(self.juju_facade, event.unit_name)
 
     def _configure_pki_secrets_engine(self, vault: VaultClient) -> None:
-        common_name = self.juju_facade.get_string_config("common_name")
-        if not common_name:
-            logger.warning("Common name is not set in the charm config")
+        if not common_name_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_common_name")
+        ):
+            logger.warning(
+                "pki_ca_common_name is not set in the charm config, not configuring PKI secrets engine"
+            )
+            return
+        if not allowed_domains_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_allowed_domains")
+        ):
+            logger.warning(
+                "pki_ca_allowed_domains has invalid value, must be a comma separated list, skipping PKI secrets engine configuration"
+            )
+            return
+        if not sans_dns_config_is_valid(self.juju_facade.get_string_config("pki_ca_sans_dns")):
+            logger.warning(
+                "pki_ca_sans_dns has invalid value, must be a comma separated list, skipping PKI secrets engine configuration"
+            )
+            return
+        certificate_request = self._get_pki_certificate_request()
+        if not certificate_request:
             return
         manager = PKIManager(
-            self,
-            vault,
-            self._get_certificate_request(common_name),
-            PKI_MOUNT,
-            PKI_ROLE_NAME,
-            self.vault_pki,
+            charm=self,
+            vault_client=vault,
+            certificate_request_attributes=certificate_request,
+            mount_point=PKI_MOUNT,
+            role_name=PKI_ROLE_NAME,
+            vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
+            allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
+            allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config("pki_allow_wildcard_certificates"),
+            allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
         )
         manager.configure()
+
+    def _get_pki_certificate_request(self) -> CertificateRequestAttributes | None:
+        common_name = self.juju_facade.get_string_config("pki_ca_common_name")
+        if not common_name:
+            logger.warning("pki_ca_common_name is not set in the charm config")
+            return None
+        sans_dns = self.juju_facade.get_string_config("pki_ca_sans_dns")
+        if not sans_dns_config_is_valid(sans_dns):
+            logger.warning("pki_ca_sans_dns is not valid")
+            return None
+        if sans_dns:
+            sans_dns = [name.strip() for name in sans_dns.split(",")]
+        return CertificateRequestAttributes(
+            common_name=common_name,
+            sans_dns=frozenset(sans_dns),
+            country_name=self.juju_facade.get_string_config("pki_ca_country_name"),
+            state_or_province_name=self.juju_facade.get_string_config(
+                "pki_ca_state_or_province_name"
+            ),
+            locality_name=self.juju_facade.get_string_config("pki_ca_locality_name"),
+            organization=self.juju_facade.get_string_config("pki_ca_organization"),
+            organizational_unit=self.juju_facade.get_string_config("pki_ca_organizational_unit"),
+            email_address=self.juju_facade.get_string_config("pki_ca_email_address"),
+            is_ca=True,
+        )
 
     def _configure_acme_server(self, vault: VaultClient) -> None:
         common_name = self.juju_facade.get_string_config("common_name")
@@ -419,7 +483,6 @@ class VaultCharm(CharmBase):
         )
         manager.configure()
 
-    # Yazan
     def _get_certificate_request(self, common_name: str) -> CertificateRequestAttributes:
         return CertificateRequestAttributes(
             common_name=common_name,
@@ -455,17 +518,31 @@ class VaultCharm(CharmBase):
 
     def _sync_vault_pki(self, vault: VaultClient) -> None:
         """Goes through all the vault-pki relations and sends necessary TLS certificate."""
-        common_name = self.juju_facade.get_string_config("common_name")
-        if not common_name:
+        if not common_name_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_common_name")
+        ):
+            return
+        if not allowed_domains_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_allowed_domains")
+        ):
+            return
+        if not sans_dns_config_is_valid(self.juju_facade.get_string_config("pki_ca_sans_dns")):
+            return
+        certificate_request = self._get_pki_certificate_request()
+        if not certificate_request:
             return
         manager = PKIManager(
-            self,
-            vault,
-            self._get_certificate_request(common_name),
-            PKI_MOUNT,
-            PKI_ROLE_NAME,
-            self.vault_pki,
+            charm=self,
+            vault_client=vault,
+            certificate_request_attributes=certificate_request,
+            mount_point=PKI_MOUNT,
+            role_name=PKI_ROLE_NAME,
+            vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
+            allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
+            allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config("pki_allow_wildcard_certificates"),
+            allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
         )
         manager.sync()
 
