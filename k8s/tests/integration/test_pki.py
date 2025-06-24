@@ -61,7 +61,7 @@ async def deploy(
         application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
         revision=VAULT_PKI_REQUIRER_REVISION,
         channel="stable",
-        config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
+        config={"common_name": "test.example.com"},
     )
     await asyncio.gather(
         ops_test.model.wait_for_idle(
@@ -87,7 +87,7 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
     vault_app = ops_test.model.applications[APPLICATION_NAME]
     common_name = "unmatching-the-requirer.com"
     common_name_config = {
-        "common_name": common_name,
+        "pki_ca_common_name": common_name,
     }
     await vault_app.set_config(common_name_config)
     await ops_test.model.integrate(
@@ -148,7 +148,7 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
     vault_app = ops_test.model.applications[APPLICATION_NAME]
     common_name = "example.com"
     common_name_config = {
-        "common_name": common_name,
+        "pki_ca_common_name": common_name,
     }
     await vault_app.set_config(common_name_config)
     asyncio.gather(

@@ -129,10 +129,12 @@ class VaultCharm(CharmBase):
             refresh_events=[self.on.config_changed],
         )
         # TODO
+        common_name = self.juju_facade.get_string_config("common_name")
+        certificate_requests = [self._get_certificate_request(common_name)] if common_name else []
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
-            certificate_requests=[CertificateRequestAttributes(common_name=self.juju_facade.get_string_config("common_name"), is_ca=True)],
+            certificate_requests=certificate_requests,
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
@@ -228,7 +230,9 @@ class VaultCharm(CharmBase):
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
         if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-            if not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
+            if not common_name_config_is_valid(
+                self.juju_facade.get_string_config("pki_ca_common_name")
+            ):
                 event.add_status(
                     BlockedStatus(
                         "Common name is not set in the charm config, cannot configure PKI secrets engine"
@@ -240,14 +244,14 @@ class VaultCharm(CharmBase):
             ):
                 event.add_status(
                     BlockedStatus(
-                        "Config value for allowed_domains is not valid, it must be a comma separated list"
+                        "Config value for pki_allowed_domains is not valid, it must be a comma separated list"
                     )
                 )
                 return
-            if not sans_dns_config_is_valid(self.juju_facade.get_string_config("pki_sans_dns")):
+            if not sans_dns_config_is_valid(self.juju_facade.get_string_config("pki_ca_sans_dns")):
                 event.add_status(
                     BlockedStatus(
-                        "Config value for sans_dns is not valid, it must be a comma separated list"
+                        "Config value for pki_ca_sans_dns is not valid, it must be a comma separated list"
                     )
                 )
                 return
@@ -413,7 +417,7 @@ class VaultCharm(CharmBase):
             )
             return
         if not allowed_domains_config_is_valid(
-            self.juju_facade.get_string_config("pki_ca_allowed_domains")
+            self.juju_facade.get_string_config("pki_allowed_domains")
         ):
             logger.warning(
                 "pki_ca_allowed_domains has invalid value, must be a comma separated list, skipping PKI secrets engine configuration"
@@ -437,7 +441,9 @@ class VaultCharm(CharmBase):
             tls_certificates_pki=self.tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
-            allow_wildcard_certificates=self.juju_facade.get_bool_config("pki_allow_wildcard_certificates"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config(
+                "pki_allow_wildcard_certificates"
+            ),
             allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
         )
         manager.configure()
@@ -541,7 +547,9 @@ class VaultCharm(CharmBase):
             tls_certificates_pki=self.tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
-            allow_wildcard_certificates=self.juju_facade.get_bool_config("pki_allow_wildcard_certificates"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config(
+                "pki_allow_wildcard_certificates"
+            ),
             allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
         )
         manager.sync()

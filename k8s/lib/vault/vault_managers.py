@@ -34,7 +34,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from typing import FrozenSet, List, MutableMapping, TextIO
+from typing import FrozenSet, MutableMapping, TextIO
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
@@ -936,10 +936,10 @@ class PKIManager:
         certificate_request_attributes: CertificateRequestAttributes,
         mount_point: str,
         role_name: str,
-        allowed_domains: List[str],
-        allow_subdomains: bool,
-        allow_wildcard_certificates: bool,
-        allow_any_name: bool,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4,
     ):
@@ -955,6 +955,10 @@ class PKIManager:
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
             tls_certificates_pki: The tls_certificates_pki requirer relation helper library
+            allowed_domains: The domains that the PKI engine will allow certificates to be issued for
+            allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
+            allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
+            allow_any_name: Whether the PKI engine will allow any name to be issued for
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -964,12 +968,15 @@ class PKIManager:
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
         self._pki_utils = _PKIUtils(vault_client, mount_point)
-        self._allowed_domains = allowed_domains if allowed_domains else [certificate_request_attributes.common_name]
+        if allowed_domains:
+            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
+            self._allowed_domains = allowed_domains
+        else:
+            self._allowed_domains_list = [certificate_request_attributes.common_name]
+            self._allowed_domains = certificate_request_attributes.common_name
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
-            allow_wildcard_certificates
-            if allow_wildcard_certificates is not None
-            else True
+            allow_wildcard_certificates if allow_wildcard_certificates is not None else True
         )
         self._allow_any_name = allow_any_name if allow_any_name is not None else False
 
@@ -1044,16 +1051,15 @@ class PKIManager:
         if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
-            allowed_domains=self._allowed_domains,
+            allowed_domains=self._allowed_domains_list,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
         ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
-            allowed_domains_str = ",".join(self._allowed_domains)
             self._vault_client.create_or_update_pki_charm_role(
-                allowed_domains=allowed_domains_str,
+                allowed_domains=self._allowed_domains,
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",

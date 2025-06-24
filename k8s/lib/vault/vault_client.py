@@ -447,9 +447,9 @@ class VaultClient:
         allowed_domains: str,
         max_ttl: str,
         mount: str,
-        allow_subdomains: bool,
-        allow_wildcard_certificates: bool,
-        allow_any_name: bool,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
     ) -> None:
         """Create a role for the PKI backend or update it if it already exists.
 
@@ -465,25 +465,32 @@ class VaultClient:
             allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
             allow_any_name: Whether to allow issuing certificates for any name.
         """
+        # Build extra_params with only non-None values
+        extra_params = {
+            "allowed_domains": allowed_domains,
+            "max_ttl": max_ttl,
+        }
+
+        if allow_subdomains is not None:
+            extra_params["allow_subdomains"] = "true" if allow_subdomains else "false"
+        if allow_wildcard_certificates is not None:
+            extra_params["allow_wildcard_certificates"] = (
+                "true" if allow_wildcard_certificates else "false"
+            )
+        if allow_any_name is not None:
+            extra_params["allow_any_name"] = "true" if allow_any_name else "false"
+
         self._client.secrets.pki.create_or_update_role(
             name=role,
             mount_point=mount,
-            extra_params={
-                "allowed_domains": allowed_domains,
-                "max_ttl": max_ttl,
-                "allow_subdomains": allow_subdomains,
-                "allow_wildcard_certificates": allow_wildcard_certificates,
-                "allow_any_name": allow_any_name,
-            },
+            extra_params=extra_params,
         )
+
+        log_params = ", ".join(f"{key}={value}" for key, value in extra_params.items())
         logger.info(
-            "Created or updated PKI role `%s` with `allowed_domains=%s` and `max_ttl=%s`",
+            "Created or updated PKI role `%s` with %s",
             role,
-            allowed_domains,
-            max_ttl,
-            allow_subdomains,
-            allow_wildcard_certificates,
-            allow_any_name,
+            log_params,
         )
 
     def create_or_update_acme_role(self, role: str, mount: str, max_ttl: str) -> None:

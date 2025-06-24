@@ -359,3 +359,49 @@ def test_list(patch_list: MagicMock):
     result = vault.list("some/path")
     assert result == ["key1", "key2"]
     patch_list.assert_called_once_with("some/path")
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.read_role")
+def test_given_role_config_matches_given_config_when_role_config_matches_given_config_then_returns_true(
+    patch_read_role: MagicMock,
+):
+    patch_read_role.return_value = {
+        "data": {
+            "allowed_domains": ["example.com"],
+            "allow_subdomains": True,
+            "allow_wildcard_certificates": True,
+            "allow_any_name": True,
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+    assert vault.role_config_matches_given_config(
+        role="test-role",
+        mount="some/path",
+        allowed_domains=["example.com"],
+        allow_subdomains=True,
+        allow_wildcard_certificates=True,
+        allow_any_name=True,
+    )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.read_role")
+def test_given_role_config_does_not_match_given_config_when_role_config_matches_given_config_then_returns_false(
+    patch_read_role: MagicMock,
+):
+    patch_read_role.return_value = {
+        "data": {
+            "allowed_domains": ["example.com"],
+            "allow_subdomains": True,
+            "allow_wildcard_certificates": True,
+            "allow_any_name": True,
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+    assert not vault.role_config_matches_given_config(
+        role="test-role",
+        mount="some/path",
+        allowed_domains=["example.com"],
+        allow_subdomains=True,
+        allow_wildcard_certificates=True,
+        allow_any_name=False,
+    )

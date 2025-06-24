@@ -367,7 +367,7 @@ class TestPKIManager:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
-        self.allowed_domains = ["common_name"]
+        self.allowed_domains = "common_name"
         self.allow_subdomains = False
         self.allow_wildcard_certificates = True
         self.allow_any_name = False
