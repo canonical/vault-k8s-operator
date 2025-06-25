@@ -826,7 +826,11 @@ class VaultOperatorCharm(CharmBase):
         try:
             snap_cache = snap.SnapCache()
             vault_snap = snap_cache[VAULT_SNAP_NAME]
-            if VAULT_SNAP_REVISION == vault_snap.revision:
+            if VAULT_SNAP_REVISION == vault_snap.revision and vault_snap.state not in [
+                snap.SnapState.Latest,
+                snap.SnapState.Present,
+            ]:
+                logger.debug("Vault snap revision %s is already installed", VAULT_SNAP_REVISION)
                 return
             with self.temp_maintenance_status("Installing Vault"):
                 vault_snap.ensure(
