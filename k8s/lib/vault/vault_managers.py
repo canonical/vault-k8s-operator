@@ -1008,6 +1008,7 @@ class PKIManager:
         Additionally, this method ensures that the intermediate CA certificate
         is renewed if necessary.
         """
+        update_ca_certificate = True
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
             return
@@ -1035,15 +1036,16 @@ class PKIManager:
                     certificate_from_provider,
                 )
                 logger.debug("Renewing CA certificate")
-                return
+                update_ca_certificate = False
             logger.debug("CA certificate already set in the PKI secrets engine")
-            return
+            update_ca_certificate = False
 
-        self._vault_client.import_ca_certificate_and_key(
-            certificate=str(certificate_from_provider.certificate),
-            private_key=str(private_key),
-            mount=self._mount_point,
-        )
+        if update_ca_certificate:
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(certificate_from_provider.certificate),
+                private_key=str(private_key),
+                mount=self._mount_point,
+            )
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )

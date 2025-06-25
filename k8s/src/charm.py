@@ -439,7 +439,7 @@ class VaultCharm(CharmBase):
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
-            allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
+            allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
@@ -557,7 +557,7 @@ class VaultCharm(CharmBase):
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
-            allowed_domains=self.juju_facade.get_string_config("pki_ca_allowed_domains"),
+            allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
