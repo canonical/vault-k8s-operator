@@ -190,7 +190,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
-            "Common name is not set in the charm config, cannot configure PKI secrets engine"
+            "pki_ca_common_name is not set in the charm config, cannot configure PKI secrets engine"
         )
 
     def test_given_tls_certificates_pki_relation_and_allowed_domains_is_invalid_when_collect_unit_status_then_status_is_blocked(  # noqa: E501

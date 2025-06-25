@@ -235,7 +235,7 @@ class VaultCharm(CharmBase):
             ):
                 event.add_status(
                     BlockedStatus(
-                        "Common name is not set in the charm config, cannot configure PKI secrets engine"
+                        "pki_ca_common_name is not set in the charm config, cannot configure PKI secrets engine"
                     )
                 )
                 return
@@ -461,15 +461,27 @@ class VaultCharm(CharmBase):
             sans_dns = [name.strip() for name in sans_dns.split(",")]
         return CertificateRequestAttributes(
             common_name=common_name,
-            sans_dns=frozenset(sans_dns),
-            country_name=self.juju_facade.get_string_config("pki_ca_country_name"),
+            sans_dns=frozenset(sans_dns) if sans_dns else frozenset(),
+            country_name=self.juju_facade.get_string_config("pki_ca_country_name")
+            if self.juju_facade.get_string_config("pki_ca_country_name")
+            else None,
             state_or_province_name=self.juju_facade.get_string_config(
                 "pki_ca_state_or_province_name"
-            ),
-            locality_name=self.juju_facade.get_string_config("pki_ca_locality_name"),
-            organization=self.juju_facade.get_string_config("pki_ca_organization"),
-            organizational_unit=self.juju_facade.get_string_config("pki_ca_organizational_unit"),
-            email_address=self.juju_facade.get_string_config("pki_ca_email_address"),
+            )
+            if self.juju_facade.get_string_config("pki_ca_state_or_province_name")
+            else None,
+            locality_name=self.juju_facade.get_string_config("pki_ca_locality_name")
+            if self.juju_facade.get_string_config("pki_ca_locality_name")
+            else None,
+            organization=self.juju_facade.get_string_config("pki_ca_organization")
+            if self.juju_facade.get_string_config("pki_ca_organization")
+            else None,
+            organizational_unit=self.juju_facade.get_string_config("pki_ca_organizational_unit")
+            if self.juju_facade.get_string_config("pki_ca_organizational_unit")
+            else None,
+            email_address=self.juju_facade.get_string_config("pki_ca_email_address")
+            if self.juju_facade.get_string_config("pki_ca_email_address")
+            else None,
             is_ca=True,
         )
 
