@@ -1,8 +1,0 @@
-"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
-"","2833","test_given_vault_pki_relation_and_unmatching_common_name_when_integrate_then_cert_not_provided","tests.integration","Tue Jun 24 12:46:12 GMT 2025","passed","Tue Jun 24 12:46:15 GMT 2025","","test_pki","",""
-"","25483","test_given_application_is_deployed_and_backup_created_when_restore_backup_action_then_backup_is_restored","tests.integration","Tue Jun 24 12:46:53 GMT 2025","passed","Tue Jun 24 12:47:18 GMT 2025","","test_backup","",""
-"","29841","test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured","tests.integration","Tue Jun 24 12:45:37 GMT 2025","passed","Tue Jun 24 12:46:07 GMT 2025","","test_acme","",""
-"","17184","test_given_vault_pki_relation_and_matching_common_name_configured_when_integrate_then_cert_is_provided","tests.integration","Tue Jun 24 12:46:15 GMT 2025","passed","Tue Jun 24 12:46:32 GMT 2025","","test_pki","",""
-"","17426","test_given_application_is_deployed_and_backup_created_when_list_backups_action_then_backups_are_listed","tests.integration","Tue Jun 24 12:46:35 GMT 2025","passed","Tue Jun 24 12:46:53 GMT 2025","","test_backup","",""
-"","31913","test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active","tests.integration","Tue Jun 24 12:45:40 GMT 2025","passed","Tue Jun 24 12:46:12 GMT 2025","","test_pki","",""
-"","54318","test_given_application_is_deployed_and_related_to_s3_integrator_when_create_backup_action_then_backup_is_created","tests.integration","Tue Jun 24 12:45:41 GMT 2025","passed","Tue Jun 24 12:46:35 GMT 2025","","test_backup","",""
