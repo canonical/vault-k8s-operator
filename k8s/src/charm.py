@@ -52,6 +52,7 @@ from vault.vault_helpers import (
     seal_type_has_changed,
 )
 from vault.vault_managers import (
+    TLS_CERTIFICATE_ACCESS_RELATION_NAME,
     TLS_CERTIFICATES_ACME_RELATION_NAME,
     TLS_CERTIFICATES_PKI_RELATION_NAME,
     ACMEManager,
@@ -165,14 +166,30 @@ class VaultCharm(CharmBase):
             charm=self,
             relation_name=LOG_FORWARDING_RELATION_NAME,
         )
+        access_sans_dns = self.juju_facade.get_string_config("access_sans_dns")
+        access_sans_dns_list = [socket.getfqdn()]
+        if access_sans_dns:
+            if not sans_dns_config_is_valid(access_sans_dns):
+                logger.warning("access_sans_dns is not valid, it must be a comma separated list")
+                access_sans_dns_list = []
+            else:
+                access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
         self.tls = TLSManager(
             charm=self,
             workload=self._container,  # type: ignore[arg-type]
             service_name=self._container_name,
             tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
             common_name=self._ingress_address if self._ingress_address else "",
-            sans_dns=frozenset([socket.getfqdn()]),
+            sans_dns=frozenset(access_sans_dns_list),
             sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
+            country_name=self.juju_facade.get_string_config("access_country_name"),
+            state_or_province_name=self.juju_facade.get_string_config(
+                "access_state_or_province_name"
+            ),
+            locality_name=self.juju_facade.get_string_config("access_locality_name"),
+            organization=self.juju_facade.get_string_config("access_organization"),
+            organizational_unit=self.juju_facade.get_string_config("access_organizational_unit"),
+            email_address=self.juju_facade.get_string_config("access_email_address"),
         )
         self.ingress_per_app = IngressPerAppRequirer(
             charm=self,
@@ -229,6 +246,14 @@ class VaultCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
+        if self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
+            if not sans_dns_config_is_valid(self.juju_facade.get_string_config("access_sans_dns")):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for access_sans_dns is not valid, it must be a comma separated list"
+                    )
+                )
+                return
         if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")

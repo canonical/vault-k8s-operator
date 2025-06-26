@@ -214,7 +214,52 @@ config:
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
         If not set, the Vault charm will automatically generate a common name.
-  
+
+    # Access interface options
+    access_sans_dns:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will automatically generate subject alternative names.
+    access_country_name:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+    access_state_or_province_name:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+    access_locality_name:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+    access_organization:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+    access_organizational_unit:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+    access_email_address:
+      type: string
+      description: >-
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface.
+        If not set, the Vault charm will request a certificate without this attribute.
+
+    # PKI engine options
     pki_ca_common_name:
       type: string
       description: >-

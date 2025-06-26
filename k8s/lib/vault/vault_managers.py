@@ -210,6 +210,12 @@ class TLSManager(Object):
         common_name: str,
         sans_dns: FrozenSet[str] = frozenset(),
         sans_ip: FrozenSet[str] = frozenset(),
+        country_name: str = "",
+        state_or_province_name: str = "",
+        locality_name: str = "",
+        organization: str = "",
+        organizational_unit: str = "",
+        email_address: str = "",
     ):
         """Create a new TLSManager object.
 
@@ -223,6 +229,12 @@ class TLSManager(Object):
             common_name: The common name of the certificate
             sans_dns: Subject alternative names of the certificate
             sans_ip: Subject alternative IP addresses of the certificate
+            country_name: Country name of the certificate
+            state_or_province_name: State or province name of the certificate
+            locality_name: Locality name of the certificate
+            organization: Organization name of the certificate
+            organizational_unit: Organizational unit name of the certificate
+            email_address: Email address of the certificate
         """
         super().__init__(charm, "tls")
         self.charm = charm
@@ -233,6 +245,12 @@ class TLSManager(Object):
         self.common_name = common_name
         self.sans_dns = sans_dns
         self.sans_ip = sans_ip
+        self.country_name = country_name
+        self.state_or_province_name = state_or_province_name
+        self.locality_name = locality_name
+        self.organization = organization
+        self.organizational_unit = organizational_unit
+        self.email_address = email_address
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         if self.mode == TLSMode.TLS_INTEGRATION:
@@ -273,9 +291,21 @@ class TLSManager(Object):
     def _get_certificate_requests(self) -> list[CertificateRequestAttributes]:
         if not self.common_name:
             return []
+        if not self.sans_dns:
+            return []
         return [
             CertificateRequestAttributes(
-                common_name=self.common_name, sans_dns=self.sans_dns, sans_ip=self.sans_ip
+                common_name=self.common_name,
+                sans_dns=self.sans_dns,
+                sans_ip=self.sans_ip,
+                country_name=self.country_name if self.country_name else None,
+                state_or_province_name=self.state_or_province_name
+                if self.state_or_province_name
+                else None,
+                locality_name=self.locality_name if self.locality_name else None,
+                organization=self.organization if self.organization else None,
+                organizational_unit=self.organizational_unit if self.organizational_unit else None,
+                email_address=self.email_address if self.email_address else None,
             )
         ]
 

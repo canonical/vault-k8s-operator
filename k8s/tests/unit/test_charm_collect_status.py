@@ -157,6 +157,45 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == WaitingStatus("Waiting for vault to be available")
 
+    def test_given_tls_certificates_access_relation_and_access_sans_dns_is_invalid_when_collect_unit_status_then_status_is_blocked(  # noqa: E501
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
+        access_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, access_relation],
+            config={
+                "access_sans_dns": "This should have been a comma separated list",
+            },
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for access_sans_dns is not valid, it must be a comma separated list"
+        )
+
     def test_given_tls_certificates_pki_relation_and_pki_ca_common_name_not_set_when_collect_unit_status_then_status_is_blocked(  # noqa: E501
         self,
     ):
