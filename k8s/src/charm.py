@@ -129,7 +129,6 @@ class VaultCharm(CharmBase):
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
-        # TODO
         acme_certificate_request = self._get_acme_certificate_request()
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
