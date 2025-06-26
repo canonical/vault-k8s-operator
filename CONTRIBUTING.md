@@ -11,3 +11,12 @@ make vendor-libs
 ```
 
 This command will copy the code from the k8s charm's `lib/vault/` directory to the machine charm's `lib/vault/` directory.
+
+## Documentation
+
+Serve the documentation locally with:
+
+```shell
+cd docs
+make run
+```
