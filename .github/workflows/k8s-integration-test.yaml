@@ -125,7 +125,7 @@ jobs:
           allure_results: allure-results
       - name: Publish test report
         uses: peaceiris/actions-gh-pages@v4
-        if: always()
+        if: ${{ github.repository == 'canonical/vault-k8s-operator' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
