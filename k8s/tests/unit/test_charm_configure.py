@@ -286,7 +286,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret],
                 relations=[peer_relation, acme_relation],
                 config={
-                    "common_name": "myhostname.com",
+                    "acme_ca_common_name": "myhostname.com",
                 },
             )
             provider_certificate, private_key = generate_example_provider_certificate(

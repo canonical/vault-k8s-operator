@@ -1563,6 +1563,10 @@ class ACMEManager:
         certificate_request_attributes: CertificateRequestAttributes,
         role_name: str,
         vault_address: str,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
     ):
         self._charm = charm
         self._juju_facade = JujuFacade(charm)
@@ -1573,6 +1577,17 @@ class ACMEManager:
         self._role_name = role_name
         self._vault_address = vault_address
         self._pki_utils = _PKIUtils(vault_client, mount_point)
+        if allowed_domains:
+            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
+            self._allowed_domains = allowed_domains
+        else:
+            self._allowed_domains_list = [certificate_request_attributes.common_name]
+            self._allowed_domains = certificate_request_attributes.common_name
+        self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
+        self._allow_wildcard_certificates = (
+            allow_wildcard_certificates if allow_wildcard_certificates is not None else True
+        )
+        self._allow_any_name = allow_any_name if allow_any_name is not None else False
 
     def _get_acme_intermediate_ca_from_relation(
         self,
@@ -1611,9 +1626,9 @@ class ACMEManager:
                     certificate_from_provider,
                 )
                 logger.debug("Renewing ACME intermediate CA certificate")
-                raise ManagerError("Renewing ACME intermediate CA certificate")
+                return
             logger.debug("ACME intermediate CA certificate already set")
-            raise ManagerError("ACME intermediate CA certificate already set")
+            return
         self._vault_client.import_ca_certificate_and_key(
             certificate=str(certificate_from_provider.certificate),
             private_key=str(private_key),
@@ -1627,13 +1642,24 @@ class ACMEManager:
             logger.debug("No intermediate CA certificate available for Vault ACME")
             return
         max_ttl = self._pki_utils.calculate_certificates_ttl(certificate_from_provider.certificate)
-        if max_ttl != self._vault_client.get_role_max_ttl(
+        if not self._vault_client.role_config_matches_given_config(
+            role=self._role_name,
+            mount=self._mount_point,
+            allowed_domains=self._allowed_domains_list,
+            allow_subdomains=self._allow_subdomains,
+            allow_wildcard_certificates=self._allow_wildcard_certificates,
+            allow_any_name=self._allow_any_name,
+        ) or max_ttl != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
             self._vault_client.create_or_update_acme_role(
                 role=self._role_name,
                 max_ttl=f"{max_ttl}s",
                 mount=self._mount_point,
+                allow_subdomains=self._allow_subdomains,
+                allow_wildcard_certificates=self._allow_wildcard_certificates,
+                allow_any_name=self._allow_any_name,
+                allowed_domains=self._allowed_domains,
             )
 
     def _enable_acme(self) -> None:
@@ -1659,7 +1685,8 @@ class ACMEManager:
 
         try:
             self._configure_intermediate_ca_certificate()
-        except ManagerError:
+        except ManagerError as e:
+            logger.error("Failed to configure ACME server: %s", e)
             return
 
         self._configure_acme_role()

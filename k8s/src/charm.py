@@ -130,12 +130,11 @@ class VaultCharm(CharmBase):
             refresh_events=[self.on.config_changed],
         )
         # TODO
-        common_name = self.juju_facade.get_string_config("common_name")
-        certificate_requests = [self._get_certificate_request(common_name)] if common_name else []
+        acme_certificate_request = self._get_acme_certificate_request()
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
-            certificate_requests=certificate_requests,
+            certificate_requests=[acme_certificate_request] if acme_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
         )
@@ -510,27 +509,82 @@ class VaultCharm(CharmBase):
             is_ca=True,
         )
 
-    def _configure_acme_server(self, vault: VaultClient) -> None:
-        common_name = self.juju_facade.get_string_config("common_name")
+    def _get_acme_certificate_request(self) -> CertificateRequestAttributes | None:
+        common_name = self.juju_facade.get_string_config("acme_ca_common_name")
         if not common_name:
-            logger.warning("Common name is not set in the charm config")
+            logger.warning("acme_ca_common_name is not set in the charm config")
+            return None
+        sans_dns = self.juju_facade.get_string_config("acme_ca_sans_dns")
+        if not sans_dns_config_is_valid(sans_dns):
+            logger.warning("acme_ca_sans_dns is not valid")
+            return None
+        if sans_dns:
+            sans_dns = [name.strip() for name in sans_dns.split(",")]
+        return CertificateRequestAttributes(
+            common_name=common_name,
+            sans_dns=frozenset(sans_dns) if sans_dns else frozenset(),
+            country_name=self.juju_facade.get_string_config("acme_ca_country_name")
+            if self.juju_facade.get_string_config("acme_ca_country_name")
+            else None,
+            state_or_province_name=self.juju_facade.get_string_config(
+                "acme_ca_state_or_province_name"
+            )
+            if self.juju_facade.get_string_config("acme_ca_state_or_province_name")
+            else None,
+            locality_name=self.juju_facade.get_string_config("acme_ca_locality_name")
+            if self.juju_facade.get_string_config("acme_ca_locality_name")
+            else None,
+            organization=self.juju_facade.get_string_config("acme_ca_organization")
+            if self.juju_facade.get_string_config("acme_ca_organization")
+            else None,
+            organizational_unit=self.juju_facade.get_string_config("acme_ca_organizational_unit")
+            if self.juju_facade.get_string_config("acme_ca_organizational_unit")
+            else None,
+            email_address=self.juju_facade.get_string_config("acme_ca_email_address")
+            if self.juju_facade.get_string_config("acme_ca_email_address")
+            else None,
+            is_ca=True,
+        )
+
+    def _configure_acme_server(self, vault: VaultClient) -> None:
+        if not common_name_config_is_valid(
+            self.juju_facade.get_string_config("acme_ca_common_name")
+        ):
+            logger.warning(
+                "acme_ca_common_name has invalid value, skipping ACME server configuration"
+            )
+            return
+        if not allowed_domains_config_is_valid(
+            self.juju_facade.get_string_config("acme_allowed_domains")
+        ):
+            logger.warning(
+                "acme_allowed_domains has invalid value, must be a comma separated list, skipping PKI secrets engine configuration"
+            )
+            return
+        if not sans_dns_config_is_valid(self.juju_facade.get_string_config("acme_ca_sans_dns")):
+            logger.warning(
+                "acme_ca_sans_dns has invalid value, must be a comma separated list, skipping PKI secrets engine configuration"
+            )
+            return
+        certificate_request = self._get_acme_certificate_request()
+        if not certificate_request:
             return
         manager = ACMEManager(
             charm=self,
             vault_client=vault,
             mount_point=ACME_MOUNT,
             tls_certificates_acme=self.tls_certificates_acme,
-            certificate_request_attributes=self._get_certificate_request(common_name),
+            certificate_request_attributes=certificate_request,
             role_name=ACME_ROLE_NAME,
             vault_address=f"https://{self._ingress_address}:{self.VAULT_PORT}",
+            allowed_domains=self.juju_facade.get_string_config("acme_allowed_domains"),
+            allow_subdomains=self.juju_facade.get_bool_config("acme_allow_subdomains"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config(
+                "acme_allow_wildcard_certificates"
+            ),
+            allow_any_name=self.juju_facade.get_bool_config("acme_allow_any_name"),
         )
         manager.configure()
-
-    def _get_certificate_request(self, common_name: str) -> CertificateRequestAttributes:
-        return CertificateRequestAttributes(
-            common_name=common_name,
-            is_ca=True,
-        )
 
     def _sync_vault_autounseal(self, vault_client: VaultClient) -> None:
         """Sync the vault autounseal relation."""

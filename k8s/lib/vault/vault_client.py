@@ -465,7 +465,6 @@ class VaultClient:
             allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
             allow_any_name: Whether to allow issuing certificates for any name.
         """
-        # Build extra_params with only non-None values
         extra_params = {
             "allowed_domains": allowed_domains,
             "max_ttl": max_ttl,
@@ -493,16 +492,38 @@ class VaultClient:
             log_params,
         )
 
-    def create_or_update_acme_role(self, role: str, mount: str, max_ttl: str) -> None:
-        """Create a role for the ACME backend or update it if it already exists."""
-        self._client.secrets.pki.create_or_update_role(
-            name=role,
-            mount_point=mount,
-            extra_params={
-                "allow_any_name": True,
-                "allow_subdomains": True,
-                "max_ttl": max_ttl,
-            },
+    def create_or_update_acme_role(
+        self,
+        role: str,
+        mount: str,
+        max_ttl: str,
+        allowed_domains: str,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
+    ) -> None:
+        """Create a role for the ACME backend or update it if it already exists.
+
+        Args:
+            role: The name of the role to create or update.
+            allowed_domains: The list of allowed domains for the role.
+            max_ttl: The maximum TTL for the role.
+                It is also used by Vault as a maximum validity for the certificates issued by this role.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
+            mount: The mount point of the PKI backend for which the role will be created.
+            allow_subdomains: Whether to allow issuing certificates for subdomains.
+            allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
+            allow_any_name: Whether to allow issuing certificates for any name.
+        """
+        self.create_or_update_pki_charm_role(
+            role=role,
+            mount=mount,
+            max_ttl=max_ttl,
+            allow_subdomains=allow_subdomains,
+            allow_wildcard_certificates=allow_wildcard_certificates,
+            allow_any_name=allow_any_name,
+            allowed_domains=allowed_domains,
         )
 
     def is_pki_role_created(self, role: str, mount: str) -> bool:
