@@ -90,6 +90,7 @@ async def test_given_tls_certificates_pki_relation_when_integrate_then_status_is
         "pki_ca_common_name": common_name,
     }
     await vault_app.set_config(common_name_config)
+    await vault_app.set_config({"pki_allow_subdomains": "true"})
     await ops_test.model.integrate(
         relation1=f"{APPLICATION_NAME}:tls-certificates-pki",
         relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
