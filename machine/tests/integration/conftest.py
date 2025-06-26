@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 
 import pytest
+from pytest_operator.plugin import OpsTest
+
+from tests.integration.config import APP_NAME
 
 pytest_plugins = (
     "tests.integration.charm_states.grafana",
     "tests.integration.charm_states.ha_proxy",
-    "tests.integration.charm_states.s3_integrator",
     "tests.integration.charm_states.self_signed_certificates",
     "tests.integration.charm_states.vault",
     "tests.integration.charm_states.vault_kv_requirer",
@@ -65,3 +67,20 @@ def vault_charm_path(request: pytest.FixtureRequest) -> Path:
 @pytest.fixture(scope="session")
 def kv_requirer_charm_path(request: pytest.FixtureRequest) -> Path:
     return Path(str(request.config.getoption("--kv_requirer_charm_path"))).resolve()
+
+
+@pytest.fixture(scope="session")
+def skip_deploy(request: pytest.FixtureRequest) -> bool:
+    return bool(request.config.getoption("--no-deploy"))
+
+
+@pytest.fixture(scope="module")
+async def host_ip(ops_test: OpsTest) -> str:
+    """Get the gateway IP of the unit, which should be the host IP where minio is running."""
+    assert ops_test.model
+    return_code, stdout, stderr = await ops_test.juju(
+        "exec", "--unit", f"{APP_NAME}/leader", "ip route | grep 'default via' | awk '{print $3}'"
+    )
+    if return_code != 0:
+        raise RuntimeError(f"Failed to get host IP: {stderr}")
+    return stdout.strip()

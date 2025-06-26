@@ -44,6 +44,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -66,6 +67,23 @@ jobs:
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: ${{ inputs.path }}built/
+      - name: Install minio binaries and configure storage buckets for backup tests
+        if: ${{ matrix.suite == 'test_backup.py' }}
+        run: |
+          minio_binaries_path="/var/snap/lxd/common/minio"
+          sudo mkdir -p ${minio_binaries_path}
+          echo "Downloading and installing MinIO binaries to ${minio_binaries_path}"
+          sudo wget --quiet --no-clobber https://dl.min.io/server/minio/release/linux-amd64/minio -O ${minio_binaries_path}/minio && sudo chmod +x ${minio_binaries_path}/minio
+          sudo wget --quiet --no-clobber https://dl.min.io/client/mc/release/linux-amd64/mc -O ${minio_binaries_path}/mc && sudo chmod +x ${minio_binaries_path}/mc
+          sudo snap set lxd minio.path=${minio_binaries_path}
+          sudo snap restart lxd
+          lxd_bridge_addr=$(sudo lxc network list --format yaml | yq '.[] | select(.name == "lxdbr0") | .config["ipv4.address"]' | cut -d'/' -f1)
+          echo "Restricting bucket access to the lxd bridge. lxd_bridge_addr=${lxd_bridge_addr}"
+          sudo lxc config set core.storage_buckets_address ${lxd_bridge_addr}:8555
+          echo "Waiting for Juju to react to the buckets restriction..."
+          sleep 30 # For some reason, the Juju controller needs some time to make itself available after restricting the storage buckets address
+          sudo lxc storage bucket create default vault-integration-test
+          sudo lxc storage bucket key create default vault-integration-test vault-integration-test --role admin --access-key vaultintegrationtest --secret-key vaultintegrationtest
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
         run: |
@@ -79,7 +97,6 @@ jobs:
         with:
           name: charmcraft-logs-${{ matrix.suite }}
           path: /home/runner/.local/state/charmcraft/log/*.log
-
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v4

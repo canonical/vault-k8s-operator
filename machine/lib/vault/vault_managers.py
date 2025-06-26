@@ -32,6 +32,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
@@ -57,7 +58,6 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
-
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -1301,10 +1301,14 @@ class BackupManager:
         self._s3_requirer = s3_requirer
         self._relation_name = relation_name
 
-    def create_backup(self, vault_client: VaultClient) -> str:
+    def create_backup(self, vault_client: VaultClient, skip_verify: bool = False) -> str:
         """Create a backup of the Vault data.
 
         Stores the backup in the S3 bucket provided by the S3 relation.
+
+        Args:
+            vault_client: The Vault client to use for creating the snapshot
+            skip_verify: Whether to skip verification of the S3 connection.
 
         Returns:
             The S3 key of the backup.
@@ -1319,6 +1323,7 @@ class BackupManager:
                 secret_key=s3_parameters["secret-key"],
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
+                skip_verify=skip_verify,
             )
         except S3Error as e:
             logger.error("Failed to create S3 session. %s", e)
@@ -1339,11 +1344,14 @@ class BackupManager:
         logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
         return backup_key
 
-    def list_backups(self) -> list[str]:
+    def list_backups(self, skip_verify: bool = False) -> list[str]:
         """List all the backups available in the S3 bucket.
 
         Backups are identified by the key prefix from
         ``Naming.backup_s3_key_prefix``.
+
+        Args:
+            skip_verify: Whether to skip verification of the S3 connection.
 
         Returns:
             A list of backup keys with the prefix.
@@ -1358,6 +1366,7 @@ class BackupManager:
                 secret_key=s3_parameters["secret-key"],
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
+                skip_verify=skip_verify,
             )
         except S3Error:
             raise ManagerError("Failed to create S3 session")
@@ -1370,12 +1379,15 @@ class BackupManager:
             raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
         return backup_ids
 
-    def restore_backup(self, vault_client: VaultClient, backup_key: str) -> None:
+    def restore_backup(
+        self, vault_client: VaultClient, backup_key: str, skip_verify: bool = False
+    ) -> None:
         """Restore the Vault data from the backup using the ``vault_client`` provided.
 
         Args:
             vault_client: The Vault client to use for restoring the snapshot
             backup_key: The S3 key of the backup to restore
+            skip_verify: Whether to skip verification of the S3 connection.
         """
         self._validate_s3_prerequisites()
 
@@ -1387,6 +1399,7 @@ class BackupManager:
                 secret_key=s3_parameters["secret-key"],
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
+                skip_verify=skip_verify,
             )
         except S3Error:
             raise ManagerError("Failed to create S3 session")
@@ -1399,7 +1412,9 @@ class BackupManager:
         except S3Error as e:
             raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
         if not snapshot:
-            raise ManagerError("Snapshot not found in S3 bucket")
+            raise ManagerError(
+                f"Snapshot `{s3_parameters['bucket']}/{backup_key}` not found in S3 bucket"
+            )
 
         try:
             vault_client.restore_snapshot(snapshot=snapshot)
