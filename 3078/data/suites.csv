@@ -1,5 +1,0 @@
-"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
-"","31857","test_given_tls_certificates_pki_relation_when_integrate_then_status_is_active","tests.integration","Tue Jun 24 15:38:08 GMT 2025","passed","Tue Jun 24 15:38:40 GMT 2025","","test_pki","",""
-"","17002","test_given_vault_pki_relation_and_matching_common_name_configured_when_integrate_then_cert_is_provided","tests.integration","Tue Jun 24 15:38:43 GMT 2025","passed","Tue Jun 24 15:39:00 GMT 2025","","test_pki","",""
-"","2816","test_given_vault_pki_relation_and_unmatching_common_name_when_integrate_then_cert_not_provided","tests.integration","Tue Jun 24 15:38:40 GMT 2025","passed","Tue Jun 24 15:38:43 GMT 2025","","test_pki","",""
-"","29934","test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured","tests.integration","Tue Jun 24 15:37:51 GMT 2025","passed","Tue Jun 24 15:38:21 GMT 2025","","test_acme","",""
