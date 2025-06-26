@@ -1,0 +1,59 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.80:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.89:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.88:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please unseal Vault
+  vault-k8s/1 [idle] blocked: Please unseal Vault
+  vault-k8s/2 [idle] blocked: Please unseal Vault
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model           Controller                Cloud/Region        Version  SLA          Timestamp
+test-core-jjg8  github-pr-de5dc-microk8s  microk8s/localhost  3.6.7    unsupported  21:13:42Z
+
+App                       Version  Status  Scale  Charm                     Channel   Rev  Address        Exposed  Message
+self-signed-certificates           active      1  self-signed-certificates  1/stable  317  10.152.183.24  no       
+vault-k8s                          active      3  vault-k8s                             0  10.152.183.23  no       
+
+Unit                         Workload  Agent  Address     Ports  Message
+self-signed-certificates/0*  active    idle   10.1.32.95         
+vault-k8s/0*                 active    idle   10.1.32.80         
+vault-k8s/1                  active    idle   10.1.32.89         
+vault-k8s/2                  active    idle   10.1.32.88         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-1: 21:06:50 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-jjg8.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fb377d96a80>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 21:07:38 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-a5b6dc60-16fe-4e80-88ee-9017f53e213f: 21:07:38 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 21:07:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.32.80:53714->10.152.183.242:17070: write: connection reset by peer: write tcp 10.1.32.80:53714->10.152.183.242:17070: write: connection reset by peer
+model-a5b6dc60-16fe-4e80-88ee-9017f53e213f: 21:08:56 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 21:08:56 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 21:10:30 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 21:10:32 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-a5b6dc60-16fe-4e80-88ee-9017f53e213f: 21:10:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 21:10:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 21:12:05 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.32.80:50050->10.152.183.242:17070: write: connection reset by peer: write tcp 10.1.32.80:50050->10.152.183.242:17070: write: connection reset by peer
+unit-vault-k8s-1: 21:12:09 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 21:13:18 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 21:13:18 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 21:13:36 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-core-jjg8...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
