@@ -67,6 +67,27 @@ tox run -e integration -- --charm_path ./vault_amd64.charm --kv_requirer_charm_p
 
 At this time, each integration test suite must be run separately.
 
+#### Backup tests
+
+To run the backup tests, you will need to have an S3 compatible storage service running, such as MinIO. You can find instructions to configure LXD to manage the MinIO service at <https://documentation.ubuntu.com/lxd/latest/howto/storage_buckets/#howto-storage-buckets>.
+
+The following is a summary of the steps, and may not be up to date with the latest LXD documentation or your system. Use with care.
+
+```shell
+sudo wget --no-clobber https://dl.min.io/server/minio/release/linux-amd64/minio -O /usr/bin/minio && sudo chmod +x /usr/bin/minio
+sudo wget --no-clobber https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/bin/mc && sudo chmod +x /usr/bin/mc
+snap set lxd minio.path=/usr/bin
+snap restart lxd
+lxc config set core.storage_buckets_address :8555
+```
+
+Finally, create the bucket and the access keys for the integration tests:
+
+```shell
+lxc storage bucket create default vault-integration-test
+lxc storage bucket key create default vault-integration-test vault-integration-test --role admin --access-key vaultintegrationtest --secret-key vaultintegrationtest
+```
+
 ## Build the charm
 
 Build the charm in this git repository using:
