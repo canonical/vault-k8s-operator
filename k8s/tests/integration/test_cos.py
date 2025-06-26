@@ -44,13 +44,13 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         PROMETHEUS_APPLICATION_NAME,
         application_name=PROMETHEUS_APPLICATION_NAME,
         trust=True,
-        channel="stable",
+        channel="1/stable",
     )
     await ops_test.model.deploy(
         LOKI_APPLICATION_NAME,
         application_name=LOKI_APPLICATION_NAME,
         trust=True,
-        channel="stable",
+        channel="1/stable",
     )
     await asyncio.gather(
         ops_test.model.wait_for_idle(
