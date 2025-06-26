@@ -826,7 +826,7 @@ class VaultOperatorCharm(CharmBase):
         try:
             snap_cache = snap.SnapCache()
             vault_snap = snap_cache[VAULT_SNAP_NAME]
-            if VAULT_SNAP_REVISION == vault_snap.revision and vault_snap.state not in [
+            if VAULT_SNAP_REVISION == vault_snap.revision and vault_snap.state in [
                 snap.SnapState.Latest,
                 snap.SnapState.Present,
             ]:
