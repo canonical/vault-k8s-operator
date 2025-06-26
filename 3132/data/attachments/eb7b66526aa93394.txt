@@ -1,0 +1,45 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-1
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model         Controller                Cloud/Region        Version  SLA          Timestamp
+test-kv-5tjp  github-pr-49568-microk8s  microk8s/localhost  3.6.7    unsupported  17:01:22Z
+
+App                  Version  Status  Scale  Charm              Channel  Rev  Address         Exposed  Message
+vault-k8s                     active      3  vault-k8s                     0  10.152.183.214  no       
+vault-kv-requirer-a           active      1  vault-kv-requirer             0  10.152.183.44   no       
+vault-kv-requirer-b           active      1  vault-kv-requirer             1  10.152.183.115  no       
+
+Unit                    Workload  Agent  Address      Ports  Message
+vault-k8s/0*            active    idle   10.1.36.208         
+vault-k8s/1             active    idle   10.1.36.217         
+vault-k8s/2             active    idle   10.1.36.216         
+vault-kv-requirer-a/0*  active    idle   10.1.36.219         
+vault-kv-requirer-b/0*  active    idle   10.1.36.221         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+model-83b33e0f-0bec-4336-8edf-80d2ca232d14: 17:00:11 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 17:00:12 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 17:00:13 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.36.217:55346->10.152.183.187:17070: write: broken pipe: write tcp 10.1.36.217:55346->10.152.183.187:17070: write: broken pipe
+unit-vault-k8s-0: 17:00:24 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 17:00:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-83b33e0f-0bec-4336-8edf-80d2ca232d14: 17:00:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 17:00:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.36.217:51922->10.152.183.187:17070: write: broken pipe: write tcp 10.1.36.217:51922->10.152.183.187:17070: write: broken pipe
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-kv-5tjp...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-kv-requirer-a
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-kv-requirer-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
