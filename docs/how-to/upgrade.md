@@ -7,5 +7,5 @@
 
 ## Upgrade Procedure
 
-- Create a backup of your Vault data following [this guide](https://discourse.charmhub.io/t/how-to-create-a-backup-with-vault/12863) (in case anything goes wrong during the upgrade).
+- Create a backup of your Vault data following [this guide](create_backup.md) (in case anything goes wrong during the upgrade).
 - run `juju refresh vault --channel=$VAULT_HIGHER_VERSION` where VAULT_HIGHER_VERSION is any version higher than the one you have currently deployed.
