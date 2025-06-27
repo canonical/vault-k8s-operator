@@ -119,13 +119,15 @@ jobs:
       - name: Build test report
         uses: simple-elf/allure-report-action@v1.12
         if: always()
+        continue-on-error: true
         with:
           gh_pages: gh-pages
           allure_history: allure-history
           allure_results: allure-results
       - name: Publish test report
         uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.repository == 'canonical/vault-k8s-operator' }}
+        if: always()
+        continue-on-error: true
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
