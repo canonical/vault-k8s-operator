@@ -65,14 +65,14 @@ from machine import Machine
 
 logger = logging.getLogger(__name__)
 
+ACME_MOUNT = "charm-acme"
+ACME_ROLE_NAME = "charm-acme"
 AUTOUNSEAL_MOUNT_PATH = "charm-autounseal"
 AUTOUNSEAL_PROVIDES_RELATION_NAME = "vault-autounseal-provides"
 AUTOUNSEAL_REQUIRES_RELATION_NAME = "vault-autounseal-requires"
 BACKUP_KEY_PREFIX = "vault-backup"
-CONFIG_TEMPLATE_DIR_PATH = "src/templates/"
-TEMPLATE_PATH = "src/templates/"
-TEMPLATE_SYSTEMD_DROP_IN_PATH = "src/templates/systemd_dropin.conf.j2"
 CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
+INGRESS_RELATION_NAME = "ingress"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
 MACHINE_TLS_FILE_DIRECTORY_PATH = "/var/snap/vault/common/certs"
@@ -83,6 +83,8 @@ REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 SYSTEMD_DROP_IN_DIR = "/etc/systemd/system/snap.vault.vaultd.service.d"
 SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
+TEMPLATE_PATH = "src/templates/"
+TEMPLATE_SYSTEMD_DROP_IN_PATH = "systemd_dropin.conf.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CHARM_POLICY_NAME = "charm-access"
@@ -93,14 +95,11 @@ VAULT_CONFIG_PATH = "/var/snap/vault/common"
 VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
-ACME_MOUNT = "charm-acme"
-ACME_ROLE_NAME = "charm-acme"
 VAULT_PORT = 8200
 VAULT_SNAP_CHANNEL = "1.17/stable"
 VAULT_SNAP_NAME = "vault"
 VAULT_SNAP_REVISION = "2354"
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
-INGRESS_RELATION_NAME = "ingress"
 
 
 class VaultOperatorCharm(CharmBase):
@@ -930,7 +929,7 @@ class VaultOperatorCharm(CharmBase):
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
 
         content = render_vault_config_file(
-            config_template_path=CONFIG_TEMPLATE_DIR_PATH,
+            config_template_path=TEMPLATE_PATH,
             config_template_name=CONFIG_TEMPLATE_NAME,
             default_lease_ttl=self._get_default_lease_ttl(),
             max_lease_ttl=self._get_max_lease_ttl(),
