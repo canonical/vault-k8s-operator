@@ -1,0 +1,46 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [executing] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model          Controller                Cloud/Region        Version  SLA          Timestamp
+test-cos-e9u8  github-pr-04730-microk8s  microk8s/localhost  3.6.7    unsupported  12:52:35Z
+
+App             Version  Status  Scale  Charm           Channel   Rev  Address         Exposed  Message
+loki-k8s        2.9.6    active      1  loki-k8s        1/stable  194  10.152.183.237  no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  1/stable  247  10.152.183.140  no       
+vault-k8s                active      3  vault-k8s                   0  10.152.183.90   no       
+
+Unit               Workload  Agent  Address     Ports  Message
+loki-k8s/0*        active    idle   10.1.32.94         
+prometheus-k8s/0*  active    idle   10.1.32.95         
+vault-k8s/0*       active    idle   10.1.32.81         
+vault-k8s/1        active    idle   10.1.32.91         
+vault-k8s/2        active    idle   10.1.32.88         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+model-a21a8d63-8b72-4cef-8d98-4d336da33e6a: 12:49:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 12:49:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 12:49:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 12:49:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.32.91:59870->10.152.183.75:17070: write: connection reset by peer: write tcp 10.1.32.91:59870->10.152.183.75:17070: write: connection reset by peer
+unit-prometheus-k8s-0: 12:51:12 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-loki-k8s-0: 12:51:44 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-a21a8d63-8b72-4cef-8d98-4d336da33e6a: 12:51:45 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 12:51:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 12:51:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 12:51:58 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-cos-e9u8...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications prometheus-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
