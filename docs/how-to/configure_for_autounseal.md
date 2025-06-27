@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-1. A Vault Charm instance you wish to use as the *unsealer*. Deployed, initialized, unsealed, and authorized. See [Tutorial: Getting started with Vault-K8s](https://discourse.charmhub.io/t/tutorial-getting-started-with-vault-k8s/12771) or [Getting Started: Vault (Machine)](https://discourse.charmhub.io/t/getting-started-vault-machine/13042) if you're not there yet.
+1. A Vault Charm instance you wish to use as the *unsealer*. Deployed, initialized, unsealed, and authorized. See [Tutorial: Getting started with Vault-K8s](../tutorial/getting_started_k8s.md) or [Getting Started: Vault (Machine)](../tutorial/getting_started_machine.md) if you're not there yet.
 2. A second Vault Charm instance you wish to use as the *autounsealed* Vault. This instance may already be initialized, unsealed, and authorized, or you may initialize it as part of this process.
 
 ## 1. Integrate the Vault instances
