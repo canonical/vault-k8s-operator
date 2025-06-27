@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 import yaml
 from cryptography import x509
+from juju.action import Action
 from juju.application import Application
 from juju.errors import JujuError
 from juju.model import Model
@@ -52,20 +53,13 @@ async def authorize_charm(
     secret = await ops_test.model.add_secret(f"approle-token-{app_name}", [f"token={root_token}"])
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
-    leader_unit = await get_leader_unit(ops_test.model, app_name)
-    authorize_action = await leader_unit.run_action(
+
+    return await run_action_on_leader(
+        ops_test,
+        app_name,
         action_name="authorize-charm",
-        **{
-            "secret-id": secret_id,
-        },
+        secret_id=secret_id,
     )
-    result = await ops_test.model.get_action_output(
-        action_uuid=authorize_action.entity_id, wait=120
-    )
-    if not result or "result" not in result:
-        raise ActionFailedError(f"Failed to authorize charm. Result: {result}")
-    logger.info("Authorization result: %s", result)
-    return result
 
 
 async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str, str]:
@@ -78,13 +72,7 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
     app = ops_test.model.applications[app_name]
     assert isinstance(app, Application)
     leader = await get_leader(app)
-    assert leader
-    leader_ip = leader.public_address
-    vault_url = f"https://{leader_ip}:8200"
-
-    vault = Vault(
-        url=vault_url, ca_file_location=await get_ca_cert_file_location(ops_test, app_name)
-    )
+    vault = await get_vault_client(ops_test, leader)
     if not vault.is_initialized():
         root_token, key = vault.initialize()
         await ops_test.model.add_secret(
@@ -92,9 +80,7 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
         )
         return root_token, key
 
-    root_token, key = await get_juju_secret(
-        ops_test.model, label=f"root-token-key-{app_name}", fields=["root-token", "key"]
-    )
+    root_token, key = await get_vault_token_and_unseal_key(ops_test.model, app_name)
     return root_token, key
 
 
@@ -147,6 +133,68 @@ async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) ->
     return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
 
 
+async def authorize_charm_and_wait(
+    ops_test: OpsTest, root_token: str, app_name: str = APP_NAME
+) -> Any | Dict:
+    """Authorize the charm and wait for it to be authorized.
+
+    Args:
+        ops_test: Ops test Framework
+        root_token: The root token for the vault
+        app_name: Application name of the Vault, defaults to "vault-k8s"
+
+    Returns:
+        Any | Dict: The result of the authorization
+    """
+    assert ops_test.model
+    result = await authorize_charm(ops_test, root_token, app_name)
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[app_name],
+            status="active",
+            timeout=60,  # Since we're not raising on error, don't wait too long. This should be quick.
+            wait_for_at_least_units=1,
+            raise_on_error=False,  # Sometimes the charm reports an InternalServerError immediately after authorization, but it resolves itself.
+        )
+    logger.info("Charm authorized")
+    return result
+
+
+async def get_vault_token_and_unseal_key(
+    model: Model, app_name: str = APP_NAME
+) -> Tuple[str, str]:
+    root_token, unseal_key = await get_juju_secret(
+        model, label=f"root-token-key-{app_name}", fields=["root-token", "key"]
+    )
+    return root_token, unseal_key
+
+
+async def initialize_unseal_authorize_vault(ops_test: OpsTest, app_name: str) -> tuple[str, str]:
+    assert ops_test.model
+    root_token, unseal_key = await initialize_vault_leader(ops_test, app_name)
+    leader = await get_leader_unit(ops_test.model, app_name)
+    vault = await get_vault_client(ops_test, leader, root_token)
+    assert vault.is_sealed()
+
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(ops_test, unseal_key)
+        await authorize_charm_and_wait(ops_test, root_token)
+    return root_token, unseal_key
+
+
+async def get_vault_client(
+    ops_test: OpsTest, unit: Unit, token: str | None = None, ca_file_name: str | None = None
+) -> Vault:
+    """Get a Vault client for the given application."""
+    return Vault(
+        url=f"https://{unit.public_address}:8200", token=token, ca_file_location=ca_file_name
+    )
+
+
+def get_first(d: dict) -> Any:
+    return next(iter(d.values()))
+
+
 async def get_leader(app: Application) -> Unit:
     for unit in app.units:
         if await unit.is_leader_from_status():
@@ -155,7 +203,7 @@ async def get_leader(app: Application) -> Unit:
 
 
 async def unseal_all_vault_units(
-    ops_test: OpsTest, ca_file_name: str | None, unseal_key: str
+    ops_test: OpsTest, unseal_key: str, ca_file_name: str | None = None
 ) -> None:
     """Unseal all the vault units."""
     assert ops_test.model
@@ -296,9 +344,8 @@ async def deploy_vault_and_wait(
         )
 
 
-async def get_leader_unit_address(ops_test: OpsTest) -> str:
-    assert ops_test.model
-    app = ops_test.model.applications[APP_NAME]
+async def get_leader_unit_address(model: Model, app_name: str = APP_NAME) -> str:
+    app = model.applications[app_name]
     leader = await get_leader(app)
     assert leader and leader.public_address
     return leader.public_address
@@ -313,6 +360,7 @@ async def deploy_if_not_exists(
     channel: str | None = None,
     revision: int | None = None,
     series: str | None = None,
+    trust: bool = False,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -324,6 +372,7 @@ async def deploy_if_not_exists(
                 channel=channel,
                 revision=revision,
                 series=series,
+                trust=trust,
             )
         except JujuError as e:
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)
@@ -349,3 +398,45 @@ def get_vault_pki_intermediate_ca_common_name(
     return str(
         loaded_certificate.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
     )
+
+
+async def run_action_on_leader(
+    ops_test: OpsTest, app_name: str, action_name: str, raise_on_error: bool = True, **kwargs: Any
+) -> dict:
+    """Run an action on the leader unit of the given application.
+
+    Wait for the action to complete and return the output. Also, checks the action status and raises an error if it failed unless `raise_on_error` is False.
+
+    Args:
+        ops_test: The OpsTest instance.
+        app_name: The name of the application to run the action on.
+        action_name: The name of the action to run.
+        raise_on_error: Whether to raise an error if the action fails. Defaults to True.
+        **kwargs: Additional keyword arguments to pass to the action.
+            Underscores in the keys will be replaced with dashes to match
+            action parameter names.
+
+    Returns:
+        dict: The output of the action.
+
+    """
+    assert ops_test.model
+    # Replace underscores in kwargs with dashes to match action parameter names
+    kwargs = {k.replace("_", "-"): v for k, v in kwargs.items()}
+    leader_unit = await get_leader_unit(ops_test.model, app_name)
+    action = await leader_unit.run_action(action_name=action_name, **kwargs)
+    action: Action = await ops_test.model.wait_for_action(action.entity_id)
+    logger.info(
+        "Action `%s` on unit `%s` completed with status `%s`. Message: `%s`, Results: %s",
+        action_name,
+        leader_unit.name,
+        action.status,
+        action.data.get("message", ""),
+        action.results,
+    )
+    if raise_on_error and action.status != "completed":
+        raise ActionFailedError(
+            f"Action {action_name} failed with status `{action.status}`. Message: {action.data.get('message', '')}"
+        )
+
+    return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=120)

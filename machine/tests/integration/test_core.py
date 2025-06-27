@@ -55,7 +55,7 @@ async def test_given_certificates_provider_is_related_when_vault_status_checked_
             ),
             ops_test.model.wait_for_idle(apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME]),
         )
-    vault_ip = await get_leader_unit_address(ops_test)
+    vault_ip = await get_leader_unit_address(ops_test.model)
     vault_url = f"https://{vault_ip}:8200"
     ca_file_location = await get_ca_cert_file_location(ops_test)
     assert ca_file_location
@@ -73,7 +73,7 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
     assert ops_test.model
     await self_signed_certificates_idle
     root_token, unseal_key = await vault_initialized
-    leader_unit_address = await get_leader_unit_address(ops_test)
+    leader_unit_address = await get_leader_unit_address(ops_test.model)
     ca_file_location = await get_ca_cert_file_location(ops_test)
     vault = Vault(
         url=f"https://{leader_unit_address}:8200",
@@ -85,7 +85,7 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
     await vault.wait_for_node_to_be_unsealed()
     assert vault.is_active()
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, ca_file_location, unseal_key)
+        await unseal_all_vault_units(ops_test, unseal_key, ca_file_location)
         try:
             await authorize_charm(ops_test, root_token)
         except ActionFailedError as e:

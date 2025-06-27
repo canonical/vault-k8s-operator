@@ -90,7 +90,7 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
             ),
         )
 
-    leader_unit_address = await get_leader_unit_address(ops_test)
+    leader_unit_address = await get_leader_unit_address(ops_test.model)
     current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=root_token,
         unit_address=leader_unit_address,
@@ -142,7 +142,7 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
             timeout=SHORT_TIMEOUT,
         )
 
-    leader_unit_address = await get_leader_unit_address(ops_test)
+    leader_unit_address = await get_leader_unit_address(ops_test.model)
     assert leader_unit_address
     current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=root_token,
