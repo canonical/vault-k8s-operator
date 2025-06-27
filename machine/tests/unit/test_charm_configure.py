@@ -294,13 +294,17 @@ class TestCharmConfigure(VaultCharmFixtures):
 
         self.ctx.run(self.ctx.on.config_changed(), state_in)
 
-        _, kwargs = self.mock_machine.push.call_args
-        assert kwargs["path"] == "/var/snap/vault/common/vault.hcl"
+        calls = [
+            call
+            for call in self.mock_machine.push.call_args_list
+            if call.kwargs["path"] == "/var/snap/vault/common/vault.hcl"
+        ]
+        assert len(calls) == 1
+        _, kwargs = calls[0]
         actual_config = kwargs["source"]
         actual_config_hcl = hcl.loads(actual_config)
         assert actual_config_hcl["seal"]["transit"]["address"] == "1.2.3.4"
         assert actual_config_hcl["seal"]["transit"]["mount_path"] == "charm-autounseal"
-        assert actual_config_hcl["seal"]["transit"]["token"] == "some token"
         assert actual_config_hcl["seal"]["transit"]["key_name"] == "key name"
         self.mock_vault.authenticate.assert_called_with(AppRole("role id", "secret id"))
         self.mock_tls.push_autounseal_ca_cert.assert_called_with("ca cert")

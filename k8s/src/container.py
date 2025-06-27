@@ -7,6 +7,7 @@
 from typing import TextIO
 
 from ops import Container as OpsContainer
+from ops.pebble import PathError
 from vault.vault_managers import WorkloadBase
 
 
@@ -38,7 +39,13 @@ class Container(WorkloadBase):
 
     def remove_path(self, path: str, recursive: bool = False) -> None:
         """Remove file or directory from the workload."""
-        self._container.remove_path(path=path, recursive=recursive)
+        try:
+            self._container.remove_path(path=path, recursive=recursive)
+        except PathError as e:
+            # Rebrand PathError to ValueError for consistency with the machine
+            # implementation. The description of PathError satisfies the
+            # definition of ValueError.
+            raise ValueError(e) from e
 
     def send_signal(self, signal: int, process: str) -> None:
         """Send a signal to a process in the workload."""
