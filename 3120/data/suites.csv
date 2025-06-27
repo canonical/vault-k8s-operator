@@ -1,2 +1,0 @@
-"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
-"","29842","test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured","tests.integration","Thu Jun 26 13:02:18 GMT 2025","passed","Thu Jun 26 13:02:47 GMT 2025","","test_acme","",""

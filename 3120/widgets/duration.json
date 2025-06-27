@@ -1,1 +1,0 @@
-[{"uid":"7cce93fd3930da42","name":"test_given_tls_certificates_acme_relation_when_integrate_then_status_is_active_and_acme_configured","time":{"start":1750942938123,"stop":1750942967965,"duration":29842},"status":"passed","severity":"normal"}]
