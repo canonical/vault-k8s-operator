@@ -58,13 +58,7 @@ jobs:
           uv tool install tox --with tox-uv --force
       - name: Enable Metallb
         run: |
-          IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
-          IFS='.' read -r i1 i2 i3 i4 <<< "$IPADDR"
-          START_IP="$i1.$i2.$i3.$((i4+1))"
-          END_IP="$i1.$i2.$i3.$((i4+9))"
-          RANGE="$START_IP-$END_IP"
-          echo "RANGE=$RANGE" >> $GITHUB_OUTPUT
-          /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:$RANGE"
+          /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.8"
       - name: Fetch Charm Under Test
         uses: actions/download-artifact@v4
         with:
@@ -131,7 +125,7 @@ jobs:
           allure_results: allure-results
       - name: Publish test report
         uses: peaceiris/actions-gh-pages@v4
-        if: always()
+        if: ${{ github.repository == 'canonical/vault-k8s-operator' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
