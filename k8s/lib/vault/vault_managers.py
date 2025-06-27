@@ -155,7 +155,11 @@ class WorkloadBase(ABC):
 
     @abstractmethod
     def remove_path(self, path: str, recursive: bool = False) -> None:
-        """Remove file or directory from the workload."""
+        """Remove file or directory from the workload.
+
+        Raises:
+            ValueError: If the path is not absolute, or the path does not exist.
+        """
         pass
 
     @abstractmethod

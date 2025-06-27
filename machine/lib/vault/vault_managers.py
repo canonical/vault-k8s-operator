@@ -57,6 +57,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
+
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -507,7 +508,7 @@ class TLSManager(Object):
         """
         try:
             self.workload.remove_path(path=self.get_tls_file_path_in_workload(file))
-        except PathError:
+        except ValueError:
             pass
         logger.debug("Removed %s file from workload.", file.name)
 
@@ -1622,6 +1623,4 @@ class ACMEManager:
             data={"path": f"{self._vault_address}/v1/{self._mount_point}"},
         )
         self._enable_acme()
-        self.make_latest_acme_issuer_default()
-        self.make_latest_acme_issuer_default()
         self.make_latest_acme_issuer_default()
