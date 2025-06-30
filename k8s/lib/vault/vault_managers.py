@@ -1265,7 +1265,7 @@ class KVManager:
 
         juju_secret_label = Naming.kv_secret_label(unit_name=unit_name)
         current_credentials = self._vault_kv.get_credentials(relation)
-        credentials_juju_secret_id = current_credentials.get(nonce, None)
+        credentials_juju_secret_id = current_credentials.get(nonce, "")
 
         if self._is_vault_kv_role_configured(
             label=juju_secret_label,
