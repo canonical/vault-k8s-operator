@@ -345,7 +345,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
-            "Common name is not set in the charm config, cannot configure ACME server"
+            "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
         )
 
     def test_given_vault_uninitialized_when_collect_unit_status_then_status_is_blocked(self):

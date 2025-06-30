@@ -280,10 +280,12 @@ class VaultCharm(CharmBase):
                 return
         if self.juju_facade.relation_exists(
             TLS_CERTIFICATES_ACME_RELATION_NAME
-        ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
+        ) and not common_name_config_is_valid(
+            self.juju_facade.get_string_config("acme_ca_common_name")
+        ):
             event.add_status(
                 BlockedStatus(
-                    "Common name is not set in the charm config, cannot configure ACME server"
+                    "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
                 )
             )
         if not self._log_level_is_valid(self._get_log_level()):

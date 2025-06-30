@@ -216,12 +216,6 @@ config:
       default: "info"
       description: >-
         The log verbosity level. Supported values (in order of descending detail) are trace, debug, info, warn, and error.
-    common_name:
-      type: string
-      description: >-
-        The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
-        Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
-        If not set, the Vault charm will automatically generate a common name.
 
     # Access interface options
     access_sans_dns:
