@@ -61,7 +61,7 @@ async def deploy(
         application_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
         revision=VAULT_PKI_REQUIRER_REVISION,
         channel="stable",
-        config={"common_name": "test.example.com"},
+        config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
     )
     await asyncio.gather(
         ops_test.model.wait_for_idle(
