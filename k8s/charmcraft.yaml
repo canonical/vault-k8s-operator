@@ -146,7 +146,6 @@ parts:
     source: .
     plugin: uv
     build-packages:
-      - git
       - libffi-dev
       - libssl-dev
       - pkg-config

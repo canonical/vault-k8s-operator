@@ -14,7 +14,7 @@ dependencies = [
     "jsonschema",
     "lightkube",
     "lightkube-models",
-    "ops",
+    "ops>=0.23.0",
     "opentelemetry-exporter-otlp-proto-http",
     "pydantic==2.10.6",
     "pytest-interface-tester",
@@ -33,10 +33,6 @@ test = [
     "pytest-asyncio==0.21.2",
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]
-
-# This block should be removed once a release > 2.22.0 of Ops is released
-[tool.uv.sources]
-ops = { git = "https://github.com/canonical/operator", rev = "af31fadcb022ca7e670485e01c98a720130fff30" }
 
 # Testing tools configuration
 [tool.coverage.run]
