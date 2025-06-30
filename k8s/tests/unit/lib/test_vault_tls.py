@@ -230,11 +230,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certs_mount = testing.Mount(
                 location="/vault/certs",
