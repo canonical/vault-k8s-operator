@@ -31,7 +31,7 @@ from ops import CharmBase, MaintenanceStatus, main, pebble
 from ops.charm import ActionEvent, CollectStatusEvent, InstallEvent, RemoveEvent
 from ops.framework import EventBase
 from ops.model import ActiveStatus, BlockedStatus, ModelError, Relation, WaitingStatus
-from ops.pebble import ChangeError, Layer, PathError
+from ops.pebble import ChangeError, Layer
 from vault.juju_facade import JujuFacade, NoSuchSecretError, SecretRemovedError, TransientJujuError
 from vault.vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
 from vault.vault_client import (
@@ -819,12 +819,12 @@ class VaultCharm(CharmBase):
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
             logger.info("Removed Vault's main database")
-        except PathError:
+        except ValueError:
             logger.info("No Vault database to remove")
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
             logger.info("Removed Vault's Raft database")
-        except PathError:
+        except ValueError:
             logger.info("No Vault raft database to remove")
 
     def _vault_service_is_running(self) -> bool:

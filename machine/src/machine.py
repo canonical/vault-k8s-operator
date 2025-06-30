@@ -67,7 +67,7 @@ class Machine(WorkloadBase):
         """Remove a file or directory.
 
         Args:
-            path: The path of the file or directory
+            path: The absolute path of the file or directory
             recursive: Whether to remove recursively
         raises:
             ValueError: If the path is not absolute.
@@ -76,12 +76,12 @@ class Machine(WorkloadBase):
             raise ValueError(f"The provided path is not absolute: {path}")
         if os.path.isdir(path) and recursive:
             shutil.rmtree(path)
-            logger.info("Recursively removed directory %s", path)
+            logger.debug("Recursively removed directory `%s`", path)
         elif os.path.isfile(path) or (os.path.isdir(path) and not recursive):
             os.remove(path)
-            logger.info("Removed file or directory %s", path)
+            logger.debug("Removed file or directory `%s`", path)
         else:
-            logger.info("No such file or directory: %s", path)
+            raise ValueError(f"Path `{path}` does not exist.")
 
     def send_signal(self, signal: int, process: str) -> None:
         """Send a signal to the charm.

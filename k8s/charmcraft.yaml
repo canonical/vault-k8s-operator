@@ -15,7 +15,7 @@ description: |
   SSH credentials, and more.
 links:
   website:
-    - https://charmhub.io/vault-k8s
+    - https://canonical-vault-charms.readthedocs-hosted.com
   source:
     - https://github.com/canonical/vault-k8s-operator
   issues:
@@ -63,18 +63,24 @@ peers:
 provides:
   vault-autounseal-provides:
     interface: vault-autounseal
+    optional: true
   vault-kv:
     interface: vault-kv
+    optional: true
   vault-pki:
     interface: tls-certificates
+    optional: true
   metrics-endpoint:
     interface: prometheus_scrape
+    optional: true
   send-ca-cert:
     interface: certificate_transfer
     description: |
       Send our CA certificate so clients can trust the CA by means of forming a relation.
+    optional: true
   grafana-dashboard:
     interface: grafana_dashboard
+    optional: true
 
 assumes:
   - juju >= 3.1.8
@@ -90,11 +96,13 @@ requires:
       Ingress relation for the vault app (ingress per app).
     interface: ingress
     limit: 1
+    optional: true
   ingress-per-unit:
     description: |
       Ingress relation for the vault units (ingress per unit).
     interface: ingress_per_unit
     limit: 1
+    optional: true
   tls-certificates-access:
     interface: tls-certificates
     limit: 1
