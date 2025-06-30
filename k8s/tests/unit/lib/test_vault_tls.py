@@ -52,9 +52,7 @@ class TestCharmTLS:
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
             interface="vault-peer",
-            peers_data={
-                0: {"node_api_address": "http://5.2.1.9:8200"},
-            },
+            local_unit_data={"node_api_address": "http://5.2.1.9:8200"},
         )
         vault_container = testing.Container(
             name="vault",
@@ -85,11 +83,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certs_mount = testing.Mount(
                 location="/vault/certs",
@@ -160,11 +154,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certs_mount = testing.Mount(
                 location="/vault/certs",
@@ -233,11 +223,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certificates_relation = testing.Relation(
                 endpoint="tls-certificates-access",
@@ -341,11 +327,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certificates_relation = testing.Relation(
                 endpoint="tls-certificates-access",
@@ -401,11 +383,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certs_mount = testing.Mount(
                 location="/vault/certs",
@@ -510,11 +488,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {
-                        "node_api_address": "http://1.2.3.4",
-                    },
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             certs_mount = testing.Mount(
                 location="/vault/certs",
@@ -600,9 +574,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {"node_api_address": "http://1.2.3.4"},
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             cert_transfer_relation = testing.Relation(
                 endpoint="send-ca-cert",
@@ -674,9 +646,7 @@ class TestCharmTLS:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
-                peers_data={
-                    0: {"node_api_address": "http://1.2.3.4"},
-                },
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
             )
             cert_transfer_relation = testing.Relation(
                 endpoint="send-ca-cert",

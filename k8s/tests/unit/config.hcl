@@ -2,11 +2,7 @@ ui      = true
 storage "raft" {
   path= "/vault/raft"
   node_id = "whatever-vault-k8s/0"
-  retry_join {
-    leader_api_addr = "https://vault-k8s-0.myhostname:8200"
-    leader_ca_cert_file = "/vault/certs/ca.pem"
-  }
-  }
+}
 log_level = info
 listener "tcp" {
   telemetry {
