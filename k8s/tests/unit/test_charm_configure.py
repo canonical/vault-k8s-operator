@@ -159,7 +159,6 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "pki_ca_common_name": "myhostname.com",
                 },
             )
-            # Assert all pki configs here
             provider_certificate, private_key = generate_example_provider_certificate(
                 common_name="myhostname.com",
                 relation_id=pki_relation.id,

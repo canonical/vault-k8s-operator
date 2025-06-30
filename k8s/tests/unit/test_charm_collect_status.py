@@ -348,6 +348,86 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
         )
 
+    def test_given_tls_certificates_acme_relation_and_allowed_domains_is_invalid_when_collect_unit_status_then_status_is_blocked(  # noqa: E501
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
+        acme_relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, acme_relation],
+            config={
+                "acme_allowed_domains": "This should have been a comma separated list",
+                "acme_ca_common_name": "myhostname.com",
+            },
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for acme_allowed_domains is not valid, it must be a comma separated list"
+        )
+
+    def test_given_tls_certificates_acme_relation_and_ca_sans_dns_is_invalid_when_collect_unit_status_then_status_is_blocked(  # noqa: E501
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
+        acme_relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, acme_relation],
+            config={
+                "acme_ca_sans_dns": "This should have been a comma separated list",
+                "acme_ca_common_name": "myhostname.com",
+            },
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for acme_ca_sans_dns is not valid, it must be a comma separated list"
+        )
+
     def test_given_vault_uninitialized_when_collect_unit_status_then_status_is_blocked(self):
         self.mock_tls.configure_mock(
             **{

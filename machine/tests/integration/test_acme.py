@@ -56,9 +56,17 @@ async def test_given_tls_certificates_acme_relation_when_integrate_then_status_i
     vault_app = ops_test.model.applications[APP_NAME]
     common_name = UNMATCHING_COMMON_NAME
     common_name_config = {
-        "common_name": common_name,
+        "acme_ca_common_name": common_name,
     }
     await vault_app.set_config(common_name_config)
+    allow_any_name_config = {
+        "acme_allow_any_name": "true",
+    }
+    await vault_app.set_config(allow_any_name_config)
+    allow_subdomains_config = {
+        "acme_allow_subdomains": "true",
+    }
+    await vault_app.set_config(allow_subdomains_config)
     if not has_relation(vault_app, "tls-certificates-acme"):
         await ops_test.model.integrate(
             relation1=f"{APP_NAME}:tls-certificates-acme",

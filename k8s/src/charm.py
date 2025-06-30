@@ -278,16 +278,34 @@ class VaultCharm(CharmBase):
                     )
                 )
                 return
-        if self.juju_facade.relation_exists(
-            TLS_CERTIFICATES_ACME_RELATION_NAME
-        ) and not common_name_config_is_valid(
-            self.juju_facade.get_string_config("acme_ca_common_name")
-        ):
-            event.add_status(
-                BlockedStatus(
-                    "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
+        if self.juju_facade.relation_exists(TLS_CERTIFICATES_ACME_RELATION_NAME):
+            if not common_name_config_is_valid(
+                self.juju_facade.get_string_config("acme_ca_common_name")
+            ):
+                event.add_status(
+                    BlockedStatus(
+                        "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
+                    )
                 )
-            )
+                return
+            if not allowed_domains_config_is_valid(
+                self.juju_facade.get_string_config("acme_allowed_domains")
+            ):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for acme_allowed_domains is not valid, it must be a comma separated list"
+                    )
+                )
+                return
+            if not sans_dns_config_is_valid(
+                self.juju_facade.get_string_config("acme_ca_sans_dns")
+            ):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for acme_ca_sans_dns is not valid, it must be a comma separated list"
+                    )
+                )
+                return
         if not self._log_level_is_valid(self._get_log_level()):
             event.add_status(BlockedStatus("log_level config is not valid"))
             return

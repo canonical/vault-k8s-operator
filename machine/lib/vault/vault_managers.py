@@ -214,6 +214,12 @@ class TLSManager(Object):
         common_name: str,
         sans_dns: FrozenSet[str] = frozenset(),
         sans_ip: FrozenSet[str] = frozenset(),
+        country_name: str = "",
+        state_or_province_name: str = "",
+        locality_name: str = "",
+        organization: str = "",
+        organizational_unit: str = "",
+        email_address: str = "",
     ):
         """Create a new TLSManager object.
 
@@ -227,6 +233,12 @@ class TLSManager(Object):
             common_name: The common name of the certificate
             sans_dns: Subject alternative names of the certificate
             sans_ip: Subject alternative IP addresses of the certificate
+            country_name: Country name of the certificate
+            state_or_province_name: State or province name of the certificate
+            locality_name: Locality name of the certificate
+            organization: Organization name of the certificate
+            organizational_unit: Organizational unit name of the certificate
+            email_address: Email address of the certificate
         """
         super().__init__(charm, "tls")
         self.charm = charm
@@ -237,6 +249,12 @@ class TLSManager(Object):
         self.common_name = common_name
         self.sans_dns = sans_dns
         self.sans_ip = sans_ip
+        self.country_name = country_name
+        self.state_or_province_name = state_or_province_name
+        self.locality_name = locality_name
+        self.organization = organization
+        self.organizational_unit = organizational_unit
+        self.email_address = email_address
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
         if self.mode == TLSMode.TLS_INTEGRATION:
@@ -277,9 +295,21 @@ class TLSManager(Object):
     def _get_certificate_requests(self) -> list[CertificateRequestAttributes]:
         if not self.common_name:
             return []
+        if not self.sans_dns:
+            return []
         return [
             CertificateRequestAttributes(
-                common_name=self.common_name, sans_dns=self.sans_dns, sans_ip=self.sans_ip
+                common_name=self.common_name,
+                sans_dns=self.sans_dns,
+                sans_ip=self.sans_ip,
+                country_name=self.country_name if self.country_name else None,
+                state_or_province_name=self.state_or_province_name
+                if self.state_or_province_name
+                else None,
+                locality_name=self.locality_name if self.locality_name else None,
+                organization=self.organization if self.organization else None,
+                organizational_unit=self.organizational_unit if self.organizational_unit else None,
+                email_address=self.email_address if self.email_address else None,
             )
         ]
 
@@ -940,6 +970,10 @@ class PKIManager:
         certificate_request_attributes: CertificateRequestAttributes,
         mount_point: str,
         role_name: str,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4,
     ):
@@ -955,6 +989,10 @@ class PKIManager:
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
             tls_certificates_pki: The tls_certificates_pki requirer relation helper library
+            allowed_domains: The domains that the PKI engine will allow certificates to be issued for
+            allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
+            allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
+            allow_any_name: Whether the PKI engine will allow any name to be issued for
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -964,6 +1002,17 @@ class PKIManager:
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
         self._pki_utils = _PKIUtils(vault_client, mount_point)
+        if allowed_domains:
+            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
+            self._allowed_domains = allowed_domains
+        else:
+            self._allowed_domains_list = [certificate_request_attributes.common_name]
+            self._allowed_domains = certificate_request_attributes.common_name
+        self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
+        self._allow_wildcard_certificates = (
+            allow_wildcard_certificates if allow_wildcard_certificates is not None else True
+        )
+        self._allow_any_name = allow_any_name if allow_any_name is not None else False
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -993,6 +1042,7 @@ class PKIManager:
         Additionally, this method ensures that the intermediate CA certificate
         is renewed if necessary.
         """
+        update_ca_certificate = True
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
             return
@@ -1020,30 +1070,38 @@ class PKIManager:
                     certificate_from_provider,
                 )
                 logger.debug("Renewing CA certificate")
-                return
+                update_ca_certificate = False
             logger.debug("CA certificate already set in the PKI secrets engine")
-            return
-        self._vault_pki.revoke_all_certificates()
-        self._vault_client.import_ca_certificate_and_key(
-            certificate=str(certificate_from_provider.certificate),
-            private_key=str(private_key),
-            mount=self._mount_point,
-        )
+            update_ca_certificate = False
+
+        if update_ca_certificate:
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(certificate_from_provider.certificate),
+                private_key=str(private_key),
+                mount=self._mount_point,
+            )
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
-        if not self._vault_client.is_common_name_allowed_in_pki_role(
+
+        if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
-            common_name=self._certificate_request_attributes.common_name,
+            allowed_domains=self._allowed_domains_list,
+            allow_subdomains=self._allow_subdomains,
+            allow_wildcard_certificates=self._allow_wildcard_certificates,
+            allow_any_name=self._allow_any_name,
         ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
             self._vault_client.create_or_update_pki_charm_role(
-                allowed_domains=self._certificate_request_attributes.common_name,
+                allowed_domains=self._allowed_domains,
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
+                allow_subdomains=self._allow_subdomains,
+                allow_wildcard_certificates=self._allow_wildcard_certificates,
+                allow_any_name=self._allow_any_name,
             )
         self.make_latest_pki_issuer_default()
 
@@ -1509,6 +1567,10 @@ class ACMEManager:
         certificate_request_attributes: CertificateRequestAttributes,
         role_name: str,
         vault_address: str,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
     ):
         self._charm = charm
         self._juju_facade = JujuFacade(charm)
@@ -1519,6 +1581,17 @@ class ACMEManager:
         self._role_name = role_name
         self._vault_address = vault_address
         self._pki_utils = _PKIUtils(vault_client, mount_point)
+        if allowed_domains:
+            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
+            self._allowed_domains = allowed_domains
+        else:
+            self._allowed_domains_list = [certificate_request_attributes.common_name]
+            self._allowed_domains = certificate_request_attributes.common_name
+        self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
+        self._allow_wildcard_certificates = (
+            allow_wildcard_certificates if allow_wildcard_certificates is not None else True
+        )
+        self._allow_any_name = allow_any_name if allow_any_name is not None else False
 
     def _get_acme_intermediate_ca_from_relation(
         self,
@@ -1557,9 +1630,9 @@ class ACMEManager:
                     certificate_from_provider,
                 )
                 logger.debug("Renewing ACME intermediate CA certificate")
-                raise ManagerError("Renewing ACME intermediate CA certificate")
+                return
             logger.debug("ACME intermediate CA certificate already set")
-            raise ManagerError("ACME intermediate CA certificate already set")
+            return
         self._vault_client.import_ca_certificate_and_key(
             certificate=str(certificate_from_provider.certificate),
             private_key=str(private_key),
@@ -1573,13 +1646,24 @@ class ACMEManager:
             logger.debug("No intermediate CA certificate available for Vault ACME")
             return
         max_ttl = self._pki_utils.calculate_certificates_ttl(certificate_from_provider.certificate)
-        if max_ttl != self._vault_client.get_role_max_ttl(
+        if not self._vault_client.role_config_matches_given_config(
+            role=self._role_name,
+            mount=self._mount_point,
+            allowed_domains=self._allowed_domains_list,
+            allow_subdomains=self._allow_subdomains,
+            allow_wildcard_certificates=self._allow_wildcard_certificates,
+            allow_any_name=self._allow_any_name,
+        ) or max_ttl != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
             self._vault_client.create_or_update_acme_role(
                 role=self._role_name,
                 max_ttl=f"{max_ttl}s",
                 mount=self._mount_point,
+                allow_subdomains=self._allow_subdomains,
+                allow_wildcard_certificates=self._allow_wildcard_certificates,
+                allow_any_name=self._allow_any_name,
+                allowed_domains=self._allowed_domains,
             )
 
     def _enable_acme(self) -> None:
@@ -1605,7 +1689,8 @@ class ACMEManager:
 
         try:
             self._configure_intermediate_ca_certificate()
-        except ManagerError:
+        except ManagerError as e:
+            logger.error("Failed to configure ACME server: %s", e)
             return
 
         self._configure_acme_role()
@@ -1624,3 +1709,4 @@ class ACMEManager:
         )
         self._enable_acme()
         self.make_latest_acme_issuer_default()
+

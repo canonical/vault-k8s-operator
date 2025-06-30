@@ -24,7 +24,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == BlockedStatus("log_level config is not valid")
 
-    def test_given_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
+    def test_given_pki_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
         self,
     ):
         tls_relation = testing.Relation(
@@ -32,14 +32,56 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             interface="tls-certificates",
         )
         state_in = testing.State(
-            config={"common_name": ""},
+            config={"pki_ca_common_name": ""},
             relations=[tls_relation],
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
-            "Common name is not set in the charm config, cannot configure PKI secrets engine"
+            "pki_ca_common_name is not set in the charm config, cannot configure PKI secrets engine"
+        )
+
+    def test_given_pki_tls_relation_and_bad_allowed_domains_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-pki",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "pki_ca_common_name": "domain.com",
+                "pki_allowed_domains": "not a comma separated list",
+            },
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for pki_allowed_domains is not valid, it must be a comma separated list"
+        )
+
+    def test_given_pki_tls_relation_and_bad_sans_dns_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-pki",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "pki_ca_common_name": "domain.com",
+                "pki_ca_sans_dns": "not a comma separated list",
+            },
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for pki_ca_sans_dns is not valid, it must be a comma separated list"
         )
 
     def test_given_acme_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
@@ -50,14 +92,74 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             interface="tls-certificates",
         )
         state_in = testing.State(
-            config={"common_name": ""},
+            config={"acme_ca_common_name": ""},
             relations=[tls_relation],
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus(
-            "Common name is not set in the charm config, cannot configure ACME server"
+            "acme_ca_common_name is not set in the charm config, cannot configure ACME server"
+        )
+
+    def test_given_acme_tls_relation_and_bad_allowed_domains_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "acme_ca_common_name": "domain.com",
+                "acme_allowed_domains": "not a comma separated list",
+            },
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for acme_allowed_domains is not valid, it must be a comma separated list"
+        )
+
+    def test_given_acme_tls_relation_and_bad_sans_dns_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "acme_ca_common_name": "domain.com",
+                "acme_ca_sans_dns": "not a comma separated list",
+            },
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for acme_ca_sans_dns is not valid, it must be a comma separated list"
+        )
+
+    def test_given_access_tls_relation_and_bad_sans_dns_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={"access_sans_dns": "not a comma separated list"},
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for access_sans_dns is not valid, it must be a comma separated list"
         )
 
     def test_given_peer_relation_not_created_when_collect_unit_status_then_status_is_waiting(self):
