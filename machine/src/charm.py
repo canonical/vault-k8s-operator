@@ -96,9 +96,9 @@ VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
 VAULT_PORT = 8200
-VAULT_SNAP_CHANNEL = "1.17/stable"
+VAULT_SNAP_CHANNEL = "1.18/stable"
 VAULT_SNAP_NAME = "vault"
-VAULT_SNAP_REVISION = "2354"
+VAULT_SNAP_REVISION = "2399"
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 
 
@@ -821,7 +821,11 @@ class VaultOperatorCharm(CharmBase):
         try:
             snap_cache = snap.SnapCache()
             vault_snap = snap_cache[VAULT_SNAP_NAME]
-            if VAULT_SNAP_REVISION == vault_snap.revision:
+            if VAULT_SNAP_REVISION == vault_snap.revision and vault_snap.state in [
+                snap.SnapState.Latest,
+                snap.SnapState.Present,
+            ]:
+                logger.debug("Vault snap revision %s is already installed", VAULT_SNAP_REVISION)
                 return
             with self.temp_maintenance_status("Installing Vault"):
                 vault_snap.ensure(

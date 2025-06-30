@@ -65,7 +65,7 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.17
+      track-name: 1.18
       path: ./k8s/
       artifact-name: built-k8s-charm
 
@@ -123,6 +123,6 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.17
+      track-name: 1.18
       path: ./machine/
       artifact-name: built-machine-charm

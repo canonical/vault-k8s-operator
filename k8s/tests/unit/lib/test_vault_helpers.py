@@ -4,7 +4,9 @@
 
 
 from vault.vault_helpers import (
+    allowed_domains_config_is_valid,
     config_file_content_matches,
+    sans_dns_config_is_valid,
     seal_type_has_changed,
 )
 
@@ -14,6 +16,29 @@ def read_file(path: str) -> str:
     with open(path, "r") as f:
         content = f.read()
     return content
+
+
+class TestJujuConfigValidity:
+    def test_given_one_domain_when_sans_dns_config_is_valid_returns_true(self):
+        assert sans_dns_config_is_valid("example.com")
+
+    def test_given_multiple_domains_when_sans_dns_config_is_valid_returns_true(self):
+        assert sans_dns_config_is_valid("example.com,example.org")
+
+    def test_given_empty_when_sans_dns_config_is_valid_returns_true(self):
+        assert sans_dns_config_is_valid("")
+
+    def test_given_invalid_string_when_sans_dns_config_is_valid_returns_false(self):
+        assert not sans_dns_config_is_valid("This should have been a comma separated list")
+
+    def test_given_valid_string_when_allowed_domains_config_is_valid_returns_true(self):
+        assert allowed_domains_config_is_valid("example.com,example.org")
+
+    def test_given_empty_when_allowed_domains_config_is_valid_returns_true(self):
+        assert allowed_domains_config_is_valid("")
+
+    def test_given_invalid_string_when_allowed_domains_config_is_valid_returns_false(self):
+        assert not allowed_domains_config_is_valid("This should have been a comma separated list")
 
 
 class TestSealTypeHasChanged:
