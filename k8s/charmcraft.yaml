@@ -267,7 +267,7 @@ config:
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-pki` charm relation interface.
         Charms integrating to Vault using the `vault-pki` charm relation interface will receive signed certificates from that CA.
-        If not set, the Vault charm will automatically generate a common name.
+        This option is required when using the `tls-certificates-pki` charm relation interface.
     pki_ca_sans_dns:
       type: string
       description: >-
@@ -349,7 +349,7 @@ config:
       description: >-
         The Vault charm will use this configuration option when requesting a CA certificate from a TLS provider using the `tls-certificates-acme` charm relation interface.
         Requirers using the ACME server of Vault will receive signed certificates from that CA.
-        If not set, the Vault charm will automatically generate a common name.
+        This option is required when using the `tls-certificates-acme` charm relation interface.
     acme_ca_sans_dns:
       type: string
       description: >-
