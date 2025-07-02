@@ -200,9 +200,7 @@ class VaultOperatorCharm(CharmBase):
 
         This may not be the Vault service running on this unit.
         """
-        addresses = self._get_peer_relation_node_api_addresses() + (
-            [self._api_address] if self._api_address else []
-        )
+        addresses = self._get_peer_relation_node_api_addresses()
         for address in addresses:
             try:
                 vault = VaultClient(
@@ -1013,7 +1011,7 @@ class VaultOperatorCharm(CharmBase):
             databag["node_api_address"]
             for databag in peer_relation_data
             if "node_api_address" in databag
-        ]
+        ] + ([self._api_address] if self._api_address else [])
 
     def _other_peer_node_api_addresses(self) -> List[str]:
         """Return the list of other peer unit addresses.
