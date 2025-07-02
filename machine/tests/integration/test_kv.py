@@ -9,7 +9,7 @@ from tests.integration.config import (
     SHORT_TIMEOUT,
     VAULT_KV_REQUIRER_APPLICATION_NAME,
 )
-from tests.integration.helpers import get_leader_unit, has_relation
+from tests.integration.helpers import has_relation, run_action_on_leader
 
 
 @pytest.mark.dependency
@@ -50,24 +50,19 @@ async def test_given_vault_kv_requirer_related_when_create_secret_then_secret_is
 
     secret_key = "test-key"
     secret_value = "test-value"
-    vault_kv_unit = await get_leader_unit(ops_test.model, VAULT_KV_REQUIRER_APPLICATION_NAME)
-    vault_kv_create_secret_action = await vault_kv_unit.run_action(
+    await run_action_on_leader(
+        ops_test,
+        VAULT_KV_REQUIRER_APPLICATION_NAME,
         action_name="create-secret",
         key=secret_key,
         value=secret_value,
     )
 
-    await ops_test.model.get_action_output(
-        action_uuid=vault_kv_create_secret_action.entity_id, wait=30
-    )
-
-    vault_kv_get_secret_action = await vault_kv_unit.run_action(
+    vault_kv_get_secret_action = await run_action_on_leader(
+        ops_test,
+        VAULT_KV_REQUIRER_APPLICATION_NAME,
         action_name="get-secret",
         key=secret_key,
     )
 
-    action_output = await ops_test.model.get_action_output(
-        action_uuid=vault_kv_get_secret_action.entity_id, wait=30
-    )
-
-    assert action_output["value"] == secret_value
+    assert vault_kv_get_secret_action["value"] == secret_value

@@ -93,6 +93,67 @@ class Vault:
         self.client.sys.submit_unseal_key(unseal_key)
         logger.info("Unsealed vault unit: %s.", self.url)
 
+    def enable_kv_engine(self, path: str = "kv/", description: str = "") -> None:
+        """Enable the KV secrets engine at the specified path.
+
+        Args:
+            path: The path to enable the KV secrets engine at
+            description: A description for the KV secrets engine
+        """
+        if self.client.sys.list_mounted_secrets_engines()["data"].get(path):
+            logger.info("KV secrets engine already enabled at path: %s", path)
+            return
+        self.client.sys.enable_secrets_engine(
+            backend_type="kv",
+            description=description,
+            path=path,
+        )
+        logger.info("Enabled KV secrets engine at path: %s", path)
+
+    def write(self, path: str, data: dict) -> None:
+        """Write data to Vault.
+
+        Args:
+            path (str): The path to write data to
+            data (dict): The data to write
+        """
+        self.client.write_data(
+            path=f"{path}",
+            data=data,
+        )
+        logger.info("Wrote data to Vault at path: %s", path)
+
+    def read(self, path: str) -> dict | None:
+        """Read data from Vault.
+
+        Args:
+            path (str): The path to read data from
+        Returns:
+            dict: The data read from the KV secrets engine
+        """
+        response = self.client.read(path=path)
+        if response is None:
+            return None
+        if isinstance(response, dict):
+            json = response
+        elif isinstance(response, requests.Response):
+            json = response.json()
+        else:
+            raise Exception(
+                "Unexpected response type from Vault client. Expected a requests.Response."
+            )
+        logger.info("Read data from Vault at path: %s", path)
+        return json.get("data", {})
+
+    def delete(self, path: str) -> None:
+        """Delete data from Vault.
+
+        Args:
+            path (str): The path to delete data from
+        """
+        self.client.delete(path=path)
+        logger.info("Deleted data from Vault at path: %s", path)
+
     async def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
         """Wait for the specified number of units to join the raft cluster.
 
