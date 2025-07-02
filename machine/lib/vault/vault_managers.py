@@ -32,7 +32,6 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import FrozenSet, MutableMapping, TextIO
@@ -58,6 +57,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
+
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -1413,7 +1413,7 @@ class BackupManager:
             raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
         if not snapshot:
             raise ManagerError(
-                f"Snapshot `{s3_parameters['bucket']}/{backup_key}` not found in S3 bucket"
+                f"Snapshot not found in S3 bucket. ({s3_parameters['bucket']}/{backup_key})"
             )
 
         try:

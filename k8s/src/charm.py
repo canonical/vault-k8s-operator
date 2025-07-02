@@ -580,6 +580,8 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             vault_client = VaultClient(
                 url=self._api_address,
@@ -597,7 +599,7 @@ class VaultCharm(CharmBase):
             return
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            backup_key = manager.create_backup(vault_client)
+            backup_key = manager.create_backup(vault_client, skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to create backup: %s", e)
             event.fail(message=f"Failed to create backup: {e}")
@@ -612,9 +614,11 @@ class VaultCharm(CharmBase):
         Args:
             event: ActionEvent
         """
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            backup_ids = manager.list_backups()
+            backup_ids = manager.list_backups(skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to list backups: %s", e)
             event.fail(message=f"Failed to list backups: {e}")
@@ -638,9 +642,11 @@ class VaultCharm(CharmBase):
         # This should be enforced by Juju/charmcraft.yaml, but we assert here
         # to make the typechecker happy
         assert isinstance(key, str)
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            manager.restore_backup(vault_client, key)
+            manager.restore_backup(vault_client, key, skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to restore backup: %s", e)
             event.fail(message=f"Failed to restore backup: {e}")

@@ -594,8 +594,8 @@ class VaultOperatorCharm(CharmBase):
         # This should be enforced by Juju/charmcraft.yaml, but we assert here
         # to make the typechecker happy
         assert isinstance(key, str)
-
         skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
             manager.restore_backup(vault_client, key, skip_verify=skip_verify)

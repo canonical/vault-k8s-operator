@@ -56,11 +56,18 @@ class S3:
         secret_key: str,
         endpoint: str,
         region: str | None = AWS_DEFAULT_REGION,
+        skip_verify: bool = False,
     ):
         self.access_key = access_key
         self.secret_key = secret_key
         self.endpoint = endpoint
         self.region = region
+
+        if skip_verify is False:
+            logger.warning(
+                "S3 client is configured to skip SSL certificate verification. "
+                "This is insecure and should only be used in development environments."
+            )
         try:
             self.session = boto3.session.Session(
                 aws_access_key_id=self.access_key,
@@ -72,7 +79,12 @@ class S3:
                     "max_attempts": 1,
                 },
             )
-            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint, config=custom_config)
+            self.s3 = self.session.resource(
+                "s3",
+                endpoint_url=self.endpoint,
+                config=custom_config,
+                verify=False if skip_verify else None,
+            )
         except (ClientError, BotoCoreError, ValueError) as e:
             raise S3Error(f"Error creating session: {e}")
 
