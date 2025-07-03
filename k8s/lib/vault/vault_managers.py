@@ -975,6 +975,12 @@ class PKIManager:
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
+        allow_ip_sans: bool | None,
+        organization: str | None,
+        organizational_unit: str | None,
+        country: str | None,
+        province: str | None,
+        locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4,
     ):
@@ -994,6 +1000,12 @@ class PKIManager:
             allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
             allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
             allow_any_name: Whether the PKI engine will allow any name to be issued for
+            allow_ip_sans: Whether the PKI engine will allow IP Subject Alternative Names
+            organization: The organization to be included in the issued certificate
+            organizational_unit: The organizational unit to be included in the issued certificate
+            country: The country to be included in the issued certificate
+            province: The province to be included in the issued certificate
+            locality: The locality to be included in the issued certificate
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1011,6 +1023,14 @@ class PKIManager:
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
         )
         self._allow_any_name = allow_any_name if allow_any_name is not None else False
+        self._allow_ip_sans = allow_ip_sans if allow_ip_sans is not None else False
+        self._organization = organization if organization is not None else None
+        self._organizational_unit = (
+            organizational_unit if organizational_unit is not None else None
+        )
+        self._country = country if country is not None else None
+        self._province = province if province is not None else None
+        self._locality = locality if locality is not None else None
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1089,6 +1109,12 @@ class PKIManager:
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
+            allow_ip_sans=self._allow_ip_sans,
+            organization=self._organization,
+            organizational_unit=self._organizational_unit,
+            country=self._country,
+            province=self._province,
+            locality=self._locality,
         ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
@@ -1100,6 +1126,12 @@ class PKIManager:
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
+                allow_ip_sans=self._allow_ip_sans,
+                organization=self._organization,
+                organizational_unit=self._organizational_unit,
+                country=self._country,
+                province=self._province,
+                locality=self._locality,
             )
         self.make_latest_pki_issuer_default()
 
@@ -1589,6 +1621,12 @@ class ACMEManager:
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
+        allow_ip_sans: bool | None,
+        organization: str | None,
+        organizational_unit: str | None,
+        country: str | None,
+        province: str | None,
+        locality: str | None,
     ):
         self._charm = charm
         self._juju_facade = JujuFacade(charm)
@@ -1607,6 +1645,14 @@ class ACMEManager:
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
         )
         self._allow_any_name = allow_any_name if allow_any_name is not None else False
+        self._allow_ip_sans = allow_ip_sans if allow_ip_sans is not None else False
+        self._organization = organization if organization is not None else None
+        self._organizational_unit = (
+            organizational_unit if organizational_unit is not None else None
+        )
+        self._country = country if country is not None else None
+        self._province = province if province is not None else None
+        self._locality = locality if locality is not None else None
 
     def _get_acme_intermediate_ca_from_relation(
         self,
@@ -1668,6 +1714,12 @@ class ACMEManager:
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
+            allow_ip_sans=self._allow_ip_sans,
+            organization=self._organization,
+            organizational_unit=self._organizational_unit,
+            country=self._country,
+            province=self._province,
+            locality=self._locality,
         ) or max_ttl != self._vault_client.get_role_max_ttl(
             role=self._role_name, mount=self._mount_point
         ):
@@ -1679,6 +1731,12 @@ class ACMEManager:
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
                 allowed_domains=self._allowed_domains,
+                allow_ip_sans=self._allow_ip_sans,
+                organization=self._organization,
+                organizational_unit=self._organizational_unit,
+                country=self._country,
+                province=self._province,
+                locality=self._locality,
             )
 
     def _enable_acme(self) -> None:

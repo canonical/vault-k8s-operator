@@ -366,6 +366,12 @@ class TestPKIManager:
         self.allow_subdomains = False
         self.allow_wildcard_certificates = True
         self.allow_any_name = False
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
 
         self.pki_manager = PKIManager(
             charm=self.charm,
@@ -379,6 +385,12 @@ class TestPKIManager:
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     @pytest.fixture
@@ -485,6 +497,12 @@ class TestPKIManager:
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     def test_given_outstanding_requests_when_sync_then_certificates_issued(
@@ -545,6 +563,12 @@ class TestACMEManager:
         self.allow_subdomains = True
         self.allow_wildcard_certificates = True
         self.allow_any_name = True
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
         self.acme_manager = ACMEManager(
             charm=self.charm,
             vault_client=self.vault,
@@ -557,6 +581,12 @@ class TestACMEManager:
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     @pytest.fixture
@@ -690,6 +720,12 @@ class TestACMEManager:
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     def test_given_intermediate_certificate_when_configure_then_backend_configured(

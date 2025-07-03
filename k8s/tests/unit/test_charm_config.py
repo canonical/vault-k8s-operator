@@ -18,9 +18,11 @@ class TestCharmConfig:
             assert not manager.charm.model.config.get("pki_allow_subdomains")
             assert manager.charm.model.config.get("pki_allow_wildcard_certificates")
             assert not manager.charm.model.config.get("pki_allow_any_name")
+            assert not manager.charm.model.config.get("pki_allow_ip_sans")
             assert not manager.charm.model.config.get("acme_allow_subdomains")
             assert manager.charm.model.config.get("acme_allow_wildcard_certificates")
             assert not manager.charm.model.config.get("acme_allow_any_name")
+            assert not manager.charm.model.config.get("acme_allow_ip_sans")
 
     def test_config_keys(self):
         """This test checks the config keys and their types.
@@ -54,6 +56,12 @@ class TestCharmConfig:
                 "pki_allow_subdomains": False,
                 "pki_allow_wildcard_certificates": True,
                 "pki_allow_any_name": False,
+                "pki_allow_ip_sans": False,
+                "pki_organization": "Example Inc",
+                "pki_organizational_unit": "IT",
+                "pki_country": "US",
+                "pki_province": "CA",
+                "pki_locality": "San Francisco",
                 "acme_ca_common_name": "example.com",
                 "acme_ca_sans_dns": "example.com",
                 "acme_ca_country_name": "US",
@@ -66,6 +74,12 @@ class TestCharmConfig:
                 "acme_allow_subdomains": False,
                 "acme_allow_wildcard_certificates": True,
                 "acme_allow_any_name": False,
+                "acme_allow_ip_sans": False,
+                "acme_organization": "Example Inc",
+                "acme_organizational_unit": "IT",
+                "acme_country": "US",
+                "acme_province": "CA",
+                "acme_locality": "San Francisco",
             },
         )
         with ctx(ctx.on.start(), state_in) as manager:

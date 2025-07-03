@@ -814,6 +814,12 @@ class VaultOperatorCharm(CharmBase):
                 "pki_allow_wildcard_certificates"
             ),
             allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
+            allow_ip_sans=self.juju_facade.get_bool_config("pki_allow_ip_sans"),
+            organization=self.juju_facade.get_string_config("pki_organization"),
+            organizational_unit=self.juju_facade.get_string_config("pki_organizational_unit"),
+            country=self.juju_facade.get_string_config("pki_country"),
+            province=self.juju_facade.get_string_config("pki_province"),
+            locality=self.juju_facade.get_string_config("pki_locality"),
         )
         manager.sync()
 
@@ -855,6 +861,12 @@ class VaultOperatorCharm(CharmBase):
                 "pki_allow_wildcard_certificates"
             ),
             allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
+            allow_ip_sans=self.juju_facade.get_bool_config("pki_allow_ip_sans"),
+            organization=self.juju_facade.get_string_config("pki_organization"),
+            organizational_unit=self.juju_facade.get_string_config("pki_organizational_unit"),
+            country=self.juju_facade.get_string_config("pki_country"),
+            province=self.juju_facade.get_string_config("pki_province"),
+            locality=self.juju_facade.get_string_config("pki_locality"),
         )
         manager.configure()
 
@@ -932,6 +944,12 @@ class VaultOperatorCharm(CharmBase):
                 "acme_allow_wildcard_certificates"
             ),
             allow_any_name=self.juju_facade.get_bool_config("acme_allow_any_name"),
+            allow_ip_sans=self.juju_facade.get_bool_config("acme_allow_ip_sans"),
+            organization=self.juju_facade.get_string_config("acme_organization"),
+            organizational_unit=self.juju_facade.get_string_config("acme_organizational_unit"),
+            country=self.juju_facade.get_string_config("acme_country"),
+            province=self.juju_facade.get_string_config("acme_province"),
+            locality=self.juju_facade.get_string_config("acme_locality"),
         )
         manager.configure()
 

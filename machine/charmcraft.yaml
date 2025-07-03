@@ -248,6 +248,37 @@ config:
       description: >-
         Allow the Vault charm to sign certificates coming from the `vault-pki` integration for any domain name.
         The Vault charm will use this configuration option in the context of acting as an intermediate CA.
+    pki_allow_ip_sans:
+      type: boolean
+      default: false
+      description: >-
+        Allow the Vault charm to sign requests with IP Subject Alternative Names.
+        The Vault charm will use this configuration option in the context of acting as an intermediate CA.
+    pki_organization:
+      type: string
+      description: >-
+        This value specifies the O (Organization) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have an O value in the Subject field.
+    pki_organizational_unit:
+      type: string
+      description: >-
+        This value specifies the OU (Organizational Unit) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have an OU value in the Subject field.
+    pki_country:
+      type: string
+      description: >-
+        This value specifies the C (Country) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have a C value in the Subject field.
+    pki_province:
+      type: string
+      description: >-
+        This value specifies the ST (State or Province) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have a ST value in the Subject field.
+    pki_locality:
+      type: string
+      description: >-
+        This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have an L value in the Subject field.
 
 
 # ACME engine options
@@ -330,6 +361,37 @@ config:
       description: >-
         Allow the ACME server of Vault to issue certificates for any domain name.
         The Vault charm will use this configuration option in the context of acting as an intermediate CA.
+    acme_allow_ip_sans:
+      type: boolean
+      default: false
+      description: >-
+        Allow the ACME server of Vault to issue certificates with IP Subject Alternative Names.
+        The Vault charm will use this configuration option in the context of acting as an intermediate CA.
+    acme_organization:
+      type: string
+      description: >-
+        This value specifies the O (Organization) value in the Subject field of the certificate issued by Vault ACME.
+        If not set the issued certificate will not have an O value in the Subject field.
+    acme_organizational_unit:
+      type: string
+      description: >-
+        This value specifies the OU (Organizational Unit) value in the Subject field of the certificate issued by Vault ACME.
+        If not set the issued certificate will not have an OU value in the Subject field.
+    acme_country:
+      type: string
+      description: >-
+        This value specifies the C (Country) value in the Subject field of the certificate issued by Vault ACME.
+        If not set the issued certificate will not have a C value in the Subject field.
+    acme_province:
+      type: string
+      description: >-
+        This value specifies the ST (State or Province) value in the Subject field of the certificate issued by Vault ACME.
+        If not set the issued certificate will not have a ST value in the Subject field.
+    acme_locality:
+      type: string
+      description: >-
+        This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
+        If not set the issued certificate will not have an L value in the Subject field.
 
 actions:
   authorize-charm:
