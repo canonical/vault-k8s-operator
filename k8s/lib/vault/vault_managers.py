@@ -34,6 +34,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
+from functools import cached_property
 from typing import FrozenSet, MutableMapping, TextIO
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
@@ -1002,12 +1003,9 @@ class PKIManager:
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
         self._pki_utils = _PKIUtils(vault_client, mount_point)
-        if allowed_domains:
-            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
-            self._allowed_domains = allowed_domains
-        else:
-            self._allowed_domains_list = [certificate_request_attributes.common_name]
-            self._allowed_domains = certificate_request_attributes.common_name
+        self._allowed_domains = (
+            allowed_domains if allowed_domains else certificate_request_attributes.common_name
+        )
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1158,6 +1156,11 @@ class PKIManager:
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
         )
+
+    @cached_property
+    def _allowed_domains_list(self) -> list[str]:
+        """Return the allowed domains for the ACME server in Vault as a list."""
+        return [domain.strip() for domain in self._allowed_domains.split(",")]
 
 
 class KVManager:
@@ -1596,12 +1599,9 @@ class ACMEManager:
         self._role_name = role_name
         self._vault_address = vault_address
         self._pki_utils = _PKIUtils(vault_client, mount_point)
-        if allowed_domains:
-            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
-            self._allowed_domains = allowed_domains
-        else:
-            self._allowed_domains_list = [certificate_request_attributes.common_name]
-            self._allowed_domains = certificate_request_attributes.common_name
+        self._allowed_domains = (
+            allowed_domains if allowed_domains else certificate_request_attributes.common_name
+        )
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1724,3 +1724,8 @@ class ACMEManager:
         )
         self._enable_acme()
         self.make_latest_acme_issuer_default()
+
+    @cached_property
+    def _allowed_domains_list(self) -> list[str]:
+        """Return the allowed domains for the ACME server in Vault as a list."""
+        return [domain.strip() for domain in self._allowed_domains.split(",")]

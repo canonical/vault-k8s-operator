@@ -33,7 +33,7 @@ def sans_dns_config_is_valid(sans_dns: str) -> bool:
     """
     if not sans_dns:
         return True
-    dns_names = [name.strip() for name in sans_dns.split(",")]
+    dns_names = (name.strip() for name in sans_dns.split(","))
     return all(name and " " not in name for name in dns_names)
 
 
@@ -45,7 +45,7 @@ def allowed_domains_config_is_valid(allowed_domains: str) -> bool:
     """
     if not allowed_domains:
         return True
-    dns_names = [name.strip() for name in allowed_domains.split(",")]
+    dns_names = (name.strip() for name in allowed_domains.split(","))
     valid = all(name and " " not in name for name in dns_names)
     return valid
 

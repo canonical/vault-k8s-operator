@@ -28,6 +28,7 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
+from functools import cached_property
 import json
 import logging
 import os
@@ -1002,12 +1003,7 @@ class PKIManager:
         self._tls_certificates_pki = tls_certificates_pki
         self._certificate_request_attributes = certificate_request_attributes
         self._pki_utils = _PKIUtils(vault_client, mount_point)
-        if allowed_domains:
-            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
-            self._allowed_domains = allowed_domains
-        else:
-            self._allowed_domains_list = [certificate_request_attributes.common_name]
-            self._allowed_domains = certificate_request_attributes.common_name
+        self._allowed_domains = allowed_domains if allowed_domains else certificate_request_attributes.common_name
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1159,6 +1155,11 @@ class PKIManager:
             provider_certificate=provider_certificate,
         )
 
+    @cached_property
+    def _allowed_domains_list(self) -> list[str]:
+        """Return the allowed domains for the ACME server in Vault as a list."""
+        return [domain.strip() for domain in self._allowed_domains.split(",")]
+
 
 class KVManager:
     """Encapsulates the business logic for managing KV credentials for requirer Charms."""
@@ -1265,7 +1266,7 @@ class KVManager:
 
         juju_secret_label = Naming.kv_secret_label(unit_name=unit_name)
         current_credentials = self._vault_kv.get_credentials(relation)
-        credentials_juju_secret_id = current_credentials.get(nonce, None)
+        credentials_juju_secret_id = current_credentials.get(nonce, "")
 
         if self._is_vault_kv_role_configured(
             label=juju_secret_label,
@@ -1596,12 +1597,7 @@ class ACMEManager:
         self._role_name = role_name
         self._vault_address = vault_address
         self._pki_utils = _PKIUtils(vault_client, mount_point)
-        if allowed_domains:
-            self._allowed_domains_list = [domain.strip() for domain in allowed_domains.split(",")]
-            self._allowed_domains = allowed_domains
-        else:
-            self._allowed_domains_list = [certificate_request_attributes.common_name]
-            self._allowed_domains = certificate_request_attributes.common_name
+        self._allowed_domains = allowed_domains if allowed_domains else certificate_request_attributes.common_name
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1725,3 +1721,7 @@ class ACMEManager:
         self._enable_acme()
         self.make_latest_acme_issuer_default()
 
+    @cached_property
+    def _allowed_domains_list(self) -> list[str]:
+        """Return the allowed domains for the ACME server in Vault as a list."""
+        return [domain.strip() for domain in self._allowed_domains.split(",")]

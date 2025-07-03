@@ -385,8 +385,25 @@ def test_given_role_config_matches_given_config_when_role_config_matches_given_c
 
 
 @patch("hvac.api.secrets_engines.pki.Pki.read_role")
+@pytest.mark.parametrize(
+    "allowed_domains, allow_subdomains, allow_wildcard_certificates, allow_any_name",
+    [
+        (["example.com"], True, True, False),
+        (["example.com"], True, False, False),
+        (["example.com"], False, True, False),
+        (["example.com"], False, False, True),
+        (["example.com"], False, False, False),
+        (["example.com", "example.org"], True, True, True),
+        (["example.com"], True, False, True),
+        (["example.com"], False, True, True),
+    ],
+)
 def test_given_role_config_does_not_match_given_config_when_role_config_matches_given_config_then_returns_false(
     patch_read_role: MagicMock,
+    allowed_domains: list[str],
+    allow_subdomains: bool,
+    allow_wildcard_certificates: bool,
+    allow_any_name: bool,
 ):
     patch_read_role.return_value = {
         "data": {
@@ -400,8 +417,8 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
     assert not vault.role_config_matches_given_config(
         role="test-role",
         mount="some/path",
-        allowed_domains=["example.com"],
-        allow_subdomains=True,
-        allow_wildcard_certificates=True,
-        allow_any_name=False,
+        allowed_domains=allowed_domains,
+        allow_subdomains=allow_subdomains,
+        allow_wildcard_certificates=allow_wildcard_certificates,
+        allow_any_name=allow_any_name,
     )
