@@ -346,7 +346,7 @@ actions:
           new policies, such as the root token that is provided upon initializing 
           Vault. Used to create the app role and policy for the charm. It is not
           stored by the charm.
-    required: [secret-id] 
+    required: [secret-id]
 
   bootstrap-raft:
     description: >-
@@ -361,10 +361,22 @@ actions:
     description: >-
       Creates a snapshot of the Raft backend and saves it to the S3 storage.
       Returns backup ID.
+    params:
+      skip-verify:
+        type: boolean
+        description: >-
+          Whether to skip the verification of the S3 connection TLS certificate.
+          If set to "true", the charm will not verify the S3 connection.
 
   list-backups:
     description: >-
       Lists all available backups.
+    params:
+      skip-verify:
+        type: boolean
+        description: >-
+          Whether to skip the verification of the S3 connection TLS certificate.
+          If set to "true", the charm will not verify the S3 connection.
 
   restore-backup:
     description: >-
@@ -375,4 +387,9 @@ actions:
         type: string
         description: >-
           Backup ID to restore.
+      skip-verify:
+        type: boolean
+        description: >-
+          Whether to skip the verification of the S3 connection TLS certificate.
+          If set to "true", the charm will not verify the S3 connection.
     required: [backup-id]

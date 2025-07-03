@@ -5,12 +5,7 @@ import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
-from vault.vault_client import (
-    AuthMethod,
-    SecretsBackend,
-    VaultClient,
-    VaultClientError,
-)
+from vault.vault_client import AuthMethod, SecretsBackend, VaultClient, VaultClientError
 from vault.vault_client import Certificate as VaultClientCertificate
 from vault.vault_managers import (
     AUTOUNSEAL_POLICY,
@@ -815,6 +810,23 @@ class TestBackupManager:
 
         assert key.startswith("vault-backup-my-model-")
 
+    @pytest.mark.parametrize("skip_verify", [True, False])
+    def test_when_create_backup_then_skip_verify_is_passed(self, skip_verify: bool) -> None:
+        self.manager.create_backup(self.vault_client, skip_verify=skip_verify)
+        assert self.s3_class.call_args.kwargs["skip_verify"] is skip_verify
+
+    @pytest.mark.parametrize("skip_verify", [True, False])
+    def test_list_backups_skip_verify(self, skip_verify: bool) -> None:
+        self.manager.list_backups(skip_verify=skip_verify)
+        assert self.s3_class.call_args.kwargs["skip_verify"] is skip_verify
+
+    @pytest.mark.parametrize("skip_verify", [True, False])
+    def test_restore_backup_skip_verify(self, skip_verify: bool) -> None:
+        self.manager.restore_backup(
+            self.vault_client, "vault-backup-my-model-1", skip_verify=skip_verify
+        )
+        assert self.s3_class.call_args.kwargs["skip_verify"] is skip_verify
+
     # List backups
     def test_given_non_leader_when_list_backups_then_error_raised(self):
         self.juju_facade.is_leader = False
@@ -913,7 +925,7 @@ class TestBackupManager:
         self.s3.get_content.return_value = None
         with pytest.raises(ManagerError) as e:
             self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
-        assert str(e.value) == "Snapshot not found in S3 bucket"
+        assert "Snapshot not found in S3 bucket" in str(e.value)
 
     def test_given_vault_client_fails_to_restore_snapshot_when_restore_backup_then_error_raised(
         self,

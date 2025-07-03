@@ -219,7 +219,8 @@ class VaultOperatorCharm(CharmBase):
 
         This may not be the Vault service running on this unit.
         """
-        for address in self._get_peer_relation_node_api_addresses():
+        addresses = self._get_peer_relation_node_api_addresses()
+        for address in addresses:
             try:
                 vault = VaultClient(
                     address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
@@ -609,13 +610,15 @@ class VaultOperatorCharm(CharmBase):
         Args:
             event: ActionEvent
         """
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         vault_client = self._get_authenticated_vault_client()
         if not vault_client:
             event.fail(message="Failed to initialize Vault client.")
             return
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            backup_key = manager.create_backup(vault_client)
+            backup_key = manager.create_backup(vault_client, skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to create backup: %s", e)
             event.fail(message=f"Failed to create backup: {e}")
@@ -626,13 +629,12 @@ class VaultOperatorCharm(CharmBase):
         """Handle the list-backups action.
 
         Lists all backups stored in S3 bucket.
-
-        Args:
-            event: ActionEvent
         """
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            backup_ids = manager.list_backups()
+            backup_ids = manager.list_backups(skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to list backups: %s", e)
             event.fail(message=f"Failed to list backups: {e}")
@@ -644,9 +646,6 @@ class VaultOperatorCharm(CharmBase):
         """Handle the restore-backup action.
 
         Restores the snapshot with the provided ID.
-
-        Args:
-            event: ActionEvent
         """
         vault_client = self._get_active_vault_client()
         if not vault_client:
@@ -656,9 +655,11 @@ class VaultOperatorCharm(CharmBase):
         # This should be enforced by Juju/charmcraft.yaml, but we assert here
         # to make the typechecker happy
         assert isinstance(key, str)
+        skip_verify: bool = event.params.get("skip-verify", False)
+
         try:
             manager = BackupManager(self, self.s3_requirer, S3_RELATION_NAME)
-            manager.restore_backup(vault_client, key)
+            manager.restore_backup(vault_client, key, skip_verify=skip_verify)
         except ManagerError as e:
             logger.error("Failed to restore backup: %s", e)
             event.fail(message=f"Failed to restore backup: {e}")
@@ -1209,7 +1210,7 @@ class VaultOperatorCharm(CharmBase):
             databag["node_api_address"]
             for databag in peer_relation_data
             if "node_api_address" in databag
-        ]
+        ] + ([self._api_address] if self._api_address else [])
 
     def _other_peer_node_api_addresses(self) -> List[str]:
         """Return the list of other peer unit addresses.

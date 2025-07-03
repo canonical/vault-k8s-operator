@@ -4,7 +4,7 @@
 
 import io
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 import boto3
 from botocore.exceptions import ClientError
@@ -350,3 +350,41 @@ class TestS3(unittest.TestCase):
         streaming_body = s3.get_content(bucket_name="whatever-bucket", object_key="whatever-key")
         assert streaming_body
         self.assertEqual(streaming_body.read(), streaming_body_content)
+
+    @patch("boto3.session.Session")
+    def test_given_skip_verify_true_when_create_s3_session_then_verify_is_false(
+        self,
+        patch_session: MagicMock,
+    ):
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            skip_verify=True,
+        )
+        patch_session.return_value.resource.assert_called_with(
+            "s3",
+            endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
+            config=ANY,
+            verify=False,
+        )
+
+    @patch("boto3.session.Session")
+    def test_given_skip_verify_false_when_create_s3_session_then_verify_is_none(
+        self,
+        patch_session: MagicMock,
+    ):
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            skip_verify=False,
+        )
+        patch_session.return_value.resource.assert_called_with(
+            "s3",
+            endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
+            config=ANY,
+            verify=None,
+        )
