@@ -425,12 +425,12 @@ class VaultClient:
         """
         try:
             response = self._client.secrets.pki.sign_certificate(
-            csr=csr,
-            mount_point=mount,
-            common_name=common_name,
-            name=role,
-            extra_params={"ttl": ttl},
-        )
+                csr=csr,
+                mount_point=mount,
+                common_name=common_name,
+                name=role,
+                extra_params={"ttl": ttl},
+            )
             logger.info("Signed a PKI certificate for %s", common_name)
             return Certificate(
                 certificate=response["data"]["certificate"],
@@ -440,7 +440,7 @@ class VaultClient:
         except InvalidRequest as e:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
-    
+
     def sign_pki_certificate_signing_request_verbatim(
         self,
         mount: str,
@@ -479,7 +479,7 @@ class VaultClient:
             )
         except InvalidRequest as e:
             logger.warning("Error while signing PKI certificate: %s", e)
-            return None    
+            return None
 
     def create_or_update_pki_charm_role(
         self,

@@ -1007,6 +1007,7 @@ class PKIManager:
             country: The country to be included in the issued certificate
             province: The province to be included in the issued certificate
             locality: The locality to be included in the issued certificate
+            sign_verbatim: Whether to sign the certificate verbatim
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1104,21 +1105,24 @@ class PKIManager:
             certificate_from_provider.certificate
         )
 
-        if not self._sign_verbatim and not self._vault_client.role_config_matches_given_config(
-            role=self._role_name,
-            mount=self._mount_point,
-            allowed_domains=self._allowed_domains_list,
-            allow_subdomains=self._allow_subdomains,
-            allow_wildcard_certificates=self._allow_wildcard_certificates,
-            allow_any_name=self._allow_any_name,
-            allow_ip_sans=self._allow_ip_sans,
-            organization=self._organization,
-            organizational_unit=self._organizational_unit,
-            country=self._country,
-            province=self._province,
-            locality=self._locality,
-        ) or issued_certificates_validity != self._vault_client.get_role_max_ttl(
-            role=self._role_name, mount=self._mount_point
+        if (
+            not self._sign_verbatim
+            and not self._vault_client.role_config_matches_given_config(
+                role=self._role_name,
+                mount=self._mount_point,
+                allowed_domains=self._allowed_domains_list,
+                allow_subdomains=self._allow_subdomains,
+                allow_wildcard_certificates=self._allow_wildcard_certificates,
+                allow_any_name=self._allow_any_name,
+                allow_ip_sans=self._allow_ip_sans,
+                organization=self._organization,
+                organizational_unit=self._organizational_unit,
+                country=self._country,
+                province=self._province,
+                locality=self._locality,
+            )
+            or issued_certificates_validity
+            != self._vault_client.get_role_max_ttl(role=self._role_name, mount=self._mount_point)
         ):
             self._vault_client.create_or_update_pki_charm_role(
                 allowed_domains=self._allowed_domains,
@@ -1170,18 +1174,22 @@ class PKIManager:
         allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
             provider_certificate.certificate
         )
-        certificate = self._vault_client.sign_pki_certificate_signing_request(
-            mount=self._mount_point,
-            role=self._role_name,
-            csr=str(requirer_csr.certificate_signing_request),
-            common_name=requirer_csr.certificate_signing_request.common_name,
-            ttl=f"{allowed_cert_validity}s",
-        ) if not self._sign_verbatim else self._vault_client.sign_pki_certificate_signing_request_verbatim(
-            mount=self._mount_point,
-            role=self._role_name,
-            csr=str(requirer_csr.certificate_signing_request),
-            common_name=requirer_csr.certificate_signing_request.common_name,
-            ttl=f"{allowed_cert_validity}s",
+        certificate = (
+            self._vault_client.sign_pki_certificate_signing_request(
+                mount=self._mount_point,
+                role=self._role_name,
+                csr=str(requirer_csr.certificate_signing_request),
+                common_name=requirer_csr.certificate_signing_request.common_name,
+                ttl=f"{allowed_cert_validity}s",
+            )
+            if not self._sign_verbatim
+            else self._vault_client.sign_pki_certificate_signing_request_verbatim(
+                mount=self._mount_point,
+                role=self._role_name,
+                csr=str(requirer_csr.certificate_signing_request),
+                common_name=requirer_csr.certificate_signing_request.common_name,
+                ttl=f"{allowed_cert_validity}s",
+            )
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")
