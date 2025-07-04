@@ -1,0 +1,80 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:753 Adding model github-pr-528fc-microk8s:test-acme-2m9h on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-k8s-0
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/noble/self-signed-certificates-263
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: installing agent
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [allocating] waiting: agent initialising
+  vault-k8s/2 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/1 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m tests.integration.helpers:helpers.py:215 Vault initialized
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.81:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.88:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.89:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m tests.integration.helpers:helpers.py:246 Charm authorized
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] active: 
+  vault-k8s/1 [executing] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [executing] blocked: Please authorize charm (see `authorize-charm` action)
+  self-signed-certificates/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model           Controller                Cloud/Region        Version  SLA          Timestamp
+test-acme-2m9h  github-pr-528fc-microk8s  microk8s/localhost  3.6.7    unsupported  10:59:25Z
+
+App                       Version  Status  Scale  Charm                     Channel   Rev  Address        Exposed  Message
+self-signed-certificates           active      1  self-signed-certificates  1/stable  263  10.152.183.48  no       
+vault-k8s                          active      3  vault-k8s                             0  10.152.183.21  no       
+
+Unit                         Workload  Agent  Address     Ports  Message
+self-signed-certificates/0*  active    idle   10.1.32.82         
+vault-k8s/0*                 active    idle   10.1.32.81         
+vault-k8s/1                  active    idle   10.1.32.88         
+vault-k8s/2                  active    idle   10.1.32.89         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-1: 10:57:49 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fc7d4f638c0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:57:50 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f489d2737d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:57:50 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0fe9fff3b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:57:51 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f42cdfe3470>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:57:52 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0c33ea6210>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:57:53 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-acme-2m9h.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f245daeb7a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-self-signed-certificates-0: 10:58:44 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 10:58:53 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 10:58:54 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 10:58:57 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 10:59:00 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 10:59:11 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-acme-2m9h...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
