@@ -1176,7 +1176,12 @@ class PKIManager:
             csr=str(requirer_csr.certificate_signing_request),
             common_name=requirer_csr.certificate_signing_request.common_name,
             ttl=f"{allowed_cert_validity}s",
-            verbatim=self._sign_verbatim,
+        ) if not self._sign_verbatim else self._vault_client.sign_pki_certificate_signing_request_verbatim(
+            mount=self._mount_point,
+            role=self._role_name,
+            csr=str(requirer_csr.certificate_signing_request),
+            common_name=requirer_csr.certificate_signing_request.common_name,
+            ttl=f"{allowed_cert_validity}s",
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")

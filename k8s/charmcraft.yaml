@@ -394,7 +394,8 @@ config:
       default: false
       description: >-
         If set to true, all other pki configuration options will be ignored and the Vault charm will sign the certificate verbatim.
-        Using this option is not recommended and should only be done when the requirers are trusted.
+        Vault recommends not using this option unless requirers are trusted.
+        "This is a potentially dangerous endpoint and only highly trusted users should have access."
 
 # ACME engine options
     acme_ca_common_name:

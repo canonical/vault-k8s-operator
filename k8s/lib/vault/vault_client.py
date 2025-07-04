@@ -408,7 +408,6 @@ class VaultClient:
         csr: str,
         common_name: str,
         ttl: str,
-        verbatim: bool = False,
     ) -> Certificate | None:
         """Sign a certificate signing request for the PKI backend.
 
@@ -425,20 +424,13 @@ class VaultClient:
             Certificate: The signed certificate object
         """
         try:
-            if verbatim:
-                response = self._client.secrets.pki.sign_verbatim(
-                    csr=csr,
-                    mount_point=mount,
-                    name=role,
-                )
-            else:
-                response = self._client.secrets.pki.sign_certificate(
-                csr=csr,
-                mount_point=mount,
-                common_name=common_name,
-                name=role,
-                extra_params={"ttl": ttl},
-            )
+            response = self._client.secrets.pki.sign_certificate(
+            csr=csr,
+            mount_point=mount,
+            common_name=common_name,
+            name=role,
+            extra_params={"ttl": ttl},
+        )
             logger.info("Signed a PKI certificate for %s", common_name)
             return Certificate(
                 certificate=response["data"]["certificate"],
@@ -448,6 +440,46 @@ class VaultClient:
         except InvalidRequest as e:
             logger.warning("Error while signing PKI certificate: %s", e)
             return None
+    
+    def sign_pki_certificate_signing_request_verbatim(
+        self,
+        mount: str,
+        role: str,
+        csr: str,
+        common_name: str,
+        ttl: str,
+    ) -> Certificate | None:
+        """Sign a certificate signing request for the PKI backend.
+
+        Args:
+            mount: The PKI mount point.
+            role: The role to use for signing the certificate.
+            csr: The certificate signing request.
+            common_name: The common name for the certificate.
+            ttl: The relative validity for the certificate.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
+
+        Returns:
+            Certificate: The signed certificate object
+        """
+        try:
+            response = self._client.secrets.pki.sign_verbatim(
+                csr=csr,
+                mount_point=mount,
+                name=role,
+                extra_params={"ttl": ttl},
+            )
+
+            logger.info("Signed a PKI certificate verbatim for %s", common_name)
+            return Certificate(
+                certificate=response["data"]["certificate"],
+                ca=response["data"]["issuing_ca"],
+                chain=response["data"]["ca_chain"],
+            )
+        except InvalidRequest as e:
+            logger.warning("Error while signing PKI certificate: %s", e)
+            return None    
 
     def create_or_update_pki_charm_role(
         self,
