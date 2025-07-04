@@ -389,6 +389,13 @@ config:
       description: >-
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
+    pki_sign_verbatim:
+      type: boolean
+      default: false
+      description: >-
+        If set to true, all other pki configuration options will be ignored and the Vault charm will sign the certificate verbatim.
+        Vault recommends not using this option unless requirers are trusted.
+        "This is a potentially dangerous endpoint and only highly trusted users should have access."
 
 # ACME engine options
     acme_ca_common_name:
