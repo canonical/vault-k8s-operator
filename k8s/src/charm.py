@@ -689,6 +689,7 @@ class VaultCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            sign_verbatim=self.juju_facade.get_bool_config("pki_sign_verbatim"),
         )
         manager.sync()
 

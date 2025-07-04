@@ -408,6 +408,7 @@ class VaultClient:
         csr: str,
         common_name: str,
         ttl: str,
+        verbatim: bool = False,
     ) -> Certificate | None:
         """Sign a certificate signing request for the PKI backend.
 
@@ -424,7 +425,14 @@ class VaultClient:
             Certificate: The signed certificate object
         """
         try:
-            response = self._client.secrets.pki.sign_certificate(
+            if verbatim:
+                response = self._client.secrets.pki.sign_verbatim(
+                    csr=csr,
+                    mount_point=mount,
+                    name=role,
+                )
+            else:
+                response = self._client.secrets.pki.sign_certificate(
                 csr=csr,
                 mount_point=mount,
                 common_name=common_name,

@@ -983,6 +983,7 @@ class PKIManager:
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4,
+        sign_verbatim: bool | None,
     ):
         """Create a new PKIManager object.
 
@@ -1031,6 +1032,7 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
+        self._sign_verbatim = sign_verbatim if sign_verbatim is not None else False
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1102,7 +1104,7 @@ class PKIManager:
             certificate_from_provider.certificate
         )
 
-        if not self._vault_client.role_config_matches_given_config(
+        if not self._sign_verbatim and not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
@@ -1174,6 +1176,7 @@ class PKIManager:
             csr=str(requirer_csr.certificate_signing_request),
             common_name=requirer_csr.certificate_signing_request.common_name,
             ttl=f"{allowed_cert_validity}s",
+            verbatim=self._sign_verbatim,
         )
         if not certificate:
             logger.debug("Failed to sign the certificate")
