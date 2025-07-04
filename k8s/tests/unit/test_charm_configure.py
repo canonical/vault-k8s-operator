@@ -9,6 +9,7 @@ from pathlib import Path
 
 import hcl
 import ops.testing as testing
+import pytest
 from ops.pebble import Layer
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import (
@@ -124,7 +125,6 @@ class TestCharmConfigure(VaultCharmFixtures):
                     "is_sealed.return_value": False,
                     "is_active_or_standby.return_value": True,
                     "get_intermediate_ca.return_value": "",
-                    "is_common_name_allowed_in_pki_role.return_value": False,
                 },
             )
             self.mock_autounseal_requires_get_details.return_value = None
@@ -156,7 +156,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret],
                 relations=[peer_relation, pki_relation],
                 config={
-                    "common_name": "myhostname.com",
+                    "pki_ca_common_name": "myhostname.com",
                 },
             )
             provider_certificate, private_key = generate_example_provider_certificate(
@@ -168,10 +168,76 @@ class TestCharmConfigure(VaultCharmFixtures):
                 provider_certificate,
                 private_key,
             )
-
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_pki_manager.configure.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "config_key, config_value",
+        [
+            ("pki_allowed_domains", "This should have been a comma separated list"),
+            ("pki_ca_sans_dns", "This should have been a comma separated list"),
+        ],
+    )
+    def test_given_pki_config_is_invalid_when_configure_then_pki_secrets_engine_is_not_configured(
+        self, config_key: str, config_value: str
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_vault.configure_mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "get_intermediate_ca.return_value": "",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            vault_config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+            )
+            pki_relation = testing.Relation(
+                endpoint="tls-certificates-pki",
+                interface="tls-certificates",
+            )
+            approle_secret = testing.Secret(
+                label="vault-approle-auth-details",
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
+            )
+            state_in = testing.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, pki_relation],
+                config={
+                    "pki_ca_common_name": "myhostname.com",
+                    config_key: config_value,
+                },
+            )
+            provider_certificate, private_key = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=pki_relation.id,
+                validity=timedelta(hours=24),
+            )
+            self.mock_get_requirer_assigned_certificate.return_value = (
+                provider_certificate,
+                private_key,
+            )
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
+            self.mock_pki_manager.configure.assert_not_called()
 
     # Test ACME
 
@@ -218,7 +284,7 @@ class TestCharmConfigure(VaultCharmFixtures):
                 secrets=[approle_secret],
                 relations=[peer_relation, acme_relation],
                 config={
-                    "common_name": "myhostname.com",
+                    "acme_ca_common_name": "myhostname.com",
                 },
             )
             provider_certificate, private_key = generate_example_provider_certificate(
@@ -234,6 +300,73 @@ class TestCharmConfigure(VaultCharmFixtures):
             self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
 
             self.mock_acme_manager.configure.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "config_key, config_value",
+        [
+            ("acme_allowed_domains", "This should have been a comma separated list"),
+            ("acme_ca_sans_dns", "This should have been a comma separated list"),
+        ],
+    )
+    def test_given_acme_config_is_invalid_when_configure_then_acme_server_is_not_configured(
+        self, config_key: str, config_value: str
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.mock_vault.configure_mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "authenticate.return_value": True,
+                    "is_initialized.return_value": True,
+                    "is_sealed.return_value": False,
+                    "is_active_or_standby.return_value": True,
+                    "get_intermediate_ca.return_value": "",
+                },
+            )
+            self.mock_autounseal_requires_get_details.return_value = None
+            vault_config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": vault_config_mount,
+                },
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+            )
+            acme_relation = testing.Relation(
+                endpoint="tls-certificates-acme",
+                interface="tls-certificates",
+            )
+            approle_secret = testing.Secret(
+                label="vault-approle-auth-details",
+                tracked_content={"role-id": "role id", "secret-id": "secret id"},
+            )
+            state_in = testing.State(
+                containers=[container],
+                leader=True,
+                secrets=[approle_secret],
+                relations=[peer_relation, acme_relation],
+                config={
+                    "acme_ca_common_name": "myhostname.com",
+                    config_key: config_value,
+                },
+            )
+            provider_certificate, private_key = generate_example_provider_certificate(
+                common_name="myhostname.com",
+                relation_id=acme_relation.id,
+                validity=timedelta(hours=24),
+            )
+            self.mock_get_requirer_assigned_certificate.return_value = (
+                provider_certificate,
+                private_key,
+            )
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
+            self.mock_acme_manager.configure.assert_not_called()
 
     # Test Auto unseal
 
@@ -252,7 +385,6 @@ class TestCharmConfigure(VaultCharmFixtures):
                 "is_sealed.return_value": False,
                 "is_active_or_standby.return_value": True,
                 "get_intermediate_ca.return_value": "",
-                "is_common_name_allowed_in_pki_role.return_value": False,
             },
         )
         self.mock_vault_autounseal_provider_manager.configure_mock(
@@ -313,7 +445,7 @@ class TestCharmConfigure(VaultCharmFixtures):
             leader=True,
             secrets=[approle_secret],
             relations=[peer_relation, vault_autounseal_relation],
-            config={"common_name": "myhostname.com"},
+            config={"pki_ca_common_name": "myhostname.com"},
         )
 
         self.ctx.run(self.ctx.on.pebble_ready(container), state_in)

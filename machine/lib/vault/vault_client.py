@@ -442,7 +442,20 @@ class VaultClient:
             return None
 
     def create_or_update_pki_charm_role(
-        self, role: str, allowed_domains: str, max_ttl: str, mount: str
+        self,
+        role: str,
+        allowed_domains: str,
+        max_ttl: str,
+        mount: str,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
+        allow_ip_sans: bool,
+        organization: str | None,
+        organizational_unit: str | None,
+        country: str | None,
+        province: str | None,
+        locality: str | None,
     ) -> None:
         """Create a role for the PKI backend or update it if it already exists.
 
@@ -454,33 +467,105 @@ class VaultClient:
                 Should be a string in the format of a number with a unit such as
                 "120m", "10h" or "90d".
             mount: The mount point of the PKI backend for which the role will be created.
+            allow_subdomains: Whether to allow issuing certificates for subdomains.
+            allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
+            allow_any_name: Whether to allow issuing certificates for any name.
+            allow_ip_sans: Whether to allow issuing certificates with IP Subject Alternative Names.
+            organization: The organization for the role.
+            organizational_unit: The organizational unit for the role.
+            country: The country for the role.
+            province: The province for the role.
+            locality: The locality for the role.
         """
+        extra_params = {
+            "allowed_domains": allowed_domains,
+            "max_ttl": max_ttl,
+        }
+
+        if allow_subdomains is not None:
+            extra_params["allow_subdomains"] = "true" if allow_subdomains else "false"
+        if allow_wildcard_certificates is not None:
+            extra_params["allow_wildcard_certificates"] = (
+                "true" if allow_wildcard_certificates else "false"
+            )
+        if allow_any_name is not None:
+            extra_params["allow_any_name"] = "true" if allow_any_name else "false"
+        if allow_ip_sans:
+            extra_params["allow_ip_sans"] = "true"
+        if organization:
+            extra_params["organization"] = organization
+        if organizational_unit:
+            extra_params["organizational_unit"] = organizational_unit
+        if country:
+            extra_params["country"] = country
+        if province:
+            extra_params["province"] = province
+        if locality:
+            extra_params["locality"] = locality
+
         self._client.secrets.pki.create_or_update_role(
             name=role,
             mount_point=mount,
-            extra_params={
-                "allowed_domains": allowed_domains,
-                "allow_subdomains": True,
-                "max_ttl": max_ttl,
-            },
-        )
-        logger.info(
-            "Created or updated PKI role `%s` with `allowed_domains=%s` and `max_ttl=%s`",
-            role,
-            allowed_domains,
-            max_ttl,
+            extra_params=extra_params,
         )
 
-    def create_or_update_acme_role(self, role: str, mount: str, max_ttl: str) -> None:
-        """Create a role for the ACME backend or update it if it already exists."""
-        self._client.secrets.pki.create_or_update_role(
-            name=role,
-            mount_point=mount,
-            extra_params={
-                "allow_any_name": True,
-                "allow_subdomains": True,
-                "max_ttl": max_ttl,
-            },
+        log_params = ", ".join(f"{key}={value}" for key, value in extra_params.items())
+        logger.info(
+            "Created or updated PKI role `%s` with %s",
+            role,
+            log_params,
+        )
+
+    def create_or_update_acme_role(
+        self,
+        role: str,
+        mount: str,
+        max_ttl: str,
+        allowed_domains: str,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
+        allow_ip_sans: bool,
+        organization: str | None,
+        organizational_unit: str | None,
+        country: str | None,
+        province: str | None,
+        locality: str | None,
+    ) -> None:
+        """Create a role for the ACME backend or update it if it already exists.
+
+        Args:
+            role: The name of the role to create or update.
+            allowed_domains: The list of allowed domains for the role.
+            max_ttl: The maximum TTL for the role.
+                It is also used by Vault as a maximum validity for the certificates issued by this role.
+                Should be a string in the format of a number with a unit such as
+                "120m", "10h" or "90d".
+            mount: The mount point of the PKI backend for which the role will be created.
+            allow_subdomains: Whether to allow issuing certificates for subdomains.
+            allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
+            allow_any_name: Whether to allow issuing certificates for any name.
+            allow_ip_sans: Whether to allow issuing certificates with IP Subject Alternative Names.
+            organization: The organization for the role.
+            organizational_unit: The organizational unit for the role.
+            country: The country for the role.
+            province: The province for the role.
+            locality: The locality for the role.
+        """
+        self.create_or_update_pki_charm_role(
+            role=role,
+            mount=mount,
+            max_ttl=max_ttl,
+            allow_subdomains=allow_subdomains,
+            allow_wildcard_certificates=allow_wildcard_certificates,
+            allow_any_name=allow_any_name,
+            allow_ip_sans=allow_ip_sans,
+            organization=organization,
+            organizational_unit=organizational_unit,
+            country=country,
+            province=province,
+            locality=locality,
+            allowed_domains=allowed_domains,
         )
 
     def is_pki_role_created(self, role: str, mount: str) -> bool:
@@ -551,6 +636,54 @@ class VaultClient:
             return common_name in self._client.secrets.pki.read_role(
                 name=role, mount_point=mount
             ).get("data", {}).get("allowed_domains", [])
+        except InvalidPath:
+            logger.warning("Role does not exist on the specified path.")
+            return False
+
+    def role_config_matches_given_config(
+        self,
+        role: str,
+        mount: str,
+        allowed_domains: List[str],
+        allow_subdomains: bool,
+        allow_wildcard_certificates: bool,
+        allow_any_name: bool,
+        allow_ip_sans: bool,
+        organization: str | None,
+        organizational_unit: str | None,
+        country: str | None,
+        province: str | None,
+        locality: str | None,
+    ) -> bool:
+        """Return whether the role config matches the charm config."""
+        try:
+            role_data = self._client.secrets.pki.read_role(name=role, mount_point=mount).get(
+                "data", {}
+            )
+
+            if not all(
+                common_name in role_data.get("allowed_domains", [])
+                for common_name in allowed_domains
+            ):
+                return False
+
+            expected_config = {
+                "allow_subdomains": allow_subdomains,
+                "allow_wildcard_certificates": allow_wildcard_certificates,
+                "allow_any_name": allow_any_name,
+                "allow_ip_sans": allow_ip_sans,
+                "organization": organization,
+                "organizational_unit": organizational_unit,
+                "country": country,
+                "province": province,
+                "locality": locality,
+            }
+
+            for field, expected_value in expected_config.items():
+                if role_data.get(field) != expected_value:
+                    return False
+
+            return True
         except InvalidPath:
             logger.warning("Role does not exist on the specified path.")
             return False

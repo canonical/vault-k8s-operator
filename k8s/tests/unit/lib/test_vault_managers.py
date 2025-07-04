@@ -362,15 +362,35 @@ class TestPKIManager:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.allowed_domains = "common_name"
+        self.allow_subdomains = False
+        self.allow_wildcard_certificates = True
+        self.allow_any_name = False
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
 
         self.pki_manager = PKIManager(
-            self.charm,
-            self.vault,
-            self.certificate_request_attributes,
-            self.mount_point,
-            self.role_name,
-            self.vault_pki,
-            self.tls_certificates_pki,
+            charm=self.charm,
+            vault_client=self.vault,
+            certificate_request_attributes=self.certificate_request_attributes,
+            mount_point=self.mount_point,
+            role_name=self.role_name,
+            vault_pki=self.vault_pki,
+            tls_certificates_pki=self.tls_certificates_pki,
+            allowed_domains=self.allowed_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     @pytest.fixture
@@ -454,6 +474,7 @@ class TestPKIManager:
     def test_given_new_certificate_issued_when_configure_then_certificates_replaced(
         self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
     ):
+        self.vault.role_config_matches_given_config.return_value = False
         # Return a different certificate from Vault, to emulate the situation
         # where a new certificate has been issued.
         vault_certificate, _ = generate_example_provider_certificate(
@@ -467,14 +488,21 @@ class TestPKIManager:
             SecretsBackend.PKI, self.mount_point
         )
 
-        self.vault_pki.revoke_all_certificates.assert_called_once()
-
         # Certificates are issued for half the time the provider certificate is valid for
         self.vault.create_or_update_pki_charm_role.assert_called_once_with(
             allowed_domains=self.certificate_request_attributes.common_name,
             mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{12 * SECONDS_IN_HOUR}s",
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     def test_given_outstanding_requests_when_sync_then_certificates_issued(
@@ -531,14 +559,34 @@ class TestACMEManager:
         )
         self.role_name = "acme-charm-role"
         self.vault_address = "https://vault:8200"
+        self.allowed_domains = "common_name"
+        self.allow_subdomains = True
+        self.allow_wildcard_certificates = True
+        self.allow_any_name = True
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
         self.acme_manager = ACMEManager(
-            self.charm,
-            self.vault,
-            self.mount_point,
-            self.tls_certificates_acme,
-            self.certificate_request_attributes,
-            self.role_name,
-            self.vault_address,
+            charm=self.charm,
+            vault_client=self.vault,
+            mount_point=self.mount_point,
+            tls_certificates_acme=self.tls_certificates_acme,
+            certificate_request_attributes=self.certificate_request_attributes,
+            role_name=self.role_name,
+            vault_address=self.vault_address,
+            allowed_domains=self.allowed_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     @pytest.fixture
@@ -644,6 +692,8 @@ class TestACMEManager:
     def test_given_intermediate_certificate_when_configure_then_role_created(
         self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
     ):
+        self.vault.role_config_matches_given_config.return_value = False
+
         vault_certificate, _ = generate_example_provider_certificate(
             self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
         )
@@ -663,9 +713,19 @@ class TestACMEManager:
         # This is how the manager currently calculates the max_ttl.
         max_ttl = int(validity_in_seconds / 2)
         self.vault.create_or_update_acme_role.assert_called_once_with(
-            mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{max_ttl}s",
+            mount=self.mount_point,
+            allowed_domains=self.allowed_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
         )
 
     def test_given_intermediate_certificate_when_configure_then_backend_configured(

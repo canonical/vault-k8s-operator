@@ -41,13 +41,13 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         num_units=NUM_VAULT_UNITS,
     )
     await ops_test.model.deploy(
-        "prometheus-k8s",
+        PROMETHEUS_APPLICATION_NAME,
         application_name=PROMETHEUS_APPLICATION_NAME,
         trust=True,
         channel="1/stable",
     )
     await ops_test.model.deploy(
-        "loki-k8s",
+        LOKI_APPLICATION_NAME,
         application_name=LOKI_APPLICATION_NAME,
         trust=True,
         channel="1/stable",

@@ -216,6 +216,91 @@ class TestCharmTLS:
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
     @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    def test_given_certificate_access_relation_and_config_values_when_relation_changed_then_new_request_is_created_with_config_values(  # noqa: E501
+        self,
+    ):
+        self.mock_get_assigned_certificate.return_value = None, None
+        ingress_address = "1.2.3.4"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            certificates_relation = testing.Relation(
+                endpoint="tls-certificates-access",
+                interface="tls-certificates",
+                remote_app_name="some-tls-provider",
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
+            )
+            certs_mount = testing.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            vault_container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = testing.Storage(
+                name="certs",
+            )
+            config_storage = testing.Storage(
+                name="config",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                relations=[certificates_relation, peer_relation],
+                storages=[certs_storage, config_storage],
+                leader=True,
+                networks={
+                    testing.Network(
+                        "vault-peers",
+                        bind_addresses=[testing.BindAddress([testing.Address("192.0.2.1")])],
+                        ingress_addresses=[ingress_address],
+                    )
+                },
+                config={
+                    "access_sans_dns": "mydomain.com,mydomain.org",
+                    "access_country_name": "US",
+                    "access_state_or_province_name": "California",
+                    "access_locality_name": "San Francisco",
+                    "access_organization": "My Organization",
+                    "access_organizational_unit": "My Organizational Unit",
+                    "access_email_address": "my@email.com",
+                },
+            )
+
+            self.ctx.run(self.ctx.on.relation_changed(certificates_relation), state_in)
+
+            self.mock_get_assigned_certificate.assert_called_once_with(
+                certificate_request=CertificateRequestAttributes(
+                    common_name=ingress_address,
+                    sans_dns=frozenset({self.fqdn, "mydomain.com", "mydomain.org"}),
+                    sans_ip=frozenset({ingress_address}),
+                    sans_oid=frozenset(),
+                    email_address="my@email.com",
+                    organization="My Organization",
+                    organizational_unit="My Organizational Unit",
+                    country_name="US",
+                    state_or_province_name="California",
+                    locality_name="San Francisco",
+                    is_ca=False,
+                )
+            )
+
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_certificate_access_relation_when_cert_available_then_new_cert_saved(
         self,
     ):
