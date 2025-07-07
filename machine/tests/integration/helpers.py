@@ -54,6 +54,7 @@ async def authorize_charm(
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
 
+    logger.info("Trying to authorize charm with token %s", root_token)
     return await run_action_on_leader(
         ops_test,
         app_name,
@@ -78,9 +79,12 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
         await ops_test.model.add_secret(
             f"root-token-key-{app_name}", [f"root-token={root_token}", f"key={key}"]
         )
+        logger.info("Initialized unit %s", leader)
+        logger.info("Token %s", root_token)
         return root_token, key
 
     root_token, key = await get_vault_token_and_unseal_key(ops_test.model, app_name)
+    logger.info("Token %s", root_token)
     return root_token, key
 
 
@@ -177,7 +181,7 @@ async def initialize_unseal_authorize_vault(ops_test: OpsTest, app_name: str) ->
     assert vault.is_sealed()
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key)
+        await unseal_all_vault_units(ops_test, unseal_key, root_token, ca_file_name=None)
         await authorize_charm_and_wait(ops_test, root_token)
     return root_token, unseal_key
 
@@ -203,7 +207,10 @@ async def get_leader(app: Application) -> Unit:
 
 
 async def unseal_all_vault_units(
-    ops_test: OpsTest, unseal_key: str, ca_file_name: str | None = None
+    ops_test: OpsTest,
+    unseal_key: str,
+    root_token: str | None = None,
+    ca_file_name: str | None = None,
 ) -> None:
     """Unseal all the vault units."""
     assert ops_test.model
@@ -223,7 +230,10 @@ async def unseal_all_vault_units(
         assert unit_address
         vault = Vault(url=f"https://{unit_address}:8200", ca_file_location=ca_file_name)
         vault.unseal(unseal_key)
+        logger.info("Unsealed unit %s", unit)
+        logger.info("Token %s", root_token)
         await vault.wait_for_node_to_be_unsealed()
+        logger.info("Token info: %s", vault.client.auth.token.lookup(token=root_token))
 
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:

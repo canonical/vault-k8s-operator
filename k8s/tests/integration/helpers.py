@@ -213,9 +213,11 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
             f"root-token-key-{app_name}", [f"root-token={root_token}", f"key={key}"]
         )
         logger.info("Vault initialized")
+        logger.info("Token %s", root_token)
         return root_token, key
 
     root_token, key = await get_vault_token_and_unseal_key(ops_test.model, app_name=app_name)
+    logger.info("Token %s", root_token)
     logger.info("Vault is already initialized")
     return root_token, key
 
@@ -426,6 +428,8 @@ async def initialize_unseal_authorize_vault(ops_test: OpsTest, app_name: str) ->
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await unseal_all_vault_units(ops_test, unseal_key, root_token)
+        logger.info("Token %s", root_token)
+        logger.info("Token info: %s", vault.client.auth.token.lookup(token=root_token))
         await authorize_charm_and_wait(ops_test, root_token)
     return root_token, unseal_key
 

@@ -65,7 +65,7 @@ async def vault_unsealed(ops_test: OpsTest, vault_initialized: Task) -> Task:
     async def task():
         async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
             await unseal_all_vault_units(
-                ops_test, unseal_key, await get_ca_cert_file_location(ops_test)
+                ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
             )
         return root_token, unseal_key
 

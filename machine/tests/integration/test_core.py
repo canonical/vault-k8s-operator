@@ -85,7 +85,7 @@ async def test_given_charm_deployed_when_vault_initialized_and_unsealed_and_auth
     await vault.wait_for_node_to_be_unsealed()
     assert vault.is_active()
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key, ca_file_location)
+        await unseal_all_vault_units(ops_test, unseal_key, root_token, ca_file_location)
         try:
             await authorize_charm(ops_test, root_token)
         except ActionFailedError as e:
