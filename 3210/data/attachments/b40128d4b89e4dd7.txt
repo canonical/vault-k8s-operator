@@ -1,0 +1,46 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:753 Adding model github-pr-359b8-microk8s:test-kv-6vjw on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-k8s-0
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: installing agent
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [executing] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [executing] maintenance: installing charm software
+  vault-k8s/2 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/1 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m tests.integration.helpers:helpers.py:215 Vault initialized
+[32mINFO    [0m tests.integration.helpers:helpers.py:216 Token hvs.I50w0dDUrcdSyBflwfN1O6Ng
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.80:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.88:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.32.89:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.helpers:helpers.py:431 Token hvs.I50w0dDUrcdSyBflwfN1O6Ng
+[32mINFO    [0m tests.integration.helpers:helpers.py:432 Token info: {'request_id': '95824457-e6f7-ddfe-50bb-8e6c96deab80', 'lease_id': '', 'renewable': False, 'lease_duration': 0, 'data': {'accessor': '8zrBbSyLgPoECmKTmlAhbtfP', 'creation_time': 1751899939, 'creation_ttl': 0, 'display_name': 'root', 'entity_id': '', 'expire_time': None, 'explicit_max_ttl': 0, 'id': 'hvs.I50w0dDUrcdSyBflwfN1O6Ng', 'meta': None, 'num_uses': 0, 'orphan': True, 'path': 'auth/token/root', 'policies': ['root'], 'ttl': 0, 'type': 'service'}, 'wrap_info': None, 'warnings': None, 'auth': None, 'mount_type': 'token'}
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m tests.integration.helpers:helpers.py:248 Charm authorized
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-kv-requirer-a/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [idle] active:
