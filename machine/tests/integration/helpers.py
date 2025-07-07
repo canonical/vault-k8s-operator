@@ -233,7 +233,6 @@ async def unseal_all_vault_units(
         logger.info("Unsealed unit %s", unit)
         logger.info("Token %s", root_token)
         await vault.wait_for_node_to_be_unsealed()
-        logger.info("Token info: %s", vault.client.auth.token.lookup(token=root_token))
 
 
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
