@@ -21,3 +21,6 @@ Vault Operators are open source projects that warmly welcomes community contribu
 - To contribute to the code Please see [CONTRIBUTING.md](/CONTRIBUTING.md) and the [Juju SDK docs](https://juju.is/docs/sdk) for guidelines and best practices.
 - Raise software issues or feature requests in [GitHub](https://github.com/canonical/vault-k8s-operator/issues)
 - Meet the community and chat with us on [Matrix](https://matrix.to/#/#tls:ubuntu.com)
+
+
+Changes to trigger the CI for testing purposes
