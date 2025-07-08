@@ -1,4 +1,4 @@
-# Vault Charms 1.18 Release Notes
+# Release Notes
 
 ## What's New:
 
