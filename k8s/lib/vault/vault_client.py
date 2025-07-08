@@ -117,6 +117,7 @@ class VaultClient:
         """
         try:
             auth_details.login(self._client)
+            logger.debug("Token after login: %s", self._client.token)
             self._client.auth.token.lookup_self()
         except (VaultError, ConnectionError, Forbidden) as e:
             logger.warning("Failed login to Vault: %s", e)

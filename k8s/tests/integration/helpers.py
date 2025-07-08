@@ -301,7 +301,7 @@ async def authorize_charm(
         if result and "result" in result:
             return result
         logger.warning(
-            "Failed to authorize charm. Attempt %d/%d. Waiting for 5 seconds...",
+            "Failed to authorize charm. Attempt %d/%d. Waiting for 5 seconds... with token %s",
             attempt,
             attempts,
         )
