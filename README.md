@@ -23,4 +23,4 @@ Vault Operators are open source projects that warmly welcomes community contribu
 - Meet the community and chat with us on [Matrix](https://matrix.to/#/#tls:ubuntu.com)
 
 
-Changes to trigger the CI for testing purposes 7
+Changes to trigger the CI for testing purposes 8
