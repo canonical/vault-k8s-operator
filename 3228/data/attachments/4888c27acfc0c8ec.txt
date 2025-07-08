@@ -1,0 +1,50 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:753 Adding model github-pr-cccd3-microk8s:test-backup-eu4x on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-k8s-0
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/jammy/s3-integrator-145
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/focal/minio-383
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: installing agent
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  s3-integrator/0 [allocating] waiting: installing agent
+  minio/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] maintenance: installing charm software
+  vault-k8s/1 [allocating] waiting: agent initialising
+  vault-k8s/2 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  s3-integrator/0 [idle] blocked: Missing parameters: ['access-key', 'secret-key']
+  minio/0 [executing] maintenance: Setting pod spec
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/1 [executing] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m tests.integration.helpers:helpers.py:215 Vault initialized
+[32mINFO    [0m tests.integration.helpers:helpers.py:216 Token hvs.c8kb3wa1eDrKpoWGDdWvLJaj
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.169.151:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.169.153:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.vault:vault.py:94 Unsealed vault unit: https://10.1.169.154:8200.
+[32mINFO    [0m tests.integration.vault:vault.py:76 Vault unit is unsealed.
+[32mINFO    [0m tests.integration.helpers:helpers.py:434 Token hvs.c8kb3wa1eDrKpoWGDdWvLJaj
+[32mINFO    [0m tests.integration.helpers:helpers.py:435 Token info: {'request_id': 'a1adf979-79d4-f7e8-999b-32a605b57919', 'lease_id': '', 'renewable': False, 'lease_duration': 0, 'data': {'accessor': 'XM1bol0xiJBKfYDgIzfxrkA2', 'creation_time': 1751987625, 'creation_ttl': 0, 'display_name': 'root', 'entity_id': '', 'expire_time': None, 'explicit_max_ttl': 0, 'id': 'hvs.c8kb3wa1eDrKpoWGDdWvLJaj', 'meta': None, 'num_uses': 0, 'orphan': True, 'path': 'auth/token/root', 'policies': ['root'], 'ttl': 0, 'type': 'service'}, 'wrap_info': None, 'warnings': None, 'auth': None, 'mount_type': 'token'}
+[32mINFO    [0m tests.integration.helpers:helpers.py:277 Token before adding to secret: hvs.c8kb3wa1eDrKpoWGDdWvLJaj
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m tests.integration.helpers:helpers.py:248 Charm authorized
+[32mINFO    [0m test_backup:test_backup.py:99 S3 Integrator sync credentials action output: {'ok': 'Credentials successfully updated.', 'return-code': 0}
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  s3-integrator/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
