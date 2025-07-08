@@ -1,4 +1,4 @@
-# Vault Charms 1.17 Release Notes
+# Release Notes
 
 ## What's New:
 
@@ -8,4 +8,4 @@
 - Allow the user to configure and enable the ACME engine using the charm. ([#635](https://github.com/canonical/vault-k8s-operator/pull/635))
 - Allow the user to run the backup and restore actions on the machine charm without TLS verification. ([#656](https://github.com/canonical/vault-k8s-operator/pull/656))
 
-Full Changelog: [Changes compared to 1.17](https://github.com/canonical/vault-k8s-operator/compare/release-1.16...release-1.17)
+Full Changelog: [Changes compared to 1.16](https://github.com/canonical/vault-k8s-operator/compare/release-1.16...release-1.17)
