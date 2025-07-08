@@ -274,6 +274,7 @@ async def authorize_charm(
 ) -> Any | Dict:
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, app_name)
+    logger.info("Token before adding to secret: %s", root_token)
     try:
         secret = await ops_test.model.add_secret(
             f"approle-token-{app_name}", [f"token={root_token}"]
@@ -287,6 +288,7 @@ async def authorize_charm(
         secret = await get_model_secret_id(ops_test, f"approle-token-{app_name}")
     secret_id = secret.split(":")[-1]
     await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
+    # logger.info("Token after adding to secret: %s", ops_test.model.get_secret(secret_id))
     # TODO: I have never seen this help. Should we remove it?
     for attempt in range(1, attempts + 1):
         authorize_action = await leader_unit.run_action(

@@ -739,6 +739,7 @@ class VaultCharm(CharmBase):
                 "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
             )
             return
+        logger.info("Token from secret: %s", token)
         vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
         if not vault.authenticate(Token(token)):
             logger.error("The token provided is not valid when authorizing charm.")
