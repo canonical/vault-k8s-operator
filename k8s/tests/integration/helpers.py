@@ -304,6 +304,7 @@ async def authorize_charm(
             "Failed to authorize charm. Attempt %d/%d. Waiting for 5 seconds... with token %s",
             attempt,
             attempts,
+            root_token,
         )
         await asyncio.sleep(5)
     logger.error("Failed to authorize charm")
