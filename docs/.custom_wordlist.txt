@@ -27,3 +27,4 @@ Traefik
 uninitialized
 unsealer
 yq
+configurability
