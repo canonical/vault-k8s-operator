@@ -61,6 +61,7 @@ skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 ignore = [ # We want these files to be analyzed, but not type-checked
     "*/lib/charms/certificate_transfer_interface/",
     "*/lib/charms/data_platform_libs/",
+    "*/lib/charms/grafana_agent/",
     "*/lib/charms/grafana_k8s/",
     "*/lib/charms/loki_k8s/",
     "*/lib/charms/prometheus_k8s/",
