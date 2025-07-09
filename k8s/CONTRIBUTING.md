@@ -40,7 +40,13 @@ tox                      # runs 'format', 'lint', 'static', and 'unit' environme
 To run the integration tests locally, you will need to have a Juju controller
 on `microk8s` active.
 
-First, you need to build the `vault-k8s` charm, as well as the test `vault-kv-requirer` charm. From the project root, run the following commands:
+First, you need to build the `vault-k8s` charm, as well as the test `vault-kv-requirer` charm. From the project root, run the following command:
+
+```shell
+make copy-test-libs-k8s
+```
+
+Then, from the `k8s/` directory, run the following commands:
 
 ```shell
 charmcraft pack
