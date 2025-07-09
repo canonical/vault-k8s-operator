@@ -21,7 +21,7 @@ dependencies = [
     "pyhcl",
     "requests",
     "rpds-py==0.23.1",
-    "vault-package",
+    "vault",
 ]
 
 [dependency-groups]
@@ -43,4 +43,4 @@ extends = "../pyproject.toml"
 include = ["src/", "lib/", "tests/"]
 
 [tool.uv.sources]
-vault-package = { path = ".vendored/vault-package" }
+vault = { path = ".vendored/vault-package" }

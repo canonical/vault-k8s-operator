@@ -1889,6 +1889,67 @@ wheels = [
 ]
 
 [[package]]
+name = "vault"
+version = "0"
+source = { directory = ".vendored/vault-package" }
+dependencies = [
+    { name = "allure-pytest" },
+    { name = "boto3" },
+    { name = "boto3-stubs", extra = ["s3"] },
+    { name = "cosl" },
+    { name = "cryptography" },
+    { name = "hvac" },
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "lightkube" },
+    { name = "lightkube-models" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "ops" },
+    { name = "pydantic" },
+    { name = "pyhcl" },
+    { name = "pytest-interface-tester" },
+    { name = "requests" },
+    { name = "rpds-py" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "allure-pytest" },
+    { name = "boto3" },
+    { name = "boto3-stubs", extras = ["s3"] },
+    { name = "cosl", specifier = ">0.0.50" },
+    { name = "cryptography" },
+    { name = "hvac" },
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "lightkube" },
+    { name = "lightkube-models" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "ops", specifier = ">=0.23.0" },
+    { name = "pydantic", specifier = "==2.10.6" },
+    { name = "pyhcl" },
+    { name = "pytest-interface-tester" },
+    { name = "requests" },
+    { name = "rpds-py", specifier = "==0.23.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "codespell" },
+    { name = "pyright" },
+    { name = "ruff" },
+    { name = "types-hvac" },
+]
+test = [
+    { name = "coverage", extras = ["toml"] },
+    { name = "juju" },
+    { name = "ops", extras = ["testing"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio", specifier = "==0.21.2" },
+    { name = "pytest-operator" },
+]
+
+[[package]]
 name = "vault-k8s-operator"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1910,7 +1971,7 @@ dependencies = [
     { name = "pytest-interface-tester" },
     { name = "requests" },
     { name = "rpds-py" },
-    { name = "vault-package" },
+    { name = "vault" },
 ]
 
 [package.dev-dependencies]
@@ -1948,68 +2009,7 @@ requires-dist = [
     { name = "pytest-interface-tester" },
     { name = "requests" },
     { name = "rpds-py", specifier = "==0.23.1" },
-    { name = "vault-package", virtual = ".vendored/vault-package" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "codespell" },
-    { name = "pyright" },
-    { name = "ruff" },
-    { name = "types-hvac" },
-]
-test = [
-    { name = "coverage", extras = ["toml"] },
-    { name = "juju" },
-    { name = "ops", extras = ["testing"] },
-    { name = "pytest" },
-    { name = "pytest-asyncio", specifier = "==0.21.2" },
-    { name = "pytest-operator" },
-]
-
-[[package]]
-name = "vault-package"
-version = "0"
-source = { virtual = ".vendored/vault-package" }
-dependencies = [
-    { name = "allure-pytest" },
-    { name = "boto3" },
-    { name = "boto3-stubs", extra = ["s3"] },
-    { name = "cosl" },
-    { name = "cryptography" },
-    { name = "hvac" },
-    { name = "jinja2" },
-    { name = "jsonschema" },
-    { name = "lightkube" },
-    { name = "lightkube-models" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "ops" },
-    { name = "pydantic" },
-    { name = "pyhcl" },
-    { name = "pytest-interface-tester" },
-    { name = "requests" },
-    { name = "rpds-py" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "allure-pytest" },
-    { name = "boto3" },
-    { name = "boto3-stubs", extras = ["s3"] },
-    { name = "cosl", specifier = ">0.0.50" },
-    { name = "cryptography" },
-    { name = "hvac" },
-    { name = "jinja2" },
-    { name = "jsonschema" },
-    { name = "lightkube" },
-    { name = "lightkube-models" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "ops", specifier = ">=0.23.0" },
-    { name = "pydantic", specifier = "==2.10.6" },
-    { name = "pyhcl" },
-    { name = "pytest-interface-tester" },
-    { name = "requests" },
-    { name = "rpds-py", specifier = "==0.23.1" },
+    { name = "vault", directory = ".vendored/vault-package" },
 ]
 
 [package.metadata.requires-dev]

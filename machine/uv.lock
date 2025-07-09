@@ -1896,78 +1896,9 @@ wheels = [
 ]
 
 [[package]]
-name = "vault-operator"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "boto3" },
-    { name = "boto3-stubs", extra = ["s3"] },
-    { name = "cosl" },
-    { name = "cryptography" },
-    { name = "hvac" },
-    { name = "jinja2" },
-    { name = "jsonschema" },
-    { name = "ops" },
-    { name = "psutil" },
-    { name = "pyhcl" },
-    { name = "pyopenssl" },
-    { name = "pytest-interface-tester" },
-    { name = "rpds-py" },
-    { name = "vault-package" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "codespell" },
-    { name = "pyright" },
-    { name = "ruff" },
-]
-test = [
-    { name = "coverage", extra = ["toml"] },
-    { name = "juju" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-dependency" },
-    { name = "pytest-operator" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "boto3" },
-    { name = "boto3-stubs", extras = ["s3"] },
-    { name = "cosl" },
-    { name = "cryptography" },
-    { name = "hvac" },
-    { name = "jinja2" },
-    { name = "jsonschema" },
-    { name = "ops" },
-    { name = "psutil" },
-    { name = "pyhcl" },
-    { name = "pyopenssl" },
-    { name = "pytest-interface-tester" },
-    { name = "rpds-py", specifier = "==0.23.1" },
-    { name = "vault-package", virtual = ".vendored/vault-package" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "codespell" },
-    { name = "pyright" },
-    { name = "ruff" },
-]
-test = [
-    { name = "coverage", extras = ["toml"] },
-    { name = "juju" },
-    { name = "pytest" },
-    { name = "pytest-asyncio", specifier = "==0.21.2" },
-    { name = "pytest-dependency" },
-    { name = "pytest-operator" },
-]
-
-[[package]]
-name = "vault-package"
+name = "vault"
 version = "0"
-source = { virtual = ".vendored/vault-package" }
+source = { directory = ".vendored/vault-package" }
 dependencies = [
     { name = "allure-pytest" },
     { name = "boto3" },
@@ -2022,6 +1953,75 @@ test = [
     { name = "ops", extras = ["testing"] },
     { name = "pytest" },
     { name = "pytest-asyncio", specifier = "==0.21.2" },
+    { name = "pytest-operator" },
+]
+
+[[package]]
+name = "vault-operator"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "boto3" },
+    { name = "boto3-stubs", extra = ["s3"] },
+    { name = "cosl" },
+    { name = "cryptography" },
+    { name = "hvac" },
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "ops" },
+    { name = "psutil" },
+    { name = "pyhcl" },
+    { name = "pyopenssl" },
+    { name = "pytest-interface-tester" },
+    { name = "rpds-py" },
+    { name = "vault" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "codespell" },
+    { name = "pyright" },
+    { name = "ruff" },
+]
+test = [
+    { name = "coverage", extra = ["toml"] },
+    { name = "juju" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-dependency" },
+    { name = "pytest-operator" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3" },
+    { name = "boto3-stubs", extras = ["s3"] },
+    { name = "cosl" },
+    { name = "cryptography" },
+    { name = "hvac" },
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "ops" },
+    { name = "psutil" },
+    { name = "pyhcl" },
+    { name = "pyopenssl" },
+    { name = "pytest-interface-tester" },
+    { name = "rpds-py", specifier = "==0.23.1" },
+    { name = "vault", directory = ".vendored/vault-package" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "codespell" },
+    { name = "pyright" },
+    { name = "ruff" },
+]
+test = [
+    { name = "coverage", extras = ["toml"] },
+    { name = "juju" },
+    { name = "pytest" },
+    { name = "pytest-asyncio", specifier = "==0.21.2" },
+    { name = "pytest-dependency" },
     { name = "pytest-operator" },
 ]
 

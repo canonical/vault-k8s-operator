@@ -1,5 +1,5 @@
 [project]
-name = "vault-package"
+name = "vault"
 version = "0"
 requires-python = ">=3.10"
 
@@ -33,6 +33,13 @@ test = [
     "pytest-asyncio==0.21.2",
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]
+
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
 
 [tool.ruff]
 extend = "../pyproject.toml"
