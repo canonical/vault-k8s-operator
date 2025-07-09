@@ -54,13 +54,15 @@ jobs:
         run: sudo snap install charmcraft --classic
 
       - name: Build KV Requirer charm
+        working-directory: ${{ inputs.path }}
         run: |
-          make copy-test-libs-${{ inputs.path }}
-          charmcraft pack --verbose --project-dir ${{ inputs.path }}tests/integration/vault_kv_requirer_operator
+          make copy-test-libs
+          charmcraft pack --verbose --project-dir tests/integration/vault_kv_requirer_operator
 
       - name: Archive KV Requirer Charm
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
-          path: "*.charm"
+          path: "${{ inputs.path }}*.charm"
           retention-days: 5
+          if-no-files-found: error

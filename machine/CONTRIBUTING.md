@@ -38,15 +38,10 @@ tox                      # runs 'format', 'lint', 'static', and 'unit' environme
 
 To run the integration tests locally, you will need to have a Juju controller on a machine substrate active (such as lxd).
 
-First, you need to build the `vault` charm, as well as the test `vault-kv-requirer` charm. From the project root, run the following command:
+First, you need to build the `vault` charm, as well as the test `vault-kv-requirer` charm. From the `machine/` directory, run the following commands:
 
 ```shell
-make copy-test-libs-machine
-```
-
-Then, from the `machine/` directory, run the following commands:
-
-```shell
+make copy-test-libs
 charmcraft pack
 charmcraft pack --project-dir tests/integration/vault_kv_requirer_operator/
 ```
