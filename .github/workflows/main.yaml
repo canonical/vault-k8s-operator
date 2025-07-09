@@ -17,8 +17,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Ensure k8s and machine charms' vendored shared code is in sync
-        run: make vendor-shared-code && git diff --exit-code
+      - name: Vendor shared code into K8s charm
+        working-directory: k8s
+        run: make vendor-shared-code
+      - name: Vendor shared code into machine charm
+        working-directory: machine
+        run: make vendor-shared-code
+      - name: Ensure vendored code is checked in
+        run: git diff --exit-code
 
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0

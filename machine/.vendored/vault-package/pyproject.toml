@@ -1,6 +1,6 @@
 [project]
-name = "vault-k8s-operator"
-version = "0.1.0"
+name = "vault"
+version = "0"
 requires-python = ">=3.10"
 
 dependencies = [
@@ -21,7 +21,6 @@ dependencies = [
     "pyhcl",
     "requests",
     "rpds-py==0.23.1",
-    "vault",
 ]
 
 [dependency-groups]
@@ -35,12 +34,16 @@ test = [
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]
 
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
+
 [tool.ruff]
 extend = "../pyproject.toml"
 
 [tool.pyright]
 extends = "../pyproject.toml"
-include = ["src/", "lib/", "tests/"]
-
-[tool.uv.sources]
-vault = { path = ".vendored/vault-package" }
