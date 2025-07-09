@@ -7,7 +7,7 @@ This repository contains the source code for the `vault-k8s` and `vault` charms.
 Shared code used by both the Vault machine and K8s charms is defined in `vault-package`. This code is vendored into both charms so that `charmcraft pack` can run in each directory without any additional information. Vendored code must be in sync to merge to `main`. Copy any changes from `vault-package` into the charms by running:
 
 ```shell
-make vendor-libs
+make vendor-shared-code
 ```
 
 ## Documentation

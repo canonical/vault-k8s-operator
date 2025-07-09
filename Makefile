@@ -5,10 +5,10 @@ ROOT_DIR := $(CURDIR)
 K8S_CHARM_LIB := $(ROOT_DIR)/k8s/lib/vault
 MACHINE_CHARM_LIB := $(ROOT_DIR)/machine/lib/vault
 
-.PHONY: vendor-libs
+.PHONY: vendor-shared-code
 
-# vendor-libs: Fetches the lib from the k8s charm lib directory to the machine charm lib directory.
-vendor-libs:
+# vendor-shared-code: Copy the shared code into the two charms that use it.
+vendor-shared-code:
 	rsync --archive --delete vault-package/vault k8s/lib/
 	rsync --archive --delete vault-package/vault machine/lib/
 
