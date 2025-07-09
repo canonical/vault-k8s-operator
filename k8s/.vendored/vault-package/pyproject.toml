@@ -1,6 +1,6 @@
 [project]
-name = "vault-k8s-operator"
-version = "0.1.0"
+name = "vault-package"
+version = "0"
 requires-python = ">=3.10"
 
 dependencies = [
@@ -21,7 +21,6 @@ dependencies = [
     "pyhcl",
     "requests",
     "rpds-py==0.23.1",
-    "vault-package",
 ]
 
 [dependency-groups]
@@ -40,7 +39,4 @@ extend = "../pyproject.toml"
 
 [tool.pyright]
 extends = "../pyproject.toml"
-include = ["src/", "lib/", "tests/"]
-
-[tool.uv.sources]
-vault-package = { path = ".vendored/vault-package" }
+include = ["vault"]

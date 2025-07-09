@@ -17,6 +17,7 @@ dependencies = [
     "pytest-interface-tester",
     "rpds-py==0.23.1",
     "hvac",
+    "vault-package",
 ]
 
 [dependency-groups]
@@ -36,3 +37,6 @@ extend = "../pyproject.toml"
 [tool.pyright]
 extends = "../pyproject.toml"
 include = ["src/", "lib/", "tests/"]
+
+[tool.uv.sources]
+vault-package = { path = ".vendored/vault-package" }
