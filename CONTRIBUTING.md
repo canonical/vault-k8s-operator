@@ -6,13 +6,11 @@ Tool settings for linting, static analysis, and testing are configured in the re
 
 ## Common code between the Machine and K8s charms
 
-The Vault machine and K8s charms share a lot of code. The K8s charm owns this common code and you can fetch this code into the Machine charm using:
+Shared code used by both the Vault machine and K8s charms is defined in `vault-package`. This code is vendored into both charms so that `charmcraft pack` can run in each directory without any additional information. Vendored code must be in sync to merge to `main`. Copy any changes from `vault-package` into the charms by running:
 
 ```shell
-make vendor-libs
+make vendor-shared-code
 ```
-
-This command will copy the code from the k8s charm's `lib/vault/` directory to the machine charm's `lib/vault/` directory.
 
 ## Documentation
 
