@@ -40,10 +40,10 @@ build-backend = "uv_build"
 
 [tool.uv]
 package = true
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
 
 [tool.ruff]
 extend = "../pyproject.toml"
 
 [tool.pyright]
 extends = "../pyproject.toml"
-include = ["vault"]
