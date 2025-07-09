@@ -56,7 +56,7 @@ jobs:
       - name: Build KV Requirer charm
         run: |
           cp ${{ inputs.path }}lib/charms/vault_k8s/v0/vault_kv.py ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/lib/charms/vault_k8s/v0/vault_kv.py
-          cp ${{ inputs.path }}lib/vault/juju_facade.py ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/lib/vault/juju_facade.py
+          cp vault-package/src/vault/juju_facade.py ${{ inputs.path }}tests/integration/vault_kv_requirer_operator/lib/vault/juju_facade.py
           charmcraft pack --verbose --project-dir ${{ inputs.path }}tests/integration/vault_kv_requirer_operator
 
       - name: Archive KV Requirer Charm
