@@ -20,6 +20,18 @@ log_cli_level = "INFO"
 # Linting tools configuration
 [tool.ruff]
 line-length = 99
+extend-exclude = [
+    "*/lib/charms/certificate_transfer_interface/",
+    "*/lib/charms/data_platform_libs/",
+    "*/lib/charms/grafana_agent/",
+    "*/lib/charms/grafana_k8s/",
+    "*/lib/charms/loki_k8s/",
+    "*/lib/charms/operator_libs_linux/",
+    "*/lib/charms/prometheus_k8s/",
+    "*/lib/charms/tempo_coordinator_k8s/",
+    "*/lib/charms/tls_certificates_interface/",
+    "*/lib/charms/traefik_k8s/",
+]
 
 [tool.ruff.lint]
 select = [
