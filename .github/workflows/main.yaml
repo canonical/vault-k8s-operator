@@ -11,6 +11,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ensure-common-code-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure k8s and machine charms' vendored packages are in sync
+        run: make vendor-libs && git diff --exit-code
+
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
@@ -73,7 +82,7 @@ jobs:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./machine/
-  
+
   machine-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
     with:
