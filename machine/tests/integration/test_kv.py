@@ -3,13 +3,13 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     SHORT_TIMEOUT,
     VAULT_KV_REQUIRER_APPLICATION_NAME,
 )
-from tests.integration.helpers import has_relation, run_action_on_leader
+from helpers import has_relation, run_action_on_leader
 
 
 @pytest.mark.dependency

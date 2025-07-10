@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import APP_NAME
+from config import APP_NAME
 
 pytest_plugins = (
-    "tests.integration.charm_states.grafana",
-    "tests.integration.charm_states.ha_proxy",
-    "tests.integration.charm_states.self_signed_certificates",
-    "tests.integration.charm_states.vault",
-    "tests.integration.charm_states.vault_kv_requirer",
-    "tests.integration.charm_states.vault_pki_requirer",
+    "charm_states.grafana",
+    "charm_states.ha_proxy",
+    "charm_states.self_signed_certificates",
+    "charm_states.vault",
+    "charm_states.vault_kv_requirer",
+    "charm_states.vault_pki_requirer",
 )
 
 

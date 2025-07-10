@@ -19,13 +19,13 @@ from lightkube.core.client import Client as KubernetesClient
 from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     VAULT_RESOURCES,
 )
-from tests.integration.vault import Vault
+from vault import Vault
 
 logger = logging.getLogger(__name__)
 

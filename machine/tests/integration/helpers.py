@@ -18,13 +18,13 @@ from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
-from tests.integration.vault import Vault
+from vault import Vault
 
 logger = logging.getLogger(__name__)
 

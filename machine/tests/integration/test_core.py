@@ -5,21 +5,21 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     SHORT_TIMEOUT,
 )
-from tests.integration.helpers import (
+from helpers import (
     ActionFailedError,
     authorize_charm,
     get_ca_cert_file_location,
     get_leader_unit_address,
     unseal_all_vault_units,
 )
-from tests.integration.vault import Vault
+from vault import Vault
 
 logger = logging.getLogger(__name__)
 
