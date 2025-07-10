@@ -34,7 +34,7 @@ juju add-model demo
 Deploy the Vault operator:
 
 ```shell
-juju deploy vault --channel=1.17/stable
+juju deploy vault --channel=1.16/stable
 ```
 
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.
@@ -45,7 +45,7 @@ Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  11:41:15-04:00
 
 App    Version  Status   Scale  Charm  Channel      Rev  Exposed  Message
-vault           blocked      1  vault  1.17/stable  475  no       Please initialize Vault or integrate with an auto-unseal provider
+vault           blocked      1  vault  1.16/stable  475  no       Please initialize Vault or integrate with an auto-unseal provider
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  blocked   idle   0        10.102.71.106          Please initialize Vault or integrate with an auto-unseal provider

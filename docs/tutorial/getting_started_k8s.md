@@ -47,7 +47,7 @@ juju add-model demo
 Deploy the Vault K8s operator:
 
 ```shell
-juju deploy vault-k8s vault --channel=1.17/stable
+juju deploy vault-k8s vault --channel=1.16/stable
 ```
 
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.
@@ -57,8 +57,8 @@ $ juju status
 Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:31:45-04:00
 
-App    Version  Status   Scale  Charm      Channel    Rev  Address         Exposed  Message
-vault           blocked      1  vault-k8s  1.18/edge  380  10.152.183.183  no       Please initialize Vault or integrate with an auto-unseal provider
+App    Version  Status   Scale  Charm      Channel      Rev  Address         Exposed  Message
+vault           blocked      1  vault-k8s  1.16/stable  380  10.152.183.183  no       Please initialize Vault or integrate with an auto-unseal provider
 
 Unit      Workload  Agent  Address     Ports  Message
 vault/0*  blocked   idle   10.1.0.237         Please initialize Vault or integrate with an auto-unseal provider
@@ -116,7 +116,7 @@ Total Shares       0
 Threshold          0
 Unseal Progress    0/0
 Unseal Nonce       n/a
-Version            1.15.6
+Version            1.17.6
 Build Date         n/a
 Storage Type       raft
 HA Enabled         true

@@ -15,7 +15,7 @@ Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:52:32-04:00
 
 App    Version  Status   Scale  Charm      Channel      Rev  Address         Exposed  Message
-vault           waiting      1  vault-k8s  1.17/stable  198  10.152.183.208  no       installing agent
+vault           waiting      1  vault-k8s  1.16/stable  198  10.152.183.208  no       installing agent
 
 Unit      Workload  Agent  Address      Ports  Message
 vault/0*  active    idle   10.1.182.38
@@ -36,7 +36,7 @@ Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:54:51-04:00
 
 App    Version  Status   Scale  Charm      Channel      Rev  Address         Exposed  Message
-vault           waiting      3  vault-k8s  1.17/stable  198  10.152.183.208  no       installing agent
+vault           waiting      3  vault-k8s  1.16/stable  198  10.152.183.208  no       installing agent
 
 Unit      Workload  Agent  Address      Ports  Message
 vault/0*  active    idle   10.1.182.38         
@@ -78,7 +78,7 @@ Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:57:52-04:00
 
 App    Version  Status  Scale  Charm      Channel      Rev  Address         Exposed  Message
-vault           active      3  vault-k8s  1.17/stable  198  10.152.183.208  no       
+vault           active      3  vault-k8s  1.16/stable  198  10.152.183.208  no       
 
 Unit      Workload  Agent  Address      Ports  Message
 vault/0*  active    idle   10.1.182.38         
