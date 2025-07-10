@@ -270,9 +270,11 @@ async def unseal_all_vault_units(
 
 
 async def authorize_charm(
-    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME, attempts: int = 12
+    ops_test: OpsTest, token: str, app_name: str = APPLICATION_NAME, attempts: int = 12
 ) -> Any | Dict:
     assert ops_test.model
+    logger.info("Token before adding to secret: %s", token)
+    root_token = "pbYXY9Aojkwsd6pwDbpfRMXQ"
     leader_unit = await get_leader_unit(ops_test.model, app_name)
     logger.info("Token before adding to secret: %s", root_token)
     try:
