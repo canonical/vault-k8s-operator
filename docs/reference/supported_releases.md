@@ -2,9 +2,9 @@
 
 The following table lists the supported releases of the Vault charm, along with their associated charm base and architecture.
 
-| Channel     | Charm Base   | Architecture |
-| ----------- | ------------ | ------------ |
-| 1.16/stable | ubuntu@22.04 | amd64        |
+| Channel       | Charm Base     | Architecture |
+| ------------- | -------------- | ------------ |
+| `1.16/stable` | `ubuntu@22.04` | `amd64`      |
 
 ## Support commitment
 
