@@ -37,6 +37,7 @@ dev = ["codespell", "pyright", "ruff", "types-hvac"]
 [tool.ruff]
 extend = "../pyproject.toml"
 extend-exclude = [
+    # libs used by (and not defined by) this charm
     "lib/charms/certificate_transfer_interface/",
     "lib/charms/data_platform_libs/",
     "lib/charms/grafana_k8s/",
@@ -51,6 +52,7 @@ extend-exclude = [
 extends = "../pyproject.toml"
 include = ["src/", "lib/", "tests/"]
 ignore = [
+    # libs used by (and not defined by) this charm
     "lib/charms/certificate_transfer_interface/",
     "lib/charms/data_platform_libs/",
     "lib/charms/grafana_k8s/",
