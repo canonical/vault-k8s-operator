@@ -28,7 +28,7 @@ from vault.vault_s3 import S3Error
 
 from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
 from container import Container
-from tests.unit.certificates import (
+from certificates import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
     sign_certificate,

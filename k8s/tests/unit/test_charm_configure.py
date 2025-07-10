@@ -16,10 +16,10 @@ from vault.vault_client import (
     AppRole,
 )
 
-from tests.unit.certificates import (
+from certificates import (
     generate_example_provider_certificate,
 )
-from tests.unit.fixtures import MockBinding, VaultCharmFixtures
+from fixtures import MockBinding, VaultCharmFixtures
 
 
 class MockRelation:

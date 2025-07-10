@@ -32,6 +32,7 @@ dev = ["codespell", "pyright", "ruff"]
 
 [tool.ruff]
 extend = "../pyproject.toml"
+src = ["src", "tests/unit", "tests/integration"]  # correctly sort local imports in tests
 extend-exclude = [
     # libs used by (and not defined by) this charm
     "lib/charms/certificate_transfer_interface/",
