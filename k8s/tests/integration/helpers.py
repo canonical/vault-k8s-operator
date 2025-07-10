@@ -25,7 +25,7 @@ from config import (
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     VAULT_RESOURCES,
 )
-from vault import Vault
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 

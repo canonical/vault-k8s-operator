@@ -26,7 +26,7 @@ from helpers import (
     revoke_token,
     wait_for_status_message,
 )
-from vault import Vault
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 
