@@ -16,7 +16,7 @@ from vault.vault_client import (
     AppRole,
 )
 
-from certificates import (
+from certificate_helpers import (
     generate_example_provider_certificate,
 )
 from fixtures import MockBinding, VaultCharmFixtures

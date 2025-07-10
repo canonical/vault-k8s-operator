@@ -26,13 +26,13 @@ from vault.vault_managers import (
 )
 from vault.vault_s3 import S3Error
 
-from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
-from container import Container
-from certificates import (
+from certificate_helpers import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
     sign_certificate,
 )
+from charm import AUTOUNSEAL_MOUNT_PATH, VaultCharm
+from container import Container
 
 SECONDS_IN_HOUR = 3600
 
