@@ -37,11 +37,11 @@ from enum import Enum, auto
 from functools import cached_property
 from typing import FrozenSet, MutableMapping, TextIO
 
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
+from _vendored.lib.charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
 )
-from charms.data_platform_libs.v0.s3 import S3Requirer
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from _vendored.lib.charms.data_platform_libs.v0.s3 import S3Requirer
+from _vendored.lib.charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
     PrivateKey,
@@ -55,7 +55,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from _vendored.lib.charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
 

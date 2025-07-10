@@ -1,0 +1,50 @@
+[project]
+name = "vault-package"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [  # TODO: cleanup dependencies
+    "boto3",
+    "boto3-stubs[s3]",
+    "hvac",
+    "jinja2",
+    "ops",
+    "pyhcl",  #hcl
+    "requests",
+    "pydantic",
+    "pytest-interface-tester",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "pytest",
+]
+dev = ["codespell", "pyright", "ruff"]
+
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+cache-keys = [{ file = "pyproject.toml" }, { file = "vault/**/*.py" }]
+
+[tool.uv.build-backend]
+module-name = "vault"
+module-root = ""
+
+[tool.ruff]
+extend = "../pyproject.toml"
+extend-exclude = [
+    # Charmhub-hosted libs vendored by this package
+    "**/lib/charms/",
+]
+
+[tool.pyright]
+extends = "../pyproject.toml"
+include = ["vault/"]
+ignore = [
+    # Charmhub-hosted libs vendored by this package
+    "**/lib/charms/",
+]

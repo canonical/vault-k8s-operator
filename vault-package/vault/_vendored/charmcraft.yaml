@@ -1,0 +1,24 @@
+type: "charm"
+
+name: "not-a-real-charm"
+summary: "Not a real charm."
+description: "This 'charm' exists solely to allow charmcraft fetch-libs to run."
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  nothing-in-particular:
+    plugin: nil
+    source:
+
+charm-libs:
+  - lib: "certificate_transfer_interface.certificate_transfer"
+    version: "1"
+  - lib: "data_platform_libs.s3"
+    version: "0"
+  - lib: "tls_certificates_interface.tls_certificates"
+    version: "4"
+  - lib: "vault_k8s.vault_kv"
+    version: "0"
