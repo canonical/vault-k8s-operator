@@ -19,7 +19,7 @@ from helpers import (
     get_leader_unit_address,
     unseal_all_vault_units,
 )
-from vault import Vault
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 

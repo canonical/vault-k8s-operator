@@ -24,7 +24,7 @@ from config import (
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
-from vault import Vault
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 
