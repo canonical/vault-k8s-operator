@@ -27,7 +27,7 @@ sudo microk8s enable dns
 From your terminal, install Juju:
 
 ```
-sudo snap install juju --channel=3.4/stable
+sudo snap install juju --channel=3.6/stable
 ```
 
 Bootstrap a Juju controller:
@@ -47,7 +47,7 @@ juju add-model demo
 Deploy the Vault K8s operator:
 
 ```shell
-juju deploy vault-k8s vault --channel=1.16/edge
+juju deploy vault-k8s vault --channel=1.17/stable
 ```
 
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.
@@ -57,11 +57,11 @@ $ juju status
 Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:31:45-04:00
 
-App    Version  Status   Scale  Charm      Channel    Rev  Address         Exposed  Message
-vault                    waiting      1  vault-k8s  1.15/beta  198  10.152.183.204  no       installing agent
+App    Version  Status   Scale  Charm      Channel      Rev  Address         Exposed  Message
+vault           blocked      1  vault-k8s  1.17/stable  380  10.152.183.183  no       Please initialize Vault or integrate with an auto-unseal provider
 
-Unit      Workload  Agent  Address      Ports  Message
-vault/0*  blocked   idle   10.1.182.56         Please initialize Vault
+Unit      Workload  Agent  Address     Ports  Message
+vault/0*  blocked   idle   10.1.0.237         Please initialize Vault or integrate with an auto-unseal provider
 ```
 
 ## 4. Set up the Vault CLI
@@ -116,7 +116,7 @@ Total Shares       0
 Threshold          0
 Unseal Progress    0/0
 Unseal Nonce       n/a
-Version            1.15.6
+Version            1.17.6
 Build Date         n/a
 Storage Type       raft
 HA Enabled         true

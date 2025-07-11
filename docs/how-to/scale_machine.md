@@ -14,8 +14,8 @@ Run `juju status`:
 Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:11:19-04:00
 
-App    Version  Status  Scale  Charm  Channel    Rev  Exposed  Message
-vault           active      1  vault  1.15/beta  257  no       
+App    Version  Status  Scale  Charm  Channel      Rev  Exposed  Message
+vault           active      1  vault  1.17/stable  257  no       
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
@@ -38,8 +38,8 @@ The new units will be sealed:
 Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:19:14-04:00
 
-App    Version  Status   Scale  Charm  Channel    Rev  Exposed  Message
-vault           blocked      3  vault  1.15/beta  257  no       Waiting for Vault to be unsealed
+App    Version  Status   Scale  Charm  Channel      Rev  Exposed  Message
+vault           blocked      3  vault  1.17/stable  257  no       Waiting for Vault to be unsealed
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
@@ -79,8 +79,8 @@ $ juju status
 Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:24:32-04:00
 
-App    Version  Status  Scale  Charm  Channel    Rev  Exposed  Message
-vault           active      3  vault  1.15/beta  257  no       
+App    Version  Status  Scale  Charm  Channel      Rev  Exposed  Message
+vault           active      3  vault  1.17/stable  257  no       
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
