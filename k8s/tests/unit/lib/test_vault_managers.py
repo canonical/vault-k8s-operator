@@ -26,7 +26,7 @@ from vault.vault_managers import (
 )
 from vault.vault_s3 import S3Error
 
-from certificate_helpers import (
+from certificates_helpers import (
     generate_example_provider_certificate,
     generate_example_requirer_csr,
     sign_certificate,
