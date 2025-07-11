@@ -34,7 +34,7 @@ juju add-model demo
 Deploy the Vault operator:
 
 ```shell
-juju deploy vault --channel=1.15/beta
+juju deploy vault --channel=1.18/edge
 ```
 
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.
@@ -42,16 +42,16 @@ Deploying Vault will take several minutes, wait for the unit to be in the `block
 ```shell
 $ juju status
 Model  Controller           Cloud/Region         Version  SLA          Timestamp
-demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  11:41:15-04:00
+demo   localhost-localhost  localhost/localhost  3.6.8    unsupported  11:41:15-04:00
 
 App    Version  Status   Scale  Charm  Channel    Rev  Exposed  Message
-vault           blocked      1  vault  1.15/beta  257  no       Waiting for Vault to be initialized
+vault           blocked      1  vault  1.18/edge  475  no       Please initialize Vault or integrate with an auto-unseal provider
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
-vault/0*  blocked   idle   0        10.191.126.116         Waiting for Vault to be initialized
+vault/0*  blocked   idle   0        10.102.71.106          Please initialize Vault or integrate with an auto-unseal provider
 
-Machine  State    Address         Inst id        Base          AZ  Message
-0        started  10.191.126.116  juju-b8368f-0  ubuntu@22.04      Running
+Machine  State    Address        Inst id        Base          AZ  Message
+0        started  10.102.71.106  juju-c3e914-0  ubuntu@24.04      Running
 ```
 
 ## 4. Set up the Vault CLI
@@ -106,8 +106,8 @@ Total Shares       0
 Threshold          0
 Unseal Progress    0/0
 Unseal Nonce       n/a
-Version            1.15.4
-Build Date         n/a
+Version            1.18.5
+Build Date         2024-07-10T15:43:57Z
 Storage Type       raft
 HA Enabled         true
 ```
