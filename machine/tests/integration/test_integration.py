@@ -36,7 +36,7 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
 GRAFANA_AGENT_APPLICATION_NAME = "grafana-agent"
 GRAFANA_AGENT_SERIES = "jammy"
-GRAFANA_AGENT_REVISION = 490
+GRAFANA_AGENT_CHANNEL = "1/stable"
 PEER_RELATION_NAME = "vault-peers"
 INGRESS_RELATION_NAME = "ingress"
 HAPROXY_APPLICATION_NAME = "haproxy"
@@ -220,8 +220,8 @@ async def grafana_deployed(ops_test: OpsTest) -> Task:
         deploy_if_not_exists(
             ops_test.model,
             GRAFANA_AGENT_APPLICATION_NAME,
+            channel=GRAFANA_AGENT_CHANNEL,
             series=GRAFANA_AGENT_SERIES,
-            revision=GRAFANA_AGENT_REVISION,
         )
     )
 
