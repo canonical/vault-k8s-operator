@@ -668,25 +668,26 @@ class TestVaultK8sIntegrationsPart2:
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
             trust=True,
+            channel="1/stable"
         )
         deploy_loki = ops_test.model.deploy(
             "loki-k8s",
             application_name=LOKI_APPLICATION_NAME,
             trust=True,
-            channel="stable",
+            channel="1/stable",
         )
         deploy_s3_integrator = ops_test.model.deploy(
             "s3-integrator",
             application_name=S3_INTEGRATOR_APPLICATION_NAME,
             trust=True,
-            channel="stable",
+            channel="1/stable",
         )
         deploy_minio = ops_test.model.deploy(
             "minio",
             application_name=MINIO_APPLICATION_NAME,
             trust=True,
             config=MINIO_CONFIG,
-            channel="ckf-1.9/stable",
+            channel="ckf-1.10/stable",
         )
         await asyncio.gather(
             deploy_prometheus,
