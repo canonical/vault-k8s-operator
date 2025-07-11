@@ -391,6 +391,7 @@ class TestPKIManager:
             country=self.country,
             province=self.province,
             locality=self.locality,
+            sign_verbatim=False,
         )
 
     @pytest.fixture
