@@ -7,7 +7,7 @@ import tempfile
 
 import ops.testing as testing
 
-from tests.unit.fixtures import VaultCharmFixtures
+from fixtures import VaultCharmFixtures
 
 
 class TestCharmInstall(VaultCharmFixtures):

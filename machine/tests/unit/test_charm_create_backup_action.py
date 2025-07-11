@@ -8,7 +8,7 @@ import pytest
 from ops.testing import ActionFailed
 from vault.vault_managers import ManagerError
 
-from tests.unit.fixtures import VaultCharmFixtures
+from fixtures import VaultCharmFixtures
 
 
 class TestCharmCreateBackupAction(VaultCharmFixtures):

@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import VAULT_KV_REQUIRER_APPLICATION_NAME
-from tests.integration.helpers import deploy_if_not_exists
+from config import VAULT_KV_REQUIRER_APPLICATION_NAME
+from helpers import deploy_if_not_exists
 
 
 @pytest.fixture(scope="module")

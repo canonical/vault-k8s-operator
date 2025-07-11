@@ -6,7 +6,7 @@ import ops.testing as testing
 import pytest
 from vault.vault_client import AuditDeviceType, VaultClientError
 
-from tests.unit.fixtures import MockBinding, VaultCharmFixtures
+from fixtures import MockBinding, VaultCharmFixtures
 
 
 class TestCharmAuthorizeAction(VaultCharmFixtures):

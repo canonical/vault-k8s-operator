@@ -8,8 +8,7 @@ from typing import Any
 import ops.testing as testing
 import pytest
 from ops.charm import ActionEvent, CharmBase
-
-from lib.vault.vault_autounseal import (
+from vault.vault_autounseal import (
     VaultAutounsealDetailsReadyEvent,
     VaultAutounsealProvides,
     VaultAutounsealRequires,

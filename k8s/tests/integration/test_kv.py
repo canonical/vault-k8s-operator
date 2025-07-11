@@ -7,7 +7,7 @@ import pytest
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
@@ -15,7 +15,7 @@ from tests.integration.config import (
     VAULT_KV_REQUIRER_1_APPLICATION_NAME,
     VAULT_KV_REQUIRER_2_APPLICATION_NAME,
 )
-from tests.integration.helpers import (
+from helpers import (
     crash_pod,
     deploy_vault,
     get_vault_token_and_unseal_key,
