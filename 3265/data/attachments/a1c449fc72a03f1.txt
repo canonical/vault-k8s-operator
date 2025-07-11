@@ -1,0 +1,42 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  s3-integrator/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model             Controller                Cloud/Region        Version  SLA          Timestamp
+test-backup-u107  github-pr-11d80-microk8s  microk8s/localhost  3.6.8    unsupported  09:59:56Z
+
+App            Version                Status  Scale  Charm          Channel         Rev  Address         Exposed  Message
+minio          res:oci-image@220b31a  active      1  minio          ckf-1.9/stable  383  10.152.183.121  no       
+s3-integrator                         active      1  s3-integrator  latest/stable   145  10.152.183.148  no       
+vault-k8s                             active      3  vault-k8s                        0  10.152.183.196  no       
+
+Unit              Workload  Agent  Address       Ports          Message
+minio/0*          active    idle   10.1.169.156  9000-9001/TCP  
+s3-integrator/0*  active    idle   10.1.169.148                 
+vault-k8s/0*      active    idle   10.1.169.144                 
+vault-k8s/1       active    idle   10.1.169.153                 
+vault-k8s/2       active    idle   10.1.169.154                 
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-vault-k8s-2: 09:57:14 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fb3c37ab380>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:15 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fb2f5137140>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:17 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fe6b06eb440>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:18 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f554633b830>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 09:57:19 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ff607820770>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:20 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f09341fb950>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 09:57:21 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fe25973b260>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:21 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f3546f3f560>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 09:57:22 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f323a5eb4a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:57:23 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-backup-u107.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fdc8b2e7020>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-backup-u107...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications s3-integrator
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications minio
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
