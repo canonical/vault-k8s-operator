@@ -9,7 +9,7 @@ Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:34:35-04:00
 
 App    Version  Status   Scale  Charm  Channel    Rev  Exposed  Message
-vault           blocked      3  vault  1.15/beta  257  no       Waiting for Vault to be unsealed
+vault           blocked      3  vault  1.18/edge  257  no       Waiting for Vault to be unsealed
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
@@ -41,7 +41,7 @@ $ juju status
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:39:11-04:00
 
 App    Version  Status  Scale  Charm  Channel    Rev  Exposed  Message
-vault           active      3  vault  1.15/beta  257  no       
+vault           active      3  vault  1.18/edge  257  no       
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
