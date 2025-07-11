@@ -32,7 +32,27 @@ dev = ["codespell", "pyright", "ruff"]
 
 [tool.ruff]
 extend = "../pyproject.toml"
+extend-exclude = [
+    # libs used by (and not defined by) this charm
+    "lib/charms/certificate_transfer_interface/",
+    "lib/charms/data_platform_libs/",
+    "lib/charms/grafana_agent/",
+    "lib/charms/operator_libs_linux/",
+    "lib/charms/tls_certificates_interface/",
+    "lib/charms/traefik_k8s/",
+    "lib/charms/vault_k8s/",
+]
 
 [tool.pyright]
 extends = "../pyproject.toml"
 include = ["src/", "lib/", "tests/"]
+ignore = [
+    # libs used by (and not defined by) this charm
+    "lib/charms/certificate_transfer_interface/",
+    "lib/charms/data_platform_libs/",
+    "lib/charms/grafana_agent/",
+    "lib/charms/operator_libs_linux/",
+    "lib/charms/tls_certificates_interface/",
+    "lib/charms/traefik_k8s/",
+    "lib/charms/vault_k8s/",
+]
