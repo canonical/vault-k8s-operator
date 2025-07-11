@@ -22,3 +22,4 @@ Serve the documentation locally with:
 cd docs
 make run
 ```
+
