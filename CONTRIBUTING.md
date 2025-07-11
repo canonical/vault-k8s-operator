@@ -8,7 +8,7 @@ Tool settings for linting, static analysis, and testing are configured in the re
 
 Shared code used by both the Vault machine and K8s charms is defined in `vault-package`. This code is vendored into both charms so that `charmcraft pack` can run in each directory without any additional information. Vendored code **must** be in sync to merge to `main`.
 
-Vendored code is syncronised into a charm when running any of its `tox` commands. When editing shared code, it is best practice to run `tox` for both charms to ensure the changes work for both charms. However, you can also manually vendor the shared code by running the following command in the `k8s/` and `machine/` directories:
+Vendored code is updated for a charm when running any of its `tox` commands. When editing shared code, it is best practice to run `tox` for both charms to ensure the changes work for both charms. However, you can also manually vendor the shared code by running the following command in the `k8s/` and `machine/` directories:
 
 ```shell
 make vendor-shared-code
