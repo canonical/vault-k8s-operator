@@ -668,7 +668,7 @@ class TestVaultK8sIntegrationsPart2:
             "prometheus-k8s",
             application_name=PROMETHEUS_APPLICATION_NAME,
             trust=True,
-            channel="1/stable"
+            channel="1/stable",
         )
         deploy_loki = ops_test.model.deploy(
             "loki-k8s",
