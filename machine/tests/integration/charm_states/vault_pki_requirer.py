@@ -3,12 +3,12 @@ from asyncio import Task, create_task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     MATCHING_COMMON_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_REVISION,
 )
-from tests.integration.helpers import deploy_if_not_exists
+from helpers import deploy_if_not_exists
 
 
 @pytest.fixture(scope="module")

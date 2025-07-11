@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     LOKI_APPLICATION_NAME,
     NUM_VAULT_UNITS,
     PROMETHEUS_APPLICATION_NAME,
     SHORT_TIMEOUT,
 )
-from tests.integration.helpers import (
+from helpers import (
     deploy_vault,
     get_vault_token_and_unseal_key,
     initialize_unseal_authorize_vault,

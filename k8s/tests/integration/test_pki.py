@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
@@ -15,7 +15,7 @@ from tests.integration.config import (
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_REVISION,
 )
-from tests.integration.helpers import (
+from helpers import (
     deploy_vault,
     get_leader_unit,
     get_unit_address,

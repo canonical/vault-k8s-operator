@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call
 
 import ops.testing as testing
 
-from tests.unit.fixtures import VaultCharmFixtures
+from fixtures import VaultCharmFixtures
 
 
 class TestCharmRemove(VaultCharmFixtures):
