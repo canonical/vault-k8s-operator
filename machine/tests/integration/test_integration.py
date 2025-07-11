@@ -214,11 +214,7 @@ async def grafana_deployed(ops_test: OpsTest) -> Task:
     """Deploy the `grafana-agent` charm."""
     assert ops_test.model
 
-    return create_task(
-        deploy_if_not_exists(
-            ops_test.model, GRAFANA_AGENT_APPLICATION_NAME, channel="1/stable", base="ubuntu@22.04"
-        )
-    )
+    return create_task(deploy_if_not_exists(ops_test.model, GRAFANA_AGENT_APPLICATION_NAME))
 
 
 @pytest.fixture(scope="module")
