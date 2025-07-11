@@ -11,6 +11,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ensure-shared-code-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Vendor shared code into K8s charm
+        working-directory: k8s
+        run: make vendor-shared-code
+      - name: Vendor shared code into machine charm
+        working-directory: machine
+        run: make vendor-shared-code
+      - name: Ensure vendored code is checked in
+        run: git diff --exit-code
+
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
@@ -73,7 +88,7 @@ jobs:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./machine/
-  
+
   machine-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
     with:
