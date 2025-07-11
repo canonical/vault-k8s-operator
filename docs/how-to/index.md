@@ -9,13 +9,10 @@ Day-1 operations cover the deployment and integration of the Vault charm.
 ```{toctree}
 :maxdepth: 1
 
-scale_k8s
-scale_machine
 unseal_k8s
 unseal_machine
 use_behind_ingress_k8s
 use_as_intermediate_ca
-use_as_acme_server
 integrate_with_cos_k8s
 integrate_with_cos_machine
 configure_for_autounseal

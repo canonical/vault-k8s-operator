@@ -106,7 +106,7 @@ Total Shares       0
 Threshold          0
 Unseal Progress    0/0
 Unseal Nonce       n/a
-Version            1.17.6
+Version            1.16.3
 Build Date         n/a
 Storage Type       raft
 HA Enabled         true
