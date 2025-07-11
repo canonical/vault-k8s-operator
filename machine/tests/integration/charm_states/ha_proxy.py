@@ -3,8 +3,8 @@ from asyncio import Task, create_task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import HAPROXY_APPLICATION_NAME
-from tests.integration.helpers import deploy_if_not_exists
+from config import HAPROXY_APPLICATION_NAME
+from helpers import deploy_if_not_exists
 
 
 @pytest.fixture(scope="module")

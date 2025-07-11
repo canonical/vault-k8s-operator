@@ -4,7 +4,7 @@ from asyncio import Task
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     MATCHING_COMMON_NAME,
@@ -14,7 +14,7 @@ from tests.integration.config import (
     UNMATCHING_COMMON_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
-from tests.integration.helpers import (
+from helpers import (
     get_leader_unit_address,
     get_vault_pki_intermediate_ca_common_name,
     has_relation,

@@ -7,7 +7,7 @@ import pytest
 import requests
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
@@ -15,7 +15,7 @@ from tests.integration.config import (
     SELF_SIGNED_CERTIFICATES_CHANNEL,
     SELF_SIGNED_CERTIFICATES_REVISION,
 )
-from tests.integration.helpers import (
+from helpers import (
     deploy_vault,
     get_leader_unit,
     get_unit_address,

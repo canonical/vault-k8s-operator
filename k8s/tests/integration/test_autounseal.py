@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     AUTOUNSEAL_TOKEN_SECRET_LABEL,
     JUJU_FAST_INTERVAL,
     METADATA,
     NUM_VAULT_UNITS,
 )
-from tests.integration.helpers import (
+from helpers import (
     authorize_charm,
     crash_pod,
     deploy_vault,
@@ -26,7 +26,7 @@ from tests.integration.helpers import (
     revoke_token,
     wait_for_status_message,
 )
-from tests.integration.vault import Vault
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ import tempfile
 import ops.testing as testing
 from ops.pebble import Layer, ServiceStatus
 
-from tests.unit.fixtures import VaultCharmFixtures
+from fixtures import VaultCharmFixtures
 
 
 class TestCharmRemove(VaultCharmFixtures):

@@ -10,7 +10,7 @@ from charms.operator_libs_linux.v2.snap import Snap
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from vault.vault_client import VaultClientError
 
-from tests.unit.fixtures import VaultCharmFixtures
+from fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):

@@ -7,14 +7,14 @@ import requests
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     UNMATCHING_COMMON_NAME,
 )
-from tests.integration.helpers import get_leader, has_relation
+from helpers import get_leader, has_relation
 
 logger = logging.getLogger(__name__)
 

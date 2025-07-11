@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     MINIO_APPLICATION_NAME,
     MINIO_S3_ACCESS_KEY,
@@ -16,7 +16,7 @@ from tests.integration.config import (
     S3_INTEGRATOR_APPLICATION_NAME,
     SHORT_TIMEOUT,
 )
-from tests.integration.helpers import (
+from helpers import (
     deploy_vault,
     get_leader_unit,
     get_vault_token_and_unseal_key,

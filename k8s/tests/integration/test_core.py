@@ -7,14 +7,14 @@ import pytest
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.config import (
+from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
     SHORT_TIMEOUT,
 )
-from tests.integration.helpers import (
+from helpers import (
     authorize_charm_and_wait,
     crash_pod,
     deploy_vault,
