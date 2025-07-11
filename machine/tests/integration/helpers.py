@@ -257,6 +257,7 @@ async def deploy_if_not_exists(
     num_units: int = 1,
     config: dict | None = None,
     channel: str | None = None,
+    series: str | None = None,
     revision: int | None = None,
 ) -> None:
     if app_name not in model.applications:
@@ -267,6 +268,7 @@ async def deploy_if_not_exists(
                 num_units=num_units,
                 config=config,
                 channel=channel,
+                series=series,
                 revision=revision,
             )
         except JujuError as e:
