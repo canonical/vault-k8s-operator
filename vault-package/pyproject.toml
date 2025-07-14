@@ -38,14 +38,13 @@ module-root = ""
 [tool.ruff]
 extend = "../pyproject.toml"
 extend-exclude = [
-    # Charmhub-hosted libs vendored by this package
-    "**/lib/charms/",
+    # symlink to Charmhub-hosted libs vendored by charms
+    "lib/charms/",
 ]
 
 [tool.pyright]
 extends = "../pyproject.toml"
-include = ["vault/"]
 ignore = [
-    # Charmhub-hosted libs vendored by this package
-    "**/lib/charms/",
+    # symlink to Charmhub-hosted libs vendored by charms
+    "lib/charms/",
 ]
