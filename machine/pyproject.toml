@@ -4,26 +4,24 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "boto3",
-    "boto3-stubs[s3]",
-    "cosl",
-    "cryptography",
     "jinja2",
-    "jsonschema",
     "ops",
     "psutil",
-    "pyhcl",
-    "pyopenssl",
-    "pytest-interface-tester",
-    "rpds-py==0.23.1",
-    "hvac",
     "vault-package",
+    # via cos_agent
+    "cosl",
+    # via cos_agent and tls_certificates
+    "cryptography",
+    # via vault_kv
+    "pytest-interface-tester",
 ]
 
 [dependency-groups]
 test = [
     "coverage[toml]",
+    "hvac",
     "juju",
+    "pyhcl",  # import hcl
     "pytest",
     "pytest-asyncio==0.21.2",
     "pytest-dependency",

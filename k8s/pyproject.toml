@@ -4,34 +4,37 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "allure-pytest",
-    "boto3",
-    "boto3-stubs[s3]",
-    "cosl>0.0.50",
-    "cryptography",
-    "hvac",
-    "jinja2",
-    "jsonschema",
-    "lightkube",
-    "lightkube-models",
     "ops>=0.23.0",
-    "opentelemetry-exporter-otlp-proto-http",
-    "pydantic==2.10.6",
-    "pytest-interface-tester",
-    "pyhcl",
-    "requests",
-    "rpds-py==0.23.1",
     "vault-package",
+    # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
+    "pydantic==2.10.6",
+    # via charm_tracing
+    "opentelemetry-exporter-otlp-proto-http",
+    # via ingress_per_unit
+    "jsonschema",
+    # via grafana_dashboard
+    "jinja2",
+    # via grafana_dashboard, loki_push_api and prometheus_scrape
+    "cosl>0.0.50",
+    # via tls_certificates
+    "cryptography",
+    # via vault_kv
+    "pytest-interface-tester",
 ]
 
 [dependency-groups]
 test = [
     "coverage[toml]",
+    "hvac",
     "juju",
+    "lightkube",
+    "lightkube-models",
     "ops[testing]",
+    "pyhcl",  # import hcl
     "pytest",
     "pytest-operator",
     "pytest-asyncio==0.21.2",
+    "requests",
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]
 
