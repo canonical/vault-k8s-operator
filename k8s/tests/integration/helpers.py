@@ -354,7 +354,13 @@ async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[s
     return [b64decode(secret.value.data[field]).decode("utf-8") for field in fields]
 
 
-async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_units: int) -> None:
+async def deploy_vault(
+    ops_test: OpsTest,
+    num_units: int,
+    charm_path: Path | None = None,
+    channel: str | None = None,
+    revision: int | None = None,
+) -> None:
     """Ensure the Vault charm is deployed."""
     assert ops_test.model
     await deploy_if_not_exists(
@@ -363,7 +369,16 @@ async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_units: int) -> N
         charm_path,
         num_units=num_units,
         resources=VAULT_RESOURCES,
+        channel=channel,
+        revision=revision,
     )
+
+
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
 
 
 async def get_ca_cert_file_location(
