@@ -8,7 +8,7 @@ MAKEFLAGS += --always-make
 
 # Copy shared package into the charm directory
 vendor-shared-code:
-	rsync --archive --delete ../vault-package .vendored/
+	rsync --archive --delete --filter='merge ../.rsync-filter' ../vault-package .vendored/
 
 # Copy libs used by test charm
 copy-test-libs:

@@ -1,0 +1,9 @@
+exclude .ruff_cache/
+exclude .tox/
+exclude __pycache__/
+exclude lib/
+exclude tests/
+exclude .coverage
+exclude coverage.xml
+exclude tox.ini
+exclude uv.lock

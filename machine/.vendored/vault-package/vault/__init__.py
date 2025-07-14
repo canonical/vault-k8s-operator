@@ -1,1 +1,0 @@
-"""Vault charm common code."""
