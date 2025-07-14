@@ -7,6 +7,32 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "allure-pytest"
+version = "2.14.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "allure-python-commons" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/17/e4/5dc0ead5e16d4ae95ec5312bbdc68bf1e4498585afd3299850592c94ba2a/allure_pytest-2.14.3.tar.gz", hash = "sha256:6d02a129867c7ef8b6943721d2be3141e3d1c3551741aff17b6afee64cd92b60", size = 17064 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/85/25cec4a0ec38fa564b26cbc2e60e02b2801c4c6e3d35f5d7b253319864b8/allure_pytest-2.14.3-py3-none-any.whl", hash = "sha256:9704dea12f98991bc9e13be4ce9f90fe703beaff90e4741d67ae64c9815336c5", size = 11582 },
+]
+
+[[package]]
+name = "allure-python-commons"
+version = "2.14.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "pluggy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/c5/8c1cc8d4216ad2266fa16d020fafa8c4cfe67ed8c23a3ce74ea0c1e8d392/allure_python_commons-2.14.3.tar.gz", hash = "sha256:2dcaa87dd6b0b41902f60fe17e2653d3762788f3998ca4cf721dabfa8342aa07", size = 15190 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/52/ed2029f1cd2c0b08040a85ef86f32af89ff70199ddecd5a4220c4043975d/allure_python_commons-2.14.3-py3-none-any.whl", hash = "sha256:7bcf6a2eff69e6f0eacd8681e923f0a9dfbdd86cb8e20d8f93288057f9fb7cb1", size = 16195 },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1886,6 +1912,7 @@ dev = [
     { name = "types-hvac" },
 ]
 test = [
+    { name = "allure-pytest" },
     { name = "coverage", extra = ["toml"] },
     { name = "hvac" },
     { name = "juju" },
@@ -1920,6 +1947,7 @@ dev = [
     { name = "types-hvac" },
 ]
 test = [
+    { name = "allure-pytest" },
     { name = "coverage", extras = ["toml"] },
     { name = "hvac" },
     { name = "juju" },
