@@ -24,9 +24,14 @@ jobs:
         working-directory: machine
         run: make vendor-shared-code
       - name: Ensure vendored code is checked in
-        run: git diff --exit-code
+        run: |
+          STATUS=$(git status --porcelain)
+          echo "$STATUS"
+          test -z "$STATUS"
 
   k8s-lint-report:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./k8s/
@@ -37,11 +42,15 @@ jobs:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-static-analysis:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
     with:
       path: ./k8s/
 
   k8s-unit-tests-with-coverage:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
     with:
       path: ./k8s/
@@ -85,6 +94,8 @@ jobs:
       artifact-name: built-k8s-charm
 
   machine-lint-report:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./machine/
@@ -95,11 +106,15 @@ jobs:
       path: ./machine/src/grafana_dashboards/*
 
   machine-static-analysis:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
     with:
       path: ./machine/
 
   machine-unit-tests-with-coverage:
+    needs:
+      - ensure-shared-code-in-sync
     uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
     with:
       path: ./machine/

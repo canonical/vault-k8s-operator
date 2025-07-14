@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 from hvac.exceptions import Forbidden, InternalServerError
+
 from vault.vault_client import (
     AppRole,
     AuditDeviceType,
@@ -17,7 +18,7 @@ from vault.vault_client import (
     VaultClient,
 )
 
-TEST_PATH = "./tests/unit/lib"
+TEST_PATH = "./tests/unit"
 
 
 @patch("hvac.api.auth_methods.token.Token.lookup_self")
