@@ -1839,6 +1839,7 @@ source = { editable = ".vendored/vault-package" }
 dependencies = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
+    { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },
     { name = "ops" },
@@ -1852,6 +1853,7 @@ dependencies = [
 requires-dist = [
     { name = "boto3" },
     { name = "boto3-stubs", extras = ["s3"] },
+    { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },
     { name = "ops" },

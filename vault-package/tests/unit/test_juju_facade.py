@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 from ops.model import ModelError, SecretNotFoundError
+
 from vault.juju_facade import (
     InvalidRelationDataError,
     JujuFacade,
