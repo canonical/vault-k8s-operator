@@ -3,24 +3,22 @@ name = "vault-package"
 version = "0.1.0"
 requires-python = ">=3.10"
 
-dependencies = [  # TODO: cleanup dependencies
+dependencies = [
     "boto3",
     "boto3-stubs[s3]",
-    "cryptography",  # via tls_certificates
     "hvac",
     "jinja2",
     "ops",
-    "pyhcl",  #hcl
+    "pyhcl",  # import hcl
     "requests",
     "pydantic",
-    "pytest-interface-tester",
+    "pytest-interface-tester",  # import interface_tester
+    # via tls_certificates
+    "cryptography",
 ]
 
 [dependency-groups]
-test = [
-    "coverage[toml]",
-    "pytest",
-]
+test = ["coverage[toml]", "pytest"]
 dev = ["codespell", "pyright", "ruff"]
 
 [build-system]
@@ -33,14 +31,8 @@ module-root = ""
 
 [tool.ruff]
 extend = "../pyproject.toml"
-extend-exclude = [
-    # symlink to Charmhub-hosted libs vendored by charms
-    "lib/charms/",
-]
+extend-exclude = ["lib/charms/"]
 
 [tool.pyright]
 extends = "../pyproject.toml"
-ignore = [
-    # symlink to Charmhub-hosted libs vendored by charms
-    "lib/charms/",
-]
+ignore = ["lib/charms/"]
