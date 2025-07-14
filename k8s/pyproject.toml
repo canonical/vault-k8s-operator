@@ -24,6 +24,7 @@ dependencies = [
 
 [dependency-groups]
 test = [
+    "allure-pytest",
     "coverage[toml]",
     "hvac",
     "juju",
