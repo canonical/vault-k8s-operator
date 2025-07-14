@@ -24,7 +24,10 @@ jobs:
         working-directory: machine
         run: make vendor-shared-code
       - name: Ensure vendored code is checked in
-        run: git diff --exit-code
+        run: |
+          STATUS=$(git status --porcelain)
+          echo "$STATUS"
+          test -z "$STATUS"
 
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
