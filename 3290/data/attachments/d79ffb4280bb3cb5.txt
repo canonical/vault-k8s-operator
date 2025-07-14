@@ -1,0 +1,82 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [executing] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:937 Model status:
+
+Model          Controller                Cloud/Region        Version  SLA          Timestamp
+test-cos-1e7i  github-pr-85971-microk8s  microk8s/localhost  3.6.8    unsupported  09:05:32Z
+
+App             Version  Status  Scale  Charm           Channel   Rev  Address         Exposed  Message
+loki-k8s        2.9.6    active      1  loki-k8s        1/stable  199  10.152.183.45   no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  1/stable  247  10.152.183.115  no       
+vault-k8s                active      3  vault-k8s                   0  10.152.183.146  no       
+
+Unit               Workload  Agent  Address      Ports  Message
+loki-k8s/0*        active    idle   10.1.63.223         
+prometheus-k8s/0*  active    idle   10.1.63.222         
+vault-k8s/0*       active    idle   10.1.63.208         
+vault-k8s/1        active    idle   10.1.63.217         
+vault-k8s/2        active    idle   10.1.63.216         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:943 Juju error logs:
+
+unit-loki-k8s-0: 09:02:05 ERROR unit.loki-k8s/0.juju-log Uncaught exception while in charm code:
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/src/charm.py", line 936, in <module>
+    main(LokiOperatorCharm)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/main.py", line 39, in main
+    return _main.main(charm_class=charm_class, use_juju_for_storage=use_juju_for_storage)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/_main.py", line 474, in main
+    manager.run()
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/_main.py", line 458, in run
+    self._emit()
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/_main.py", line 402, in _emit
+    self._emit_charm_event(self.dispatcher.event_name)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/_main.py", line 437, in _emit_charm_event
+    event_to_emit.emit(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/framework.py", line 351, in emit
+    framework._emit(event)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/framework.py", line 923, in _emit
+    self._reemit(event_path)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/framework.py", line 1029, in _reemit
+    custom_handler(event)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/lib/charms/tempo_coordinator_k8s/v0/charm_tracing.py", line 1116, in wrapped_function
+    return callable(*args, **kwargs)  # type: ignore
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/src/charm.py", line 329, in _on_node_exporter_pebble_ready
+    self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/model.py", line 2490, in add_layer
+    self._pebble.add_layer(label, layer, combine=combine)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/pebble.py", line 2543, in add_layer
+    self._request('POST', '/v1/layers', body=body)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/pebble.py", line 2155, in _request
+    response = self._request_raw(method, path, query, headers, data)
+  File "/var/lib/juju/agents/unit-loki-k8s-0/charm/venv/lib/python3.8/site-packages/ops/pebble.py", line 2208, in _request_raw
+    raise ConnectionError(
+ops.pebble.ConnectionError: Could not connect to Pebble: socket not found at '/charm/containers/node-exporter/pebble.socket' (container restarted?)
+unit-vault-k8s-2: 09:02:05 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fc69886f7d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-loki-k8s-0: 09:02:06 ERROR juju.worker.uniter.operation hook "node-exporter-pebble-ready" (via hook dispatching script: dispatch) failed: exit status 1
+unit-loki-k8s-0: 09:02:06 ERROR juju.worker.uniter pebble poll failed for container "node-exporter": failed to send pebble-ready event: hook failed
+unit-vault-k8s-1: 09:02:06 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f7b4f05f6e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:02:08 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ff0eb937230>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 09:02:09 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fac73dfb410>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:02:10 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ff7721370b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 09:02:11 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-1e7i.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0593dfb230>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 09:03:48 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-87cb11ca-fe61-474b-86c8-b18dd33f2dec: 09:03:48 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 09:03:48 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.63.217:59540->10.152.183.156:17070: write: broken pipe
+unit-vault-k8s-0: 09:03:49 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-loki-k8s-0: 09:05:07 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1049 Resetting model test-cos-1e7i...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications prometheus-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1038    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1054 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1025 Forgetting model main...
