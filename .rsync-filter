@@ -4,6 +4,7 @@ exclude __pycache__/
 exclude lib/
 exclude tests/
 exclude .coverage
+exclude CONTRIBUTING.md
 exclude coverage.xml
 exclude tox.ini
 exclude uv.lock
