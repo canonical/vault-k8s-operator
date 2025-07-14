@@ -324,16 +324,24 @@ async def wait_for_status_message(
     )
 
 
-async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_vaults: int) -> None:
+async def deploy_vault(
+    ops_test: OpsTest, num_vaults: int, charm_path: Path | None = None, channel: str | None = None
+) -> None:
     """Ensure the Vault charm is deployed."""
     assert ops_test.model
-    await deploy_if_not_exists(ops_test.model, APP_NAME, charm_path, num_units=num_vaults)
+    await deploy_if_not_exists(
+        ops_test.model, APP_NAME, charm_path, num_units=num_vaults, channel=channel
+    )
 
 
 async def deploy_vault_and_wait(
-    ops_test: OpsTest, charm_path: Path, num_units: int, status: str | None = None
+    ops_test: OpsTest,
+    num_units: int,
+    charm_path: Path | None = None,
+    channel: str | None = None,
+    status: str | None = None,
 ) -> None:
-    await deploy_vault(ops_test, charm_path, num_units)
+    await deploy_vault(ops_test, num_units, charm_path, channel)
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
@@ -376,6 +384,13 @@ async def deploy_if_not_exists(
             )
         except JujuError as e:
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)
+
+
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
 
 
 async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[str]:
