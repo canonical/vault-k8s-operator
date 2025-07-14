@@ -21,6 +21,7 @@ dependencies = [
     "pyhcl",
     "requests",
     "rpds-py==0.23.1",
+    "vault-package",
 ]
 
 [dependency-groups]
@@ -38,6 +39,8 @@ dev = ["codespell", "pyright", "ruff", "types-hvac"]
 extend = "../pyproject.toml"
 src = ["src", "tests/unit", "tests/integration"]  # correctly sort local imports in tests
 extend-exclude = [
+    # vendored local Python packages
+    ".vendored/",
     # libs used by (and not defined by) this charm
     "lib/charms/certificate_transfer_interface/",
     "lib/charms/data_platform_libs/",
@@ -63,3 +66,6 @@ ignore = [
     "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
 ]
+
+[tool.uv.sources]
+vault-package = { path = ".vendored/vault-package", editable = true }
