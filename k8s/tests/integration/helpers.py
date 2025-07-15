@@ -364,9 +364,9 @@ async def deploy_vault(
     """Ensure the Vault charm is deployed."""
     assert ops_test.model
     await deploy_if_not_exists(
-        ops_test.model,
-        APPLICATION_NAME,
-        charm_path,
+        model=ops_test.model,
+        app_name=APPLICATION_NAME,
+        charm_path=charm_path,
         num_units=num_units,
         resources=VAULT_RESOURCES,
         channel=channel,
