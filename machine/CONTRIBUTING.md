@@ -76,6 +76,13 @@ snap restart lxd
 lxc config set core.storage_buckets_address :8555
 ```
 
+It would, however, be best to lock down the storage buckets to only allow access from other LXD containers.
+
+```shell
+lxd_bridge_ip=$(lxc network list --format yaml | yq '.[] | select(.name == "lxdbr0") | .config["ipv4.address"]' | cut -d'/' -f1) && echo "LXD bridge IP: ${lxd_bridge_ip}"
+lxc config set core.storage_buckets_address ${lxd_bridge_ip}:8555
+```
+
 Finally, create the bucket and the access keys for the integration tests:
 
 ```shell
@@ -90,5 +97,3 @@ Build the charm in this git repository using:
 ```shell
 charmcraft pack
 ```
-
-<!-- You may want to include any contribution/style guidelines in this document>

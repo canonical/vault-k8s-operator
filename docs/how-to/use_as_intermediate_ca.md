@@ -6,7 +6,9 @@ The certificates issued by Vault will have a validity period that is half of its
 
 ![image|690x129](upload://9Fqp2fx6aXCVzucptBL9PdlJp8n.png)
 
-[note]Vault PKI will only allow issuing certificates depending on how it is configured, please see `pki_allow_subdomains`, `pki_allowed_domains`, `pki_allow_any_name` and `pki_allow_wildcard_certificates`[/note]
+```{note}
+Vault PKI will only allow issuing certificates depending on how it is configured, please see `pki_allow_subdomains`, `pki_allowed_domains`, `pki_allow_any_name` and `pki_allow_wildcard_certificates`
+```
 
 1. Configure Vault's common name
 
@@ -34,7 +36,9 @@ juju integrate vault:tls-certificates-pki self-signed-certificates
 
 5. Deploy `tls-certificates-requirer`
 
-[note]The common name must be a subdomain of the Vault common name[/note]
+```{note}
+The common name must be a subdomain of the Vault common name
+```
 
 ```shell
 juju deploy tls-certificates-requirer --config common_name=demo.mydomain.com  --config sans_dns=demo.mydomain.com
