@@ -4,25 +4,24 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "boto3",
-    "boto3-stubs[s3]",
-    "cosl",
-    "cryptography",
     "jinja2",
-    "jsonschema",
     "ops",
     "psutil",
-    "pyhcl",
-    "pyopenssl",
+    "vault-package",
+    # via cos_agent
+    "cosl",
+    # via cos_agent and tls_certificates
+    "cryptography",
+    # via vault_kv
     "pytest-interface-tester",
-    "rpds-py==0.23.1",
-    "hvac",
 ]
 
 [dependency-groups]
 test = [
     "coverage[toml]",
+    "hvac",
     "juju",
+    "pyhcl",  # import hcl
     "pytest",
     "pytest-asyncio==0.21.2",
     "pytest-dependency",
@@ -34,6 +33,8 @@ dev = ["codespell", "pyright", "ruff"]
 extend = "../pyproject.toml"
 src = ["src", "tests/unit", "tests/unit/lib", "tests/integration"]  # correctly sort local imports in tests
 extend-exclude = [
+    # vendored local Python packages
+    ".vendored/",
     # libs used by (and not defined by) this charm
     "lib/charms/certificate_transfer_interface/",
     "lib/charms/data_platform_libs/",
@@ -57,3 +58,6 @@ ignore = [
     "lib/charms/traefik_k8s/",
     "lib/charms/vault_k8s/",
 ]
+
+[tool.uv.sources]
+vault-package = { path = ".vendored/vault-package", editable = true }

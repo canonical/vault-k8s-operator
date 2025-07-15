@@ -9,6 +9,7 @@ from unittest.mock import ANY, MagicMock, Mock, patch
 import boto3
 from botocore.exceptions import ClientError
 from botocore.response import StreamingBody
+
 from vault.vault_s3 import S3, S3Error
 
 
