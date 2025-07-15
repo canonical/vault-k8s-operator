@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+from juju.errors import JujuError
 import pytest
 from config import (
     APP_NAME,
@@ -75,6 +76,10 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
     ops_test: OpsTest, vault_charm_path: Path
 ):
     assert ops_test.model
+    try:
+        await ops_test.model.remove_application(APP_NAME)
+    except JujuError:
+        pass
     await deploy_vault_and_wait(
         ops_test, NUM_VAULT_UNITS, status="blocked", channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL
     )
