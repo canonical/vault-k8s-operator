@@ -50,7 +50,6 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     )
     await ops_test.model.deploy(
         S3_INTEGRATOR_APPLICATION_NAME,
-        application_name=S3_INTEGRATOR_APPLICATION_NAME,
         channel="stable",
         trust=True,
     )
