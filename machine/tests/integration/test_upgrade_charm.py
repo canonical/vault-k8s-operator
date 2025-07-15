@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 
-from juju.errors import JujuError
 import pytest
 from config import (
     APP_NAME,
@@ -16,6 +15,7 @@ from helpers import (
     refresh_application,
     unseal_all_vault_units,
 )
+from juju.errors import JujuError
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
