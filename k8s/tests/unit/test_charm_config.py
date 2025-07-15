@@ -76,7 +76,7 @@ class TestCharmConfig:
             assert not manager.charm.model.config.get("acme_allow_any_name")
             assert not manager.charm.model.config.get("acme_allow_ip_sans")
 
-    def test_given_config_when_start_then_config_keys_are_complate_and_types_are_correct(self):
+    def test_given_config_when_start_then_config_keys_are_complete_and_types_are_correct(self):
         """This test checks the config keys and their types.
 
         This is supposed to fail if a key is removed or the type is changed.
