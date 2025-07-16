@@ -12,6 +12,8 @@ from helpers import (
     get_ca_cert_file_location,
     initialize_vault_leader,
     unseal_all_vault_units,
+    refresh_application,
+    authorize_charm,
 )
 from pytest_operator.plugin import OpsTest
 
@@ -22,7 +24,6 @@ CURRENT_TRACK_FIRST_STABLE_REVISION = 353
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency()
 async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_active(
     ops_test: OpsTest, vault_charm_path: Path
 ):
@@ -47,73 +48,74 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
             ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
         )
 
-    #     await authorize_charm(ops_test, root_token)
+        await authorize_charm(ops_test, root_token)
 
-    # await ops_test.model.wait_for_idle(
-    #     apps=[APPLICATION_NAME],
-    #     status="active",
-    #     wait_for_exact_units=NUM_VAULT_UNITS,
-    #     timeout=1000,
-    # )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )
 
-    # await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
+    await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
 
-    # async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-    #     await unseal_all_vault_units(
-    #         ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
-    #     )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(
+            ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
+        )
 
-    #     await authorize_charm(ops_test, root_token)
+        await authorize_charm(ops_test, root_token)
 
-    # await ops_test.model.wait_for_idle(
-    #     apps=[APPLICATION_NAME],
-    #     status="active",
-    #     wait_for_exact_units=NUM_VAULT_UNITS,
-    #     timeout=1000,
-    # )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )
+
+    await ops_test.model.remove_application(APPLICATION_NAME)
 
 
-# @pytest.mark.abort_on_fail
-# @pytest.mark.dependency()
-# async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
-#     ops_test: OpsTest, vault_charm_path: Path
-# ):
-#     assert ops_test.model
-#     await deploy_vault(ops_test, NUM_VAULT_UNITS, channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL)
-#     await ops_test.model.wait_for_idle(
-#         apps=[APPLICATION_NAME],
-#         status="blocked",
-#         wait_for_exact_units=NUM_VAULT_UNITS,
-#         timeout=1000,
-#     )
-#     root_token, unseal_key = await initialize_vault_leader(ops_test, APPLICATION_NAME)
+@pytest.mark.abort_on_fail
+async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
+    ops_test: OpsTest, vault_charm_path: Path
+):
+    assert ops_test.model
+    await deploy_vault(ops_test, NUM_VAULT_UNITS, channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL)
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="blocked",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )
+    root_token, unseal_key = await initialize_vault_leader(ops_test, APPLICATION_NAME)
 
-#     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-#         await unseal_all_vault_units(
-#             ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
-#         )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(
+            ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
+        )
 
-#         await authorize_charm(ops_test, root_token)
+        await authorize_charm(ops_test, root_token)
 
-#     await ops_test.model.wait_for_idle(
-#         apps=[APPLICATION_NAME],
-#         status="active",
-#         wait_for_exact_units=NUM_VAULT_UNITS,
-#         timeout=1000,
-#     )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )
 
-#     await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
+    await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
 
-#     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-#         await unseal_all_vault_units(
-#             ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
-#         )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(
+            ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
+        )
 
-#         await authorize_charm(ops_test, root_token)
+        await authorize_charm(ops_test, root_token)
 
-#     await ops_test.model.wait_for_idle(
-#         apps=[APPLICATION_NAME],
-#         status="active",
-#         wait_for_exact_units=NUM_VAULT_UNITS,
-#         timeout=1000,
-#     )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )

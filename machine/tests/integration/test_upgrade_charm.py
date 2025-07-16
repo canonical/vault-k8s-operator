@@ -25,7 +25,6 @@ CURRENT_TRACK_FIRST_STABLE_REVISION = 442
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency()
 async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_active(
     ops_test: OpsTest, vault_charm_path: Path
 ):
@@ -69,17 +68,13 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         timeout=1000,
     )
 
+    await ops_test.model.remove_application(APP_NAME)
+
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency()
 async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
     ops_test: OpsTest, vault_charm_path: Path
 ):
-    assert ops_test.model
-    try:
-        await ops_test.model.remove_application(APP_NAME)
-    except JujuError:
-        pass
     await deploy_vault_and_wait(
         ops_test, NUM_VAULT_UNITS, status="blocked", channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL
     )
