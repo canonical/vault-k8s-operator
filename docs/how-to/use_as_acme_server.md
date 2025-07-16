@@ -8,35 +8,23 @@ The certificates issued by Vault will have a validity period that is half of its
 Vault ACME will allow issuing certificates depending on how it is configured, please see `acme_allow_subdomains`, `acme_allowed_domains`, `acme_allow_any_name` and `acme_allow_wildcard_certificates`
 ```
 
-1. Configure Vault's common name
+1. Configure Vault's common name, and the ACME server to allow issuing certificates for subdomains and any domain name
 
-```shell
-juju config vault acme_ca_common_name=mydomain.com
-```
+    ```shell
+    juju config vault acme_ca_common_name=mydomain.com acme_allow_subdomains=true acme_allow_any_name=true
+    ```
 
-2. Configure Vault's ACME Server to allow issuing certificates for subdomains
+2. Deploy the parent CA
 
-```shell
-juju config vault acme_allow_subdomains=true
-```
+    ```shell
+    juju deploy self-signed-certificates --channel 1/stable
+    ```
 
-3. Configure Vault's ACME Server to allow issuing certificates to any domain name
+3. Integrate Vault with its parent CA
 
-```shell
-juju config vault acme_allow_any_name=true
-```
-
-4. Deploy the parent CA
-
-```shell
-juju deploy self-signed-certificates --channel 1/stable
-```
-
-5. Integrate Vault with its parent CA
-
-```shell
-juju integrate vault:tls-certificates-acme self-signed-certificates
-```
+    ```shell
+    juju integrate vault:tls-certificates-acme self-signed-certificates
+    ```
 
 Now the ACME server is accessible on `https://<Vault Address>:8200/v1/charm-acme/acme/directory`
 
