@@ -53,12 +53,17 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
 
     await refresh_application(ops_test, APP_NAME, vault_charm_path)
 
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="blocked",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+        timeout=1000,
+    )
+
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await unseal_all_vault_units(
             ops_test, unseal_key, await get_ca_cert_file_location(ops_test)
         )
-
-        await authorize_charm(ops_test, root_token)
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
