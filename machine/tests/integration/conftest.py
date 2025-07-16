@@ -10,15 +10,6 @@ from pytest_operator.plugin import OpsTest
 
 from config import APP_NAME
 
-pytest_plugins = (
-    "charm_states.grafana",
-    "charm_states.ha_proxy",
-    "charm_states.self_signed_certificates",
-    "charm_states.vault",
-    "charm_states.vault_kv_requirer",
-    "charm_states.vault_pki_requirer",
-)
-
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add options to the pytest command line.
