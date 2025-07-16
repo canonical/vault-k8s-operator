@@ -329,7 +329,7 @@ async def deploy_if_not_exists(
                 channel=channel,
                 revision=revision,
                 series=series,
-                resources=resources,
+                resources=resources if charm_path else None,
             )
         except JujuError as e:
             # This could be because the charm is already deployed, so we ignore it.

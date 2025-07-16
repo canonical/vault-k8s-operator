@@ -33,7 +33,6 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         num_units=NUM_VAULT_UNITS,
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
         revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
-        charm_path=vault_charm_path,
     )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
@@ -48,7 +47,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
             ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
         )
 
-        await authorize_charm(ops_test, root_token)
+    await authorize_charm(ops_test, root_token)
 
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
