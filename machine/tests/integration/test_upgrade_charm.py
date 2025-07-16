@@ -15,7 +15,6 @@ from helpers import (
     refresh_application,
     unseal_all_vault_units,
 )
-from juju.errors import JujuError
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -75,6 +74,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
 async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
     ops_test: OpsTest, vault_charm_path: Path
 ):
+    assert ops_test.model
     await deploy_vault_and_wait(
         ops_test, NUM_VAULT_UNITS, status="blocked", channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL
     )

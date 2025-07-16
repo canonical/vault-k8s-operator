@@ -8,12 +8,12 @@ from config import (
     NUM_VAULT_UNITS,
 )
 from helpers import (
+    authorize_charm,
     deploy_vault,
     get_ca_cert_file_location,
     initialize_vault_leader,
-    unseal_all_vault_units,
     refresh_application,
-    authorize_charm,
+    unseal_all_vault_units,
 )
 from pytest_operator.plugin import OpsTest
 
