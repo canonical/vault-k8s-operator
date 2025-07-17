@@ -37,7 +37,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
             ops_test, unseal_key, await get_ca_cert_file_location(ops_test)
         )
 
-    await authorize_charm(ops_test, root_token)
+        await authorize_charm(ops_test, root_token)
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
