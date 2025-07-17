@@ -15,8 +15,10 @@ from charm import VaultOperatorCharm
 class VaultCharmFixtures(VaultCharmFixturesBase):
     @pytest.fixture(autouse=True)
     def setup(self):
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mocks())  # common mocks from base class
+        with (
+            self.mocks(),  # common mocks from base class
+            contextlib.ExitStack() as stack,
+        ):
             # When we want to mock the instances, we use the return value of the mocked class
             self.mock_machine = stack.enter_context(patch("charm.Machine")).return_value
             self.mock_raft_manager = stack.enter_context(
