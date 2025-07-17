@@ -28,6 +28,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
     ops_test: OpsTest, vault_charm_path: Path
 ):
     assert ops_test.model
+    logger.info("Deploying vault from Charmhub")
     await deploy_vault_and_wait(
         ops_test,
         NUM_VAULT_UNITS,
@@ -51,8 +52,11 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         timeout=1000,
     )
 
-    await refresh_application(ops_test, APP_NAME, vault_charm_path)
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        logger.info("Refreshing vault from built charm")
+        await refresh_application(ops_test, APP_NAME, vault_charm_path)
 
+    logger.info("Waiting for vault to be blocked after refresh")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="blocked",
@@ -65,6 +69,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
             ops_test, unseal_key, await get_ca_cert_file_location(ops_test)
         )
 
+    logger.info("Waiting for vault to be active after refresh")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
