@@ -20,7 +20,7 @@ dependencies = [
 test = [
     "coverage[toml]",
     "hvac",
-    "juju >= 3.6.1.3",
+    "juju",
     "pyhcl",  # import hcl
     "pytest",
     "pytest-asyncio==0.21.2",

@@ -27,7 +27,7 @@ test = [
     "allure-pytest",
     "coverage[toml]",
     "hvac",
-    "juju >= 3.6.1.3",
+    "juju",
     "lightkube",
     "lightkube-models",
     "ops[testing]",
