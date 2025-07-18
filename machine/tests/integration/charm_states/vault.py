@@ -26,7 +26,7 @@ async def vault_idle_blocked(
     This is the default state of Vault.
     """
     return create_task(
-        deploy_vault_and_wait(ops_test, vault_charm_path, NUM_VAULT_UNITS, status="blocked")
+        deploy_vault_and_wait(ops_test, NUM_VAULT_UNITS, vault_charm_path, status="blocked")
     )
 
 
@@ -83,4 +83,4 @@ async def vault_idle(
     unsealed, and authorized. A "blocked" state is acceptable, but so is an
     "active" state.
     """
-    return create_task(deploy_vault_and_wait(ops_test, vault_charm_path, NUM_VAULT_UNITS))
+    return create_task(deploy_vault_and_wait(ops_test, NUM_VAULT_UNITS, vault_charm_path))
