@@ -8,9 +8,9 @@ from config import (
     NUM_VAULT_UNITS,
 )
 from helpers import (
-    initialize_unseal_authorize_vault,
     deploy_vault,
     get_ca_cert_file_location,
+    initialize_unseal_authorize_vault,
     refresh_application,
     unseal_all_vault_units,
 )

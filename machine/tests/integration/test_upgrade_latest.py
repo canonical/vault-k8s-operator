@@ -9,8 +9,8 @@ from config import (
 )
 from helpers import (
     deploy_vault_and_wait,
-    refresh_application,
     initialize_unseal_authorize_vault,
+    refresh_application,
 )
 from pytest_operator.plugin import OpsTest
 
