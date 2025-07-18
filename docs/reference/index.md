@@ -17,6 +17,7 @@ key_differences_between_charm_versions
 relation_based_secret_engines
 charm_policies
 release_notes
+supported_releases
 ```
 
 In the Charm's Charmhub page, you can find additional reference material, including:
