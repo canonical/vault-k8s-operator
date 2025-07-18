@@ -8,10 +8,8 @@ from config import (
     NUM_VAULT_UNITS,
 )
 from helpers import (
-    authorize_charm,
-    deploy_vault,
+    initialize_unseal_authorize_vault,
     get_ca_cert_file_location,
-    initialize_vault_leader,
     refresh_application,
     unseal_all_vault_units,
 )
@@ -41,14 +39,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         wait_for_exact_units=NUM_VAULT_UNITS,
         timeout=1000,
     )
-    root_token, unseal_key = await initialize_vault_leader(ops_test, APPLICATION_NAME)
-
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(
-            ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
-        )
-
-    await authorize_charm(ops_test, root_token)
+    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
 
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],

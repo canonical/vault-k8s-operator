@@ -8,12 +8,9 @@ from config import (
     NUM_VAULT_UNITS,
 )
 from helpers import (
-    authorize_charm,
     deploy_vault_and_wait,
-    get_ca_cert_file_location,
-    initialize_vault_leader,
+    initialize_unseal_authorize_vault,
     refresh_application,
-    unseal_all_vault_units,
 )
 from pytest_operator.plugin import OpsTest
 
@@ -36,14 +33,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
         revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
     )
-    root_token, unseal_key = await initialize_vault_leader(ops_test, APP_NAME)
-
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(
-            ops_test, unseal_key, await get_ca_cert_file_location(ops_test)
-        )
-
-    await authorize_charm(ops_test, root_token)
+    await initialize_unseal_authorize_vault(ops_test, APP_NAME)
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
