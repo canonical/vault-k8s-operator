@@ -18,7 +18,6 @@ class VaultCharmFixtures(VaultCharmFixturesBase):
             self.mocks(),  # common mocks from base class
             contextlib.ExitStack() as stack,
         ):
-            stack.enter_context(self.mocks())
             # When we want to mock the instances, we use the return value of the mocked class
             # When we want to mock the callable, we use the mock directly
             self.mock_get_binding = stack.enter_context(patch("ops.model.Model.get_binding"))
