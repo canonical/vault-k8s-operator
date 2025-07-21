@@ -26,16 +26,15 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import VaultKvClientDetachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader
 from ops import ActionEvent, BlockedStatus, ErrorStatus
-from ops.charm import CharmBase, CollectStatusEvent, RemoveEvent
+from ops.charm import CollectStatusEvent, RemoveEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, Relation, WaitingStatus
-from vault.juju_facade import JujuFacade, NoSuchSecretError, SecretRemovedError
+from vault.charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharmBase
+from vault.juju_facade import JujuFacade, NoSuchSecretError
 from vault.vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
 from vault.vault_client import (
     AppRole,
-    AuditDeviceType,
     SecretsBackend,
-    Token,
     VaultClient,
     VaultClientError,
 )
@@ -89,7 +88,6 @@ SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
 TEMPLATE_PATH = "src/templates/"
 TEMPLATE_SYSTEMD_DROP_IN_PATH = "systemd_dropin.conf.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
-VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
 VAULT_CHARM_POLICY_NAME = "charm-access"
 VAULT_CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
 VAULT_CLUSTER_PORT = 8201
@@ -105,7 +103,7 @@ VAULT_SNAP_REVISION = "2399"
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 
 
-class VaultOperatorCharm(CharmBase):
+class VaultOperatorCharm(VaultCharmBase):
     """Machine Charm for Vault."""
 
     def __init__(self, *args: Any):
@@ -325,72 +323,6 @@ class VaultOperatorCharm(CharmBase):
         self.unit.status = MaintenanceStatus(message)
         yield
         self.unit.status = previous_status
-
-    def _on_authorize_charm_action(self, event: ActionEvent):
-        """Authorize the charm to interact with Vault."""
-        if not self.unit.is_leader():
-            event.fail("This action can only be run by the leader unit")
-            return
-
-        secret_id = event.params.get("secret-id", "")
-        try:
-            if not (
-                token := self.juju_facade.get_latest_secret_content(id=secret_id).get("token", "")
-            ):
-                logger.warning("Token not found in the secret when authorizing charm.")
-                event.fail("Token not found in the secret. Please provide a valid token secret.")
-                return
-        except (NoSuchSecretError, SecretRemovedError):
-            logger.warning(
-                "Secret id provided could not be found by the charm when authorizing charm."
-            )
-            event.fail(
-                "The secret id provided could not be found by the charm. Please grant the token secret to the charm."
-            )
-            return
-
-        logger.info("Authorizing the charm to interact with Vault")
-        if not self._api_address:
-            logger.warning("API address is not available when authorizing charm")
-            event.fail("API address is not available.")
-            return
-        if not self.tls.tls_file_available_in_charm(File.CA):
-            event.fail("CA certificate is not available in the charm. Something is wrong.")
-            return
-        vault = self._get_vault_client()
-        if not vault:
-            logger.warning("Failed to initialize the Vault client when authorizing charm")
-            event.fail("Failed to initialize the Vault client")
-            return
-        if not vault.authenticate(Token(token)):
-            logger.warning("Failed to authenticate with Vault when authorizing charm")
-            event.fail("Failed to authenticate with Vault")
-            return
-        try:
-            vault.enable_audit_device(device_type=AuditDeviceType.FILE, path="stdout")
-            vault.enable_approle_auth_method()
-            vault.create_or_update_policy_from_file(
-                name=VAULT_CHARM_POLICY_NAME, path=VAULT_CHARM_POLICY_PATH
-            )
-            role_id = vault.create_or_update_approle(
-                name="charm",
-                policies=[VAULT_CHARM_POLICY_NAME, VAULT_DEFAULT_POLICY_NAME],
-                token_ttl="1h",
-                token_max_ttl="1h",
-            )
-            vault_secret_id = vault.generate_role_secret_id(name="charm")
-            self.juju_facade.set_app_secret_content(
-                content={"role-id": role_id, "secret-id": vault_secret_id},
-                label=VAULT_CHARM_APPROLE_SECRET_LABEL,
-                description="The authentication details for the charm's access to vault.",
-            )
-            event.set_results(
-                {"result": "Charm authorized successfully. You may now remove the secret."}
-            )
-        except VaultClientError as e:
-            logger.exception("Vault returned an error while authorizing the charm")
-            event.fail(f"Vault returned an error while authorizing the charm: {str(e)}")
-            return
 
     def _on_bootstrap_raft_action(self, event: ActionEvent):
         """Bootstraps the raft cluster when a single node is present.
