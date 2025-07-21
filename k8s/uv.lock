@@ -546,7 +546,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -806,7 +806,7 @@ wheels = [
 
 [[package]]
 name = "juju"
-version = "3.6.1.2"
+version = "3.6.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backports-datetime-fromisoformat" },
@@ -823,7 +823,10 @@ dependencies = [
     { name = "typing-inspect" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/27/c8/8166486f28f470ea0af062b7494d9a33b5ee471cc6bceb4547d7b5638fd3/juju-3.6.1.2.tar.gz", hash = "sha256:01ff58b8590b2ea19ace024c124a29d470c9e38431f5a9688ef990eef2b86889", size = 304682, upload-time = "2025-05-26T00:50:03.326Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/ac/42ed7565d1b031856fb7e8884089acb3eab5aa6a2dabfee3fcf09660f885/juju-3.6.1.3.tar.gz", hash = "sha256:2fcf510fa35b387abb382da3a8b2227f38852ae7e9dc1058afb228588e1aec51", size = 305052, upload-time = "2025-07-11T02:15:59.237Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/13/e31f9b9c24e723a161bc3b75729acb109d80bf3f75f937e4c3d408f19e5a/juju-3.6.1.3-py3-none-any.whl", hash = "sha256:87469500a0a4e6a3976ddf0595e316379868d5cea96e15af2d2d4b94188f76e5", size = 287075, upload-time = "2025-07-11T02:15:57.118Z" },
+]
 
 [[package]]
 name = "kubernetes"
@@ -1958,7 +1961,7 @@ dev = [
 ]
 test = [
     { name = "coverage", extras = ["toml"] },
-    { name = "juju" },
+    { name = "juju", specifier = ">=3.6.1.3" },
     { name = "ops", extras = ["testing"] },
     { name = "pytest" },
     { name = "pytest-asyncio", specifier = "==0.21.2" },
