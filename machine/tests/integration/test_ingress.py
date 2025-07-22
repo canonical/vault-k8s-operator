@@ -73,7 +73,7 @@ async def test_given_haproxy_deployed_when_integrated_then_status_is_active(
     assert ops_test.model
 
     haproxy_app = ops_test.model.applications[HAPROXY_APPLICATION_NAME]
-    external_hostname = "haproxy"
+    external_hostname = "haproxy.example.com"
     await haproxy_app.set_config({"external-hostname": external_hostname})
 
     await ops_test.model.integrate(
