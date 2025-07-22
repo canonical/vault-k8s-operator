@@ -1018,6 +1018,77 @@ class TestVaultK8sIntegrationsPart3:
             )
 
 
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
+
+
+CURRENT_TRACK_FIRST_STABLE_REVISION = 323
+CURRENT_TRACK_LATEST_STABLE_CHANNEL = "1.16/stable"
+
+
+class TestUpgradeVaultFirstStableRevision:
+    """Test the upgrade from the first stable revision within track to current build."""
+
+    async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_active(
+        self, ops_test: OpsTest, request: FixtureRequest
+    ):
+        assert ops_test.model
+        logger.info("Deploying vault from Charmhub")
+        await ops_test.model.deploy(
+            APPLICATION_NAME,
+            application_name=APPLICATION_NAME,
+            channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
+            revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
+        )
+        leader_unit_index, root_token, unseal_key = await initialize_vault_leader(
+            ops_test, APPLICATION_NAME
+        )
+        unit_addresses = [row["address"] for row in await read_vault_unit_statuses(ops_test)]
+        async with ops_test.fast_forward(fast_interval="60s"):
+            unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
+            await wait_for_status_message(
+                ops_test=ops_test,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+            )
+            unseal_all_vaults(unit_addresses, root_token, unseal_key)
+            await wait_for_status_message(
+                ops_test=ops_test,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+                unit_name=f"{APPLICATION_NAME}/{leader_unit_index}",
+            )
+            await authorize_charm(ops_test, root_token)
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
+
+            logger.info("Refreshing vault from built charm")
+            vault_charm_path = Path(str(request.config.getoption("--charm_path"))).resolve()
+            await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
+            unseal_vault(unit_addresses[leader_unit_index], root_token, unseal_key)
+            await wait_for_status_message(
+                ops_test=ops_test,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+            )
+            unseal_all_vaults(unit_addresses, root_token, unseal_key)
+            await wait_for_status_message(
+                ops_test=ops_test,
+                expected_message="Please authorize charm (see `authorize-charm` action)",
+                unit_name=f"{APPLICATION_NAME}/{leader_unit_index}",
+            )
+            await ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=1000,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            )
+
+
 async def run_get_certificate_action(ops_test: OpsTest) -> dict:
     """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
 
