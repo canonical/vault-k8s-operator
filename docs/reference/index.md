@@ -11,7 +11,8 @@ Here, you will find the following references:
 backend
 tls
 unsealing
-production_blueprint
+production_blueprint_k8s
+production_blueprint_machine
 s3_storage
 key_differences_between_charm_versions
 relation_based_secret_engines
