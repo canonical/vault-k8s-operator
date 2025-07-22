@@ -19,7 +19,7 @@ class Tests:
     mock_tls: unittest.mock.MagicMock
     mock_lib_vault: unittest.mock.MagicMock
 
-    def relations(self):
+    def relations(self) -> typing.Iterable[testing.RelationBase]:
         return [testing.PeerRelation(endpoint="vault-peers")]
 
     # k8s tests override this
