@@ -24,6 +24,7 @@ from tests.integration.helpers import (
     get_leader_unit,
     get_leader_unit_address,
     has_relation,
+    refresh_application,
     run_get_certificate_action,
     unseal_all_vault_units,
     wait_for_certificate_to_be_provided,
@@ -53,6 +54,8 @@ VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"
 MATCHING_COMMON_NAME = "example.com"
 UNMATCHING_COMMON_NAME = "unmatching-the-requirer.com"
 VAULT_PKI_REQUIRER_REVISION = 93
+CURRENT_TRACK_FIRST_STABLE_REVISION = 387
+CURRENT_TRACK_LATEST_STABLE_CHANNEL = "1.16/stable"
 
 
 class ActionFailedError(Exception):
@@ -79,7 +82,11 @@ async def vault_idle(
 
     This is the default state of Vault.
     """
-    return create_task(deploy_vault_and_wait(ops_test, vault_charm_path, NUM_VAULT_UNITS))
+    return create_task(
+        deploy_vault_and_wait(
+            ops_test=ops_test, num_units=NUM_VAULT_UNITS, charm_path=vault_charm_path
+        )
+    )
 
 
 @pytest.fixture(scope="function")
@@ -91,7 +98,12 @@ async def vault_idle_blocked(
     This is the default state of Vault.
     """
     return create_task(
-        deploy_vault_and_wait(ops_test, vault_charm_path, NUM_VAULT_UNITS, status="blocked")
+        deploy_vault_and_wait(
+            ops_test=ops_test,
+            num_units=NUM_VAULT_UNITS,
+            charm_path=vault_charm_path,
+            status="blocked",
+        )
     )
 
 
@@ -995,3 +1007,84 @@ async def test_given_vault_b_is_deployed_and_autounsealed_when_add_unit_then_sta
         wait_for_exact_units=2,
         idle_period=5,
     )
+
+
+async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_active(
+    ops_test: OpsTest,
+    vault_charm_path: Path,
+):
+    assert ops_test.model
+    logger.info("Deploying vault from Charmhub")
+    application_name_in_model = "first"
+    await deploy_vault_and_wait(
+        ops_test,
+        app_name_in_model=application_name_in_model,
+        num_units=NUM_VAULT_UNITS,
+        channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
+        revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
+    )
+    root_token, unseal_key = await initialize_vault_leader(ops_test, application_name_in_model)
+    async with ops_test.fast_forward(fast_interval="60s"):
+        await unseal_all_vault_units(
+            ops_test,
+            await get_ca_cert_file_location(ops_test),
+            unseal_key,
+            app_name=application_name_in_model,
+        )
+        await authorize_charm(ops_test, root_token, app_name=application_name_in_model)
+        await ops_test.model.wait_for_idle(
+            apps=[application_name_in_model],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+        logger.info("Refreshing vault from built charm")
+        await refresh_application(ops_test, application_name_in_model, vault_charm_path)
+
+        await ops_test.model.wait_for_idle(
+            apps=[application_name_in_model],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+
+async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
+    ops_test: OpsTest,
+    vault_charm_path: Path,
+):
+    assert ops_test.model
+    logger.info("Deploying vault from Charmhub")
+    application_name_in_model = "latest"
+    await deploy_vault_and_wait(
+        ops_test,
+        app_name_in_model=application_name_in_model,
+        num_units=NUM_VAULT_UNITS,
+        channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
+    )
+    root_token, unseal_key = await initialize_vault_leader(ops_test, application_name_in_model)
+    async with ops_test.fast_forward(fast_interval="60s"):
+        await unseal_all_vault_units(
+            ops_test,
+            await get_ca_cert_file_location(ops_test),
+            unseal_key,
+            app_name=application_name_in_model,
+        )
+        await authorize_charm(ops_test, root_token, app_name=application_name_in_model)
+        await ops_test.model.wait_for_idle(
+            apps=[application_name_in_model],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+        logger.info("Refreshing vault from built charm")
+        await refresh_application(ops_test, application_name_in_model, vault_charm_path)
+
+        await ops_test.model.wait_for_idle(
+            apps=[application_name_in_model],
+            status="active",
+            timeout=1000,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
