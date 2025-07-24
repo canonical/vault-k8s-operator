@@ -1,8 +1,8 @@
-# Production blueprint
+# Production blueprint (machine)
 
 This document outlines recommendations for operating Vault in a production environment. 
 
-```{image} ../images/production_blueprint.png
+```{image} ../images/production_blueprint_machine.png
 :alt: Production Blueprint
 :align: center
 ```
