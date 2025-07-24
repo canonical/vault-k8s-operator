@@ -1,0 +1,65 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.98.16:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.98.25:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.98.23:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please unseal Vault
+  vault-k8s/1 [idle] blocked: Please unseal Vault
+  vault-k8s/2 [idle] blocked: Please unseal Vault
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model           Controller                Cloud/Region        Version  SLA          Timestamp
+test-core-smax  github-pr-48f5c-microk8s  microk8s/localhost  3.6.8    unsupported  14:22:29Z
+
+App                       Version  Status  Scale  Charm                     Channel   Rev  Address         Exposed  Message
+self-signed-certificates           active      1  self-signed-certificates  1/stable  317  10.152.183.191  no       
+vault-k8s                          active      3  vault-k8s                             0  10.152.183.161  no       
+
+Unit                         Workload  Agent  Address     Ports  Message
+self-signed-certificates/0*  active    idle   10.1.98.31         
+vault-k8s/0*                 active    idle   10.1.98.16         
+vault-k8s/1                  active    idle   10.1.98.25         
+vault-k8s/2                  active    idle   10.1.98.23         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-vault-k8s-2: 14:14:21 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f8ef125d160>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 14:14:22 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fc0fe100c50>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 14:14:23 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fd5ef761580>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 14:14:24 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0616b84dd0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 14:14:25 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f8b4fff8e30>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 14:14:26 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ffa37388fb0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 14:15:37 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa2c6096cc0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 14:16:54 ERROR unit.vault-k8s/3.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f376eb79040>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 14:16:55 ERROR unit.vault-k8s/3.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f3754f8cad0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 14:16:56 ERROR unit.vault-k8s/3.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-smax.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f9478020cb0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-self-signed-certificates-0: 14:19:04 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:19:17 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:19:20 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:19:23 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:19:25 ERROR unit.self-signed-certificates/0.juju-log certificates:1: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:19:33 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:20:28 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:20:48 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:21:15 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:22:05 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 14:22:25 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-core-smax...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
