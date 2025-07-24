@@ -289,11 +289,12 @@ async def deploy_if_not_exists(
     series: str | None = None,
     revision: int | None = None,
 ) -> None:
-    if app_name not in model.applications:
+    application_name = app_name_in_model if app_name_in_model else app_name
+    if application_name not in model.applications:
         try:
             await model.deploy(
                 charm_path if charm_path else app_name,
-                application_name=app_name_in_model if app_name_in_model else app_name,
+                application_name=application_name,
                 num_units=num_units,
                 config=config,
                 channel=channel,
