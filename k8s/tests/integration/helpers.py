@@ -10,6 +10,7 @@ import hvac
 import hvac.exceptions
 import yaml
 from cryptography import x509
+from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
 from lightkube.core.client import Client as KubernetesClient
@@ -130,3 +131,10 @@ def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
     client = hvac.Client(url=f"https://{endpoint}:8200", verify=False)
     client.token = root_token
     client.revoke_token(token=token_to_revoke)
+
+
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
