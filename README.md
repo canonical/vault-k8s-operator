@@ -1,5 +1,7 @@
 # Vault Operators (Kubernetes and Machine)
 
+A PR to check the current integration test status.
+
 [![CharmHub Badge](https://charmhub.io/vault-k8s/badge.svg)](https://charmhub.io/vault-k8s)
 [![CharmHub Badge](https://charmhub.io/vault/badge.svg)](https://charmhub.io/vault)
 
