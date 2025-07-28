@@ -96,11 +96,11 @@ async def get_leader(app: Application) -> Unit:
 
 
 async def unseal_all_vault_units(
-    ops_test: OpsTest, ca_file_name: str | None, unseal_key: str
+    ops_test: OpsTest, ca_file_name: str | None, unseal_key: str, app_name: str = APP_NAME
 ) -> None:
     """Unseal all the vault units."""
     assert ops_test.model
-    app = ops_test.model.applications[APP_NAME]
+    app = ops_test.model.applications[app_name]
     assert isinstance(app, Application)
 
     # We need to unseal the leader first, since this is the one we initialized.
@@ -221,20 +221,48 @@ async def wait_for_status_message(
     )
 
 
-async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_vaults: int) -> None:
+async def deploy_vault(
+    ops_test: OpsTest,
+    num_vaults: int,
+    charm_path: Path | None = None,
+    app_name_in_model: str = APP_NAME,
+    channel: str | None = None,
+    revision: int | None = None,
+) -> None:
     """Ensure the Vault charm is deployed."""
     assert ops_test.model
-    await deploy_if_not_exists(ops_test.model, APP_NAME, charm_path, num_units=num_vaults)
+    await deploy_if_not_exists(
+        model=ops_test.model,
+        app_name=APP_NAME,
+        app_name_in_model=app_name_in_model,
+        charm_path=charm_path,
+        num_units=num_vaults,
+        channel=channel,
+        revision=revision,
+    )
 
 
 async def deploy_vault_and_wait(
-    ops_test: OpsTest, charm_path: Path, num_units: int, status: str | None = None
+    ops_test: OpsTest,
+    num_units: int,
+    app_name_in_model: str = APP_NAME,
+    charm_path: Path | None = None,
+    status: str | None = None,
+    channel: str | None = None,
+    revision: int | None = None,
 ) -> None:
-    await deploy_vault(ops_test, charm_path, num_units)
+    await deploy_vault(
+        ops_test=ops_test,
+        num_vaults=num_units,
+        app_name_in_model=app_name_in_model,
+        charm_path=charm_path,
+        channel=channel,
+        revision=revision,
+    )
     async with ops_test.fast_forward(fast_interval="60s"):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
+            apps=[app_name_in_model],
             wait_for_at_least_units=num_units,
             timeout=1000,
             status=status,
@@ -253,6 +281,7 @@ async def get_leader_unit_address(ops_test: OpsTest) -> str:
 async def deploy_if_not_exists(
     model: Model,
     app_name: str,
+    app_name_in_model: str | None = None,
     charm_path: Path | None = None,
     num_units: int = 1,
     config: dict | None = None,
@@ -260,11 +289,12 @@ async def deploy_if_not_exists(
     series: str | None = None,
     revision: int | None = None,
 ) -> None:
-    if app_name not in model.applications:
+    application_name = app_name_in_model if app_name_in_model else app_name
+    if application_name not in model.applications:
         try:
             await model.deploy(
                 charm_path if charm_path else app_name,
-                application_name=app_name,
+                application_name=application_name,
                 num_units=num_units,
                 config=config,
                 channel=channel,
@@ -280,3 +310,10 @@ async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[s
     secret = next(secret for secret in secrets if secret.label == label)
 
     return [b64decode(secret.value.data[field]).decode("utf-8") for field in fields]
+
+
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
