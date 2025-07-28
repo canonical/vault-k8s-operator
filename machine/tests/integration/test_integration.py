@@ -1022,6 +1022,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         num_units=NUM_VAULT_UNITS,
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
         revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
+        status="blocked",
     )
     root_token, unseal_key = await initialize_vault_leader(ops_test, application_name_in_model)
     async with ops_test.fast_forward(fast_interval="60s"):
@@ -1062,6 +1063,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         app_name_in_model=application_name_in_model,
         num_units=NUM_VAULT_UNITS,
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
+        status="blocked",
     )
     root_token, unseal_key = await initialize_vault_leader(ops_test, application_name_in_model)
     async with ops_test.fast_forward(fast_interval="60s"):
