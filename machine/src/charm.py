@@ -431,6 +431,14 @@ class VaultOperatorCharm(CharmBase):
                     )
                 )
                 return
+        if self.juju_facade.relation_exists(PKI_RELATION_NAME):
+            if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+                event.add_status(
+                    BlockedStatus(
+                        f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
+                    )
+                )
+                return
         if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
