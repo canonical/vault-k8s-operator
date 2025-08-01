@@ -44,11 +44,6 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         )
 
     def test_given_no_token_when_authorize_charm_then_action_fails(self):
-        self.mock_vault.configure_mock(
-            **{
-                "authenticate.return_value": False,
-            },
-        )
         container = testing.Container(
             name="vault",
             can_connect=True,
@@ -74,7 +69,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         )
 
     def test_given_invalid_token_when_authorize_charm_then_action_fails(self):
-        self.mock_vault.configure_mock(
+        self.mock_lib_vault.configure_mock(
             **{
                 "authenticate.return_value": False,
             },
@@ -105,7 +100,7 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
 
     def test_given_vault_client_error_when_authorize_charm_then_action_fails(self):
         my_error_message = "my error message"
-        self.mock_vault.configure_mock(
+        self.mock_lib_vault.configure_mock(
             **{
                 "authenticate.return_value": True,
                 "enable_audit_device.side_effect": VaultClientError(my_error_message),
@@ -136,7 +131,8 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
         )
 
     def test_given_when_authorize_charm_then_charm_is_authorized(self):
-        self.mock_vault.configure_mock(
+        mock_vault = self.mock_lib_vault
+        mock_vault.configure_mock(
             **{
                 "authenticate.return_value": True,
                 "create_or_update_approle.return_value": "my-role-id",
@@ -168,15 +164,15 @@ class TestCharmAuthorizeAction(VaultCharmFixtures):
             state=state_in,
         )
 
-        self.mock_vault.enable_audit_device.assert_called_once_with(
+        mock_vault.enable_audit_device.assert_called_once_with(
             device_type=AuditDeviceType.FILE, path="stdout"
         )
-        self.mock_vault.enable_approle_auth_method.assert_called_once()
-        self.mock_vault.create_or_update_policy_from_file.assert_called_once_with(
+        mock_vault.enable_approle_auth_method.assert_called_once()
+        mock_vault.create_or_update_policy_from_file.assert_called_once_with(
             name="charm-access",
             path="src/templates/charm_policy.hcl",
         )
-        self.mock_vault.create_or_update_approle.assert_called_once_with(
+        mock_vault.create_or_update_approle.assert_called_once_with(
             name="charm",
             policies=["charm-access", "default"],
             token_ttl="1h",
