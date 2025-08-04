@@ -20,6 +20,8 @@ dependencies = [
     "cryptography",
     # via vault_kv
     "pytest-interface-tester",
+    "lightkube",
+    "lightkube-models",
 ]
 
 [dependency-groups]
