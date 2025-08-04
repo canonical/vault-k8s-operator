@@ -54,6 +54,7 @@ extend-exclude = [
     "lib/charms/tempo_coordinator_k8s/",
     "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
+    "lib/charms/observability_libs"
 ]
 
 [tool.pyright]
@@ -69,6 +70,7 @@ ignore = [
     "lib/charms/tempo_coordinator_k8s/",
     "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
+    "lib/charms/observability_libs"
 ]
 
 [tool.uv.sources]

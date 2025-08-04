@@ -5,10 +5,13 @@ import yaml
 from ops.testing import Context, State
 
 from charm import VaultCharm
+from fixtures import VaultCharmFixtures
 
 
-class TestCharmConfig:
+class TestCharmConfig(VaultCharmFixtures):
     config = {
+        "cpu": "1",
+        "memory": "1Gi",
         "default_lease_ttl": "168h",
         "max_lease_ttl": "720h",
         "log_level": "info",

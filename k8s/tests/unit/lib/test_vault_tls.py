@@ -17,7 +17,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from ops.model import WaitingStatus
+from ops.model import ActiveStatus, WaitingStatus
 from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
@@ -34,13 +34,32 @@ class TestCharmTLS:
         f"{TLS_CERTIFICATES_LIB_PATH_V4}.TLSCertificatesRequiresV4.get_assigned_certificate"
     )
     patcher_socket_get_fqdn = patch("socket.getfqdn")
+    patcher_lightkube_client = patch("lightkube.core.client.GenericSyncClient")
+
+    # Mock KubernetesComputeResourcesPatch using the library's recommended approach
+    patcher_k8s_resources = patch.multiple(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch",
+        _namespace="test-namespace",
+        is_ready=lambda *a, **kw: True,
+        get_status=lambda _: ActiveStatus(),
+    )
 
     @pytest.fixture(autouse=True)
     def setup(self):
         self.fqdn = "my-fqdn"
         self.mock_get_assigned_certificate = TestCharmTLS.patcher_get_assigned_certificate.start()
         self.mock_get_fqdn = TestCharmTLS.patcher_socket_get_fqdn.start()
+        self.mock_lightkube_client = TestCharmTLS.patcher_lightkube_client.start()
+        self.mock_k8s_resources = TestCharmTLS.patcher_k8s_resources.start()
         self.mock_get_fqdn.return_value = self.fqdn
+
+        yield
+
+        # Cleanup: Stop all patchers
+        TestCharmTLS.patcher_get_assigned_certificate.stop()
+        TestCharmTLS.patcher_socket_get_fqdn.stop()
+        TestCharmTLS.patcher_lightkube_client.stop()
+        TestCharmTLS.patcher_k8s_resources.stop()
 
     @pytest.fixture(autouse=True)
     def context(self):

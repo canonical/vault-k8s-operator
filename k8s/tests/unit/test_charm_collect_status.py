@@ -3,6 +3,8 @@
 # See LICENSE file for licensing details.
 
 
+from unittest.mock import patch
+
 import ops.testing as testing
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from vault.vault_client import VaultClientError
@@ -11,6 +13,40 @@ from fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.is_ready",
+        return_value=False,
+    )
+    def test_given_resources_patch_not_ready_when_collect_unit_status_then_status_is_waiting(
+        self, _
+    ):
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+            interface="vault-peer",
+            local_unit_data={"node_api_address": "http://1.2.3.4"},
+        )
+        ca_certificate_secret = testing.Secret(
+            label="vault-ca-certificate",
+            tracked_content={"privatekey": "some private key", "certificate": "some cert"},
+            owner="app",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation],
+            secrets=[ca_certificate_secret],
+            leader=True,
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == testing.WaitingStatus(
+            "Waiting for resources patch to be ready"
+        )
+
     def test_given_invalid_log_level_config_when_collect_unit_status_then_status_is_blocked(
         self,
     ):

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import ops.testing as testing
 import pytest
+from ops.model import ActiveStatus
 from vault.testing.mocks import VaultCharmFixturesBase
 
 from charm import VaultCharm
@@ -21,6 +22,17 @@ class VaultCharmFixtures(VaultCharmFixturesBase):
             # When we want to mock the instances, we use the return value of the mocked class
             # When we want to mock the callable, we use the mock directly
             self.mock_get_binding = stack.enter_context(patch("ops.model.Model.get_binding"))
+
+            # Mock KubernetesComputeResourcesPatch using the library's recommended approach
+            stack.enter_context(
+                patch.multiple(
+                    "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch",
+                    _namespace="test-namespace",
+                    is_ready=lambda *a, **kw: True,
+                    get_status=lambda _: ActiveStatus(),
+                )
+            )
+            stack.enter_context(patch("lightkube.core.client.GenericSyncClient"))
             yield
 
     @pytest.fixture(autouse=True)

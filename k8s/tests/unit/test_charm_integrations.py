@@ -2,9 +2,10 @@ import ops.testing as testing
 from ops.testing import Context
 
 from charm import VaultCharm
+from fixtures import VaultCharmFixtures
 
 
-class TestCharmIntegrations:
+class TestCharmIntegrations(VaultCharmFixtures):
     integration_endpoints = [
         "vault-autounseal-requires",
         "ingress",
