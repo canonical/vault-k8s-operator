@@ -264,7 +264,18 @@ class VaultCharm(CharmBase):
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
         if not self.resources_patch.is_ready():
-            event.add_status(WaitingStatus("Waiting for resources patch to be ready"))
+            if isinstance(self.resources_patch.get_status(), WaitingStatus):
+                event.add_status(
+                    WaitingStatus(
+                        "Waiting for resources patch to be ready. Please monitor the logs for errors."
+                    )
+                )
+            elif isinstance(self.resources_patch.get_status(), BlockedStatus):
+                event.add_status(
+                    BlockedStatus(
+                        "Failed to apply resources patch. Please monitor the logs for errors."
+                    )
+                )
             return
         if self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             if not sans_dns_config_is_valid(self.juju_facade.get_string_config("access_sans_dns")):
