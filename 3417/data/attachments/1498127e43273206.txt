@@ -1,0 +1,106 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  tls-certificates-requirer/0 [executing] active: Certificate relation is created
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] active: 
+  vault-k8s/1 [executing] active: 
+  vault-k8s/2 [executing] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model          Controller                Cloud/Region        Version  SLA          Timestamp
+test-pki-tyqm  github-pr-1b6f0-microk8s  microk8s/localhost  3.6.8    unsupported  10:12:18Z
+
+App                        Version  Status  Scale  Charm                      Channel        Rev  Address         Exposed  Message
+self-signed-certificates            active      1  self-signed-certificates   1/stable       317  10.152.183.53   no       
+tls-certificates-requirer           active      1  tls-certificates-requirer  latest/stable   93  10.152.183.84   no       Unit certificate is available
+vault-k8s                           active      3  vault-k8s                                   0  10.152.183.132  no       
+
+Unit                          Workload  Agent  Address       Ports  Message
+self-signed-certificates/0*   active    idle   10.1.112.212         
+tls-certificates-requirer/0*  active    idle   10.1.112.215         Unit certificate is available
+vault-k8s/0*                  active    idle   10.1.112.221         
+vault-k8s/1                   active    idle   10.1.112.220         
+vault-k8s/2                   active    idle   10.1.112.219         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-vault-k8s-0: 10:09:17 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 10:09:18 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-04e67803-65ed-446e-8b51-267a820177a3: 10:09:18 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 10:09:46 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 10:09:46 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fe8d88e4830>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:09:48 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fc462ce09b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:09:49 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fee2d0da9c0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:10:01 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-04e67803-65ed-446e-8b51-267a820177a3: 10:10:02 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 10:10:02 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 10:10:03 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f2c2f0e3680>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:10:05 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fc35b4dacc0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-0: 10:10:16 ERROR unit.vault-k8s/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-0.vault-k8s-endpoints.test-pki-tyqm.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ff22c140b90>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-self-signed-certificates-0: 10:10:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-tls-certificates-requirer-0: 10:10:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 10:11:14 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-vault-k8s-1: 10:11:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 10:11:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 10:11:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-04e67803-65ed-446e-8b51-267a820177a3: 10:11:21 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-pki-tyqm...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications tls-certificates-requirer
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
+[31m[1mERROR   [0m asyncio:base_events.py:1821 _GatheringFuture exception was never retrieved
+future: <_GatheringFuture finished exception=NoConnectionException('not connected')>
+Traceback (most recent call last):
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 3158, in wait_for_idle
+    if app_name not in self.applications:
+                       ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 1184, in applications
+    return self.state.applications
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 209, in applications
+    return self._live_entity_map("application")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 198, in _live_entity_map
+    entity_id: self.get_entity(entity_type, entity_id)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 311, in get_entity
+    return entity_class(
+           ^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 348, in __init__
+    self.connection = model.connection()
+                      ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 697, in connection
+    return self._connector.connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/client/connector.py", line 62, in connection
+    raise NoConnectionException("not connected")
+juju.client.connector.NoConnectionException: not connected
+[31m[1mERROR   [0m asyncio:base_events.py:1821 _GatheringFuture exception was never retrieved
+future: <_GatheringFuture finished exception=NoConnectionException('not connected')>
+Traceback (most recent call last):
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 3158, in wait_for_idle
+    if app_name not in self.applications:
+                       ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 1184, in applications
+    return self.state.applications
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 209, in applications
+    return self._live_entity_map("application")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 198, in _live_entity_map
+    entity_id: self.get_entity(entity_type, entity_id)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 311, in get_entity
+    return entity_class(
+           ^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 348, in __init__
+    self.connection = model.connection()
+                      ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/model/__init__.py", line 697, in connection
+    return self._connector.connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/vault-k8s-operator/vault-k8s-operator/k8s/.tox/integration/lib/python3.12/site-packages/juju/client/connector.py", line 62, in connection
+    raise NoConnectionException("not connected")
+juju.client.connector.NoConnectionException: not connected
