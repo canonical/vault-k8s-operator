@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import ops.testing as testing
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -23,8 +23,8 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     )
     def test_given_resources_patch_not_ready_when_collect_unit_status_then_status_is_waiting(
         self,
-        _,
-        __,
+        _: MagicMock,
+        __: MagicMock,
     ):
         container = testing.Container(
             name="vault",
@@ -62,8 +62,8 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
     )
     def test_given_resources_patch_failed_when_collect_unit_status_then_status_is_blocked(
         self,
-        _,
-        __,
+        _: MagicMock,
+        __: MagicMock,
     ):
         container = testing.Container(
             name="vault",
