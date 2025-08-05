@@ -251,7 +251,7 @@ class VaultCharm(CharmBase):
             "cpu": self.model.config.get("cpu"),
             "memory": self.model.config.get("memory"),
         }
-        requests = {"cpu": "0.5", "memory": "1Gi"}
+        requests = {"cpu": "750m", "memory": "1.5Gi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_install(self, event: InstallEvent):
