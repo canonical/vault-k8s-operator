@@ -222,16 +222,18 @@ config:
   options:
     cpu:
       description: |
-        K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). This value is used
-        for the "limits" portion of the resource requirements (the "requests" portion is
-        automatically deduced from it).
+        K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). 
+        The charm uses a default request of 750m CPU. If you set a limit below 750m, 
+        the limit will be automatically raised to 750m to ensure adequate resources.
+        If you set a limit above 750m, that limit is used while the request remains at 750m.
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
     memory:
       description: |
-        K8s memory resource limit, e.g. "1Gi". Default is unset (no limit). This value is used
-        for the "limits" portion of the resource requirements (the "requests" portion is
-        automatically deduced from it).
+        K8s memory resource limit, e.g. "1Gi". Default is unset (no limit).
+        The charm uses a default request of 1.5Gi memory. If you set a limit below 1.5Gi, 
+        the limit will be automatically raised to 1.5Gi to ensure adequate resources.
+        If you set a limit above 1.5Gi, that limit is used while the request remains at 1.5Gi.
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
     default_lease_ttl:
