@@ -565,9 +565,14 @@ class TestCharmTLS:
     @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
+    @patch(f"{VAULT_MANAGERS_PATH}.TLSManager.pull_tls_file_from_workload")
     def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
-        self, patch_generate_certificate: MagicMock, patch_generate_ca: MagicMock
+        self,
+        patch_pull_tls_file_from_workload: MagicMock,
+        patch_generate_certificate: MagicMock,
+        patch_generate_ca: MagicMock,
     ):
+        patch_pull_tls_file_from_workload.return_value = ""
         self_signed_private_key = generate_private_key()
         self_signed_ca_private_key = generate_private_key()
         self_signed_ca_certificate = generate_ca(
