@@ -208,6 +208,7 @@ class JujuFacade:
         """Add a secret to the application."""
         try:
             secret = self.charm.app.add_secret(content, label=label, description=description)
+            secret.get_content(refresh=True)
             logger.info("Secret %s added to application", label or secret.id)
             return secret
         except ValueError as e:
@@ -222,6 +223,7 @@ class JujuFacade:
         """Add a secret to the unit."""
         try:
             secret = self.charm.unit.add_secret(content, label=label, description=description)
+            secret.get_content(refresh=True)
             logger.info("Secret %s added to unit", label or secret.id)
             return secret
         except ValueError as e:

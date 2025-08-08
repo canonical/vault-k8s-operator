@@ -47,5 +47,10 @@ variable "units" {
   description = "Number of units to deploy"
   type        = number
   default     = 1
+}
 
+variable "trust" {
+  description = "Whether to grant the charm access to the k8s cluster"
+  type        = bool
+  default     = true
 }

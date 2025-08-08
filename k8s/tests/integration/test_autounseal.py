@@ -50,6 +50,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         application_name="vault-b",
         num_units=1,
         resources=resources,
+        trust=True,
     )
     await deploy_vault(
         ops_test,
