@@ -118,8 +118,13 @@ class VaultCharm(CharmBase):
 
     def __init__(self, *args: Any):
         super().__init__(*args)
-        self.juju_facade = JujuFacade(self)
         self._service_name = self._container_name = CONTAINER_NAME
+        self.resources_patch = KubernetesComputeResourcesPatch(
+            self,
+            self._container_name,
+            resource_reqs_func=self._resource_reqs_from_config,
+        )
+        self.juju_facade = JujuFacade(self)
         self._container = Container(container=self.unit.get_container(self._container_name))
         self.unit.set_ports(self.VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
@@ -211,11 +216,6 @@ class VaultCharm(CharmBase):
             scheme=lambda: "https",
         )
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
-        self.resources_patch = KubernetesComputeResourcesPatch(
-            self,
-            self._container_name,
-            resource_reqs_func=self._resource_reqs_from_config,
-        )
 
         configure_events = [
             self.on.update_status,
@@ -248,10 +248,13 @@ class VaultCharm(CharmBase):
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {
-            "cpu": self.model.config.get("cpu"),
-            "memory": self.model.config.get("memory"),
+            "cpu": self.juju_facade.get_string_config("cpu-limit"),
+            "memory": self.juju_facade.get_string_config("memory-limit"),
         }
-        requests = {"cpu": "750m", "memory": "1.5Gi"}
+        requests = {
+            "cpu": self.juju_facade.get_string_config("cpu-request"),
+            "memory": self.juju_facade.get_string_config("memory-request"),
+        }
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_install(self, event: InstallEvent):

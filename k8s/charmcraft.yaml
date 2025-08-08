@@ -220,20 +220,28 @@ actions:
 
 config:
   options:
-    cpu:
+    cpu-limit:
       description: |
         K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). 
-        The charm uses a default request of 750m CPU. If you set a limit below 750m, 
-        the limit will be automatically raised to 750m to ensure adequate resources.
-        If you set a limit above 750m, that limit is used while the request remains at 750m.
+        If you set a limit below the request, the limit will be automatically raised to the request.
+        If you set a limit above the request, that limit is used while the request remains unchanged.
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
-    memory:
+    memory-limit:
       description: |
         K8s memory resource limit, e.g. "1Gi". Default is unset (no limit).
-        The charm uses a default request of 1.5Gi memory. If you set a limit below 1.5Gi, 
-        the limit will be automatically raised to 1.5Gi to ensure adequate resources.
-        If you set a limit above 1.5Gi, that limit is used while the request remains at 1.5Gi.
+        If you set a limit below the request, the limit will be automatically raised to the request.
+        If you set a limit above the request, that limit is used while the request remains unchanged.
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
+    cpu-request:
+      description: |
+        K8s cpu resource request, e.g. "750m". Default is unset (no request).
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
+    memory-request:
+      description: |
+        K8s memory resource request, e.g. "1.5Gi". Default is unset (no request).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
     default_lease_ttl:

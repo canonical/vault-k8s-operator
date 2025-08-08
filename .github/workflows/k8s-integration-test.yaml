@@ -35,7 +35,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: [self-hosted, linux, amd64, xlarge, jammy]
+    runs-on: ubuntu-latest
     needs: [integration-matrix]
     strategy:
       fail-fast: false
