@@ -157,6 +157,27 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
 
 
 @pytest.mark.abort_on_fail
+async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_status_is_active(
+    ops_test: OpsTest, _: VaultInit
+):
+    assert ops_test.model
+    app: Application = ops_test.model.applications[APPLICATION_NAME]
+
+    await app.set_config({
+        "cpu-request": "0.75",
+        "memory-request": "1Gi",
+        "cpu-limit": "2",
+        "memory-limit": "2Gi",
+    })
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        timeout=SHORT_TIMEOUT,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
+
+
+@pytest.mark.abort_on_fail
 async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(
     ops_test: OpsTest, deploy: VaultInit
 ):
