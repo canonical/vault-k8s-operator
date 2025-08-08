@@ -158,7 +158,7 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
 
 @pytest.mark.abort_on_fail
 async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_status_is_active(
-    ops_test: OpsTest, _: VaultInit
+    ops_test: OpsTest, deploy: VaultInit
 ):
     assert ops_test.model
     app: Application = ops_test.model.applications[APPLICATION_NAME]

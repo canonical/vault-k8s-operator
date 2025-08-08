@@ -248,12 +248,20 @@ class VaultCharm(CharmBase):
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {
-            "cpu": self.juju_facade.get_string_config("cpu-limit"),
-            "memory": self.juju_facade.get_string_config("memory-limit"),
+            k: v
+            for k, v in {
+                "cpu": self.juju_facade.get_string_config("cpu-limit"),
+                "memory": self.juju_facade.get_string_config("memory-limit"),
+            }.items()
+            if v is not None and v != ""
         }
         requests = {
-            "cpu": self.juju_facade.get_string_config("cpu-request"),
-            "memory": self.juju_facade.get_string_config("memory-request"),
+            k: v
+            for k, v in {
+                "cpu": self.juju_facade.get_string_config("cpu-request"),
+                "memory": self.juju_facade.get_string_config("memory-request"),
+            }.items()
+            if v is not None and v != ""
         }
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
