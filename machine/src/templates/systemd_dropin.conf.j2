@@ -1,2 +1,5 @@
 [Service]
-Environment=VAULT_TOKEN={{ external_vault_token }}
+{{ encrypted_external_vault_token }}
+{% raw %}
+Environment=VAULT_TOKEN=${CREDENTIAL_PATH[vault_token]}
+{% endraw %}
