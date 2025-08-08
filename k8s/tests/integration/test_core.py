@@ -178,6 +178,8 @@ async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
+    await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
+
 
 @pytest.mark.abort_on_fail
 async def test_given_vault_deployed_when_tls_access_relation_created_then_existing_certificate_replaced(

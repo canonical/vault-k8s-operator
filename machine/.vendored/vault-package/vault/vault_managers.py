@@ -325,18 +325,17 @@ class TLSManager(Object):
         if not self.workload.is_accessible():
             logger.debug("Workload is not accessible")
             return
-        existing_ca_certificate = self.pull_tls_file_from_workload(File.CA)
-        if (
-            self.charm.unit.is_leader()
-            and not self.ca_certificate_secret_exists()
-            and not existing_ca_certificate
-        ):
+        existing_ca_certificate = ca_certificate = self.pull_tls_file_from_workload(File.CA)
+        ca_private_key = self.pull_tls_file_from_workload(File.KEY)
+        if not ca_certificate and self.charm.unit.is_leader():
             ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            logger.info("Generated new CA certificate.")
+        if self.charm.unit.is_leader():
             self.juju_facade.set_app_secret_content(
                 {"privatekey": ca_private_key, "certificate": ca_certificate},
                 CA_CERTIFICATE_JUJU_SECRET_LABEL,
             )
-            logger.info("Saved the Vault generated CA cert in juju secrets.")
+
         if existing_ca_certificate and existing_certificate_is_self_signed(
             ca_certificate=Certificate.from_string(existing_ca_certificate)
         ):
