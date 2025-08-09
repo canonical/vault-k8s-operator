@@ -173,12 +173,19 @@ async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_
     )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
-        status="active",
+        status="blocked",
         timeout=SHORT_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
     await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        timeout=SHORT_TIMEOUT,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
 
 
 @pytest.mark.abort_on_fail
