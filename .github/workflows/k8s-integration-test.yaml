@@ -60,12 +60,12 @@ jobs:
         run: |
           /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.8"
       - name: Fetch Charm Under Test
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
           path: ${{ inputs.path }}built/
       - name: Fetch KV Requirer Charm
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: ${{ inputs.path }}built/
@@ -104,7 +104,7 @@ jobs:
     if: always()
     steps:
       - name: Download all Allure results artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: allure-results-*
           path: allure-results

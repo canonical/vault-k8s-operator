@@ -58,12 +58,12 @@ jobs:
           sudo snap install astral-uv --classic
           uv tool install tox --with tox-uv --force
       - name: Fetch Charm Under Test
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
           path: ${{ inputs.path }}built/
       - name: Fetch KV Requirer Charm
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: ${{ inputs.path }}built/
