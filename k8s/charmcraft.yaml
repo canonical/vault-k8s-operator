@@ -226,6 +226,7 @@ config:
         If you set a limit below the request, the limit will be automatically raised to the request.
         If you set a limit above the request, that limit is used while the request remains unchanged.
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        Using this option requires the juju trust status of the charm to be set to True.
       type: string
     memory-limit:
       description: |
@@ -233,16 +234,19 @@ config:
         If you set a limit below the request, the limit will be automatically raised to the request.
         If you set a limit above the request, that limit is used while the request remains unchanged.
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        Using this option requires the juju trust status of the charm to be set to True.
       type: string
     cpu-request:
       description: |
         K8s cpu resource request, e.g. "750m". Default is unset (no request).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        Using this option requires the juju trust status of the charm to be set to True.
       type: string
     memory-request:
       description: |
         K8s memory resource request, e.g. "1.5Gi". Default is unset (no request).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        Using this option requires the juju trust status of the charm to be set to True.
       type: string
     default_lease_ttl:
       type: string
