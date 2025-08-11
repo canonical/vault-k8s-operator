@@ -163,6 +163,13 @@ async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_
     assert ops_test.model
     app: Application = ops_test.model.applications[APPLICATION_NAME]
 
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        timeout=SHORT_TIMEOUT,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
+
     await app.set_config(
         {
             "cpu-request": "0.75",
