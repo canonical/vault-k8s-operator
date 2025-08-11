@@ -9,6 +9,7 @@ from pytest_operator.plugin import OpsTest
 
 from config import (
     APPLICATION_NAME,
+    DEPLOY_TIMEOUT,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -162,14 +163,6 @@ async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_
 ):
     assert ops_test.model
     app: Application = ops_test.model.applications[APPLICATION_NAME]
-
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="active",
-        timeout=SHORT_TIMEOUT,
-        wait_for_exact_units=NUM_VAULT_UNITS,
-    )
-
     await app.set_config(
         {
             "cpu-request": "0.75",
@@ -181,16 +174,17 @@ async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
         status="blocked",
-        timeout=SHORT_TIMEOUT,
+        timeout=DEPLOY_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
-
-    await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
+        await authorize_charm_and_wait(ops_test, deploy.root_token)
 
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_NAME],
         status="active",
-        timeout=SHORT_TIMEOUT,
+        timeout=DEPLOY_TIMEOUT,
         wait_for_exact_units=NUM_VAULT_UNITS,
     )
 
