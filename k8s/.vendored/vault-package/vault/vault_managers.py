@@ -326,7 +326,7 @@ class TLSManager(Object):
             logger.debug("Workload is not accessible")
             return
         if self.tls_access:
-            logger.debug("TLS access relation found, skipping self signed certificate generation.")
+            logger.warning("TLS access relation found, skipping self signed certificate generation.")
             return
         existing_ca_certificate = ca_certificate = self.pull_tls_file_from_workload(File.CA)
         try:
@@ -336,14 +336,18 @@ class TLSManager(Object):
             )[0]
         except NoSuchSecretError:
             secret_ca_certificate = None
+        
         if self.charm.unit.is_leader():
-            if not secret_ca_certificate or Certificate.from_string(ca_certificate) != Certificate.from_string(secret_ca_certificate):
+            if not secret_ca_certificate:
                 ca_private_key, ca_certificate = generate_vault_ca_certificate()
                 logger.info("Generated new CA certificate.")
                 self.juju_facade.set_app_secret_content(
                     {"privatekey": ca_private_key, "certificate": ca_certificate},
                     CA_CERTIFICATE_JUJU_SECRET_LABEL,
                 )
+            elif secret_ca_certificate and ca_certificate and Certificate.from_string(ca_certificate) != Certificate.from_string(secret_ca_certificate):
+                logger.warning("CA certificate mismatch between workload and secret. Using secret as source of truth.")
+                ca_certificate = secret_ca_certificate
         if existing_ca_certificate and existing_certificate_is_self_signed(
             ca_certificate=Certificate.from_string(existing_ca_certificate)
         ) and Certificate.from_string(existing_ca_certificate) == Certificate.from_string(secret_ca_certificate):
