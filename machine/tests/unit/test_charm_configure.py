@@ -14,9 +14,7 @@ from charms.operator_libs_linux.v2.snap import Snap
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import AppRole
 
-from certificates import (
-    generate_example_provider_certificate,
-)
+from certificates import generate_example_provider_certificate
 from fixtures import VaultCharmFixtures
 
 
@@ -397,6 +395,10 @@ class TestCharmConfigure(VaultCharmFixtures):
             "1.2.3.4", "charm-autounseal", "key name", "role id", "secret id", "ca cert"
         )
         self.mock_machine.pull.return_value = StringIO("")
+        self.mock_subprocess_run.return_value = MagicMock(
+            stdout="SetCredentialEncrypted=vault_token: encrypteddata",
+            returncode=0,
+        )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
         )
