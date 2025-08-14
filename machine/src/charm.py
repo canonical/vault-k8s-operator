@@ -95,6 +95,7 @@ VAULT_CHARM_POLICY_PATH = "src/templates/charm_policy.hcl"
 VAULT_CLUSTER_PORT = 8201
 VAULT_CONFIG_FILE_NAME = "vault.hcl"
 VAULT_CONFIG_PATH = "/var/snap/vault/common"
+VAULT_ENV_PATH = f"{VAULT_CONFIG_PATH}/vault.env"
 VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
@@ -1091,6 +1092,7 @@ class VaultOperatorCharm(CharmBase):
             logger.debug("No auto-unseal token available")
             try:
                 self.machine.remove_path(SYSTEMD_DROP_IN_FILE_PATH)
+                self.machine.remove_path(VAULT_ENV_PATH)
                 logger.info("Removed systemd drop-in file since token is no longer set")
             except ValueError:
                 pass
@@ -1118,6 +1120,10 @@ class VaultOperatorCharm(CharmBase):
                 path=SYSTEMD_DROP_IN_FILE_PATH,
                 source=self._get_systemd_drop_in_content(external_vault_token),
             )
+            self.machine.push(
+                path=VAULT_ENV_PATH,
+                source="export VAULT_TOKEN=$(cat ${CREDENTIALS_DIRECTORY}/vault_token)\n",
+            )
             logger.info("Created systemd drop-in file for Vault service")
             return True
         # Read the existing content and see if it contains the token
@@ -1135,11 +1141,27 @@ class VaultOperatorCharm(CharmBase):
         logger.info("Updated systemd drop-in file with new token")
         return True
 
+    def _encrypt_token(self, token: str) -> str:
+        # Encrypt the token using systemd-cryptsetup
+        # -p flag is used to format the output as a systemd credential for
+        # inclusion directly in the drop-in file
+        encrypted_token = subprocess.run(
+            ["systemd-creds", "encrypt", "-p", "--name=vault_token", "-", "-"],
+            input=token,
+            capture_output=True,
+            text=True,
+        )
+        if encrypted_token.returncode != 0:
+            logger.error("Failed to encrypt token. Reason: %s", encrypted_token.stderr.strip())
+            raise RuntimeError("Token encryption failed")
+        return encrypted_token.stdout.strip()
+
     def _get_systemd_drop_in_content(self, external_vault_token: str) -> str:
         """Get the content for the systemd drop-in file."""
+        encrypted_external_vault_token = self._encrypt_token(external_vault_token)
         jinja2_environment = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         template = jinja2_environment.get_template(TEMPLATE_SYSTEMD_DROP_IN_PATH)
-        return template.render(external_vault_token=external_vault_token)
+        return template.render(encrypted_external_vault_token=encrypted_external_vault_token)
 
     def _generate_vault_config_file(self) -> None:
         """Create the Vault config file and push it to the Machine."""
