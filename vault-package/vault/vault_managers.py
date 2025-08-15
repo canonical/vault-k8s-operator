@@ -58,7 +58,6 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
-
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -325,16 +324,33 @@ class TLSManager(Object):
         if not self.workload.is_accessible():
             logger.debug("Workload is not accessible")
             return
-        if self.charm.unit.is_leader() and not self.ca_certificate_secret_exists():
-            ca_private_key, ca_certificate = generate_vault_ca_certificate()
-            self.juju_facade.set_app_secret_content(
-                {"privatekey": ca_private_key, "certificate": ca_certificate},
-                CA_CERTIFICATE_JUJU_SECRET_LABEL,
+        if self.tls_access:
+            logger.warning("TLS access relation found, skipping self signed certificate generation.")
+            return
+        workload_ca_certificate = self.pull_tls_file_from_workload(File.CA)
+        try:
+            secret_ca_certificate = ca_certificate = self.juju_facade.get_secret_content_values(
+                "certificate",
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+            )[0]
+        except NoSuchSecretError:
+            secret_ca_certificate = ca_certificate = None
+
+        if self.charm.unit.is_leader():
+            if not secret_ca_certificate:
+                ca_private_key, ca_certificate = generate_vault_ca_certificate()
+                logger.info("Generated new CA certificate.")
+                self.juju_facade.set_app_secret_content(
+                    {"privatekey": ca_private_key, "certificate": ca_certificate},
+                    CA_CERTIFICATE_JUJU_SECRET_LABEL,
+                )
+        if (
+            workload_ca_certificate
+            and existing_certificate_is_self_signed(
+                ca_certificate=Certificate.from_string(workload_ca_certificate)
             )
-            logger.info("Saved the Vault generated CA cert in juju secrets.")
-        existing_ca_certificate = self.pull_tls_file_from_workload(File.CA)
-        if existing_ca_certificate and existing_certificate_is_self_signed(
-            ca_certificate=Certificate.from_string(existing_ca_certificate)
+            and Certificate.from_string(workload_ca_certificate)
+            == Certificate.from_string(secret_ca_certificate)
         ):
             logger.debug("Found existing self signed certificate in workload.")
             return
