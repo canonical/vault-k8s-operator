@@ -30,6 +30,7 @@ from ops.charm import CharmBase, CollectStatusEvent, RemoveEvent
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, Relation, WaitingStatus
 from vault.juju_facade import JujuFacade, NoSuchSecretError, SecretRemovedError
+from vault.systemd_creds import SystemdCreds
 from vault.vault_autounseal import VaultAutounsealProvides, VaultAutounsealRequires
 from vault.vault_client import (
     AppRole,
@@ -86,7 +87,7 @@ REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 SYSTEMD_DROP_IN_DIR = "/etc/systemd/system/snap.vault.vaultd.service.d"
 SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
-SYSTEMD_ENCRYPTED_CREDENTIAL_STORE = "/etc/credstore.encrypted/"
+SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME = "external_vault_token"
 TEMPLATE_PATH = "src/templates/"
 TEMPLATE_SYSTEMD_DROP_IN_PATH = "systemd_dropin.conf.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
@@ -1123,17 +1124,15 @@ class VaultOperatorCharm(CharmBase):
             )
             self.machine.push(
                 path=VAULT_ENV_PATH,
-                source="export VAULT_TOKEN=$(cat ${CREDENTIALS_DIRECTORY}/vault_token)\n",
+                source="export VAULT_TOKEN=$(cat ${CREDENTIALS_DIRECTORY}/{SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME})\n",
             )
             logger.info("Created systemd drop-in file for Vault service")
             return True
         # Read the existing content and see if it contains the token
-        drop_in_file = self.machine.pull(path=SYSTEMD_DROP_IN_FILE_PATH)
-        for line in drop_in_file:
-            if line.startswith("Environment="):
-                if f"VAULT_TOKEN={external_vault_token}" in line:
-                    logger.debug("Systemd drop-in file already contains the token")
-                    return False
+        logging.info("External vault token: %s", external_vault_token)
+        if SystemdCreds().decrypt(SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME) == external_vault_token:
+            logger.debug("Systemd drop-in file already contains the token")
+            return False
 
         self.machine.push(
             path=SYSTEMD_DROP_IN_FILE_PATH,
@@ -1142,42 +1141,13 @@ class VaultOperatorCharm(CharmBase):
         logger.info("Updated systemd drop-in file with new token")
         return True
 
-    def _encrypt_and_save_token(self, name: str, value: str) -> None:
-        encrypted_token = subprocess.run(
-            ["systemd-creds", "encrypt", "--name=vault_token", "-", "-"],
-            input=name,
-            capture_output=True,
-            text=True,
-        )
-        if encrypted_token.returncode != 0:
-            logger.error("Failed to encrypt token. Reason: %s", encrypted_token.stderr.strip())
-            raise RuntimeError("Token encryption failed")
-
-        # Save the encrypted token to the systemd credential store
-        with open(SYSTEMD_ENCRYPTED_CREDENTIAL_STORE, "w") as f:
-            f.write(encrypted_token.stdout.strip())
-
-    def _encrypt_token(self, token: str) -> str:
-        # Encrypt the token using systemd-cryptsetup
-        # -p flag is used to format the output as a systemd credential for
-        # inclusion directly in the drop-in file
-        encrypted_token = subprocess.run(
-            ["systemd-creds", "encrypt", "-p", "--name=vault_token", "-", "-"],
-            input=token,
-            capture_output=True,
-            text=True,
-        )
-        if encrypted_token.returncode != 0:
-            logger.error("Failed to encrypt token. Reason: %s", encrypted_token.stderr.strip())
-            raise RuntimeError("Token encryption failed")
-        return encrypted_token.stdout.strip()
 
     def _get_systemd_drop_in_content(self, external_vault_token: str) -> str:
         """Get the content for the systemd drop-in file."""
-        encrypted_external_vault_token = self._encrypt_token(external_vault_token)
+        SystemdCreds().encrypt("external_vault_token", external_vault_token)
         jinja2_environment = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         template = jinja2_environment.get_template(TEMPLATE_SYSTEMD_DROP_IN_PATH)
-        return template.render(encrypted_external_vault_token=encrypted_external_vault_token)
+        return template.render(credential_name="external_vault_token")
 
     def _generate_vault_config_file(self) -> None:
         """Create the Vault config file and push it to the Machine."""
