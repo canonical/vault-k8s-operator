@@ -86,6 +86,7 @@ REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
 SYSTEMD_DROP_IN_DIR = "/etc/systemd/system/snap.vault.vaultd.service.d"
 SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
+SYSTEMD_ENCRYPTED_CREDENTIAL_STORE = "/etc/credstore.encrypted/"
 TEMPLATE_PATH = "src/templates/"
 TEMPLATE_SYSTEMD_DROP_IN_PATH = "systemd_dropin.conf.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
@@ -1140,6 +1141,21 @@ class VaultOperatorCharm(CharmBase):
         )
         logger.info("Updated systemd drop-in file with new token")
         return True
+
+    def _encrypt_and_save_token(self, name: str, value: str) -> None:
+        encrypted_token = subprocess.run(
+            ["systemd-creds", "encrypt", "--name=vault_token", "-", "-"],
+            input=name,
+            capture_output=True,
+            text=True,
+        )
+        if encrypted_token.returncode != 0:
+            logger.error("Failed to encrypt token. Reason: %s", encrypted_token.stderr.strip())
+            raise RuntimeError("Token encryption failed")
+
+        # Save the encrypted token to the systemd credential store
+        with open(SYSTEMD_ENCRYPTED_CREDENTIAL_STORE, "w") as f:
+            f.write(encrypted_token.stdout.strip())
 
     def _encrypt_token(self, token: str) -> str:
         # Encrypt the token using systemd-cryptsetup
