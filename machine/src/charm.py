@@ -1135,11 +1135,27 @@ class VaultOperatorCharm(CharmBase):
         logger.info("Updated systemd drop-in file with new token")
         return True
 
+    def _encrypt_token(self, token: str) -> str:
+        # Encrypt the token using systemd-cryptsetup
+        # -p flag is used to format the output as a systemd credential for
+        # inclusion directly in the drop-in file
+        encrypted_token = subprocess.run(
+            ["systemd-creds", "encrypt", "-p", "--name=vault_token", "-", "-"],
+            input=token,
+            capture_output=True,
+            text=True,
+        )
+        if encrypted_token.returncode != 0:
+            logger.error("Failed to encrypt token. Reason: %s", encrypted_token.stderr.strip())
+            raise RuntimeError("Token encryption failed")
+        return encrypted_token.stdout.strip()
+
     def _get_systemd_drop_in_content(self, external_vault_token: str) -> str:
         """Get the content for the systemd drop-in file."""
+        encrypted_external_vault_token = self._encrypt_token(external_vault_token)
         jinja2_environment = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         template = jinja2_environment.get_template(TEMPLATE_SYSTEMD_DROP_IN_PATH)
-        return template.render(external_vault_token=external_vault_token)
+        return template.render(encrypted_external_vault_token=encrypted_external_vault_token)
 
     def _generate_vault_config_file(self) -> None:
         """Create the Vault config file and push it to the Machine."""
