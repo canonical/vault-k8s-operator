@@ -47,7 +47,7 @@ juju add-model demo
 Deploy the Vault K8s operator:
 
 ```shell
-juju deploy vault-k8s vault --channel=1.18/edge
+juju deploy vault-k8s vault --channel=1.18/edge --trust
 ```
 
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.

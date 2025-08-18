@@ -318,6 +318,7 @@ async def deploy_if_not_exists(
     revision: int | None = None,
     series: str | None = None,
     resources: Dict[str, str] | None = None,
+    trust: bool = True,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -330,6 +331,7 @@ async def deploy_if_not_exists(
                 revision=revision,
                 series=series,
                 resources=resources,
+                trust=trust,
             )
         except JujuError as e:
             # This could be because the charm is already deployed, so we ignore it.

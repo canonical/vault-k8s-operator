@@ -15,4 +15,5 @@ resource "juju_application" "vault-k8s" {
   config      = var.config
   constraints = var.constraints
   units       = var.units
+  trust       = var.trust
 }

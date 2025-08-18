@@ -9,6 +9,7 @@ from pytest_operator.plugin import OpsTest
 
 from config import (
     APPLICATION_NAME,
+    DEPLOY_TIMEOUT,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -154,6 +155,38 @@ async def test_given_application_is_deployed_when_scale_down_then_status_is_acti
 
     vault = await get_vault_client(ops_test, app.units[0].name, deploy.root_token)
     assert vault.number_of_raft_nodes() == NUM_VAULT_UNITS
+
+
+@pytest.mark.abort_on_fail
+async def test_given_application_is_deployed_when_apply_k8s_resource_patch_then_status_is_active(
+    ops_test: OpsTest, deploy: VaultInit
+):
+    assert ops_test.model
+    app: Application = ops_test.model.applications[APPLICATION_NAME]
+    await app.set_config(
+        {
+            "cpu-request": "0.75",
+            "memory-request": "1Gi",
+            "cpu-limit": "2",
+            "memory-limit": "2Gi",
+        }
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="blocked",
+        timeout=DEPLOY_TIMEOUT,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await unseal_all_vault_units(ops_test, deploy.unseal_key, deploy.root_token)
+        await authorize_charm_and_wait(ops_test, deploy.root_token)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="active",
+        timeout=DEPLOY_TIMEOUT,
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
 
 
 @pytest.mark.abort_on_fail

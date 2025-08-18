@@ -16,6 +16,11 @@ from typing import Any, Generator
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    KubernetesComputeResourcesPatch,
+    ResourceRequirements,
+    adjust_resource_requirements,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
@@ -111,8 +116,13 @@ class VaultCharm(VaultCharmBase):
 
     def __init__(self, *args: Any):
         super().__init__(*args)
-        self.juju_facade = JujuFacade(self)
         self._service_name = self._container_name = CONTAINER_NAME
+        self.resources_patch = KubernetesComputeResourcesPatch(
+            self,
+            self._container_name,
+            resource_reqs_func=self._resource_reqs_from_config,
+        )
+        self.juju_facade = JujuFacade(self)
         self._container = Container(container=self.unit.get_container(self._container_name))
         self.unit.set_ports(self.VAULT_PORT)
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
@@ -234,6 +244,25 @@ class VaultCharm(VaultCharmBase):
             self.vault_kv.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
 
+    def _resource_reqs_from_config(self) -> ResourceRequirements:
+        limits = {
+            k: v
+            for k, v in {
+                "cpu": self.juju_facade.get_string_config("cpu-limit"),
+                "memory": self.juju_facade.get_string_config("memory-limit"),
+            }.items()
+            if v is not None and v != ""
+        }
+        requests = {
+            k: v
+            for k, v in {
+                "cpu": self.juju_facade.get_string_config("cpu-request"),
+                "memory": self.juju_facade.get_string_config("memory-request"),
+            }.items()
+            if v is not None and v != ""
+        }
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
+
     def _on_install(self, event: InstallEvent):
         """Handle the install charm event."""
         if not self._container.can_connect():
@@ -243,11 +272,33 @@ class VaultCharm(VaultCharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
+        if not self.resources_patch.is_ready():
+            if isinstance(self.resources_patch.get_status(), WaitingStatus):
+                event.add_status(
+                    WaitingStatus(
+                        "Waiting for resources patch to be ready. Please monitor the logs for errors."
+                    )
+                )
+            elif isinstance(self.resources_patch.get_status(), BlockedStatus):
+                event.add_status(
+                    BlockedStatus(
+                        "Failed to apply resources patch. Please monitor the logs for errors."
+                    )
+                )
+            return
         if self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME):
             if not sans_dns_config_is_valid(self.juju_facade.get_string_config("access_sans_dns")):
                 event.add_status(
                     BlockedStatus(
                         "Config value for access_sans_dns is not valid, it must be a comma separated list"
+                    )
+                )
+                return
+        if self.juju_facade.relation_exists(PKI_RELATION_NAME):
+            if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+                event.add_status(
+                    BlockedStatus(
+                        f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
                     )
                 )
                 return
@@ -375,6 +426,8 @@ class VaultCharm(VaultCharmBase):
         service, and unseals Vault.
         """
         if not self._container.can_connect():
+            return
+        if not self.resources_patch.is_ready():
             return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return

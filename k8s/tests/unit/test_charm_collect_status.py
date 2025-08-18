@@ -3,6 +3,8 @@
 # See LICENSE file for licensing details.
 
 
+from unittest.mock import MagicMock, patch
+
 import ops.testing as testing
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from vault.vault_client import VaultClientError
@@ -11,6 +13,84 @@ from fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.is_ready",
+        return_value=False,
+    )
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.get_status",
+        return_value=WaitingStatus("Some waiting status message"),
+    )
+    def test_given_resources_patch_not_ready_when_collect_unit_status_then_status_is_waiting(
+        self,
+        _: MagicMock,
+        __: MagicMock,
+    ):
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+            interface="vault-peer",
+            local_unit_data={"node_api_address": "http://1.2.3.4"},
+        )
+        ca_certificate_secret = testing.Secret(
+            label="vault-ca-certificate",
+            tracked_content={"privatekey": "some private key", "certificate": "some cert"},
+            owner="app",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation],
+            secrets=[ca_certificate_secret],
+            leader=True,
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+        assert state_out.unit_status == WaitingStatus(
+            "Waiting for resources patch to be ready. Please monitor the logs for errors."
+        )
+
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.is_ready",
+        return_value=False,
+    )
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.get_status",
+        return_value=BlockedStatus("Some blocked status message"),
+    )
+    def test_given_resources_patch_failed_when_collect_unit_status_then_status_is_blocked(
+        self,
+        _: MagicMock,
+        __: MagicMock,
+    ):
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+            interface="vault-peer",
+            local_unit_data={"node_api_address": "http://1.2.3.4"},
+        )
+        ca_certificate_secret = testing.Secret(
+            label="vault-ca-certificate",
+            tracked_content={"privatekey": "some private key", "certificate": "some cert"},
+            owner="app",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation],
+            secrets=[ca_certificate_secret],
+            leader=True,
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+        assert state_out.unit_status == BlockedStatus(
+            "Failed to apply resources patch. Please monitor the logs for errors."
+        )
+
     def test_given_invalid_log_level_config_when_collect_unit_status_then_status_is_blocked(
         self,
     ):
@@ -20,6 +100,24 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("log_level config is not valid")
+
+    def test_given_pki_relation_and_tls_certificates_pki_relation_missing_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        pki_relation = testing.Relation(
+            endpoint="vault-pki",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={"pki_ca_common_name": "domain.com"},
+            relations=[pki_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "tls-certificates-pki relation is missing, cannot configure PKI secrets engine"
+        )
 
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
         container = testing.Container(

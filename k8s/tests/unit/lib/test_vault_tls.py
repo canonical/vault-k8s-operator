@@ -17,7 +17,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from ops.model import WaitingStatus
+from ops.model import ActiveStatus, WaitingStatus
 from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
@@ -34,13 +34,32 @@ class TestCharmTLS:
         f"{TLS_CERTIFICATES_LIB_PATH_V4}.TLSCertificatesRequiresV4.get_assigned_certificate"
     )
     patcher_socket_get_fqdn = patch("socket.getfqdn")
+    patcher_lightkube_client = patch("lightkube.core.client.GenericSyncClient")
+
+    # Mock KubernetesComputeResourcesPatch using the library's recommended approach
+    patcher_k8s_resources = patch.multiple(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch",
+        _namespace="test-namespace",
+        is_ready=lambda *a, **kw: True,
+        get_status=lambda _: ActiveStatus(),
+    )
 
     @pytest.fixture(autouse=True)
     def setup(self):
         self.fqdn = "my-fqdn"
         self.mock_get_assigned_certificate = TestCharmTLS.patcher_get_assigned_certificate.start()
         self.mock_get_fqdn = TestCharmTLS.patcher_socket_get_fqdn.start()
+        self.mock_lightkube_client = TestCharmTLS.patcher_lightkube_client.start()
+        self.mock_k8s_resources = TestCharmTLS.patcher_k8s_resources.start()
         self.mock_get_fqdn.return_value = self.fqdn
+
+        yield
+
+        # Cleanup: Stop all patchers
+        TestCharmTLS.patcher_get_assigned_certificate.stop()
+        TestCharmTLS.patcher_socket_get_fqdn.stop()
+        TestCharmTLS.patcher_lightkube_client.stop()
+        TestCharmTLS.patcher_k8s_resources.stop()
 
     @pytest.fixture(autouse=True)
     def context(self):
@@ -492,18 +511,6 @@ class TestCharmTLS:
             config_storage = testing.Storage(
                 name="config",
             )
-            ca_certificate_secret = testing.Secret(
-                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
-                tracked_content={"privatekey": "some private key", "certificate": "some cert"},
-                owner="app",
-            )
-            state_in = testing.State(
-                containers=[vault_container],
-                storages=[certs_storage, config_storage],
-                secrets=[ca_certificate_secret],
-                leader=True,
-                relations=[peer_relation],
-            )
             private_key = generate_private_key()
             ca_private_key = generate_private_key()
             ca_certificate = generate_ca(
@@ -520,6 +527,21 @@ class TestCharmTLS:
                 ca=ca_certificate,
                 ca_private_key=ca_private_key,
                 validity=timedelta(days=365),
+            )
+            ca_certificate_secret = testing.Secret(
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+                tracked_content={
+                    "privatekey": str(ca_private_key),
+                    "certificate": str(ca_certificate),
+                },
+                owner="app",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                storages=[certs_storage, config_storage],
+                secrets=[ca_certificate_secret],
+                leader=True,
+                relations=[peer_relation],
             )
             with open(temp_dir + "/ca.pem", "w") as f:
                 f.write(str(ca_certificate))
@@ -546,9 +568,14 @@ class TestCharmTLS:
     @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
     @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
+    @patch(f"{VAULT_MANAGERS_PATH}.TLSManager.pull_tls_file_from_workload")
     def test_given_tls_relation_removed_when_configure_self_signed_certificates_then_certs_are_overwritten(
-        self, patch_generate_certificate: MagicMock, patch_generate_ca: MagicMock
+        self,
+        patch_pull_tls_file_from_workload: MagicMock,
+        patch_generate_certificate: MagicMock,
+        patch_generate_ca: MagicMock,
     ):
+        patch_pull_tls_file_from_workload.return_value = ""
         self_signed_private_key = generate_private_key()
         self_signed_ca_private_key = generate_private_key()
         self_signed_ca_certificate = generate_ca(
@@ -628,115 +655,6 @@ class TestCharmTLS:
                 f.write(str(tls_integration_certificate))
 
             self.ctx.run(self.ctx.on.update_status(), state_in)
-
-            with open(temp_dir + "/ca.pem", "r") as f:
-                assert f.read() == str(self_signed_ca_certificate)
-            with open(temp_dir + "/cert.pem", "r") as f:
-                assert f.read() == str(self_signed_certificate)
-
-    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
-    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
-    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
-    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
-    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
-    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
-    @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
-    @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
-    @patch(f"{VAULT_MANAGERS_PATH}.generate_vault_ca_certificate")
-    def test_given_tls_relation_and_ca_secret_exists_but_no_certs_in_workload_when_configure_self_signed_certificates_then_certs_pushed(
-        self,
-        patch_generate_vault_ca_certificate: MagicMock,
-        patch_generate_certificate: MagicMock,
-        patch_generate_ca: MagicMock,
-    ):
-        self_signed_private_key = generate_private_key()
-        self_signed_ca_private_key = generate_private_key()
-        self_signed_ca_certificate = generate_ca(
-            common_name=VAULT_CA_SUBJECT,
-            private_key=self_signed_ca_private_key,
-            validity=timedelta(days=365),
-        )
-        self_signed_csr = generate_csr(
-            private_key=self_signed_private_key,
-            common_name="my.domain",
-        )
-        self_signed_certificate = generate_certificate(
-            csr=self_signed_csr,
-            ca=self_signed_ca_certificate,
-            ca_private_key=self_signed_ca_private_key,
-            validity=timedelta(days=365),
-        )
-        patch_generate_ca.return_value = self_signed_ca_certificate
-        patch_generate_certificate.return_value = self_signed_certificate
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            peer_relation = testing.PeerRelation(
-                endpoint="vault-peers",
-                interface="vault-peer",
-                local_unit_data={"node_api_address": "http://1.2.3.4"},
-            )
-            certs_mount = testing.Mount(
-                location="/vault/certs",
-                source=temp_dir,
-            )
-            config_mount = testing.Mount(
-                location="/vault/config",
-                source=temp_dir,
-            )
-            vault_container = testing.Container(
-                name="vault",
-                can_connect=True,
-                mounts={
-                    "certs": certs_mount,
-                    "config": config_mount,
-                },
-            )
-            certs_storage = testing.Storage(
-                name="certs",
-            )
-            config_storage = testing.Storage(
-                name="config",
-            )
-            ca_certificate_secret = testing.Secret(
-                label="self-signed-vault-ca-certificate",
-                tracked_content={
-                    "privatekey": str(self_signed_ca_private_key),
-                    "certificate": str(self_signed_ca_certificate),
-                },
-                owner="app",
-            )
-            state_in = testing.State(
-                containers=[vault_container],
-                storages=[certs_storage, config_storage],
-                secrets=[ca_certificate_secret],
-                leader=True,
-                relations=[peer_relation],
-            )
-            tls_integration_private_key = generate_private_key()
-            tls_integration_ca_private_key = generate_private_key()
-            tls_integration_ca_certificate = generate_ca(
-                common_name="tls integration ca",
-                private_key=tls_integration_ca_private_key,
-                validity=timedelta(days=365),
-            )
-            tls_integration_csr = generate_csr(
-                private_key=tls_integration_private_key,
-                common_name="my.domain",
-            )
-            tls_integration_certificate = generate_certificate(
-                csr=tls_integration_csr,
-                ca=tls_integration_ca_certificate,
-                ca_private_key=tls_integration_ca_private_key,
-                validity=timedelta(days=365),
-            )
-            with open(temp_dir + "/ca.pem", "w") as f:
-                f.write(str(tls_integration_ca_certificate))
-            with open(temp_dir + "/cert.pem", "w") as f:
-                f.write(str(tls_integration_certificate))
-
-            self.ctx.run(self.ctx.on.update_status(), state_in)
-
-            patch_generate_vault_ca_certificate.assert_not_called()
 
             with open(temp_dir + "/ca.pem", "r") as f:
                 assert f.read() == str(self_signed_ca_certificate)
@@ -877,3 +795,112 @@ class TestCharmTLS:
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             add_certificates.assert_not_called()
+
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_ca")
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_certificate")
+    @patch(f"{VAULT_MANAGERS_PATH}.generate_vault_ca_certificate")
+    def test_given_no_tls_relation_and_ca_secret_exists_but_no_certs_in_workload_when_configure_self_signed_certificates_then_certs_pushed(
+        self,
+        patch_generate_vault_ca_certificate: MagicMock,
+        patch_generate_certificate: MagicMock,
+        patch_generate_ca: MagicMock,
+    ):
+        self_signed_private_key = generate_private_key()
+        self_signed_ca_private_key = generate_private_key()
+        self_signed_ca_certificate = generate_ca(
+            common_name=VAULT_CA_SUBJECT,
+            private_key=self_signed_ca_private_key,
+            validity=timedelta(days=365),
+        )
+        self_signed_csr = generate_csr(
+            private_key=self_signed_private_key,
+            common_name="my.domain",
+        )
+        self_signed_certificate = generate_certificate(
+            csr=self_signed_csr,
+            ca=self_signed_ca_certificate,
+            ca_private_key=self_signed_ca_private_key,
+            validity=timedelta(days=365),
+        )
+        patch_generate_ca.return_value = self_signed_ca_certificate
+        patch_generate_certificate.return_value = self_signed_certificate
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
+            )
+            certs_mount = testing.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            vault_container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = testing.Storage(
+                name="certs",
+            )
+            config_storage = testing.Storage(
+                name="config",
+            )
+            ca_certificate_secret = testing.Secret(
+                label="self-signed-vault-ca-certificate",
+                tracked_content={
+                    "privatekey": str(self_signed_ca_private_key),
+                    "certificate": str(self_signed_ca_certificate),
+                },
+                owner="app",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                storages=[certs_storage, config_storage],
+                secrets=[ca_certificate_secret],
+                leader=True,
+                relations=[peer_relation],
+            )
+            tls_integration_private_key = generate_private_key()
+            tls_integration_ca_private_key = generate_private_key()
+            tls_integration_ca_certificate = generate_ca(
+                common_name="tls integration ca",
+                private_key=tls_integration_ca_private_key,
+                validity=timedelta(days=365),
+            )
+            tls_integration_csr = generate_csr(
+                private_key=tls_integration_private_key,
+                common_name="my.domain",
+            )
+            tls_integration_certificate = generate_certificate(
+                csr=tls_integration_csr,
+                ca=tls_integration_ca_certificate,
+                ca_private_key=tls_integration_ca_private_key,
+                validity=timedelta(days=365),
+            )
+            with open(temp_dir + "/ca.pem", "w") as f:
+                f.write(str(tls_integration_ca_certificate))
+            with open(temp_dir + "/cert.pem", "w") as f:
+                f.write(str(tls_integration_certificate))
+
+            self.ctx.run(self.ctx.on.update_status(), state_in)
+
+            patch_generate_vault_ca_certificate.assert_not_called()
+
+            with open(temp_dir + "/ca.pem", "r") as f:
+                assert f.read() == str(self_signed_ca_certificate)
+            with open(temp_dir + "/cert.pem", "r") as f:
+                assert f.read() == str(self_signed_certificate)
