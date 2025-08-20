@@ -34,5 +34,6 @@ seal "transit" {
   key_name        = "{{ autounseal_key_name }}"
   mount_path      = "{{ autounseal_mount_path }}"
   tls_ca_cert     = "{{ autounseal_ca_cert_path }}"
+  token           = "file:///var/run/credentials/snap.vault.vaultd.service.d/external_vault_token"
 }
 {% endif %}
