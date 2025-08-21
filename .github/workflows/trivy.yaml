@@ -1,0 +1,10 @@
+name: Scan UV dependencies
+
+on:
+  push:
+    branches:
+      - release-1.16
+
+jobs:
+  scan:
+    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v0
