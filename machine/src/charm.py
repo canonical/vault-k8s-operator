@@ -1127,14 +1127,13 @@ class VaultOperatorCharm(CharmBase):
         Returns:
             True if the file was created, False otherwise
         """
-        if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
-            return False
-
+        jinja2 = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         self.machine.make_dir(path=SYSTEMD_DROP_IN_DIR)
 
-        jinja2 = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
-
         if SystemdCreds.is_credentials_supported():
+            if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
+                return False
+
             dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
                 credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
             )
@@ -1144,7 +1143,7 @@ class VaultOperatorCharm(CharmBase):
             vault_env_content = jinja2.get_template(TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS).render(
                 credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
             )
-            # self.machine.push(path=VAULT_ENV_PATH, source=vault_env_content)
+            self.machine.push(path=VAULT_ENV_PATH, source=vault_env_content)
             logger.info("Created systemd drop-in file for Vault service")
         else:
             # If credentials are not working, pass the token via an env var
