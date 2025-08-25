@@ -1,0 +1,81 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  self-signed-certificates/0 [idle] active: 
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.33:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.32:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.31:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please unseal Vault
+  vault-k8s/1 [idle] blocked: Please unseal Vault
+  vault-k8s/2 [idle] blocked: Please unseal Vault
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model           Controller                Cloud/Region        Version  SLA          Timestamp
+test-core-1ang  github-pr-fe285-microk8s  microk8s/localhost  3.6.9    unsupported  21:01:27Z
+
+App                       Version  Status  Scale  Charm                     Channel   Rev  Address         Exposed  Message
+self-signed-certificates           active      1  self-signed-certificates  1/stable  317  10.152.183.20   no       
+vault-k8s                          active      3  vault-k8s                             0  10.152.183.123  no       
+
+Unit                         Workload  Agent  Address    Ports  Message
+self-signed-certificates/0*  active    idle   10.1.7.34         
+vault-k8s/0*                 active    idle   10.1.7.33         
+vault-k8s/1                  active    idle   10.1.7.32         
+vault-k8s/2                  active    idle   10.1.7.31         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-vault-k8s-2: 20:51:12 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f35fd9355e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 20:51:14 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0b61d3e240>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 20:51:14 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f68738a7bc0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 20:51:16 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fefd38bc2f0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 20:51:16 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fafa82afbc0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 20:51:17 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fbf2fdb8320>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 20:52:31 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7facf0c646b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 20:53:16 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 20:53:17 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-686984e0-31cb-4f64-87a4-87b1bc73d39d: 20:53:17 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-3: 20:54:08 ERROR unit.vault-k8s/3.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa2b06db440>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 20:54:10 ERROR unit.vault-k8s/3.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f1dbc46b560>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-3: 20:54:11 ERROR unit.vault-k8s/3.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-3.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f76d0bc41d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 20:54:42 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-3: 20:54:53 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-686984e0-31cb-4f64-87a4-87b1bc73d39d: 20:54:59 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 20:54:59 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.7.17:54022->10.152.183.94:17070: write: connection reset by peer: write tcp 10.1.7.17:54022->10.152.183.94:17070: write: connection reset by peer
+unit-vault-k8s-2: 20:54:59 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.7.23:56100->10.152.183.94:17070: write: connection reset by peer: write tcp 10.1.7.23:56100->10.152.183.94:17070: write: connection reset by peer
+unit-vault-k8s-0: 20:56:42 ERROR unit.vault-k8s/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-0.vault-k8s-endpoints.test-core-1ang.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f53f4dec4a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 20:56:54 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 20:57:26 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 20:58:17 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-vault-k8s-0: 20:58:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-686984e0-31cb-4f64-87a4-87b1bc73d39d: 20:58:29 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 20:58:36 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 20:58:37 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 20:58:37 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: write tcp 10.1.7.34:50950->10.152.183.94:17070: write: connection reset by peer: write tcp 10.1.7.34:50950->10.152.183.94:17070: write: connection reset by peer
+unit-self-signed-certificates-0: 20:58:38 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 20:58:56 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 20:59:38 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 20:59:57 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-vault-k8s-0: 20:59:59 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 21:00:13 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 21:00:13 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 21:00:13 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 21:00:25 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-self-signed-certificates-0: 21:01:12 ERROR unit.self-signed-certificates/0.juju-log At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-core-1ang...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications self-signed-certificates
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
