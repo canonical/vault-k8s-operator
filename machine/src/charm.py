@@ -196,6 +196,7 @@ class VaultOperatorCharm(CharmBase):
             self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
             self.tls_certificates_pki.on.certificate_available,
             self.on.tls_certificates_pki_relation_joined,
+            self.on.vault_pki_relation_changed,
             self.vault_kv.on.new_vault_kv_client_attached,
         ]
         for event in configure_events:
