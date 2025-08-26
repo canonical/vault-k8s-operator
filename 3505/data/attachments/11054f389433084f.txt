@@ -1,0 +1,43 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:762 Adding model github-pr-b2985-microk8s:test-kv-107o on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-k8s-0
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: installing agent
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [executing] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [allocating] waiting: agent initialising
+  vault-k8s/2 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/1 [executing] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [executing] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m helpers:helpers.py:215 Vault initialized
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.17:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.25:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.7.24:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m helpers:helpers.py:246 Charm authorized
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-kv-requirer-a/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [idle] active:
