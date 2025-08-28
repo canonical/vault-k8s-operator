@@ -1,0 +1,5 @@
+[32mINFO    [0m httpx:_client.py:1025 HTTP Request: DELETE https://10.1.0.145:16443/api/v1/namespaces/test-kv-5m0n/pods/vault-kv-requirer-a-0 "HTTP/1.1 200 OK"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-a/0 [idle] active:
