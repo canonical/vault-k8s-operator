@@ -14,9 +14,7 @@ from charms.operator_libs_linux.v2.snap import Snap
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import AppRole
 
-from certificates import (
-    generate_example_provider_certificate,
-)
+from certificates import generate_example_provider_certificate
 from fixtures import VaultCharmFixtures
 
 

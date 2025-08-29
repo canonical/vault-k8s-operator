@@ -29,6 +29,7 @@ class VaultCharmFixtures(VaultCharmFixturesBase):
                 patch("charm.subprocess.run", autospec=True)
             )
             self.mock_snap_cache = stack.enter_context(patch("charm.snap.SnapCache"))
+            self.mock_systemd_creds = stack.enter_context(patch("charm.SystemdCreds"))
             yield
 
     @pytest.fixture(autouse=True)

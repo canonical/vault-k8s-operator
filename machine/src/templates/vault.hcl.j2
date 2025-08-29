@@ -1,4 +1,4 @@
-ui      = true
+ui       = true
 storage "raft" {
   path= "{{ raft_storage_path }}"
   node_id = "{{ node_id }}"
@@ -30,7 +30,6 @@ telemetry {
 {% if autounseal_address %}
 seal "transit" {
   address         = "{{ autounseal_address }}"
-  disable_renewal = "false"
   key_name        = "{{ autounseal_key_name }}"
   mount_path      = "{{ autounseal_mount_path }}"
   tls_ca_cert     = "{{ autounseal_ca_cert_path }}"
