@@ -1,0 +1,42 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  loki-k8s/0 [executing] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model          Controller                Cloud/Region        Version  SLA          Timestamp
+test-cos-qlkg  github-pr-5ec28-microk8s  microk8s/localhost  3.6.9    unsupported  22:29:39Z
+
+App             Version  Status  Scale  Charm           Channel   Rev  Address         Exposed  Message
+loki-k8s        2.9.6    active      1  loki-k8s        1/stable  199  10.152.183.35   no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  1/stable  247  10.152.183.63   no       
+vault-k8s                active      3  vault-k8s                   0  10.152.183.222  no       
+
+Unit               Workload  Agent  Address     Ports  Message
+loki-k8s/0*        active    idle   10.1.22.95         
+prometheus-k8s/0*  active    idle   10.1.22.94         
+vault-k8s/0*       active    idle   10.1.22.80         
+vault-k8s/1        active    idle   10.1.22.88         
+vault-k8s/2        active    idle   10.1.22.91         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-vault-k8s-2: 22:26:25 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f72e9f3e060>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 22:26:25 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f2bd04a8b30>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 22:26:27 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f28be809250>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 22:26:27 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa07c5bd1c0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 22:26:29 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0888fa5550>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 22:26:30 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-cos-qlkg.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7efe14bbda60>: Failed to establish a new connection: [Errno 111] Connection refused'))
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-cos-qlkg...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications prometheus-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications loki-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
