@@ -21,9 +21,8 @@ test = [
     "coverage[toml]",
     "hvac",
     "juju",
-    "pyhcl",  # import hcl
+    "pyhcl",             # import hcl
     "pytest",
-    "pytest-asyncio==0.21.2",
     "pytest-dependency",
     "pytest-operator",
 ]
@@ -31,7 +30,12 @@ dev = ["codespell", "pyright", "ruff"]
 
 [tool.ruff]
 extend = "../pyproject.toml"
-src = ["src", "tests/unit", "tests/unit/lib", "tests/integration"]  # correctly sort local imports in tests
+src = [
+    "src",
+    "tests/unit",
+    "tests/unit/lib",
+    "tests/integration",
+] # correctly sort local imports in tests
 extend-exclude = [
     # vendored local Python packages
     ".vendored/",
