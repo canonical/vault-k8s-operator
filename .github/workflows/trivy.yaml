@@ -4,7 +4,15 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # Allows manual triggering
+
 
 jobs:
-  scan:
+  scan-k8s:
     uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v0
+    with:
+      uv-lock-path: './k8s/uv.lock'
+  scan-machine:
+    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v0
+    with:
+      uv-lock-path: './machine/uv.lock'
