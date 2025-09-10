@@ -12,6 +12,7 @@ Day-1 operations cover the deployment and integration of the Vault charm.
 unseal_k8s
 unseal_machine
 use_behind_ingress_k8s
+use_behind_ingress_machine
 use_as_intermediate_ca
 use_as_acme_server
 integrate_with_cos_k8s
