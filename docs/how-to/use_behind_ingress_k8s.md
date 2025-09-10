@@ -17,7 +17,7 @@ juju deploy traefik-k8s --channel edge --trust
 Deploy Self Signed Certificates Operator
 
 ```bash
-juju deploy self-signed-certificates --channel beta
+juju deploy self-signed-certificates --channel 1/stable
 ```
 
 Integrate Traefik with Self-Signed-Certificates Operator
@@ -27,6 +27,7 @@ juju integrate self-signed-certificates:certificates traefik-k8s:certificates
 ```
 
 Integrate Vault with Traefik
+
 ```bash
 juju integrate vault-k8s:send-ca-cert traefik-k8s:receive-ca-cert
 juju integrate vault-k8s:ingress traefik-k8s:ingress
