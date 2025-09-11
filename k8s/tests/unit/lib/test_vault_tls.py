@@ -624,7 +624,7 @@ class TestCharmTLS:
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             add_certificates.assert_called_once_with(
-                certificates=set("some ca"),
+                certificates={"some ca"},
                 relation_id=cert_transfer_relation.id,
             )
 
