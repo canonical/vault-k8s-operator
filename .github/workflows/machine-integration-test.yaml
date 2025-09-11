@@ -88,7 +88,7 @@ jobs:
         working-directory: ${{ inputs.path }}
         run: |
           tox -e integration -- \
-            --charm_path=./built/vault_amd64.charm \
+            --charm_path=./built/vault_ubuntu@24.04-amd64.charm \
             --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
             -k "${{ matrix.suite }}"
       - name: Archive charmcraft logs

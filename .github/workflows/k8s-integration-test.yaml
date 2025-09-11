@@ -73,7 +73,7 @@ jobs:
         working-directory: ${{ inputs.path }}
         run: |
           tox -e integration -- \
-            --charm_path=./built/vault-k8s_amd64.charm \
+            --charm_path=./built/vault-k8s_ubuntu@24.04-amd64.charm \
             --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
             --alluredir allure-results \
             -k "${{ matrix.suite }}"
