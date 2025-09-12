@@ -1,5 +1,6 @@
 import datetime
 import os
+
 import yaml
 
 # Configuration for the Sphinx documentation builder.
@@ -226,8 +227,9 @@ redirects = {}
 
 linkcheck_ignore = [
     "http://127.0.0.1:8000",
+    "https://developer.hashicorp.com/*",
     "https://github.com/canonical/ACME/*",
-    r"https://matrix.to/#/#tls:ubuntu\.com"
+    r"https://matrix.to/#/#tls:ubuntu\.com",
 ]
 
 # A regex list of URLs where anchors are ignored by 'make linkcheck'
@@ -349,5 +351,8 @@ if os.path.exists('./reuse/substitutions.yaml'):
 # Add configuration for intersphinx mapping
 
 intersphinx_mapping = {
-    'starter-pack': ('https://canonical-example-product-documentation.readthedocs-hosted.com/en/latest', None)
+    "starter-pack": (
+        "https://canonical-example-product-documentation.readthedocs-hosted.com/en/latest",
+        None,
+    )
 }
