@@ -4,7 +4,7 @@ It is recommended to run Vault behind an ingress. In this guide we will list the
 
 ## Pre-requisites
 
-- Vault deployed on a Juju model
+- Vault deployed on a Juju model on a machine controller (non-K8s)
 
 ## Steps
 
@@ -45,11 +45,11 @@ juju integrate vault:tls-certificates-access self-signed-certificates
 ```
 
 ```bash
- juju integrate vault ingress-configurator
+ juju integrate vault:ingress ingress-configurator
 ```
 
 ```bash
-juju integrate ingress-configurator haproxy
+juju integrate ingress-configurator:haproxy-route haproxy
 ```
 
 ```bash
@@ -60,7 +60,7 @@ juju integrate self-signed-certificates haproxy:receive-ca-certs
 juju integrate haproxy:certificates self-signed-certificates
 ```
 
-The `ingress` integration will allow accessing Vault through the proxy.
+The `ingress` (between Vault and the ingress-configurator) and the `haproxy-route` (between ingress-configurator and HAProxy) integrations allow accessing Vault through the proxy.
 
 Now in the relation data of the ingress integration in Vault we will find the URL that we can use to access Vault
 
@@ -130,7 +130,7 @@ Set the vault token for use in the client:
 export VAULT_TOKEN=hvs.Z3CuzSQno3XMuUgUcm1CmjQK
 ```
 
-Read the `active-ca-certificates` secret content of `self-signed-certificates` as we used it to sing the access certificates of Vault:
+Read the `active-ca-certificates` secret content of `self-signed-certificates` as we used it to sign the access certificates of Vault:
 
 ```bash
 user@ubuntu:~$ juju show-secret cks0s1c24l7c77v23p80 --reveal
