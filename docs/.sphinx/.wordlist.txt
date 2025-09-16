@@ -248,6 +248,7 @@ Endianness
 Fluentd
 GraphQL
 HAProxy
+haproxy
 HAcluster
 Imagecraft
 Infiniband
@@ -329,3 +330,6 @@ snapcrafting
 subcluster
 swrast
 zSystems
+hostname
+Configurator
+configurator
