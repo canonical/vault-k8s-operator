@@ -1,0 +1,48 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:vault-kv-requirer-1
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+  vault-kv-requirer-b/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-kv-requirer-b/0 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model         Controller                Cloud/Region        Version  SLA          Timestamp
+test-kv-icd3  github-pr-3ce70-microk8s  microk8s/localhost  3.6.9    unsupported  10:33:41Z
+
+App                  Version  Status  Scale  Charm              Channel  Rev  Address         Exposed  Message
+vault-k8s                     active      3  vault-k8s                     0  10.152.183.201  no       
+vault-kv-requirer-a           active      1  vault-kv-requirer             0  10.152.183.131  no       
+vault-kv-requirer-b           active      1  vault-kv-requirer             1  10.152.183.132  no       
+
+Unit                    Workload  Agent  Address      Ports  Message
+vault-k8s/0*            active    idle   10.1.242.79         
+vault-k8s/1             active    idle   10.1.242.89         
+vault-k8s/2             active    idle   10.1.242.88         
+vault-kv-requirer-a/0*  active    idle   10.1.242.91         
+vault-kv-requirer-b/0*  active    idle   10.1.242.93         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-vault-k8s-2: 10:30:03 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa219c44470>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:30:04 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f8b708a84a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:30:05 ERROR unit.vault-k8s/2.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fdc6a236d20>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:30:06 ERROR unit.vault-k8s/1.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f84dd2c2b10>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 10:30:07 ERROR unit.vault-k8s/2.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-2.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f1b74cbaab0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-1: 10:30:07 ERROR unit.vault-k8s/1.juju-log vault-peers:0: [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-1.vault-k8s-endpoints.test-kv-icd3.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f4b80e954f0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+model-93ee9d9a-160d-4a15-86a2-7aad2e5fae98: 10:32:19 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 10:32:24 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 10:32:24 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-2: 10:32:24 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-kv-icd3...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-kv-requirer-a
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-kv-requirer-b
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
