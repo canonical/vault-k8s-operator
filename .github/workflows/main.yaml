@@ -61,6 +61,8 @@ jobs:
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
     uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
@@ -73,7 +75,7 @@ jobs:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
     with:
       path: ./machine/
-  
+
   machine-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
     with:
@@ -119,6 +121,8 @@ jobs:
       - machine-unit-tests-with-coverage
       - machine-integration-test
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
     uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
