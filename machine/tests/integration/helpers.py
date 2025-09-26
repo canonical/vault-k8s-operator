@@ -324,16 +324,36 @@ async def wait_for_status_message(
     )
 
 
-async def deploy_vault(ops_test: OpsTest, charm_path: Path, num_vaults: int) -> None:
+async def deploy_vault(
+    ops_test: OpsTest,
+    num_vaults: int,
+    channel: str | None = None,
+    charm_path: Path | None = None,
+    revision: int | None = None,
+) -> None:
     """Ensure the Vault charm is deployed."""
     assert ops_test.model
-    await deploy_if_not_exists(ops_test.model, APP_NAME, charm_path, num_units=num_vaults)
+    await deploy_if_not_exists(
+        ops_test.model,
+        app_name=APP_NAME,
+        charm_path=charm_path,
+        num_units=num_vaults,
+        channel=channel,
+        revision=revision,
+    )
 
 
 async def deploy_vault_and_wait(
-    ops_test: OpsTest, charm_path: Path, num_units: int, status: str | None = None
+    ops_test: OpsTest,
+    num_units: int,
+    status: str | None = None,
+    channel: str | None = None,
+    charm_path: Path | None = None,
+    revision: int | None = None,
 ) -> None:
-    await deploy_vault(ops_test, charm_path, num_units)
+    await deploy_vault(
+        ops_test, num_vaults=num_units, channel=channel, charm_path=charm_path, revision=revision
+    )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         assert ops_test.model
         await ops_test.model.wait_for_idle(
@@ -440,3 +460,10 @@ async def run_action_on_leader(
         )
 
     return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=120)
+
+
+async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
+    assert ops_test.model
+    app = ops_test.model.applications[app_name]
+    assert isinstance(app, Application)
+    await app.refresh(path=charm_path)
