@@ -11,6 +11,7 @@ from ops.model import (
     Application,
     Binding,
     ModelError,
+    Port,
     Relation,
     RelationDataContent,
     RelationDataError,
@@ -79,6 +80,14 @@ class JujuFacade:
 
     def __init__(self, charm: CharmBase):
         self.charm = charm
+
+    def set_unit_ports(self, *ports: int | Port) -> None:
+        """Set the ports for the unit.
+
+        This enables Juju to open the ports in the firewall if needed when
+        `juju expose` is used.
+        """
+        return self.charm.unit.set_ports(*ports)
 
     # Secret related methods
     def get_secret(self, label: str | None = None, id: str | None = None) -> Secret:
