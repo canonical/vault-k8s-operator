@@ -56,6 +56,7 @@ from vault.vault_helpers import (
     render_vault_config_file,
     sans_dns_config_is_valid,
     seal_type_has_changed,
+    get_env_var,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
@@ -1097,6 +1098,19 @@ class VaultCharm(CharmBase):
         return True
 
     @property
+    def _juju_proxy_environment(self) -> dict[str, str]:
+        """Extract proxy model environment variables."""
+        env = {}
+
+        if http_proxy := get_env_var(env_var="JUJU_CHARM_HTTP_PROXY"):
+            env["HTTP_PROXY"] = http_proxy
+        if https_proxy := get_env_var(env_var="JUJU_CHARM_HTTPS_PROXY"):
+            env["HTTPS_PROXY"] = https_proxy
+        if no_proxy := get_env_var(env_var="JUJU_CHARM_NO_PROXY"):
+            env["NO_PROXY"] = no_proxy
+        return env
+
+    @property
     def _vault_layer(self) -> Layer:
         """Return the pebble layer to start Vault."""
         layer = Layer(
@@ -1109,6 +1123,7 @@ class VaultCharm(CharmBase):
                         "summary": "vault",
                         "command": f"vault server -config={VAULT_CONFIG_FILE_PATH}",
                         "startup": "enabled",
+                        "environment": self._juju_proxy_environment,
                     }
                 },
             }
