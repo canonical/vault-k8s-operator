@@ -7,6 +7,7 @@
 
 import json
 import logging
+import os
 import socket
 import subprocess
 from contextlib import contextmanager
@@ -44,6 +45,7 @@ from vault.vault_helpers import (
     allowed_domains_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
     seal_type_has_changed,
@@ -1078,6 +1080,7 @@ class VaultOperatorCharm(CharmBase):
 
     def _start_vault_service(self) -> None:
         """Start the Vault service."""
+        self._set_juju_proxy_environment()
         self._sync_autounseal_token_with_systemd()
 
         snap_cache = snap.SnapCache()
@@ -1207,9 +1210,19 @@ class VaultOperatorCharm(CharmBase):
     def _restart_vault_service(self) -> None:
         """Restart the Vault service."""
         if self._vault_service_is_running():
+            self._set_juju_proxy_environment()
             self._sync_autounseal_token_with_systemd()
             self.machine.restart(VAULT_SNAP_NAME)
             logger.debug("Vault service restarted")
+
+    def _set_juju_proxy_environment(self) -> None:
+        """Set proxy environment variables from Juju model config."""
+        if http_proxy := get_env_var(env_var="JUJU_CHARM_HTTP_PROXY"):
+            os.putenv("HTTP_PROXY", http_proxy)
+        if https_proxy := get_env_var(env_var="JUJU_CHARM_HTTPS_PROXY"):
+            os.putenv("HTTPS_PROXY", https_proxy)
+        if no_proxy := get_env_var(env_var="JUJU_CHARM_NO_PROXY"):
+            os.putenv("NO_PROXY", no_proxy)
 
     def _get_vault_autounseal_token(self) -> str | None:
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
