@@ -116,6 +116,7 @@ class VaultOperatorCharm(CharmBase):
     def __init__(self, *args: Any):
         super().__init__(*args)
         self.juju_facade = JujuFacade(self)
+        self.juju_facade.set_unit_ports(VAULT_PORT)
         self.machine = Machine()
         self._cos_agent = COSAgentProvider(
             self,
