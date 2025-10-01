@@ -1,2 +1,15 @@
 [Service]
+{% if credential_name -%}
 LoadCredentialEncrypted={{ credential_name }}
+{% endif -%}
+{% if proxy_env -%}
+{% if proxy_env.HTTP_PROXY -%}
+Environment=HTTP_PROXY="{{ proxy_env.HTTP_PROXY }}"
+{% endif -%}
+{% if proxy_env.HTTPS_PROXY -%}
+Environment=HTTPS_PROXY="{{ proxy_env.HTTPS_PROXY }}"
+{% endif -%}
+{% if proxy_env.NO_PROXY -%}
+Environment=NO_PROXY="{{ proxy_env.NO_PROXY }}"
+{% endif -%}
+{% endif -%}

@@ -79,9 +79,15 @@ class TestCharmConfigure(VaultCharmFixtures):
 
         with open("tests/unit/config.hcl", "r") as f:
             expected_config = f.read()
-        _, kwargs = self.mock_machine.push.call_args
-        assert kwargs["path"] == "/var/snap/vault/common/vault.hcl"
-        pushed_content_hcl = hcl.loads(kwargs["source"])
+
+        vault_hcl_call = None
+        for call in self.mock_machine.push.call_args_list:
+            if call.kwargs["path"] == "/var/snap/vault/common/vault.hcl":
+                vault_hcl_call = call
+                break
+
+        assert vault_hcl_call is not None, "vault.hcl was not pushed"
+        pushed_content_hcl = hcl.loads(vault_hcl_call.kwargs["source"])
         assert pushed_content_hcl == hcl.loads(expected_config)
 
     def test_given_leader_when_configure_then_vault_service_is_started(self):
