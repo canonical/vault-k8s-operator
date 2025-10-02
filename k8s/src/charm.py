@@ -53,10 +53,10 @@ from vault.vault_helpers import (
     allowed_domains_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
     seal_type_has_changed,
-    get_env_var,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
