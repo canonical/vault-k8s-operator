@@ -8,6 +8,7 @@ from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
+    SHORT_TIMEOUT,
 )
 from helpers import (
     deploy_vault,
@@ -38,7 +39,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APPLICATION_NAME],
         status="blocked",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
 
@@ -46,7 +47,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APPLICATION_NAME],
         status="active",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -58,7 +59,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APPLICATION_NAME],
         status="blocked",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -71,5 +72,5 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APPLICATION_NAME],
         status="active",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )

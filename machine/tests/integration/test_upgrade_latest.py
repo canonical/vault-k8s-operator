@@ -8,6 +8,7 @@ from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
+    SHORT_TIMEOUT,
 )
 from helpers import (
     deploy_vault_and_wait,
@@ -38,7 +39,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APP_NAME],
         status="active",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -52,5 +53,5 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APP_NAME],
         status="active",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=1000,
+        timeout=SHORT_TIMEOUT,
     )
