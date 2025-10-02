@@ -1163,23 +1163,6 @@ class VaultOperatorCharm(CharmBase):
                 credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME,
                 proxy_env=proxy_env,
             )
-
-            # Check if file exists and content has changed
-            if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
-                existing_content = self.machine.pull(path=SYSTEMD_DROP_IN_FILE_PATH).read()
-                if existing_content == dropin_content:
-                    return False
-
-            self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
-            # Use the vault.env file to load the credential into an environment
-            # variable.
-            # NOTE: In Vault 1.19, we can remove this and load the token
-            # directly from a file.
-            vault_env_content = jinja2.get_template(TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS).render(
-                credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
-            )
-            self.machine.push(path=VAULT_ENV_PATH, source=vault_env_content)
-            logger.info("Updated systemd drop-in file for Vault service")
         elif external_vault_token:
             # If we have a token but credentials are not working, pass the token via an env var
             logger.warning(
@@ -1189,14 +1172,30 @@ class VaultOperatorCharm(CharmBase):
                 external_vault_token=external_vault_token,
                 proxy_env=proxy_env,
             )
-            self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
         else:
             # No token, just proxy environment variables
             dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
                 credential_name=None,
                 proxy_env=proxy_env,
             )
-            self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
+
+        # Check if file exists and content has changed
+        if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
+            existing_content = self.machine.pull(path=SYSTEMD_DROP_IN_FILE_PATH).read()
+            if existing_content == dropin_content:
+                return False
+
+        # Push the drop-in file
+        self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
+
+        # If using systemd credentials, also update vault.env to load the credential
+        if external_vault_token and SystemdCreds.is_credentials_supported():
+            vault_env_content = jinja2.get_template(TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS).render(
+                credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
+            )
+            self.machine.push(path=VAULT_ENV_PATH, source=vault_env_content)
+            logger.info("Updated systemd drop-in file for Vault service")
+
         return True
 
     def _generate_vault_config_file(self) -> None:
