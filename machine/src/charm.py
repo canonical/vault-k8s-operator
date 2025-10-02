@@ -584,12 +584,16 @@ class VaultOperatorCharm(CharmBase):
         if not self._log_level_is_valid(self._get_log_level()):
             return
         self._generate_vault_config_file()
-        self._sync_vault_environment()
-        try:
-            self._start_vault_service()
-        except snap.SnapError as e:
-            logger.error("Failed to start Vault service: %s", e)
-            return
+        env_changed = self._sync_vault_environment()
+
+        if env_changed and self._vault_service_is_running():
+            self._restart_vault_service()
+        else:
+            try:
+                self._start_vault_service()
+            except snap.SnapError as e:
+                logger.error("Failed to start Vault service: %s", e)
+                return
         self._set_peer_relation_node_api_address()
 
         vault = self._get_authenticated_vault_client()
@@ -1100,7 +1104,7 @@ class VaultOperatorCharm(CharmBase):
         vault_snap.start(services=["vaultd"])
         logger.debug("Vault service started")
 
-    def _sync_vault_environment(self) -> None:
+    def _sync_vault_environment(self) -> bool:
         """Add or remove the systemd drop-in file for the Vault service.
 
         This file is used to set the VAULT_TOKEN environment variable for the
@@ -1109,6 +1113,9 @@ class VaultOperatorCharm(CharmBase):
 
         If no token and no proxy environment variables are available, the systemd drop-in
         is removed and vault.env is cleared.
+
+        Returns:
+            True if environment files were updated, False otherwise
         """
         token = self._get_vault_autounseal_token()
         proxy_env = self._juju_proxy_environment
@@ -1121,7 +1128,7 @@ class VaultOperatorCharm(CharmBase):
                 logger.info("Removed systemd drop-in file and vault.env")
             except ValueError:
                 pass
-            return
+            return False
 
         if token:
             try:
@@ -1131,8 +1138,8 @@ class VaultOperatorCharm(CharmBase):
 
         if self._generate_systemd_drop_in_file(token, proxy_env):
             SystemdCreds.reload_daemon()
-            # Restart vault if it's already running to pick up new environment variables
-            self._restart_vault_service()
+            return True
+        return False
 
     def _generate_systemd_drop_in_file(
         self, external_vault_token: str | None, proxy_env: dict[str, str]
