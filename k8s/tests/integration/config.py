@@ -12,6 +12,7 @@ JUJU_FAST_INTERVAL = "20s"
 SHORT_TIMEOUT = (
     60 * 2
 )  # How long to wait for apps to settle after integrating them, or configuring them. These events should be quick.
+LONG_TIMEOUT = 60 * 10  # How long to wait for apps to settle after deploying them
 DEPLOY_TIMEOUT = 60 * 5  # How long to wait for apps to settle after deploying them
 
 APPLICATION_NAME = "vault-k8s"

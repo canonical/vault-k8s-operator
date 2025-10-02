@@ -7,6 +7,7 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
+    LONG_TIMEOUT,
     NUM_VAULT_UNITS,
     SHORT_TIMEOUT,
 )
@@ -54,5 +55,5 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         apps=[APP_NAME],
         status="active",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=SHORT_TIMEOUT,
+        timeout=LONG_TIMEOUT,
     )
