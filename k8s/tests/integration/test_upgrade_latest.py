@@ -7,7 +7,6 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
-    LONG_TIMEOUT,
     NUM_VAULT_UNITS,
     SHORT_TIMEOUT,
 )
@@ -59,7 +58,7 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         apps=[APPLICATION_NAME],
         status="blocked",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=LONG_TIMEOUT,
+        timeout=SHORT_TIMEOUT,
     )
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -67,10 +66,10 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
             ops_test, unseal_key, root_token, await get_ca_cert_file_location(ops_test)
         )
 
-    logger.info("Waiting for vault to be active after refresh")
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="active",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=LONG_TIMEOUT,
-    )
+        logger.info("Waiting for vault to be active after refresh")
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+            timeout=SHORT_TIMEOUT,
+        )
