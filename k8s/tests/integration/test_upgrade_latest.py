@@ -44,14 +44,13 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
     )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
 
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="active",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=SHORT_TIMEOUT,
-    )
-
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="active",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+            timeout=SHORT_TIMEOUT,
+        )
         logger.info("Refreshing vault from built charm")
         await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
 
