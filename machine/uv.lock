@@ -1418,7 +1418,7 @@ wheels = [
 
 [[package]]
 name = "pytest-operator"
-version = "0.43.1"
+version = "0.43.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipdb" },
@@ -1428,9 +1428,9 @@ dependencies = [
     { name = "pytest-asyncio" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/e5/6bdb380d88a7c1bebf31a5e65e785e34dacec6ec1c8d8b4d0227322da828/pytest_operator-0.43.1.tar.gz", hash = "sha256:fd76c7e34c56624176405b47f981de3fe0c3efb71d7875109483cc01f221be99", size = 149695, upload-time = "2025-07-03T16:05:09.797Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/48/880facbcaca080b852854f60fd46b37ca2985b27dc7f1713857d9de6d469/pytest_operator-0.43.2.tar.gz", hash = "sha256:3db34dcd9c114a2e41a9bc61da72daf1264e7644fd5b92e855f250cb337e01c3", size = 149628, upload-time = "2025-10-04T14:38:45.16Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/a9/4bffc59bc343ca82ec0e9d6ae96a2ffd2de65e1eeb578523c2fc4e57cd71/pytest_operator-0.43.1-py3-none-any.whl", hash = "sha256:092e010fef884ea6166c3f71ec4ca717ed9158cf09de67f28e23cfdd780c46fa", size = 48338, upload-time = "2025-07-03T16:05:08.644Z" },
+    { url = "https://files.pythonhosted.org/packages/96/a0/22b018287f4ff7a36cdb79745c196f28897184d27e18b90177f5dfc2a0f4/pytest_operator-0.43.2-py3-none-any.whl", hash = "sha256:d7d01ffe35d14b75577fd80a07c34f0a9f4835cfc6d373b8e2f995bcb4146bda", size = 48322, upload-time = "2025-10-04T14:38:43.763Z" },
 ]
 
 [[package]]
