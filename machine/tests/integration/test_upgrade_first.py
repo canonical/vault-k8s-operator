@@ -8,8 +8,8 @@ from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
-    SHORT_TIMEOUT,
     REFRESH_TIMEOUT,
+    SHORT_TIMEOUT,
 )
 from helpers import (
     deploy_vault_and_wait,

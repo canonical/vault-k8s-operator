@@ -1165,16 +1165,20 @@ class VaultOperatorCharm(CharmBase):
         self.machine.make_dir(path=SYSTEMD_DROP_IN_DIR)
 
         credentials_supported = SystemdCreds.is_credentials_supported()
-        
+
         # If we have a token but credentials are not supported, log a warning
         if external_vault_token and not credentials_supported:
             logger.warning(
                 "This system configuration does not support systemd credentials. Falling back to un-encrypted environment variables."
             )
-        
+
         dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
-            credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME if external_vault_token and credentials_supported else None,
-            external_vault_token=external_vault_token if external_vault_token and not credentials_supported else None,
+            credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
+            if external_vault_token and credentials_supported
+            else None,
+            external_vault_token=external_vault_token
+            if external_vault_token and not credentials_supported
+            else None,
             proxy_env=proxy_env,
         )
 
