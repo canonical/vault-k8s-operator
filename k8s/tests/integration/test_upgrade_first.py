@@ -6,9 +6,9 @@ from pytest_operator.plugin import OpsTest
 
 from config import (
     APPLICATION_NAME,
+    DEPLOY_TIMEOUT,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
-    DEPLOY_TIMEOUT,
     SHORT_TIMEOUT,
 )
 from helpers import (
