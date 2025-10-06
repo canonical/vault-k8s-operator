@@ -90,7 +90,6 @@ SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
 SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME = "external_vault_token"
 TEMPLATE_PATH = "src/templates/"
 TEMPLATE_SYSTEMD_DROP_IN_CREDS = "systemd_dropin_creds.conf.j2"
-TEMPLATE_SYSTEMD_DROP_IN_ENV = "systemd_dropin_env.conf.j2"
 TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS = "vault_load_systemd_creds.env.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
@@ -1059,11 +1058,11 @@ class VaultOperatorCharm(CharmBase):
             Dictionary of proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
         """
         env = {}
-        if http_proxy := get_env_var(env_var="JUJU_CHARM_HTTP_PROXY"):
+        if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
             env["HTTP_PROXY"] = http_proxy
-        if https_proxy := get_env_var(env_var="JUJU_CHARM_HTTPS_PROXY"):
+        if https_proxy := get_env_var("JUJU_CHARM_HTTPS_PROXY"):
             env["HTTPS_PROXY"] = https_proxy
-        if no_proxy := get_env_var(env_var="JUJU_CHARM_NO_PROXY"):
+        if no_proxy := get_env_var("JUJU_CHARM_NO_PROXY"):
             env["NO_PROXY"] = no_proxy
         return env
 
@@ -1165,26 +1164,19 @@ class VaultOperatorCharm(CharmBase):
         jinja2 = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         self.machine.make_dir(path=SYSTEMD_DROP_IN_DIR)
 
-        if external_vault_token and SystemdCreds.is_credentials_supported():
-            dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
-                credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME,
-                proxy_env=proxy_env,
-            )
-        elif external_vault_token:
-            # If we have a token but credentials are not working, pass the token via an env var
+        credentials_supported = SystemdCreds.is_credentials_supported()
+        
+        # If we have a token but credentials are not supported, log a warning
+        if external_vault_token and not credentials_supported:
             logger.warning(
                 "This system configuration does not support systemd credentials. Falling back to un-encrypted environment variables."
             )
-            dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_ENV).render(
-                external_vault_token=external_vault_token,
-                proxy_env=proxy_env,
-            )
-        else:
-            # No token, just proxy environment variables
-            dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
-                credential_name=None,
-                proxy_env=proxy_env,
-            )
+        
+        dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
+            credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME if external_vault_token and credentials_supported else None,
+            external_vault_token=external_vault_token if external_vault_token and not credentials_supported else None,
+            proxy_env=proxy_env,
+        )
 
         # Check if file exists and content has changed
         if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
@@ -1248,7 +1240,6 @@ class VaultOperatorCharm(CharmBase):
             )
             # If the seal type has changed, vault will be restarted by _sync_vault_environment()
             # in configure to pick up both config and environment changes together.
-            # SIGHUP is currently only supported as a beta feature for the enterprise version.
 
     def _restart_vault_service(self) -> None:
         """Restart the Vault service."""

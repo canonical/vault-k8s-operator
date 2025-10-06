@@ -151,7 +151,7 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
 def get_env_var(env_var: str) -> str | None:
     """Get the environment variable value.
 
-    Looks for all upper-case and all low-case of the `env_var`.
+    Converts the `env_var` to upper-case before looking it up.
 
     Args:
         env_var: Name of the environment variable.
@@ -159,4 +159,4 @@ def get_env_var(env_var: str) -> str | None:
     Returns:
         Value of the environment variable. None if not found.
     """
-    return os.environ.get(env_var.upper(), os.environ.get(env_var.lower(), None))
+    return os.environ.get(env_var.upper())
