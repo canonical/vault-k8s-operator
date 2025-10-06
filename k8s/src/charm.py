@@ -1102,11 +1102,11 @@ class VaultCharm(CharmBase):
         """Extract proxy model environment variables."""
         env = {}
 
-        if http_proxy := get_env_var(env_var="JUJU_CHARM_HTTP_PROXY"):
+        if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
             env["HTTP_PROXY"] = http_proxy
-        if https_proxy := get_env_var(env_var="JUJU_CHARM_HTTPS_PROXY"):
+        if https_proxy := get_env_var("JUJU_CHARM_HTTPS_PROXY"):
             env["HTTPS_PROXY"] = https_proxy
-        if no_proxy := get_env_var(env_var="JUJU_CHARM_NO_PROXY"):
+        if no_proxy := get_env_var("JUJU_CHARM_NO_PROXY"):
             env["NO_PROXY"] = no_proxy
         return env
 

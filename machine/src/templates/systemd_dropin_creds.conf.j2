@@ -1,6 +1,8 @@
 [Service]
 {% if credential_name -%}
 LoadCredentialEncrypted={{ credential_name }}
+{% elif external_vault_token -%}
+Environment=VAULT_TOKEN="{{ external_vault_token }}"
 {% endif -%}
 {% if proxy_env -%}
 {% if proxy_env.HTTP_PROXY -%}

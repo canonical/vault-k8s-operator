@@ -132,14 +132,9 @@ class Machine(WorkloadBase):
         Returns:
             int: The process ID
         """
-        processes = list(psutil.process_iter())
-        for proc in processes:
-            try:
-                if proc.name() == process:
-                    return proc.pid
-            except psutil.NoSuchProcess:
-                logger.debug("Process %s exited during check", proc.pid)
-                continue
+        for proc in psutil.process_iter(attrs=["name", "pid"]):
+            if proc.info["name"] == process:
+                return proc.info["pid"]
         return None
 
     def is_accessible(self) -> bool:
