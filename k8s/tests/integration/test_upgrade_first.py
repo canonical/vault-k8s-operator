@@ -8,6 +8,7 @@ from config import (
     APPLICATION_NAME,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
+    DEPLOY_TIMEOUT,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -40,7 +41,7 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         apps=[APPLICATION_NAME],
         status="blocked",
         wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=SHORT_TIMEOUT,
+        timeout=DEPLOY_TIMEOUT,
     )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
 
