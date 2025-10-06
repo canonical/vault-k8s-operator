@@ -34,3 +34,4 @@ JUJU_FAST_INTERVAL = "20s"
 
 # How long to wait for apps to settle after integrating them, or configuring them. These events should be quick.
 SHORT_TIMEOUT = 60 * 2
+REFRESH_TIMEOUT = 60 * 10
