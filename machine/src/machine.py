@@ -132,10 +132,9 @@ class Machine(WorkloadBase):
         Returns:
             int: The process ID
         """
-        processes = list(psutil.process_iter())
-        for proc in processes:
-            if proc.name() == process:
-                return proc.pid
+        for proc in psutil.process_iter(attrs=["name", "pid"]):
+            if proc.info["name"] == process:
+                return proc.info["pid"]
         return None
 
     def is_accessible(self) -> bool:
