@@ -9,7 +9,7 @@ import json
 import logging
 import socket
 import subprocess
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -1121,12 +1121,10 @@ class VaultOperatorCharm(CharmBase):
 
         if not token and not proxy_env:
             logger.debug("No auto-unseal token or proxy environment variables available")
-            try:
+            with suppress(ValueError):
                 self.machine.remove_path(SYSTEMD_DROP_IN_FILE_PATH)
                 self.machine.remove_path(VAULT_ENV_PATH)
                 logger.info("Removed systemd drop-in file and vault.env")
-            except ValueError:
-                pass
             return False
 
         if token:
