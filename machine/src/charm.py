@@ -9,7 +9,7 @@ import json
 import logging
 import socket
 import subprocess
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -44,9 +44,9 @@ from vault.vault_helpers import (
     allowed_domains_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
-    seal_type_has_changed,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
@@ -90,7 +90,6 @@ SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
 SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME = "external_vault_token"
 TEMPLATE_PATH = "src/templates/"
 TEMPLATE_SYSTEMD_DROP_IN_CREDS = "systemd_dropin_creds.conf.j2"
-TEMPLATE_SYSTEMD_DROP_IN_ENV = "systemd_dropin_env.conf.j2"
 TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS = "vault_load_systemd_creds.env.j2"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 VAULT_CHARM_APPROLE_SECRET_LABEL = "vault-approle-auth-details"
@@ -584,11 +583,16 @@ class VaultOperatorCharm(CharmBase):
         if not self._log_level_is_valid(self._get_log_level()):
             return
         self._generate_vault_config_file()
-        try:
-            self._start_vault_service()
-        except snap.SnapError as e:
-            logger.error("Failed to start Vault service: %s", e)
-            return
+        env_changed = self._sync_vault_environment()
+
+        if env_changed and self._vault_service_is_running():
+            self._restart_vault_service()
+        else:
+            try:
+                self._start_vault_service()
+            except snap.SnapError as e:
+                logger.error("Failed to start Vault service: %s", e)
+                return
         self._set_peer_relation_node_api_address()
 
         vault = self._get_authenticated_vault_client()
@@ -1046,6 +1050,22 @@ class VaultOperatorCharm(CharmBase):
             return None
         return AppRole(role_id, secret_id) if role_id and secret_id else None
 
+    @property
+    def _juju_proxy_environment(self) -> dict[str, str]:
+        """Extract Juju proxy model environment variables.
+
+        Returns:
+            Dictionary of proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
+        """
+        env = {}
+        if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
+            env["HTTP_PROXY"] = http_proxy
+        if https_proxy := get_env_var("JUJU_CHARM_HTTPS_PROXY"):
+            env["HTTPS_PROXY"] = https_proxy
+        if no_proxy := get_env_var("JUJU_CHARM_NO_PROXY"):
+            env["NO_PROXY"] = no_proxy
+        return env
+
     def _install_vault_snap(self) -> None:
         """Installs the Vault snap in the machine."""
         try:
@@ -1078,50 +1098,63 @@ class VaultOperatorCharm(CharmBase):
 
     def _start_vault_service(self) -> None:
         """Start the Vault service."""
-        self._sync_autounseal_token_with_systemd()
-
         snap_cache = snap.SnapCache()
         vault_snap = snap_cache[VAULT_SNAP_NAME]
         vault_snap.start(services=["vaultd"])
         logger.debug("Vault service started")
 
-    def _sync_autounseal_token_with_systemd(self) -> None:
+    def _sync_vault_environment(self) -> bool:
         """Add or remove the systemd drop-in file for the Vault service.
 
         This file is used to set the VAULT_TOKEN environment variable for the
-        external Vault service when using auto-unseal.
+        external Vault service when using auto-unseal, and to set proxy environment
+        variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY) when available.
 
-        If no token is available, the file is removed.
+        If no token and no proxy environment variables are available, the systemd drop-in
+        is removed and vault.env is cleared.
+
+        Returns:
+            True if environment files were updated, False otherwise
         """
         token = self._get_vault_autounseal_token()
-        if not token:
-            logger.debug("No auto-unseal token available")
-            try:
+        proxy_env = self._juju_proxy_environment
+
+        if not token and not proxy_env:
+            logger.debug("No auto-unseal token or proxy environment variables available")
+            with suppress(ValueError):
                 self.machine.remove_path(SYSTEMD_DROP_IN_FILE_PATH)
                 self.machine.remove_path(VAULT_ENV_PATH)
-                logger.info("Removed systemd drop-in file since token is no longer set")
-            except ValueError:
-                pass
-            return
+                logger.info("Removed systemd drop-in file and vault.env")
+            return False
 
-        try:
-            SystemdCreds.encrypt_if_changed(SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME, token)
-        except subprocess.CalledProcessError:
-            logger.warning("Failed to encrypt auto-unseal token")
+        if token:
+            try:
+                SystemdCreds.encrypt_if_changed(SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME, token)
+            except subprocess.CalledProcessError:
+                logger.warning("Failed to encrypt auto-unseal token")
 
-        if self._generate_systemd_drop_in_file(token):
+        if self._generate_systemd_drop_in_file(token, proxy_env):
             SystemdCreds.reload_daemon()
+            return True
+        return False
 
-    def _generate_systemd_drop_in_file(self, external_vault_token: str) -> bool:
+    def _generate_systemd_drop_in_file(
+        self, external_vault_token: str | None, proxy_env: dict[str, str]
+    ) -> bool:
         """Create the systemd drop-in file for the Vault service.
 
         This file is a bit like an overlay, and adds some extra configuration
         to a service. In particular, we use this file to pass the encrypted
         external vault token to the service (if supported), or otherwise inject
-        the token as an environment variable.
+        the token as an environment variable. It also sets proxy environment
+        variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY) if available.
 
         If the token is passed via a credential, we also update the `vault.env`
         file to load this credential into the VAULT_TOKEN env var.
+
+        Args:
+            external_vault_token: The autounseal token, or None if not using autounseal
+            proxy_env: Dictionary of proxy environment variables
 
         Returns:
             True if the file was created, False otherwise
@@ -1129,32 +1162,41 @@ class VaultOperatorCharm(CharmBase):
         jinja2 = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
         self.machine.make_dir(path=SYSTEMD_DROP_IN_DIR)
 
-        if SystemdCreds.is_credentials_supported():
-            if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
+        credentials_supported = SystemdCreds.is_credentials_supported()
+
+        # If we have a token but credentials are not supported, log a warning
+        if external_vault_token and not credentials_supported:
+            logger.warning(
+                "This system configuration does not support systemd credentials. Falling back to un-encrypted environment variables."
+            )
+
+        dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
+            credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
+            if external_vault_token and credentials_supported
+            else None,
+            external_vault_token=external_vault_token
+            if external_vault_token and not credentials_supported
+            else None,
+            proxy_env=proxy_env,
+        )
+
+        # Check if file exists and content has changed
+        if self.machine.exists(path=SYSTEMD_DROP_IN_FILE_PATH):
+            existing_content = self.machine.pull(path=SYSTEMD_DROP_IN_FILE_PATH).read()
+            if existing_content == dropin_content:
                 return False
 
-            dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_CREDS).render(
-                credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
-            )
-            self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
-            # Use the vault.env file to load the credential into an environment
-            # variable.
-            # NOTE: In Vault 1.19, we can remove this and load the token
-            # directly from a file.
+        # Push the drop-in file
+        self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
+
+        # If using systemd credentials, also update vault.env to load the credential
+        if external_vault_token and SystemdCreds.is_credentials_supported():
             vault_env_content = jinja2.get_template(TEMPLATE_VAULT_ENV_LOAD_SYSTEMD_CREDS).render(
                 credential_name=SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME
             )
             self.machine.push(path=VAULT_ENV_PATH, source=vault_env_content)
-            logger.info("Created systemd drop-in file for Vault service")
-        else:
-            # If credentials are not working, pass the token via an env var
-            logger.warning(
-                "This system configuration does not support systemd credentials. Falling back to un-encrypted environment variables."
-            )
-            dropin_content = jinja2.get_template(TEMPLATE_SYSTEMD_DROP_IN_ENV).render(
-                external_vault_token=external_vault_token
-            )
-            self.machine.push(path=SYSTEMD_DROP_IN_FILE_PATH, source=dropin_content)
+            logger.info("Updated systemd drop-in file for Vault service")
+
         return True
 
     def _generate_vault_config_file(self) -> None:
@@ -1198,16 +1240,12 @@ class VaultOperatorCharm(CharmBase):
                 path=vault_config_file_path,
                 source=content,
             )
-            # If the seal type has changed, we need to restart Vault to apply
-            # the changes. SIGHUP is currently only supported as a beta feature
-            # for the enterprise version in Vault 1.16+
-            if seal_type_has_changed(existing_content, content):
-                self._restart_vault_service()
+            # If the seal type has changed, vault will be restarted by _sync_vault_environment()
+            # in configure to pick up both config and environment changes together.
 
     def _restart_vault_service(self) -> None:
         """Restart the Vault service."""
         if self._vault_service_is_running():
-            self._sync_autounseal_token_with_systemd()
             self.machine.restart(VAULT_SNAP_NAME)
             logger.debug("Vault service restarted")
 
