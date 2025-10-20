@@ -3,7 +3,7 @@
 
 resource "juju_application" "vault-k8s" {
   name  = var.app_name
-  model = var.model
+  model_uuid = var.model
 
   charm {
     name     = "vault-k8s"
@@ -16,4 +16,6 @@ resource "juju_application" "vault-k8s" {
   constraints = var.constraints
   units       = var.units
   trust       = var.trust
+
+  storage_directives = var.storage_directives
 }

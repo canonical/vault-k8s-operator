@@ -2,8 +2,7 @@
 # See LICENSE file for licensing details.
 
 resource "juju_application" "vault" {
-  name  = var.app_name
-  model = var.model
+  name = var.app_name
 
   charm {
     name     = "vault"
@@ -15,4 +14,7 @@ resource "juju_application" "vault" {
   config      = var.config
   constraints = var.constraints
   units       = var.units
+  model_uuid  = var.model
+
+  storage_directives = var.storage_directives
 }
