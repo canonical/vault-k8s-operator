@@ -26,7 +26,7 @@ variable "constraints" {
 }
 
 variable "model" {
-  description = "Reference to a `juju_model`."
+  description = "Reference to a `juju_model` uuid."
   type        = string
   default     = ""
 }
@@ -47,5 +47,10 @@ variable "units" {
   description = "Number of units to deploy"
   type        = number
   default     = 1
+}
 
+variable "storage_directives" {
+  description = "Storage directives for the application."
+  type        = map(string)
+  default     = {}
 }

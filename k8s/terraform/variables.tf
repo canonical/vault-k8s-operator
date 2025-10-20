@@ -26,7 +26,7 @@ variable "constraints" {
 }
 
 variable "model" {
-  description = "Reference to a `juju_model`."
+  description = "Reference to a `juju_model` uuid."
   type        = string
   default     = ""
 }
@@ -53,4 +53,10 @@ variable "trust" {
   description = "Whether to grant the charm access to the k8s cluster"
   type        = bool
   default     = true
+}
+
+variable "storage_directives" {
+  description = "Storage directives for the application."
+  type        = map(string)
+  default     = {}
 }
