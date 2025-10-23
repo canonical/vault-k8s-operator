@@ -24,6 +24,7 @@ from botocore.response import StreamingBody
 from mypy_boto3_s3.literals import BucketLocationConstraintType
 from mypy_boto3_s3.service_resource import Bucket
 from mypy_boto3_s3.type_defs import CreateBucketConfigurationTypeDef
+from .security_logger import _OWASPLogger
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -55,6 +56,7 @@ class S3:
         access_key: str,
         secret_key: str,
         endpoint: str,
+        application: str,
         region: str | None = AWS_DEFAULT_REGION,
         skip_verify: bool = False,
     ):
@@ -62,6 +64,7 @@ class S3:
         self.secret_key = secret_key
         self.endpoint = endpoint
         self.region = region
+        self._security_logger = _OWASPLogger(application=application)
 
         if skip_verify is False:
             logger.warning(
@@ -155,6 +158,13 @@ class S3:
         try:
             bucket = self.s3.Bucket(name=bucket_name)
             bucket.upload_fileobj(Key=key, Fileobj=content)
+            self._security_logger.log_event(
+                event="content_uploaded_to_s3",
+                level=logging.INFO,
+                description="Content uploaded to S3 bucket",
+                bucket_name=bucket_name,
+                key=key,
+            )
             return True
         except (BotoCoreError, ClientError) as e:
             logger.error("Error uploading content to bucket %s: %s", bucket_name, e)
@@ -175,6 +185,14 @@ class S3:
             bucket = self.s3.Bucket(bucket_name)
             for obj in bucket.objects.filter(Prefix=prefix):
                 keys.append(obj.key)
+            self._security_logger.log_event(
+                event="content_listed_from_s3",
+                level=logging.INFO,
+                description="Content listed from S3 bucket",
+                bucket_name=bucket_name,
+                prefix=prefix,
+                count=str(len(keys)),
+            )
             return keys
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchBucket":  # type: ignore[reportTypedDictNotRequiredAccess]
@@ -219,4 +237,11 @@ class S3:
             logger.error("Error getting object %s from bucket %s: %s", object_key, bucket_name, e)
             raise S3Error(f"Error getting object {object_key} from bucket {bucket_name}: {e}")
 
+        self._security_logger.log_event(
+            event="content_fetched_from_s3",
+            level=logging.INFO,
+            description="Content fetched from S3 bucket",
+            bucket_name=bucket_name,
+            key=object_key,
+        )
         return obj["Body"]

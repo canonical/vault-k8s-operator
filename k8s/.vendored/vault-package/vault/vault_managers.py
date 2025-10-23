@@ -1433,6 +1433,7 @@ class BackupManager:
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
                 skip_verify=skip_verify,
+                application=self._charm.app.name,
             )
         except S3Error as e:
             logger.error("Failed to create S3 session. %s", e)
@@ -1476,6 +1477,7 @@ class BackupManager:
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
                 skip_verify=skip_verify,
+                application=self._charm.app.name,
             )
         except S3Error:
             raise ManagerError("Failed to create S3 session")
@@ -1509,6 +1511,7 @@ class BackupManager:
                 endpoint=s3_parameters["endpoint"],
                 region=s3_parameters.get("region"),
                 skip_verify=skip_verify,
+                application=self._charm.app.name,
             )
         except S3Error:
             raise ManagerError("Failed to create S3 session")
