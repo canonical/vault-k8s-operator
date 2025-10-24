@@ -34,7 +34,7 @@ jobs:
         run: charmcraft pack --verbose --project-dir ${{ inputs.path }}
 
       - name: Archive Charm Under Test
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
           path: "*.charm"
@@ -60,7 +60,7 @@ jobs:
           charmcraft pack --verbose --project-dir tests/integration/vault_kv_requirer_operator
 
       - name: Archive KV Requirer Charm
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: "${{ inputs.path }}*.charm"
