@@ -58,12 +58,12 @@ jobs:
           sudo snap install astral-uv --classic
           uv tool install tox --with tox-uv --force
       - name: Fetch Charm Under Test
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
           path: ${{ inputs.path }}built/
       - name: Fetch KV Requirer Charm
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: ${{ inputs.path }}built/
@@ -93,13 +93,13 @@ jobs:
             -k "${{ matrix.suite }}"
       - name: Archive charmcraft logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: charmcraft-logs-${{ matrix.suite }}
           path: /home/runner/.local/state/charmcraft/log/*.log
       - name: Archive juju crashdump
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: juju-crashdump-machine-${{ matrix.suite }}
           path: ${{ inputs.path }}/juju-crashdump-*.tar.xz

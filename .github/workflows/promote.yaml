@@ -17,34 +17,35 @@ on:
           - k8s
           - machine
 
+env:
+  PROMOTE_FROM: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
+  PROMOTE_TO: ${{ inputs.promotion == 'edge -> beta' && 'beta' || inputs.promotion == 'beta -> candidate' && 'candidate' || inputs.promotion == 'candidate -> stable' && 'stable' || '' }}
+  TRACK: "1.18" # This also needs to be updated in the scan job below
+
 jobs:
+  scan:
+    name: Secscan
+    uses: canonical/identity-credentials-workflows/.github/workflows/secscan-charm.yaml@v0
+    with:
+      charm: ${{ inputs.charm == 'k8s' && 'vault-k8s' || inputs.charm == 'machine' && 'vault' || '' }}
+      # We have to compute the channel here again because we can't pass env variables to a reusable workflow
+      track: "1.18"
+      channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
+      arch: amd64
+      create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
+
   promote:
     name: Promote Charm
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Set target channel
-        env:
-          PROMOTE_FROM: ${{ github.event.inputs.promotion }}
-        run: |
-          if [ "${PROMOTE_FROM}" == "edge -> beta" ]; then
-            echo "promote-from=edge" >> ${GITHUB_ENV}
-            echo "promote-to=beta" >> ${GITHUB_ENV}
-          elif [ "${PROMOTE_FROM}" == "beta -> candidate" ]; then
-            echo "promote-from=beta" >> ${GITHUB_ENV}
-            echo "promote-to=candidate" >> ${GITHUB_ENV}
-          elif [ "${PROMOTE_FROM}" == "candidate -> stable" ]; then
-            echo "promote-from=candidate" >> ${GITHUB_ENV}
-            echo "promote-to=stable" >> ${GITHUB_ENV}
-          fi
+      - uses: actions/checkout@v5
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
-          charm-path: ./${{ github.event.inputs.charm }}
+          charm-path: ./${{ inputs.charm }}
           base-channel: 24.04
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: 1.18/${{ env.promote-to }}
-          origin-channel: 1.18/${{ env.promote-from }}
+          destination-channel: ${{ env.TRACK }}/${{ env.PROMOTE_TO }}
+          origin-channel: ${{ env.TRACK }}/${{ env.PROMOTE_FROM }}
           charmcraft-channel: latest/stable
