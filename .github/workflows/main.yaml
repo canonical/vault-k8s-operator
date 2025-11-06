@@ -56,10 +56,6 @@ jobs:
       path: ./k8s/
 
   k8s-build:
-    needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
     uses: ./.github/workflows/build.yaml
     secrets: inherit
     with:
@@ -122,10 +118,6 @@ jobs:
       path: ./machine/
 
   machine-build:
-    needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
     uses: ./.github/workflows/build.yaml
     secrets: inherit
     with:
