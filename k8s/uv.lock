@@ -8,6 +8,9 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[options]
+prerelease-mode = "allow"
+
 [[package]]
 name = "allure-pytest"
 version = "2.15.0"
@@ -271,7 +274,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser", marker = "(python_full_version < '3.11' and implementation_name != 'PyPy') or (implementation_name != 'PyPy' and platform_python_implementation != 'PyPy')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -666,7 +669,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -1240,16 +1243,16 @@ wheels = [
 
 [[package]]
 name = "ops"
-version = "3.3.1"
+version = "3.4.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "opentelemetry-api" },
     { name = "pyyaml" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/cd/bbd4263b53bb19e87f995b05ef93f565fa4edcb90bacacec615d47c56568/ops-3.3.1.tar.gz", hash = "sha256:8dec621c32a31365d040eaf05960c0e65a2ffbcdbfa91107e03b1ee9d4d26034", size = 541783, upload-time = "2025-10-16T01:46:25.431Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/92/3e23c7130cd417bdee936c1f33af8bd01ed4be872b977d11a3ad786dca88/ops-3.4.0b1.tar.gz", hash = "sha256:dcf59bed42d100b7f08866caa6d5380212af367b9d8759a6a836847e2001de99", size = 571515, upload-time = "2025-10-22T03:44:49.746Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/97/c1e5447c3c0d86cab16cad802e1bb58613b2396b7184797af2e4484c2014/ops-3.3.1-py3-none-any.whl", hash = "sha256:38229bb1cc6d9c2aa4dff4495f3e33af928dbd1070e8c5d8b697dfb32dcd89a8", size = 191338, upload-time = "2025-10-16T01:46:20.038Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/ec/4da88941b1a5fda98266af671bde698bbec61a7a936237dfb86fe12db49e/ops-3.4.0b1-py3-none-any.whl", hash = "sha256:7ff0738fa6d2fc32c7262ed23774999062e4d5003373376bb7de5085f32fad18", size = 211745, upload-time = "2025-10-22T03:44:45.02Z" },
 ]
 
 [package.optional-dependencies]
@@ -1259,15 +1262,15 @@ testing = [
 
 [[package]]
 name = "ops-scenario"
-version = "8.3.1"
+version = "8.4.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/94/cf17208427d43f9136b0fb61ca75ac937b88ac66cb0a3fe126bbffbde677/ops_scenario-8.3.1.tar.gz", hash = "sha256:553cd1ee30f161edd110e217a01505a9778baf778c039d810e0cfbd6101b855b", size = 110260, upload-time = "2025-10-16T01:46:27.097Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/b1/1419e5ff31b0c27d610482fb5d417400dcfa025841745232cff64b6d8cd6/ops_scenario-8.4.0b1.tar.gz", hash = "sha256:cc737d586adc554119fdf6462a41dc2f97bc3a65ebb97c2a31ff8344bd093171", size = 112014, upload-time = "2025-10-22T03:44:51.115Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/dd/da2bcb1a164c4c9c8690c689305b15c3f988166db44add5084c4dc04ad04/ops_scenario-8.3.1-py3-none-any.whl", hash = "sha256:bf8404387cd8c22cd0b45c996ca7c12e84b6c603edc8b056e85234fc3d270941", size = 64403, upload-time = "2025-10-16T01:46:22.082Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/12/47c80f94586b2f647eb53ca0979778985d408c5350a9590ed7f5cac4c0e1/ops_scenario-8.4.0b1-py3-none-any.whl", hash = "sha256:e6522aaec491cd5a14c9b12d177832adfaed98bdbcf65437a09bf43519d4c54e", size = 64600, upload-time = "2025-10-22T03:44:46.682Z" },
 ]
 
 [[package]]
@@ -2239,7 +2242,7 @@ requires-dist = [
     { name = "lightkube" },
     { name = "lightkube-models" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "ops", specifier = ">=3.3.1" },
+    { name = "ops", specifier = "==3.4.0b1" },
     { name = "pydantic", specifier = "==2.12.4" },
     { name = "pytest-interface-tester" },
     { name = "vault-package", editable = ".vendored/vault-package" },
