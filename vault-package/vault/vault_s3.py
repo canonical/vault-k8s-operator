@@ -78,6 +78,8 @@ class S3:
                 region_name=region,
             )
             custom_config = Config(
+                request_checksum_calculation="WHEN_REQUIRED",
+                response_checksum_validation="WHEN_REQUIRED",
                 retries={
                     "max_attempts": 1,
                 },
