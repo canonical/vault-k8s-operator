@@ -81,6 +81,8 @@ class S3:
                 retries={
                     "max_attempts": 1,
                 },
+                request_checksum_calculation="WHEN_REQUIRED",
+                response_checksum_validation="WHEN_REQUIRED",
             )
             self.s3 = self.session.resource(
                 "s3",
