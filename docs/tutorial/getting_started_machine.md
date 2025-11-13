@@ -77,8 +77,8 @@ export VAULT_ADDR=https://$(juju status vault/leader --format=yaml | awk '/publi
 Extract and store Vault's CA certificate to a `vault.pem` file:
 
 ```shell
-cert_juju_secret_id=$(juju secrets --format=yaml | yq 'to_entries | .[] | select(.value.label == "self-signed-vault-ca-certificate") | .key'); echo $cert_juju_secret_id
-juju show-secret ${cert_juju_secret_id} --reveal --format=yaml | yq '.[].content.certificate' > vault.pem
+cert_juju_secret_id=$(juju secrets --format=yaml | yq -r 'to_entries | .[] | select(.value.label == "self-signed-vault-ca-certificate") | .key'); echo $cert_juju_secret_id
+juju show-secret ${cert_juju_secret_id} --reveal --format=yaml | yq -r '.[].content.certificate' > vault.pem
 ```
 
 This will put the CA certificate in a file called `vault.pem`. Now, you can point the `vault` client to this file by setting the `VAULT_CAPATH` variable.

@@ -46,7 +46,7 @@ vault/2   blocked   idle   10.1.182.34         Please unseal Vault
 
 Set the `VAULT_ADDR` variable to the `vault/1` unit:
 ```
-export VAULT_ADDR=https://$(juju status vault/1 --format=yaml |  yq '.applications.vault.units.vault/1.address'):8200; echo $VAULT_ADDR
+export VAULT_ADDR=https://$(juju status vault/1 --format=yaml |  yq -r '.applications.vault.units.vault/1.address'):8200; echo $VAULT_ADDR
 ```
 
 Set the `VAULT_SKIP_VERIFY` to true:
@@ -64,7 +64,7 @@ vault operator unseal EJoB62t286mjUpSQYZg3mOla3lz/bbElVL5OLnj+rpE=
 And complete the same operations for the `vault/2` unit:
 
 ```
-export VAULT_ADDR=https://$(juju status vault/2 --format=yaml |  yq '.applications.vault.units.vault/2.address'):8200; echo $VAULT_ADDR
+export VAULT_ADDR=https://$(juju status vault/2 --format=yaml |  yq -r '.applications.vault.units.vault/2.address'):8200; echo $VAULT_ADDR
 vault operator unseal EJoB62t286mjUpSQYZg3mOla3lz/bbElVL5OLnj+rpE=
 ```
 
