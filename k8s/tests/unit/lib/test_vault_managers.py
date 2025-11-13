@@ -520,7 +520,8 @@ class TestPKIManager:
         cert = VaultClientCertificate(
             certificate=str(signed_certificate),
             ca=str(provider_certificate.certificate),
-            chain=[str(cert) for cert in provider_certificate.chain],
+            chain=[str(provider_certificate.certificate)]
+            + [str(cert) for cert in provider_certificate.chain],
         )
 
         self.vault.sign_pki_certificate_signing_request.return_value = cert
@@ -541,7 +542,8 @@ class TestPKIManager:
                 certificate=signed_certificate,
                 certificate_signing_request=csr.certificate_signing_request,
                 ca=provider_certificate.certificate,
-                chain=provider_certificate.chain,
+                chain=[signed_certificate, provider_certificate.certificate]
+                + list(provider_certificate.chain),
             )
         )
 
