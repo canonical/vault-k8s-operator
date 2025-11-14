@@ -1068,7 +1068,8 @@ class PKIManager:
             certificate=Certificate.from_string(certificate.certificate),
             certificate_signing_request=requirer_csr.certificate_signing_request,
             ca=Certificate.from_string(certificate.ca),
-            chain=[Certificate.from_string(cert) for cert in certificate.chain],
+            chain=[Certificate.from_string(certificate.certificate)]
+            + [Certificate.from_string(cert) for cert in certificate.chain],
         )
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
