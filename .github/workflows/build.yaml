@@ -20,7 +20,7 @@ jobs:
   build-charm-under-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup LXD
         uses: canonical/setup-lxd@main
@@ -43,7 +43,7 @@ jobs:
   build-kv-requirer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup LXD
         uses: canonical/setup-lxd@v0.1.3

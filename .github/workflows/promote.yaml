@@ -38,7 +38,7 @@ jobs:
     name: Promote Charm
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
