@@ -5,7 +5,7 @@ requires-python = ">=3.10"
 
 dependencies = [
     "jinja2",
-    "ops",
+    "ops==3.4.0b1",
     "psutil",
     "vault-package",
     # via cos_agent
