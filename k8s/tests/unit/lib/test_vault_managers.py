@@ -1,8 +1,10 @@
 from datetime import timedelta
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.tls_certificates_interface.v4.tls_certificates import CertificateRequestErrorCode
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import AuthMethod, SecretsBackend, VaultClient, VaultClientError
@@ -546,6 +548,46 @@ class TestPKIManager:
                 + list(provider_certificate.chain),
             )
         )
+
+    def test_given_ip_sans_denied_when_sync_then_request_error_recorded(self):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+        self.vault.sign_pki_certificate_signing_request.side_effect = self._vault_error(
+            "ip_sans are not allowed by this role"
+        )
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_certificate.assert_not_called()
+        self.vault_pki.set_relation_error.assert_called_once()
+        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
+        assert provider_error.relation_id == csr.relation_id
+        assert provider_error.error.code == CertificateRequestErrorCode.IP_NOT_ALLOWED, (
+            provider_error.error
+        )
+
+    def test_given_unmapped_vault_error_when_sync_then_no_request_error_recorded(self):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+        self.vault.sign_pki_certificate_signing_request.side_effect = self._vault_error(
+            "some unexpected failure"
+        )
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_error.assert_not_called()
+        self.vault_pki.set_relation_certificate.assert_not_called()
+
+    @staticmethod
+    def _vault_error(message: str):
+        def _side_effect(*args: Any, **kwargs: Any):
+            fake_error = Exception(message)
+            fake_error.errors = [message]  # type: ignore[attr-defined]
+            raise VaultClientError(fake_error) from fake_error
+
+        return _side_effect
 
 
 class TestACMEManager:

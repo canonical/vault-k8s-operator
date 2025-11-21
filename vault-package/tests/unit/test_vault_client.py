@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from hvac.exceptions import Forbidden, InternalServerError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidRequest
 
 from vault.vault_client import (
     AppRole,
@@ -16,6 +16,7 @@ from vault.vault_client import (
     SecretsBackend,
     Token,
     VaultClient,
+    VaultClientError,
 )
 
 TEST_PATH = "./tests/unit"
@@ -575,3 +576,44 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
         province=province,
         locality=locality,
     )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.sign_certificate")
+def test_when_sign_pki_csr_succeeds_then_certificate_object_returned(patch_sign: MagicMock):
+    patch_sign.return_value = {
+        "data": {
+            "certificate": "cert-pem",
+            "issuing_ca": "ca-pem",
+            "ca_chain": ["chain-pem"],
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    certificate = vault.sign_pki_certificate_signing_request(
+        mount="pki",
+        role="role",
+        csr="csr-pem",
+        common_name="example.com",
+        ttl="720h",
+    )
+
+    assert certificate.certificate == "cert-pem"
+    assert certificate.ca == "ca-pem"
+    assert certificate.chain == ["chain-pem"]
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.sign_certificate")
+def test_when_sign_pki_csr_denied_by_vault_then_vault_client_error_raised(
+    patch_sign: MagicMock,
+):
+    patch_sign.side_effect = InvalidRequest()
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    with pytest.raises(VaultClientError):
+        vault.sign_pki_certificate_signing_request(
+            mount="pki",
+            role="role",
+            csr="csr-pem",
+            common_name="example.com",
+            ttl="720h",
+        )

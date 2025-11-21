@@ -35,7 +35,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from functools import cached_property
-from typing import FrozenSet, MutableMapping, TextIO
+from typing import FrozenSet, List, MutableMapping, Optional, Sequence, TextIO
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
@@ -44,12 +44,15 @@ from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
+    CertificateRequestErrorCode,
     PrivateKey,
     ProviderCertificate,
+    ProviderCertificateError,
     RequirerCertificateRequest,
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
+    _CertificateError,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -110,6 +113,76 @@ class LogAdapter(logging.LoggerAdapter):
 
 
 logger = LogAdapter(logging.getLogger(__name__), {})
+
+
+_VAULT_PROVIDER_NAME = "vault-pki"
+_CERTIFICATE_ERROR_MESSAGES = {
+    CertificateRequestErrorCode.IP_NOT_ALLOWED: (
+        "Vault PKI role rejects CSRs containing IP Subject Alternative Names."
+    ),
+    CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED: (
+        "Vault PKI role rejected the requested DNS names."
+    ),
+    CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED: (
+        "Vault PKI role does not allow wildcard DNS names."
+    ),
+}
+
+
+def _extract_vault_error_messages(error: VaultClientError) -> List[str]:
+    """Return human-readable error messages from a VaultClientError."""
+    messages: List[str] = []
+    cause = error.__cause__
+    candidate_sequences: List[Optional[Sequence[str]]] = []
+    if cause is not None:
+        candidate_sequences.append(getattr(cause, "errors", None))
+        json_payload = getattr(cause, "json", None)
+        if isinstance(json_payload, dict):
+            candidate_sequences.append(json_payload.get("errors"))
+    for sequence in candidate_sequences:
+        if isinstance(sequence, Sequence):
+            messages.extend([str(entry) for entry in sequence if entry])
+        elif isinstance(sequence, str):
+            messages.append(sequence)
+    for candidate in (cause, error):
+        if not candidate:
+            continue
+        candidate_str = str(candidate).strip()
+        if candidate_str and candidate_str not in messages:
+            messages.append(candidate_str)
+    return [msg.strip() for msg in messages if msg and msg.strip()]
+
+
+def _certificate_error_from_vault_error(
+    error: VaultClientError,
+) -> Optional[_CertificateError]:
+    """Map Vault policy/role denials to canonical certificate errors."""
+    for message in _extract_vault_error_messages(error):
+        lowered = message.lower()
+        if "ip san" in lowered or "ip_san" in lowered or "ip sans" in lowered:
+            code = CertificateRequestErrorCode.IP_NOT_ALLOWED
+        elif "wildcard" in lowered:
+            code = CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
+        elif (
+            "allowed_domains" in lowered
+            or "dns name" in lowered
+            or "domain" in lowered
+            or "subject alternative name" in lowered
+            or "common name" in lowered
+            or "cn " in lowered
+        ):
+            code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
+        else:
+            continue
+        return _CertificateError(
+            code=code,
+            message=_CERTIFICATE_ERROR_MESSAGES[code],
+            category="policy",
+            reason=message,
+            provider=_VAULT_PROVIDER_NAME,
+            provider_code=message,
+        )
+    return None
 
 
 class ManagerError(Exception):
@@ -1055,9 +1128,14 @@ class PKIManager:
 
         This is the CA certificate that the provider charm has issued to Vault.
         """
-        provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
+        result = self._tls_certificates_pki.get_assigned_certificate(
             certificate_request=self._certificate_request_attributes
         )
+        # Be defensive against mocks or providers returning unexpected shapes
+        if not isinstance(result, tuple) or len(result) != 2:
+            logger.debug("No intermediate CA certificate available for Vault PKI")
+            return None, None
+        provider_certificate, private_key = result
         if not provider_certificate:
             logger.debug("No intermediate CA certificate available for Vault PKI")
         if not private_key:
@@ -1179,20 +1257,31 @@ class PKIManager:
             logger.debug("PKI role not created")
             return
         provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
-        if not provider_certificate:
-            return
-        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
-            provider_certificate.certificate
-        )
-        certificate = self._vault_client.sign_pki_certificate_signing_request(
-            mount=self._mount_point,
-            role=self._role_name,
-            csr=str(requirer_csr.certificate_signing_request),
-            common_name=requirer_csr.certificate_signing_request.common_name,
-            ttl=f"{allowed_cert_validity}s",
-        )
-        if not certificate:
-            logger.debug("Failed to sign the certificate")
+        if provider_certificate:
+            allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
+                provider_certificate.certificate
+            )
+        else:
+            # Fall back to current role max TTL if intermediate CA from relation is unavailable
+            allowed_cert_validity = self._vault_client.get_role_max_ttl(
+                role=self._role_name, mount=self._mount_point
+            )
+        try:
+            certificate = self._vault_client.sign_pki_certificate_signing_request(
+                mount=self._mount_point,
+                role=self._role_name,
+                csr=str(requirer_csr.certificate_signing_request),
+                common_name=requirer_csr.certificate_signing_request.common_name,
+                ttl=f"{allowed_cert_validity}s",
+            )
+        except VaultClientError as error:
+            handled = self._report_certificate_request_error(requirer_csr, error)
+            logger.warning(
+                "Vault policy denied CSR for relation %s (%s) [recorded_error=%s]",
+                requirer_csr.relation_id,
+                requirer_csr.certificate_signing_request.common_name,
+                handled,
+            )
             return
         provider_certificate = ProviderCertificate(
             relation_id=requirer_csr.relation_id,
@@ -1204,6 +1293,52 @@ class PKIManager:
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
         )
+
+    def _report_certificate_request_error(
+        self, requirer_csr: RequirerCertificateRequest, error: VaultClientError
+    ) -> bool:
+        """Record a mapped policy error for the given CSR if possible."""
+        extracted_messages = _extract_vault_error_messages(error)
+        logger.warning(
+            "Attempting to record CSR policy error for relation %s (%s). raw_error=%r, extracted_messages=%s",
+            requirer_csr.relation_id,
+            requirer_csr.certificate_signing_request.common_name,
+            error,
+            extracted_messages,
+        )
+        certificate_error = _certificate_error_from_vault_error(error)
+        if not certificate_error:
+            logger.warning(
+                "Could not map VaultClientError to a known certificate error; no relation error will be recorded. relation=%s, common_name=%s, raw_error=%r, extracted_messages=%s",
+                requirer_csr.relation_id,
+                requirer_csr.certificate_signing_request.common_name,
+                error,
+                extracted_messages,
+            )
+            return False
+        logger.warning(
+            "Mapped VaultClientError to certificate error [code=%s, message=%s, reason=%s, provider=%s, provider_code=%s] for relation %s (%s). Proceeding to write provider error to relation data.",
+            certificate_error.code,
+            certificate_error.message,
+            certificate_error.reason,
+            certificate_error.provider,
+            certificate_error.provider_code,
+            requirer_csr.relation_id,
+            requirer_csr.certificate_signing_request.common_name,
+        )
+        self._vault_pki.set_relation_error(
+            provider_error=ProviderCertificateError(
+                relation_id=requirer_csr.relation_id,
+                certificate_signing_request=requirer_csr.certificate_signing_request,
+                error=certificate_error,
+            )
+        )
+        logger.warning(
+            "Recorded provider error into relation data for relation %s (%s).",
+            requirer_csr.relation_id,
+            requirer_csr.certificate_signing_request.common_name,
+        )
+        return True
 
     @cached_property
     def _allowed_domains_list(self) -> list[str]:

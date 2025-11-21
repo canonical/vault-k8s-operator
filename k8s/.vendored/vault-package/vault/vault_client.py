@@ -422,6 +422,9 @@ class VaultClient:
 
         Returns:
             Certificate: The signed certificate object
+
+        Raises:
+            VaultClientError: If Vault rejects the CSR (for example due to policy violations).
         """
         try:
             response = self._client.secrets.pki.sign_certificate(
@@ -439,7 +442,7 @@ class VaultClient:
             )
         except InvalidRequest as e:
             logger.warning("Error while signing PKI certificate: %s", e)
-            return None
+            raise VaultClientError(e) from e
 
     def create_or_update_pki_charm_role(
         self,
