@@ -22,7 +22,7 @@ test = ["coverage[toml]", "pytest"]
 dev = ["codespell", "pyright", "ruff"]
 
 [build-system]
-requires = ["uv_build>=0.9.9,<0.9.10"]
+requires = ["uv_build>=0.9.11,<0.9.12"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
