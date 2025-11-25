@@ -20,7 +20,7 @@ vault/2   blocked   idle   10.1.182.15         Please unseal Vault
 Set the `VAULT_ADDR` variable to the sealed unit:
 
 ```
-export VAULT_ADDR=https://$(juju status vault/2 --format=yaml |  yq '.applications.vault.units.vault/2.address'):8200; echo $VAULT_ADDR
+export VAULT_ADDR=https://$(juju status vault/2 --format=yaml |  yq -r '.applications.vault.units.vault/2.address'):8200; echo $VAULT_ADDR
 ```
 
 Unseal the the unit using the same unseal keys as received during the initialization of the Vault leader:
