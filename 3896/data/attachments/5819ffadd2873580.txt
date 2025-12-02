@@ -1,0 +1,127 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:762 Adding model github-pr-1328c-microk8s:test-upgrade-first-eb4t on cloud microk8s
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[32mINFO    [0m test_upgrade_first:test_upgrade_first.py:33 Deploying vault from Charmhub
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/noble/vault-k8s-446
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s (waiting for exactly 3 units, current : 2)
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [allocating] waiting: agent initialising
+  vault-k8s/1 [allocating] waiting: installing agent
+  vault-k8s/2 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [executing] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/1 [idle] waiting: Waiting for CA certificate to be accessible in the charm
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+  vault-k8s/2 [idle] blocked: Please initialize Vault or integrate with an auto-unseal provider
+[32mINFO    [0m helpers:helpers.py:215 Vault initialized
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.149:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.151:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.152:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m helpers:helpers.py:246 Charm authorized
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+  vault-k8s/2 [idle] blocked: Please authorize charm (see `authorize-charm` action)
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+[32mINFO    [0m test_upgrade_first:test_upgrade_first.py:55 Refreshing vault from built charm
+[32mINFO    [0m test_upgrade_first:test_upgrade_first.py:58 Waiting for vault to be blocked after refresh
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] active: 
+  vault-k8s/2 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] active: 
+  vault-k8s/1 [idle] maintenance: 
+  vault-k8s/2 [executing] blocked: Please unseal Vault
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] maintenance: 
+  vault-k8s/1 [idle] blocked: Please unseal Vault
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.155:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.154:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m vault_helpers:vault_helpers.py:94 Unsealed vault unit: https://10.1.243.153:8200.
+[32mINFO    [0m vault_helpers:vault_helpers.py:76 Vault unit is unsealed.
+[32mINFO    [0m test_upgrade_first:test_upgrade_first.py:71 Waiting for vault to be active after refresh
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-k8s/0 [idle] blocked: Please unseal Vault
+  vault-k8s/1 [idle] blocked: Please unseal Vault
+  vault-k8s/2 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model                    Controller                Cloud/Region        Version  SLA          Timestamp
+test-upgrade-first-eb4t  github-pr-1328c-microk8s  microk8s/localhost  3.6.12   unsupported  19:38:35Z
+
+App        Version  Status  Scale  Charm      Channel  Rev  Address         Exposed  Message
+vault-k8s           active      3  vault-k8s             0  10.152.183.149  no       
+
+Unit          Workload  Agent  Address       Ports  Message
+vault-k8s/0*  active    idle   10.1.243.155         
+vault-k8s/1   active    idle   10.1.243.154         
+vault-k8s/2   active    idle   10.1.243.153         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+model-c542689a-77f5-4a37-8a5b-b3a1df1d8d64: 19:37:15 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-0: 19:37:27 ERROR unit.vault-k8s/0.juju-log [vault_client] Error while checking Vault health status: HTTPSConnectionPool(host='vault-k8s-0.vault-k8s-endpoints.test-upgrade-first-eb4t.svc.cluster.local', port=8200): Max retries exceeded with url: /v1/sys/health (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fa0d1980770>: Failed to establish a new connection: [Errno 111] Connection refused'))
+unit-vault-k8s-2: 19:37:43 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-vault-k8s-1: 19:38:11 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1063 Resetting model test-upgrade-first-eb4t...
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1052    Destroying applications vault-k8s
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1068 Not waiting on reset to complete.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
