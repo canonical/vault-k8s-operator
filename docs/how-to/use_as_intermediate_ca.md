@@ -11,7 +11,7 @@ The certificates issued by Vault will have a validity period that is half of its
 [note]Vault PKI will only allow issuing certificates for the subdomains of the common_name configured here, it will reject any requests using different domains in their subject.[/note]
 
 ```shell
-juju config vault common_name=mydomain.com
+juju config vault common_name=<your domain name>
 ```
 
 2. Deploy the parent CA
@@ -31,7 +31,7 @@ juju integrate vault:tls-certificates-pki self-signed-certificates
 [note]The common name must be a subdomain of the Vault common name[/note]
 
 ```shell
-juju deploy tls-certificates-requirer --config common_name=demo.mydomain.com  --config sans_dns=demo.mydomain.com
+juju deploy tls-certificates-requirer --config common_name=<your domain name>  --config sans_dns=<your domain name>
 ```
 
 5. Integrate TLS Certificates Requirer with Vault
