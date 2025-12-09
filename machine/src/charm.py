@@ -13,15 +13,15 @@ from contextlib import contextmanager, suppress
 from datetime import datetime
 from typing import Any, Dict, List
 
-from charms.data_platform_libs.v0.s3 import S3Requirer
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from charms.operator_libs_linux.v2 import snap
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     Mode,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
+from charms.operator_libs_linux.v2 import snap
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import VaultKvClientDetachedEvent, VaultKvProvides
 from jinja2 import Environment, FileSystemLoader

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import ops.testing as testing
 import pytest
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     ProviderCertificate,
     generate_ca,
@@ -23,7 +23,7 @@ from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
-TLS_CERTIFICATES_LIB_PATH_V4 = "charms.tls_certificates_interface.v4.tls_certificates"
+TLS_CERTIFICATES_LIB_PATH_V4 = "charmlibs.interfaces.tls_certificates"
 CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
 VAULT_MANAGERS_PATH = "vault.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
