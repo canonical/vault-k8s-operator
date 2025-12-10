@@ -1,0 +1,16 @@
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [idle] active: 
+  vault-b/2 [idle] active: 
+  vault-b/1 [idle] active: 
+[32mINFO    [0m httpx:_client.py:1025 HTTP Request: DELETE https://10.1.0.218:16443/api/v1/namespaces/test-autounseal-vns8/pods/vault-b-0 "HTTP/1.1 200 OK"
+[32mINFO    [0m httpx:_client.py:1025 HTTP Request: DELETE https://10.1.0.218:16443/api/v1/namespaces/test-autounseal-vns8/pods/vault-b-1 "HTTP/1.1 200 OK"
+[32mINFO    [0m httpx:_client.py:1025 HTTP Request: DELETE https://10.1.0.218:16443/api/v1/namespaces/test-autounseal-vns8/pods/vault-b-2 "HTTP/1.1 200 OK"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [executing] maintenance: stopping charm software
+  vault-b/2 [idle] active: 
+  vault-b/1 [executing] maintenance: stopping charm software
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  vault-b/0 [executing] waiting: Waiting for vault to be available
+  vault-b/2 [executing] waiting: Waiting for vault to be available
+  vault-b/1 [executing] waiting: Waiting for vault to be available
+[32mINFO    [0m vault_helpers:vault_helpers.py:125 Expected number of nodes are part of the raft cluster: 3/3
