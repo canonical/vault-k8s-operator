@@ -32,26 +32,26 @@ jobs:
   k8s-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
     with:
       path: ./k8s/
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
     with:
       path: ./k8s/
 
   k8s-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
     with:
       path: ./k8s/
 
@@ -84,40 +84,42 @@ jobs:
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
+      - k8s-build
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.18
-      path: ./k8s/
-      artifact-name: built-k8s-charm
+      destination_channel: 1.18/edge
+      artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
+      tag-prefix: k8s
 
   machine-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
     with:
       path: ./machine/
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
     with:
       path: ./machine/
 
   machine-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
     with:
       path: ./machine/
 
@@ -150,13 +152,15 @@ jobs:
       - machine-static-analysis
       - machine-unit-tests-with-coverage
       - machine-integration-test
+      - machine-build
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.18
-      path: ./machine/
-      artifact-name: built-machine-charm
+      destination_channel: 1.18/edge
+      artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
+      tag-prefix: machine

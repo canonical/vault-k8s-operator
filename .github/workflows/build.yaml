@@ -15,10 +15,20 @@ on:
         description: Name of the artifact to be uploaded for the kv-requirer charm
         required: true
         type: string
+    outputs:
+      artifacts-key:
+        description: Artifact identifier for the vault charm
+        value: ${{ jobs.build-charm-under-test.outputs.artifacts-key }}
+      charm-paths:
+        description: Comma-separated charm file paths
+        value: ${{ jobs.build-charm-under-test.outputs.charm-paths }}
 
 jobs:
   build-charm-under-test:
     runs-on: ubuntu-latest
+    outputs:
+      artifacts-key: ${{ inputs.vault-charm-artifact-name }}
+      charm-paths: ${{ steps.get-charm-path.outputs.charm-path }}
     steps:
       - uses: actions/checkout@v6
 
@@ -30,14 +40,26 @@ jobs:
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
 
+      - name: Install yq
+        run: sudo snap install yq
+
       - name: Build charm under test
-        run: charmcraft pack --verbose --project-dir ${{ inputs.path }}
+        working-directory: ${{ inputs.path }}
+        run: charmcraft pack --verbose
+
+      - name: Get charm path
+        id: get-charm-path
+        working-directory: ${{ inputs.path }}
+        run: |
+          CHARM_NAME=$(yq -r '.name' charmcraft.yaml)
+          PLATFORM=$(yq -r '.bases // .platforms | keys | .[] | select(endswith(":amd64"))' charmcraft.yaml | head -1 | sed 's/@/-/g' | sed 's/:/-/g')
+          echo "charm-path=${CHARM_NAME}_${PLATFORM}.charm" >> $GITHUB_OUTPUT
 
       - name: Archive Charm Under Test
         uses: actions/upload-artifact@v5
         with:
           name: ${{ inputs.vault-charm-artifact-name }}
-          path: "*.charm"
+          path: "${{ inputs.path }}*.charm"
           retention-days: 5
 
   build-kv-requirer:

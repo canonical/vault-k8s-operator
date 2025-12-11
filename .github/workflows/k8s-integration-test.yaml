@@ -69,12 +69,21 @@ jobs:
         with:
           name: ${{ inputs.kv-requirer-charm-artifact-name }}
           path: ${{ inputs.path }}built/
+      - name: Get Charm Path
+        id: charm-path
+        working-directory: ${{ inputs.path }}
+        run: |
+          # Find the vault charm file (not kv-requirer)
+          VAULT_CHARM=$(ls built/*.charm | grep -v kv-requirer | head -1)
+          KV_CHARM=$(ls built/*kv-requirer*.charm | head -1)
+          echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
+          echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
         run: |
           tox -e integration -- \
-            --charm_path=./built/vault-k8s_ubuntu@24.04-amd64.charm \
-            --kv_requirer_charm_path=./built/vault-kv-requirer_amd64.charm \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
             --alluredir allure-results \
             -k "${{ matrix.suite }}"
 
