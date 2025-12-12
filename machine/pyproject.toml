@@ -8,6 +8,7 @@ dependencies = [
     "ops",
     "psutil",
     "vault-package",
+    "charmlibs-interfaces-tls-certificates~=1.0",
     # via cos_agent
     "cosl",
     # via cos_agent and tls_certificates
@@ -44,7 +45,6 @@ extend-exclude = [
     "lib/charms/data_platform_libs/",
     "lib/charms/grafana_agent/",
     "lib/charms/operator_libs_linux/",
-    "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
     "lib/charms/vault_k8s/",
 ]
@@ -58,7 +58,6 @@ ignore = [
     "lib/charms/data_platform_libs/",
     "lib/charms/grafana_agent/",
     "lib/charms/operator_libs_linux/",
-    "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
     "lib/charms/vault_k8s/",
 ]

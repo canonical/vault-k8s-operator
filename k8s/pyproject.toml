@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ops>=3.4.0",
     "vault-package",
+    "charmlibs-interfaces-tls-certificates~=1.0",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
     "pydantic==2.12.5",
     # via charm_tracing
@@ -53,7 +54,6 @@ extend-exclude = [
     "lib/charms/loki_k8s/",
     "lib/charms/prometheus_k8s/",
     "lib/charms/tempo_coordinator_k8s/",
-    "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
     "lib/charms/observability_libs"
 ]
@@ -69,7 +69,6 @@ ignore = [
     "lib/charms/loki_k8s/",
     "lib/charms/prometheus_k8s/",
     "lib/charms/tempo_coordinator_k8s/",
-    "lib/charms/tls_certificates_interface/",
     "lib/charms/traefik_k8s/",
     "lib/charms/observability_libs"
 ]

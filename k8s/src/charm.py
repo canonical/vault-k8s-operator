@@ -13,6 +13,12 @@ import socket
 from itertools import chain
 from typing import Any, Generator
 
+from charmlibs.interfaces.tls_certificates import (
+    CertificateRequestAttributes,
+    Mode,
+    TLSCertificatesProvidesV4,
+    TLSCertificatesRequiresV4,
+)
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -24,12 +30,6 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from charms.tls_certificates_interface.v4.tls_certificates import (
-    CertificateRequestAttributes,
-    Mode,
-    TLSCertificatesProvidesV4,
-    TLSCertificatesRequiresV4,
-)
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from charms.vault_k8s.v0.vault_kv import VaultKvClientDetachedEvent, VaultKvProvides
