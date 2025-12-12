@@ -32,26 +32,26 @@ jobs:
   k8s-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
     with:
       path: ./k8s/
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
     with:
       path: ./k8s/
 
   k8s-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
     with:
       path: ./k8s/
 
@@ -60,20 +60,31 @@ jobs:
       - k8s-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
-    uses: ./.github/workflows/build.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v1
+    secrets: inherit
+    with:
+      path: k8s
+      artifact-suffix: k8s
+
+  k8s-build-kv-requirer:
+    needs:
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+    uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
     with:
       path: ./k8s/
-      vault-charm-artifact-name: built-k8s-charm
-      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
+      artifact-name: kv-requirer-k8s-charm
 
   k8s-integration-test:
     needs:
       - k8s-build
+      - k8s-build-kv-requirer
     uses: ./.github/workflows/k8s-integration-test.yaml
     with:
       path: ./k8s/
-      vault-charm-artifact-name: built-k8s-charm
+      vault-charm-artifact-name: ${{ needs.k8s-build.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
   k8s-publish-charm:
@@ -84,40 +95,43 @@ jobs:
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
+      - k8s-build
+      - k8s-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.18
-      path: ./k8s/
-      artifact-name: built-k8s-charm
+      destination_channel: 1.18/edge
+      artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
+      tag-prefix: k8s
 
   machine-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
     with:
       path: ./machine/
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
     with:
       path: ./machine/
 
   machine-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
     with:
       path: ./machine/
 
@@ -126,20 +140,31 @@ jobs:
       - machine-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
-    uses: ./.github/workflows/build.yaml
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v1
+    secrets: inherit
+    with:
+      path: machine
+      artifact-suffix: machine
+
+  machine-build-kv-requirer:
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+    uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
     with:
       path: ./machine/
-      vault-charm-artifact-name: built-machine-charm
-      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+      artifact-name: kv-requirer-machine-charm
 
   machine-integration-test:
     needs:
       - machine-build
+      - machine-build-kv-requirer
     uses: ./.github/workflows/machine-integration-test.yaml
     with:
       path: ./machine/
-      vault-charm-artifact-name: built-machine-charm
+      vault-charm-artifact-name: ${{ needs.machine-build.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-machine-charm
 
   machine-publish-charm:
@@ -150,13 +175,16 @@ jobs:
       - machine-static-analysis
       - machine-unit-tests-with-coverage
       - machine-integration-test
+      - machine-build
+      - machine-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 1.18
-      path: ./machine/
-      artifact-name: built-machine-charm
+      destination_channel: 1.18/edge
+      artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
+      tag-prefix: machine
