@@ -8,7 +8,7 @@ dependencies = [
     "ops",
     "psutil",
     "vault-package",
-    "charmlibs-interfaces-tls-certificates~=1.0",
+    "charmlibs-interfaces-tls-certificates~=1.2",
     # via cos_agent
     "cosl",
     # via cos_agent and tls_certificates
