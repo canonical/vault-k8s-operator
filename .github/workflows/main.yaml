@@ -64,6 +64,7 @@ jobs:
     secrets: inherit
     with:
       path: k8s
+      artifact-suffix: k8s
 
   k8s-build-kv-requirer:
     needs:
@@ -143,6 +144,7 @@ jobs:
     secrets: inherit
     with:
       path: machine
+      artifact-suffix: machine
 
   machine-build-kv-requirer:
     needs:
