@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 import ops.testing as testing
 import pytest
 from charmlibs.interfaces.tls_certificates import (
+    Certificate,
     CertificateRequestAttributes,
     ProviderCertificate,
     generate_ca,
@@ -484,6 +485,102 @@ class TestCharmTLS:
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
+            ingress_address = "1.2.3.4"
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": f"http://{ingress_address}"},
+            )
+            certs_mount = testing.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            vault_container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = testing.Storage(
+                name="certs",
+            )
+            config_storage = testing.Storage(
+                name="config",
+            )
+            private_key = generate_private_key()
+            ca_private_key = generate_private_key()
+            ca_certificate = generate_ca(
+                common_name=VAULT_CA_SUBJECT,
+                private_key=ca_private_key,
+                validity=timedelta(days=365),
+            )
+            csr = generate_csr(
+                private_key=private_key,
+                common_name=ingress_address,
+                sans_dns=frozenset([self.fqdn]),
+                sans_ip=frozenset([ingress_address]),
+            )
+            certificate = generate_certificate(
+                csr=csr,
+                ca=ca_certificate,
+                ca_private_key=ca_private_key,
+                validity=timedelta(days=365),
+            )
+            ca_certificate_secret = testing.Secret(
+                label=CA_CERTIFICATE_JUJU_SECRET_LABEL,
+                tracked_content={
+                    "privatekey": str(ca_private_key),
+                    "certificate": str(ca_certificate),
+                },
+                owner="app",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                storages=[certs_storage, config_storage],
+                secrets=[ca_certificate_secret],
+                leader=True,
+                relations=[peer_relation],
+                networks={
+                    testing.Network(
+                        "vault-peers",
+                        bind_addresses=[testing.BindAddress([testing.Address("192.0.2.1")])],
+                        ingress_addresses=[ingress_address],
+                    )
+                },
+            )
+            with open(temp_dir + "/ca.pem", "w") as f:
+                f.write(str(ca_certificate))
+
+            with open(temp_dir + "/cert.pem", "w") as f:
+                f.write(str(certificate))
+
+            self.ctx.run(self.ctx.on.update_status(), state_in)
+
+            with open(temp_dir + "/ca.pem", "r") as f:
+                assert f.read() == str(ca_certificate)
+            with open(temp_dir + "/cert.pem", "r") as f:
+                assert f.read() == str(certificate)
+            modification_time_cert_pem = os.stat(temp_dir + "/cert.pem").st_mtime
+            modification_time_ca_pem = os.stat(temp_dir + "/ca.pem").st_mtime
+            assert os.stat(temp_dir + "/cert.pem").st_mtime == modification_time_cert_pem
+            assert os.stat(temp_dir + "/ca.pem").st_mtime == modification_time_ca_pem
+
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    def test_given_self_signed_certificate_with_different_sans_when_update_status_then_certificate_is_regenerated(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
             peer_relation = testing.PeerRelation(
                 endpoint="vault-peers",
                 interface="vault-peer",
@@ -518,12 +615,14 @@ class TestCharmTLS:
                 private_key=ca_private_key,
                 validity=timedelta(days=365),
             )
-            csr = generate_csr(
+            old_csr = generate_csr(
                 private_key=private_key,
-                common_name="my.domain",
+                common_name="1.2.3.4",
+                sans_dns=frozenset([self.fqdn]),
+                sans_ip=frozenset(["1.2.3.4"]),
             )
-            certificate = generate_certificate(
-                csr=csr,
+            old_certificate = generate_certificate(
+                csr=old_csr,
                 ca=ca_certificate,
                 ca_private_key=ca_private_key,
                 validity=timedelta(days=365),
@@ -536,29 +635,38 @@ class TestCharmTLS:
                 },
                 owner="app",
             )
+            new_ingress_address = "5.6.7.8"
             state_in = testing.State(
                 containers=[vault_container],
                 storages=[certs_storage, config_storage],
                 secrets=[ca_certificate_secret],
                 leader=True,
                 relations=[peer_relation],
+                networks={
+                    testing.Network(
+                        "vault-peers",
+                        bind_addresses=[testing.BindAddress([testing.Address("192.0.2.1")])],
+                        ingress_addresses=[new_ingress_address],
+                    )
+                },
             )
             with open(temp_dir + "/ca.pem", "w") as f:
                 f.write(str(ca_certificate))
-
             with open(temp_dir + "/cert.pem", "w") as f:
-                f.write(str(certificate))
+                f.write(str(old_certificate))
 
             self.ctx.run(self.ctx.on.update_status(), state_in)
 
             with open(temp_dir + "/ca.pem", "r") as f:
                 assert f.read() == str(ca_certificate)
+
             with open(temp_dir + "/cert.pem", "r") as f:
-                assert f.read() == str(certificate)
-            modification_time_cert_pem = os.stat(temp_dir + "/cert.pem").st_mtime
-            modification_time_ca_pem = os.stat(temp_dir + "/ca.pem").st_mtime
-            assert os.stat(temp_dir + "/cert.pem").st_mtime == modification_time_cert_pem
-            assert os.stat(temp_dir + "/ca.pem").st_mtime == modification_time_ca_pem
+                new_cert_content = f.read()
+                assert new_cert_content != str(old_certificate)
+
+                new_certificate = Certificate.from_string(new_cert_content)
+                assert new_certificate.sans_ip is not None
+                assert new_ingress_address in new_certificate.sans_ip
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
