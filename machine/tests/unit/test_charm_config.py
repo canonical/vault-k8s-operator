@@ -13,6 +13,7 @@ class TestCharmConfig:
         "max_lease_ttl": "720h",
         "log_level": "info",
         "access_sans_dns": "example.com",
+        "access_sans_ip": "10.0.0.1",
         "access_country_name": "US",
         "access_state_or_province_name": "CA",
         "access_locality_name": "San Francisco",
