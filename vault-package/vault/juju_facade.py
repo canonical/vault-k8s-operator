@@ -709,6 +709,27 @@ class JujuFacade:
             return None
         return str(binding.network.ingress_address)
 
+    def get_ingress_addresses(
+        self,
+        relation_name: str | None = None,
+        relation: Relation | None = None,
+        relation_id: int | None = None,
+    ) -> List[str]:
+        """Get all ingress addresses for the given relation.
+
+        In public cloud environments, units may have multiple addresses
+        (e.g., private and public IPs). This method returns all of them.
+
+        Returns:
+            A list of ingress addresses, empty if binding is not available
+        """
+        binding = self.get_binding(
+            relation_name=relation_name, relation_id=relation_id, relation=relation
+        )
+        if not binding or not binding.network.ingress_addresses:
+            return []
+        return [str(addr) for addr in binding.network.ingress_addresses]
+
     def get_bind_address(
         self,
         relation_name: str,

@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 import os
 from typing import Dict, List
+import ipaddress
 
 import hcl
 from jinja2 import Environment, FileSystemLoader
@@ -49,6 +50,25 @@ def allowed_domains_config_is_valid(allowed_domains: str) -> bool:
     dns_names = (name.strip() for name in allowed_domains.split(","))
     valid = all(name and " " not in name for name in dns_names)
     return valid
+
+
+def sans_ip_config_is_valid(sans_ip: str) -> bool:
+    """Return whether the config value for the sans IPs is valid.
+
+    Checks that the provided string is a comma separated list of valid IPv4/IPv6 addresses,
+    and that each string is not empty and does not contain any spaces.
+    """
+    if not sans_ip:
+        return True
+    candidates = (token.strip() for token in sans_ip.split(","))
+    for token in candidates:
+        if not token or " " in token:
+            return False
+        try:
+            ipaddress.ip_address(token)
+        except ValueError:
+            return False
+    return True
 
 
 def render_vault_config_file(
