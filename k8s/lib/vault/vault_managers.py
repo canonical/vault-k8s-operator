@@ -305,8 +305,14 @@ class TLSManager(Object):
         if existing_ca_certificate and existing_certificate_is_self_signed(
             ca_certificate=Certificate.from_string(existing_ca_certificate)
         ):
-            logger.debug("Found existing self signed certificate in workload.")
-            return
+            workload_unit_cert = self.pull_tls_file_from_workload(File.CERT)
+            if workload_unit_cert and self._unit_certificate_sans_match_current_request(
+                workload_unit_cert
+            ):
+                logger.debug(
+                    "Found existing self signed certificate in workload with matching attributes."
+                )
+                return
         if not self.ca_certificate_secret_exists():
             logger.debug("No CA certificate found.")
             return
@@ -522,6 +528,32 @@ class TLSManager(Object):
             bool: True if file exists.
         """
         return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+
+    def _unit_certificate_sans_match_current_request(self, unit_cert_content: str) -> bool:
+        """Check if the unit certificate attributes match the current TLS manager configuration.
+
+        Args:
+            unit_cert_content: The PEM content of the unit certificate
+
+        Returns:
+            bool: True if certificate attributes match current configuration, False otherwise
+        """
+        try:
+            unit_cert = Certificate.from_string(unit_cert_content)
+
+            cert_sans_dns = set(unit_cert.sans_dns) if unit_cert.sans_dns else set()
+            cert_sans_ip = set(unit_cert.sans_ip) if unit_cert.sans_ip else set()
+            current_sans_dns = set(self.sans_dns) if self.sans_dns else set()
+            current_sans_ip = set(self.sans_ip) if self.sans_ip else set()
+
+            return (
+                cert_sans_dns == current_sans_dns
+                and cert_sans_ip == current_sans_ip
+                and unit_cert.common_name == self.common_name
+            )
+        except Exception as e:
+            logger.warning("Failed to parse unit certificate attributes: %s", e)
+            return False
 
 
 def generate_vault_ca_certificate() -> tuple[str, str]:
