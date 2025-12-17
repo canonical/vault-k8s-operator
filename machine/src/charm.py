@@ -47,6 +47,7 @@ from vault.vault_helpers import (
     get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
+    sans_ip_config_is_valid,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
@@ -134,6 +135,19 @@ class VaultOperatorCharm(CharmBase):
                 access_sans_dns_list = []
             else:
                 access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
+        ip_addresses = set()
+        if self._bind_address:
+            ip_addresses.add(self._bind_address)
+        ingress_addresses = self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME)
+        ip_addresses.update(ingress_addresses)
+        access_sans_ip = self.juju_facade.get_string_config("access_sans_ip")
+        if access_sans_ip:
+            if not sans_ip_config_is_valid(access_sans_ip):
+                logger.warning(
+                    "access_sans_ip is not valid, it must be a comma separated list of IP addresses"
+                )
+            else:
+                ip_addresses.update([ip.strip() for ip in access_sans_ip.split(",")])
         self.tls = TLSManager(
             charm=self,
             workload=self.machine,
@@ -141,7 +155,7 @@ class VaultOperatorCharm(CharmBase):
             tls_directory_path=MACHINE_TLS_FILE_DIRECTORY_PATH,
             common_name=self._bind_address if self._bind_address else "",
             sans_dns=frozenset(access_sans_dns_list),
-            sans_ip=frozenset([self._bind_address] if self._bind_address else []),
+            sans_ip=frozenset(ip_addresses),
             country_name=self.juju_facade.get_string_config("access_country_name"),
             state_or_province_name=self.juju_facade.get_string_config(
                 "access_state_or_province_name"
@@ -434,6 +448,13 @@ class VaultOperatorCharm(CharmBase):
                 event.add_status(
                     BlockedStatus(
                         "Config value for access_sans_dns is not valid, it must be a comma separated list"
+                    )
+                )
+                return
+            if not sans_ip_config_is_valid(self.juju_facade.get_string_config("access_sans_ip")):
+                event.add_status(
+                    BlockedStatus(
+                        "Config value for access_sans_ip is not valid, it must be a comma separated list of IP addresses"
                     )
                 )
                 return

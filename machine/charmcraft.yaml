@@ -130,6 +130,13 @@ config:
         The Vault charm will use this configuration option when requesting a certificate from a TLS provider
         using the `tls-certificates-access` charm relation interface.
         If not set, the Vault charm will automatically generate subject alternative names.
+    access_sans_ip:
+      type: string
+      description: >-
+        Comma-separated list of IP addresses to include as SANs for the access certificate.
+        The Vault charm will use this configuration option when requesting a certificate from a TLS provider
+        using the `tls-certificates-access` charm relation interface. These are in addition to IPs
+        automatically detected by the charm.
     access_country_name:
       type: string
       description: >-

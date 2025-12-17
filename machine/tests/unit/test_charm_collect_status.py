@@ -180,6 +180,24 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             "Config value for access_sans_dns is not valid, it must be a comma separated list"
         )
 
+    def test_given_access_tls_relation_and_bad_sans_ip_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        tls_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={"access_sans_ip": "not an ip, also bad"},
+            relations=[tls_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Config value for access_sans_ip is not valid, it must be a comma separated list of IP addresses"
+        )
+
     def test_given_peer_relation_not_created_when_collect_unit_status_then_status_is_waiting(self):
         state_in = testing.State(
             relations=[],

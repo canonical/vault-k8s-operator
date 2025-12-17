@@ -39,6 +39,7 @@ class MockNetwork:
     def __init__(self, bind_address: str, ingress_address: str):
         self.bind_address = bind_address
         self.ingress_address = ingress_address
+        self.ingress_addresses = [ingress_address]
 
 
 class MockBinding:
@@ -424,6 +425,13 @@ class TestCharmConfigure(VaultCharmFixtures):
             leader=True,
             secrets=[approle_secret],
             relations=[peer_relation, vault_autounseal_relation],
+            networks={
+                testing.Network(
+                    "vault-peers",
+                    bind_addresses=[testing.BindAddress([testing.Address("myhostname")])],
+                    ingress_addresses=["myhostname"],
+                )
+            },
         )
 
         self.ctx.run(self.ctx.on.config_changed(), state_in)
