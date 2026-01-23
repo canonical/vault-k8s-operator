@@ -10,10 +10,12 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APPLICATION_NAME,
     MINIO_APPLICATION_NAME,
+    MINIO_REVISION,
     MINIO_S3_ACCESS_KEY,
     MINIO_S3_SECRET_KEY,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
+    S3_INTEGRATOR_REVISION,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -49,12 +51,14 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         S3_INTEGRATOR_APPLICATION_NAME,
         application_name=S3_INTEGRATOR_APPLICATION_NAME,
         channel="stable",
+        revision=S3_INTEGRATOR_REVISION,
         trust=True,
     )
     await ops_test.model.deploy(
         MINIO_APPLICATION_NAME,
         application_name=MINIO_APPLICATION_NAME,
         channel="ckf-1.9/stable",
+        revision=MINIO_REVISION,
         config={
             "access-key": MINIO_S3_ACCESS_KEY,
             "secret-key": MINIO_S3_SECRET_KEY,

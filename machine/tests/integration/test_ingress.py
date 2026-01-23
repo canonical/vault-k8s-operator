@@ -9,6 +9,7 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APP_NAME,
     HAPROXY_APPLICATION_NAME,
+    HAPROXY_REVISION,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
@@ -46,6 +47,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     await ops_test.model.deploy(
         HAPROXY_APPLICATION_NAME,
         channel="2.8/edge",
+        revision=HAPROXY_REVISION,
     )
 
     # When waiting for Vault to go to the blocked state, we may need an update

@@ -9,8 +9,10 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APPLICATION_NAME,
     LOKI_APPLICATION_NAME,
+    LOKI_REVISION,
     NUM_VAULT_UNITS,
     PROMETHEUS_APPLICATION_NAME,
+    PROMETHEUS_REVISION,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -45,12 +47,14 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         application_name=PROMETHEUS_APPLICATION_NAME,
         trust=True,
         channel="1/stable",
+        revision=PROMETHEUS_REVISION,
     )
     await ops_test.model.deploy(
         LOKI_APPLICATION_NAME,
         application_name=LOKI_APPLICATION_NAME,
         trust=True,
         channel="1/stable",
+        revision=LOKI_REVISION,
     )
     await asyncio.gather(
         ops_test.model.wait_for_idle(
