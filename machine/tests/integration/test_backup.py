@@ -14,6 +14,7 @@ from config import (
     MINIO_S3_SECRET_KEY,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
+    S3_INTEGRATOR_REVISION,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -51,6 +52,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     await ops_test.model.deploy(
         S3_INTEGRATOR_APPLICATION_NAME,
         channel="stable",
+        revision=S3_INTEGRATOR_REVISION,
         trust=True,
     )
 

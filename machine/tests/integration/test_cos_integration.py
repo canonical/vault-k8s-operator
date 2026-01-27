@@ -9,6 +9,7 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APP_NAME,
     GRAFANA_AGENT_APPLICATION_NAME,
+    GRAFANA_AGENT_REVISION,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SHORT_TIMEOUT,
@@ -40,6 +41,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         GRAFANA_AGENT_APPLICATION_NAME,
         series="noble",
         channel="1/stable",
+        revision=GRAFANA_AGENT_REVISION,
     )
 
     # When waiting for Vault to go to the blocked state, we may need an update
