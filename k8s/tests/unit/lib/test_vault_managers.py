@@ -626,7 +626,9 @@ class TestPKIManager:
 
         fake_error = Exception("some unexpected failure")
         fake_error.errors = ["some unexpected failure"]  # type: ignore[attr-defined]
-        self.vault.sign_pki_certificate_signing_request.side_effect = VaultClientError(fake_error)
+        self.vault.sign_pki_certificate_signing_request.side_effect = PKICertificateError(
+            fake_error
+        )
 
         self.pki_manager.sync()
 
