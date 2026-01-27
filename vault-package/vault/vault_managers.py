@@ -35,7 +35,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from functools import cached_property
-from typing import FrozenSet, MutableMapping, TextIO
+from typing import FrozenSet, List, MutableMapping, Optional, Sequence, TextIO
 
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
@@ -43,9 +43,12 @@ from charms.certificate_transfer_interface.v1.certificate_transfer import (
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
+    CertificateError,
     CertificateRequestAttributes,
+    CertificateRequestErrorCode,
     PrivateKey,
     ProviderCertificate,
+    ProviderCertificateError,
     RequirerCertificateRequest,
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
@@ -70,7 +73,14 @@ from vault.vault_autounseal import (
     VaultAutounsealProvides,
     VaultAutounsealRequires,
 )
-from vault.vault_client import AppRole, SecretsBackend, Token, VaultClient, VaultClientError
+from vault.vault_client import (
+    AppRole,
+    PKICertificateError,
+    SecretsBackend,
+    Token,
+    VaultClient,
+    VaultClientError,
+)
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
@@ -97,6 +107,63 @@ path "sys/internal/ui/mounts/{mount}" {{
   capabilities = ["read"]
 }}
 """
+
+_VAULT_PROVIDER_NAME = "vault-pki"
+_CERTIFICATE_ERROR_MESSAGES = {
+    CertificateRequestErrorCode.IP_NOT_ALLOWED: (
+        "Vault PKI role rejected the IP Subject Alternative Name."
+    ),
+    CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED: (
+        "Vault PKI role rejected the requested DNS names."
+    ),
+    CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED: (
+        "Vault PKI role does not allow wildcard DNS names."
+    ),
+    CertificateRequestErrorCode.OTHER: (
+        "Vault PKI role rejected the certificate request."
+    ),
+}
+
+
+def _map_vault_pki_errors(
+    error: PKICertificateError,
+) -> CertificateError:
+    """Map Vault PKI errors to canonical certificate errors from the tls library.
+
+    This is best effort based on what the Vault client provides.
+
+    Args:
+        error: PKICertificateError, The error object wrapping different Vault PKI errors.
+
+    Returns:
+        CertificateError with the appropriate error code. Defaults to OTHER if
+        the error cannot be classified into a specific category.
+    """
+    error_message = str(error).lower()
+    
+    if "ip san" in error_message or "ip_san" in error_message or "ip sans" in error_message:
+        code = CertificateRequestErrorCode.IP_NOT_ALLOWED
+    elif "wildcard" in error_message:
+        code = CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
+    elif (
+        "allowed_domains" in error_message
+        or "dns name" in error_message
+        or "domain" in error_message
+        or "subject alternative name" in error_message
+        or "common name" in error_message
+        or "cn " in error_message
+    ):
+        code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
+    else:
+        code = CertificateRequestErrorCode.OTHER
+    
+    return CertificateError(
+        code=code,
+        name=code.name,
+        message=_CERTIFICATE_ERROR_MESSAGES[code],
+        reason=str(error),
+        provider=_VAULT_PROVIDER_NAME,
+    )
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -1212,15 +1279,20 @@ class PKIManager:
         allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
             provider_certificate.certificate
         )
-        certificate = self._vault_client.sign_pki_certificate_signing_request(
-            mount=self._mount_point,
-            role=self._role_name,
-            csr=str(requirer_csr.certificate_signing_request),
-            common_name=requirer_csr.certificate_signing_request.common_name,
-            ttl=f"{allowed_cert_validity}s",
-        )
-        if not certificate:
-            logger.debug("Failed to sign the certificate")
+        try:
+            certificate = self._vault_client.sign_pki_certificate_signing_request(
+                mount=self._mount_point,
+                role=self._role_name,
+                csr=str(requirer_csr.certificate_signing_request),
+                common_name=requirer_csr.certificate_signing_request.common_name,
+                ttl=f"{allowed_cert_validity}s",
+            )
+        except PKICertificateError as error:
+            logger.warning(
+                "Failed to sign certificate request %s (%s)",
+                requirer_csr.raw
+            )
+            self._report_certificate_request_error(requirer_csr, error)
             return
         provider_certificate = ProviderCertificate(
             relation_id=requirer_csr.relation_id,
@@ -1231,6 +1303,19 @@ class PKIManager:
         )
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
+        )
+
+    def _report_certificate_request_error(
+        self, requirer_csr: RequirerCertificateRequest, error: VaultClientError
+    ) -> None:
+        """Set certificate error for a given certificate request."""
+        certificate_error = _map_vault_pki_errors(error)
+        self._vault_pki.set_relation_error(
+            provider_error=ProviderCertificateError(
+                relation_id=requirer_csr.relation_id,
+                certificate_signing_request=requirer_csr.certificate_signing_request,
+                error=certificate_error,
+            )
         )
 
     @cached_property

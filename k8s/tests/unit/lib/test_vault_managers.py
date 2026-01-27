@@ -5,7 +5,13 @@ import pytest
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
-from vault.vault_client import AuthMethod, SecretsBackend, VaultClient, VaultClientError
+from vault.vault_client import (
+    AuthMethod,
+    PKICertificateError,
+    SecretsBackend,
+    VaultClient,
+    VaultClientError,
+)
 from vault.vault_client import Certificate as VaultClientCertificate
 from vault.vault_managers import (
     AUTOUNSEAL_POLICY,
@@ -14,6 +20,7 @@ from vault.vault_managers import (
     AutounsealRequirerManager,
     BackupManager,
     CertificateRequestAttributes,
+    CertificateRequestErrorCode,
     KVManager,
     ManagerError,
     PKIManager,
@@ -546,6 +553,88 @@ class TestPKIManager:
                 + list(provider_certificate.chain),
             )
         )
+
+    def test_given_ip_sans_denied_when_sync_then_request_error_recorded(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        fake_error = Exception("ip_sans are not allowed by this role")
+        fake_error.errors = ["ip_sans are not allowed by this role"]  # type: ignore[attr-defined]
+        self.vault.sign_pki_certificate_signing_request.side_effect = PKICertificateError(
+            fake_error
+        )
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_certificate.assert_not_called()
+        self.vault_pki.set_relation_error.assert_called_once()
+        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
+        assert provider_error.relation_id == csr.relation_id
+        assert provider_error.error.code == CertificateRequestErrorCode.IP_NOT_ALLOWED
+
+    def test_given_wildcard_denied_when_sync_then_request_error_recorded(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        fake_error = Exception("wildcard names are not allowed by this role")
+        fake_error.errors = ["wildcard names are not allowed by this role"]  # type: ignore[attr-defined]
+        self.vault.sign_pki_certificate_signing_request.side_effect = PKICertificateError(
+            fake_error
+        )
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_certificate.assert_not_called()
+        self.vault_pki.set_relation_error.assert_called_once()
+        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
+        assert provider_error.relation_id == csr.relation_id
+        assert provider_error.error.code == CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
+
+    def test_given_domain_denied_when_sync_then_request_error_recorded(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        fake_error = Exception("domain not allowed by this role's allowed_domains")
+        fake_error.errors = ["domain not allowed by this role's allowed_domains"]  # type: ignore[attr-defined]
+        self.vault.sign_pki_certificate_signing_request.side_effect = PKICertificateError(
+            fake_error
+        )
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_certificate.assert_not_called()
+        self.vault_pki.set_relation_error.assert_called_once()
+        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
+        assert provider_error.relation_id == csr.relation_id
+        assert provider_error.error.code == CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
+
+    def test_given_unmapped_vault_error_when_sync_then_other_error_recorded(
+        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
+    ):
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        fake_error = Exception("some unexpected failure")
+        fake_error.errors = ["some unexpected failure"]  # type: ignore[attr-defined]
+        self.vault.sign_pki_certificate_signing_request.side_effect = VaultClientError(fake_error)
+
+        self.pki_manager.sync()
+
+        self.vault_pki.set_relation_certificate.assert_not_called()
+        self.vault_pki.set_relation_error.assert_called_once()
+        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
+        assert provider_error.relation_id == csr.relation_id
+        assert provider_error.error.code == CertificateRequestErrorCode.OTHER
 
 
 class TestACMEManager:
