@@ -8,4 +8,5 @@
 ## Upgrade Procedure
 
 - Create a backup of your Vault data following [this guide](create_backup.md) (in case anything goes wrong during the upgrade).
-- run `juju refresh vault --channel=$VAULT_HIGHER_VERSION` where VAULT_HIGHER_VERSION is any version higher than the one you have currently deployed.
+- Make sure to save your unseal key(s), as this operation will seal all units.
+- Run `juju refresh vault --channel=$VAULT_HIGHER_VERSION`, where VAULT_HIGHER_VERSION is any 1.x version higher than the one you currently have deployed.
