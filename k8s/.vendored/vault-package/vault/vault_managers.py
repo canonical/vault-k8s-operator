@@ -1288,9 +1288,8 @@ class PKIManager:
             )
         except PKICertificateError as error:
             logger.warning(
-                "Failed to sign certificate request %s (%s)",
+                "Failed to sign certificate request %s",
                 requirer_csr.certificate_signing_request.raw,
-                error,
             )
             self._report_certificate_request_error(requirer_csr, error)
             return
