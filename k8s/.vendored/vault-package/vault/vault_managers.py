@@ -130,8 +130,6 @@ def _map_vault_pki_errors(
 ) -> CertificateError:
     """Map Vault PKI errors to canonical certificate errors from the tls library.
 
-    This is best effort based on what the Vault client provides.
-
     Args:
         error: PKICertificateError, The error object wrapping different Vault PKI errors.
 
@@ -139,19 +137,17 @@ def _map_vault_pki_errors(
         CertificateError with the appropriate error code. Defaults to OTHER if
         the error cannot be classified into a specific category.
     """
-    error_message = str(error).lower()
+    error_text = str(error).lower()
     
-    if "ip san" in error_message or "ip_san" in error_message or "ip sans" in error_message:
+    if "ip_san" in error_text or "ip san" in error_text:
         code = CertificateRequestErrorCode.IP_NOT_ALLOWED
-    elif "wildcard" in error_message:
+    elif "wildcard" in error_text:
         code = CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
     elif (
-        "allowed_domains" in error_message
-        or "dns name" in error_message
-        or "domain" in error_message
-        or "subject alternative name" in error_message
-        or "common name" in error_message
-        or "cn " in error_message
+        "allowed_domain" in error_text
+        or "dns name" in error_text
+        or "common name" in error_text
+        or "subject alternative name" in error_text
     ):
         code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
     else:
