@@ -497,8 +497,7 @@ class VaultClient:
             )
         if allow_any_name is not None:
             extra_params["allow_any_name"] = "true" if allow_any_name else "false"
-        if allow_ip_sans:
-            extra_params["allow_ip_sans"] = "true"
+        extra_params["allow_ip_sans"] = "true" if allow_ip_sans else "false"
         if organization:
             extra_params["organization"] = organization
         if organizational_unit:
