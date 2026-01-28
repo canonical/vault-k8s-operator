@@ -116,9 +116,6 @@ _CERTIFICATE_ERROR_MESSAGES = {
     CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED: (
         "Vault PKI role rejected the requested DNS names."
     ),
-    CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED: (
-        "Vault PKI role does not allow wildcard DNS names."
-    ),
     CertificateRequestErrorCode.OTHER: (
         "Vault PKI role rejected the certificate request."
     ),
@@ -139,20 +136,22 @@ def _map_vault_pki_errors(
     """
     error_text = str(error).lower()
     
-    if (
+    # Use mutually exclusive conditions to avoid order dependency
+    is_ip_error = (
         "ip_san" in error_text
         or "ip san" in error_text
         or "ip subject alternative name" in error_text
-    ):
-        code = CertificateRequestErrorCode.IP_NOT_ALLOWED
-    elif "wildcard" in error_text:
-        code = CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
-    elif (
+    )
+    is_domain_error = (
         "allowed_domain" in error_text
         or "dns name" in error_text
         or "common name" in error_text
-        or "subject alternative name" in error_text
-    ):
+        or ("subject alternative name" in error_text and not is_ip_error)
+    )
+    
+    if is_ip_error:
+        code = CertificateRequestErrorCode.IP_NOT_ALLOWED
+    elif is_domain_error:
         code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
     else:
         code = CertificateRequestErrorCode.OTHER

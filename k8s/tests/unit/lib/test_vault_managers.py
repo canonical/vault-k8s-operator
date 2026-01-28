@@ -575,27 +575,6 @@ class TestPKIManager:
         assert provider_error.relation_id == csr.relation_id
         assert provider_error.error.code == CertificateRequestErrorCode.IP_NOT_ALLOWED
 
-    def test_given_wildcard_denied_when_sync_then_request_error_recorded(
-        self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
-    ):
-        self.vault.is_pki_role_created.return_value = True
-        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
-        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
-
-        fake_error = Exception("wildcard names are not allowed by this role")
-        fake_error.errors = ["wildcard names are not allowed by this role"]  # type: ignore[attr-defined]
-        self.vault.sign_pki_certificate_signing_request.side_effect = PKICertificateError(
-            fake_error
-        )
-
-        self.pki_manager.sync()
-
-        self.vault_pki.set_relation_certificate.assert_not_called()
-        self.vault_pki.set_relation_error.assert_called_once()
-        provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
-        assert provider_error.relation_id == csr.relation_id
-        assert provider_error.error.code == CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
-
     def test_given_domain_denied_when_sync_then_request_error_recorded(
         self, assigned_certificate_and_key: tuple[ProviderCertificate, PrivateKey]
     ):
