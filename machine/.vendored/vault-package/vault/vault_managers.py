@@ -139,7 +139,11 @@ def _map_vault_pki_errors(
     """
     error_text = str(error).lower()
     
-    if "ip_san" in error_text or "ip san" in error_text:
+    if (
+        "ip_san" in error_text
+        or "ip san" in error_text
+        or "ip subject alternative name" in error_text
+    ):
         code = CertificateRequestErrorCode.IP_NOT_ALLOWED
     elif "wildcard" in error_text:
         code = CertificateRequestErrorCode.WILDCARD_NOT_ALLOWED
