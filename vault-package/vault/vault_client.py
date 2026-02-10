@@ -103,6 +103,10 @@ class VaultClientError(Exception):
     """Base class for exceptions raised by the Vault client."""
 
 
+class PKICertificateError(VaultClientError):
+    """Raised when the PKI engine fails to sign a certificate request."""
+
+
 class VaultClient:
     """Class to interact with Vault through its API."""
 
@@ -422,6 +426,9 @@ class VaultClient:
 
         Returns:
             Certificate: The signed certificate object
+
+        Raises:
+            PKICertificateError: If the PKI engine fails to sign the certificate request.
         """
         try:
             response = self._client.secrets.pki.sign_certificate(
@@ -437,9 +444,9 @@ class VaultClient:
                 ca=response["data"]["issuing_ca"],
                 chain=response["data"]["ca_chain"],
             )
-        except InvalidRequest as e:
-            logger.warning("Error while signing PKI certificate: %s", e)
-            return None
+        except (InvalidRequest, Forbidden, InternalServerError, ConnectionError, RequestException) as e:
+            logger.warning("PKI error while signing certificate: %s", e)
+            raise PKICertificateError(e) from e
 
     def create_or_update_pki_charm_role(
         self,
@@ -490,8 +497,7 @@ class VaultClient:
             )
         if allow_any_name is not None:
             extra_params["allow_any_name"] = "true" if allow_any_name else "false"
-        if allow_ip_sans:
-            extra_params["allow_ip_sans"] = "true"
+        extra_params["allow_ip_sans"] = "true" if allow_ip_sans else "false"
         if organization:
             extra_params["organization"] = organization
         if organizational_unit:
