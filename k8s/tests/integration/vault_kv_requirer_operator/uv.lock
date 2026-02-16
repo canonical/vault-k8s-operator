@@ -85,7 +85,7 @@ name = "click"
 version = "8.1.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593 }
 wheels = [
@@ -441,6 +441,10 @@ dependencies = [
     { name = "hvac" },
     { name = "ops" },
     { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+test = [
     { name = "pytest-interface-tester" },
 ]
 
@@ -449,7 +453,7 @@ requires-dist = [
     { name = "hvac" },
     { name = "ops" },
     { name = "pydantic", specifier = "==2.10.4" },
-    { name = "pytest-interface-tester" },
+    { name = "pytest-interface-tester", marker = "extra == 'test'" },
 ]
 
 [[package]]

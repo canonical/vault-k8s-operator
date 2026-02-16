@@ -14,7 +14,7 @@ on:
 
 jobs:
   build-kv-requirer:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -36,6 +36,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.artifact-name }}
-          path: "${{ inputs.path }}*.charm"
+          path: ${{ inputs.path }}/*kv-requirer*.charm
           retention-days: 5
           if-no-files-found: error
