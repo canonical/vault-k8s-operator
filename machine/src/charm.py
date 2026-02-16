@@ -153,11 +153,11 @@ class VaultOperatorCharm(CharmBase):
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
         self.framework.observe(self.on.remove, self._on_remove)
-        self.vault_autounseal_provides = VaultAutounsealProvides(
-            self, AUTOUNSEAL_PROVIDES_RELATION_NAME
-        )
         self.vault_autounseal_requires = VaultAutounsealRequires(
             self, AUTOUNSEAL_REQUIRES_RELATION_NAME
+        )
+        self.vault_autounseal_provides = VaultAutounsealProvides(
+            self, AUTOUNSEAL_PROVIDES_RELATION_NAME
         )
         configure_events = [
             self.on.config_changed,
