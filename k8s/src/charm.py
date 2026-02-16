@@ -180,13 +180,6 @@ class VaultCharm(CharmBase):
             sans_dns=frozenset([socket.getfqdn()]),
             sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
         )
-        self.ingress_per_app = IngressPerAppRequirer(
-            charm=self,
-            port=self.VAULT_PORT,
-            strip_prefix=True,
-            scheme=lambda: "https",
-            relation_name=INGRESS_PER_APP_RELATION_NAME,
-        )
         self.ingress_per_unit = IngressPerUnitRequirer(
             self,
             relation_name=INGRESS_PER_UNIT_RELATION_NAME,
@@ -194,6 +187,13 @@ class VaultCharm(CharmBase):
             strip_prefix=True,
             redirect_https=True,
             scheme=lambda: "https",
+        )
+        self.ingress_per_app = IngressPerAppRequirer(
+            charm=self,
+            port=self.VAULT_PORT,
+            strip_prefix=True,
+            scheme=lambda: "https",
+            relation_name=INGRESS_PER_APP_RELATION_NAME,
         )
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
 
