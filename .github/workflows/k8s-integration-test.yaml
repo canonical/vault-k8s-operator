@@ -85,6 +85,7 @@ jobs:
         with:
           ref: gh-pages
           path: gh-pages
+
       - name: Build test report
         uses: simple-elf/allure-report-action@v1.13
         if: always()
@@ -92,6 +93,7 @@ jobs:
           gh_pages: gh-pages
           allure_history: allure-history
           allure_results: allure-results
+
       - name: Publish test report
         uses: peaceiris/actions-gh-pages@v4
         if: always()
