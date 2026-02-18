@@ -65,6 +65,7 @@ jobs:
 
   k8s-publish-charm:
     name: Publish K8s Charm
+    runs-on: ubuntu-24.04
     needs:
       - k8s-lint-report
       - k8s-grafana-dashboard-lint-report
@@ -76,15 +77,23 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
-    secrets:
-      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
-    with:
-      destination_channel: 1.16/edge
-      path: k8s
-      artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
-      charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
-      tag-prefix: k8s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download charm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.k8s-build.outputs.artifacts-key }}
+      
+      - name: Upload and release charm
+        uses: canonical/charming-actions/upload-charm@2.7.0
+        with:
+          built-charm-path: ${{ needs.k8s-build.outputs.charm-paths }}
+          credentials: ${{ secrets.CHARMCRAFT_AUTH }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          channel: 1.16/edge
+          tag-prefix: k8s
 
   machine-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
@@ -140,6 +149,7 @@ jobs:
 
   machine-publish-charm:
     name: Publish Machine Charm
+    runs-on: ubuntu-24.04
     needs:
       - machine-lint-report
       - machine-grafana-dashboard-lint-report
@@ -151,12 +161,20 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
-    secrets:
-      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
-    with:
-      destination_channel: 1.16/edge
-      path: machine
-      artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
-      charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
-      tag-prefix: machine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download charm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.machine-build.outputs.artifacts-key }}
+      
+      - name: Upload and release charm
+        uses: canonical/charming-actions/upload-charm@2.7.0
+        with:
+          built-charm-path: ${{ needs.machine-build.outputs.charm-paths }}
+          credentials: ${{ secrets.CHARMCRAFT_AUTH }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          channel: 1.16/edge
+          tag-prefix: machine
