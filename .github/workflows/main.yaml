@@ -80,19 +80,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0
+
+      - name: Prepare charm paths
+        id: charm-paths
+        run: |
+          # Prepend path to each charm filename since artifacts download to path directory
+          PATHS="${{ needs.k8s-build.outputs.charm-paths }}"
+          UPDATED_PATHS=$(echo "$PATHS" | sed 's|^|k8s/|; s|,|,k8s/|g')
+          echo "paths=$UPDATED_PATHS" >> $GITHUB_OUTPUT
+
       - name: Download charm artifacts
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.k8s-build.outputs.artifacts-key }}
-      
-      - name: Upload and release charm
+          path: k8s
+
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
+
+      - name: Upload charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.7.0
         with:
-          built-charm-path: ${{ needs.k8s-build.outputs.charm-paths }}
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           channel: 1.16/edge
+          destructive-mode: false
+          charm-path: k8s
+          built-charm-path: ${{ steps.charm-paths.outputs.paths }}
+          github-tag: true
           tag-prefix: k8s
 
   machine-lint-report:
@@ -164,17 +181,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0
+
+      - name: Prepare charm paths
+        id: charm-paths
+        run: |
+          # Prepend path to each charm filename since artifacts download to path directory
+          PATHS="${{ needs.machine-build.outputs.charm-paths }}"
+          UPDATED_PATHS=$(echo "$PATHS" | sed 's|^|machine/|; s|,|,machine/|g')
+          echo "paths=$UPDATED_PATHS" >> $GITHUB_OUTPUT
+
       - name: Download charm artifacts
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.machine-build.outputs.artifacts-key }}
-      
-      - name: Upload and release charm
+          path: machine
+
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
+
+      - name: Upload charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.7.0
         with:
-          built-charm-path: ${{ needs.machine-build.outputs.charm-paths }}
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           channel: 1.16/edge
+          destructive-mode: false
+          charm-path: machine
+          built-charm-path: ${{ steps.charm-paths.outputs.paths }}
+          github-tag: true
           tag-prefix: machine
