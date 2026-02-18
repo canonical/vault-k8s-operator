@@ -74,7 +74,7 @@ jobs:
       - k8s-integration-test
       - k8s-build
       - k8s-build-kv-requirer
-    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-')  }}
+    if: ${{ (github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) && needs.k8s-build.outputs.charm-paths != '' }}
     permissions:
       contents: write
     steps:
@@ -167,7 +167,7 @@ jobs:
       - machine-integration-test
       - machine-build
       - machine-build-kv-requirer
-    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    if: ${{ (github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) && needs.machine-build.outputs.charm-paths != '' }}
     permissions:
       contents: write
     steps:
