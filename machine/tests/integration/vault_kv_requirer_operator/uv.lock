@@ -437,10 +437,6 @@ dependencies = [
     { name = "hvac" },
     { name = "ops" },
     { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-test = [
     { name = "pytest-interface-tester" },
 ]
 
@@ -449,7 +445,7 @@ requires-dist = [
     { name = "hvac" },
     { name = "ops" },
     { name = "pydantic", specifier = "==2.9.2" },
-    { name = "pytest-interface-tester", marker = "extra == 'test'" },
+    { name = "pytest-interface-tester" },
 ]
 
 [[package]]

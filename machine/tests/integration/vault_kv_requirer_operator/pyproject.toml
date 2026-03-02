@@ -7,9 +7,8 @@ dependencies = [
     "ops",
     "hvac",
     "pydantic==2.9.2",
+    "pytest-interface-tester",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest-interface-tester",
-]
+test = []

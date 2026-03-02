@@ -7,12 +7,11 @@ dependencies = [
     "hvac",
     "ops",
     "pydantic==2.10.4",
+    "pytest-interface-tester",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest-interface-tester",
-]
+test = []
 
 # Testing tools configuration
 [tool.coverage.run]
