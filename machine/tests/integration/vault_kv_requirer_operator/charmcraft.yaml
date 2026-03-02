@@ -22,7 +22,7 @@ storage:
 type: charm
 base: ubuntu@24.04
 platforms:
-  ubuntu@24.04:amd64:
+  amd64:
 
 parts:
   charm:
