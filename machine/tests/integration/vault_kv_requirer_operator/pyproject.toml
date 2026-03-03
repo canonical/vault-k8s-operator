@@ -9,3 +9,6 @@ dependencies = [
     "pydantic==2.9.2",
     "pytest-interface-tester",
 ]
+
+[project.optional-dependencies]
+test = []

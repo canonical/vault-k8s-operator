@@ -48,7 +48,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.31-strict/stable
+          channel: 1.35-strict/stable
           juju-channel: 3.6/stable
 
       - name: Install UV and Tox

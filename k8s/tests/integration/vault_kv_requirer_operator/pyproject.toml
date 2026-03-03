@@ -10,6 +10,9 @@ dependencies = [
     "pytest-interface-tester",
 ]
 
+[project.optional-dependencies]
+test = []
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
