@@ -104,7 +104,7 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      destination_channel: 1.18/edge
+      destination_channel: 1.19/edge
       path: k8s
       artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
@@ -185,7 +185,7 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      destination_channel: 1.18/edge
+      destination_channel: 1.19/edge
       path: machine
       artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
