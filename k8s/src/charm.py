@@ -773,6 +773,10 @@ class VaultCharm(CharmBase):
             )
 
     def _on_authorize_charm_action(self, event: ActionEvent) -> None:
+        """Handle the authorize-charm action.
+
+        Grants the charm access to interact with Vault
+        """
         if not self.unit.is_leader():
             event.fail("This action must be run on the leader unit.")
             return
