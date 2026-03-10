@@ -32,5 +32,6 @@ scale_machine
 create_backup
 restore_backup
 upgrade
+upgrade_1.16_to_1.19
 recover_when_quorum_is_lost
 ```
