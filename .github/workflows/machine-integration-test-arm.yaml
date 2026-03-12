@@ -1,0 +1,75 @@
+name: ARM Integration Tests (Machine)
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
+      vault-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the vault charm
+        required: true
+        type: string
+      kv-requirer-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the kv-requirer charm
+        required: true
+        type: string
+
+jobs:
+  integration-test-core-arm:
+    name: Integration Test Core (ARM)
+    runs-on: [self-hosted, linux, ARM64, medium, noble]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.6/stable
+          provider: lxd
+          lxd-channel: 5.21/stable
+
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Get Charm Path
+        id: charm-path
+        working-directory: ${{ inputs.path }}
+        run: |
+          VAULT_CHARM=$(ls built/*.charm | grep -v kv-requirer | head -1)
+          KV_CHARM=$(ls built/*kv-requirer*.charm | head -1)
+          echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
+          echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
+      - name: Run test_core integration test
+        working-directory: ${{ inputs.path }}
+        run: |
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
+            -k "test_core.py"
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: charmcraft-logs-test_core-machine-arm
+          path: /home/runner/.local/state/charmcraft/log/*.log
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: juju-crashdump-machine-test_core-arm
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
