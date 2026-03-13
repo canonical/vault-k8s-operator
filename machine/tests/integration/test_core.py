@@ -10,7 +10,6 @@ from config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-    SELF_SIGNED_CERTIFICATES_REVISION,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -42,7 +41,6 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool):
     await ops_test.model.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         channel="1/stable",
-        revision=SELF_SIGNED_CERTIFICATES_REVISION,
     )
 
     # When waiting for Vault to go to the blocked state, we may need an update

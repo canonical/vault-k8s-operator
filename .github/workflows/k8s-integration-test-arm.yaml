@@ -1,0 +1,93 @@
+name: ARM Integration tests (K8s)
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
+      vault-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the vault charm
+        required: true
+        type: string
+      kv-requirer-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the kv-requirer charm
+        required: true
+        type: string
+
+jobs:
+  integration-test-core-arm:
+    name: Integration Test Core (ARM)
+    runs-on: [self-hosted, linux, ARM64, medium, noble]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.35-strict/stable
+          juju-channel: 3.6/stable
+
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+      - name: Enable Metallb
+        run: |
+          /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.8"
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Fetch KV Requirer Charm
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.kv-requirer-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Get Charm Path
+        id: charm-path
+        working-directory: ${{ inputs.path }}
+        run: |
+          VAULT_CHARM=$(ls built/*.charm | grep -v kv-requirer | head -1)
+          KV_CHARM=$(ls built/*kv-requirer*.charm | head -1)
+          echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
+          echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
+      - name: Run test_core integration test
+        working-directory: ${{ inputs.path }}
+        run: |
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
+            -k "test_core.py"
+      - name: Dump pod details on failure
+        if: failure()
+        run: |
+          MODEL_NS=$(juju models --format json 2>/dev/null | python3 -c "import sys,json; models=json.load(sys.stdin).get('models',[]); print(models[-1]['short-name'] if models else 'unknown')" 2>/dev/null || echo "unknown")
+          echo "=== Namespaces ==="
+          /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get ns"
+          for ns in $(/usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get ns -o name" | grep -i test-core | sed 's|namespace/||'); do
+            echo "=== Pods in $ns ==="
+            /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get pods -n $ns -o wide"
+            echo "=== Events in $ns ==="
+            /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get events -n $ns --sort-by='.lastTimestamp'" | tail -50
+            for pod in $(/usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get pods -n $ns -o name" 2>/dev/null); do
+              echo "=== Describe $pod in $ns ==="
+              /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl describe $pod -n $ns"
+            done
+          done
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: charmcraft-logs-test_core-k8s-arm
+          path: /home/runner/.local/state/charmcraft/log/*.log
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: juju-crashdump-k8s-test_core-arm
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
