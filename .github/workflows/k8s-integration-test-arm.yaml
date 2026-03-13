@@ -63,6 +63,22 @@ jobs:
             --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
             --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
             -k "test_core.py"
+      - name: Dump pod details on failure
+        if: failure()
+        run: |
+          MODEL_NS=$(juju models --format json 2>/dev/null | python3 -c "import sys,json; models=json.load(sys.stdin).get('models',[]); print(models[-1]['short-name'] if models else 'unknown')" 2>/dev/null || echo "unknown")
+          echo "=== Namespaces ==="
+          /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get ns"
+          for ns in $(/usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get ns -o name" | grep -i test-core | sed 's|namespace/||'); do
+            echo "=== Pods in $ns ==="
+            /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get pods -n $ns -o wide"
+            echo "=== Events in $ns ==="
+            /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get events -n $ns --sort-by='.lastTimestamp'" | tail -50
+            for pod in $(/usr/bin/sg snap_microk8s -c "sudo microk8s kubectl get pods -n $ns -o name" 2>/dev/null); do
+              echo "=== Describe $pod in $ns ==="
+              /usr/bin/sg snap_microk8s -c "sudo microk8s kubectl describe $pod -n $ns"
+            done
+          done
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v7
