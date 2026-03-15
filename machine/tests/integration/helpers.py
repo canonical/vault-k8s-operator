@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import platform
 import time
 from base64 import b64decode
 from pathlib import Path
@@ -371,6 +372,13 @@ async def get_leader_unit_address(model: Model, app_name: str = APP_NAME) -> str
     return leader.public_address
 
 
+def _get_arch_constraint() -> str:
+    """Return arch constraint matching the current machine architecture."""
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+    arch = arch_map.get(platform.machine(), "amd64")
+    return f"arch={arch}"
+
+
 async def deploy_if_not_exists(
     model: Model,
     app_name: str,
@@ -381,6 +389,7 @@ async def deploy_if_not_exists(
     revision: int | None = None,
     series: str | None = None,
     trust: bool = False,
+    constraints: str | None = None,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -393,6 +402,7 @@ async def deploy_if_not_exists(
                 revision=revision,
                 series=series,
                 trust=trust,
+                constraints=constraints,
             )
         except JujuError as e:
             logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)

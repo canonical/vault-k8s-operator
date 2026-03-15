@@ -16,6 +16,7 @@ from config import (
     SHORT_TIMEOUT,
 )
 from helpers import (
+    _get_arch_constraint,
     authorize_charm_and_wait,
     crash_pod,
     deploy_vault,
@@ -200,6 +201,7 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
         application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         channel="1/stable",
         num_units=1,
+        constraints=_get_arch_constraint(),
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await ops_test.model.wait_for_idle(
