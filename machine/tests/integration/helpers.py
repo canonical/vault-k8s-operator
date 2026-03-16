@@ -341,6 +341,7 @@ async def deploy_vault(
         num_units=num_vaults,
         channel=channel,
         revision=revision,
+        constraints=_get_arch_constraint(),
     )
 
 

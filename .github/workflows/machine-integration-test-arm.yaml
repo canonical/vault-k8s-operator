@@ -19,7 +19,7 @@ on:
 jobs:
   integration-test-core-arm:
     name: Integration Test Core (ARM)
-    runs-on: [self-hosted, linux, ARM64, medium, noble]
+    runs-on: [self-hosted, linux, ARM64, large, noble]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
