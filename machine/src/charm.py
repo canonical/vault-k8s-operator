@@ -7,6 +7,7 @@
 
 import json
 import logging
+import platform
 import socket
 import subprocess
 from contextlib import contextmanager, suppress
@@ -106,7 +107,11 @@ VAULT_PKI_ROLE = "charm-pki"
 VAULT_PORT = 8200
 VAULT_SNAP_CHANNEL = "1.19/stable"
 VAULT_SNAP_NAME = "vault"
-VAULT_SNAP_REVISION = "2424"
+VAULT_SNAP_REVISIONS = {
+    "x86_64": "2424",
+    "aarch64": "2425",
+}
+VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS[platform.machine()]
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 
 
