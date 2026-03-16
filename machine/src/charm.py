@@ -109,7 +109,7 @@ VAULT_SNAP_CHANNEL = "1.19/stable"
 VAULT_SNAP_NAME = "vault"
 VAULT_SNAP_REVISIONS = {
     "x86_64": "2424",
-    "aarch64": "2461",
+    "aarch64": "2425",
 }
 VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS[platform.machine()]
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
