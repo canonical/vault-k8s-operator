@@ -10,7 +10,7 @@ To create a Vault Backup, ensure you:
 - Have [configured the settings for S3 storage](../reference/s3_storage.md).
 - Have saved your unseal keys and root-token in a secure location of your choice.
 
-**Note**: The unseal keys and root-token used at the time of creating the backup must be saved as they will be required to perform the restore action. Additionally the new Vault on which the backup will be restored must have the same key-shares and key-threshold configuration when initialized.
+**Note**: The unseal keys and root token used at the time of creating the backup must be saved as they will be required to perform the restore action.
 
 Once the prerequisites are in place you can run the `create-backup` action on the leader unit to create a backup:
 
