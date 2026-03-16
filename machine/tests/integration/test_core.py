@@ -13,6 +13,7 @@ from config import (
     SHORT_TIMEOUT,
 )
 from helpers import (
+    _get_arch,
     _get_arch_constraint,
     deploy_vault,
     get_ca_cert_file_location,
@@ -42,6 +43,7 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool):
     await ops_test.model.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         channel="1/stable",
+        revision={"amd64": 586, "arm64": 585}[_get_arch()],
         constraints=_get_arch_constraint(),
     )
 

@@ -16,6 +16,7 @@ from config import (
     SHORT_TIMEOUT,
 )
 from helpers import (
+    _get_arch,
     _get_arch_constraint,
     authorize_charm_and_wait,
     crash_pod,
@@ -201,6 +202,7 @@ async def test_given_vault_deployed_when_tls_access_relation_created_then_existi
         application_name=SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         channel="1/stable",
         num_units=1,
+        revision={"amd64": 586, "arm64": 585}[_get_arch()],
         constraints=_get_arch_constraint(),
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):

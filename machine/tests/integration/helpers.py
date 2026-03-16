@@ -373,11 +373,15 @@ async def get_leader_unit_address(model: Model, app_name: str = APP_NAME) -> str
     return leader.public_address
 
 
+def _get_arch() -> str:
+    """Return the Juju architecture name for the current machine."""
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+    return arch_map.get(platform.machine(), "amd64")
+
+
 def _get_arch_constraint() -> str:
     """Return arch constraint matching the current machine architecture."""
-    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
-    arch = arch_map.get(platform.machine(), "amd64")
-    return f"arch={arch}"
+    return f"arch={_get_arch()}"
 
 
 async def deploy_if_not_exists(
