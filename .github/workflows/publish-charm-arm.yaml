@@ -1,0 +1,73 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# This is a variant of the publish-charm workflow that runs on ARM self-hosted
+# runners. This is necessary because charming-actions/upload-charm pulls the OCI
+# resource image locally before uploading it to Charmhub. Running on an ARM
+# runner ensures the arm64 image variant is pulled, making the resource
+# compatible with the arm64 charm package.
+
+name: Publish Charm (ARM)
+
+on:
+  workflow_call:
+    inputs:
+      destination_channel:
+        description: CharmHub channel to publish to
+        required: true
+        type: string
+      artifacts-key:
+        description: Artifact key from build workflow output
+        required: true
+        type: string
+      charm-paths:
+        description: Charm paths output from build workflow
+        required: true
+        type: string
+      tag-prefix:
+        description: Tag prefix for GitHub releases (useful for monorepos with multiple charms)
+        required: false
+        type: string
+        default: ""
+      path:
+        description: Path to the charm directory (for monorepos)
+        required: false
+        default: .
+        type: string
+    secrets:
+      CHARMCRAFT_AUTH:
+        required: true
+
+jobs:
+  publish-charm:
+    name: Publish Charm (ARM)
+    runs-on: [self-hosted, linux, ARM64, medium, noble]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download charm artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifacts-key }}
+          path: ${{ inputs.path }}
+
+      - name: Upload charm to Charmhub
+        uses: canonical/charming-actions/upload-charm@2.7.0
+        with:
+          credentials: ${{ secrets.CHARMCRAFT_AUTH }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          channel: ${{ inputs.destination_channel }}
+          destructive-mode: false
+          charm-path: ${{ inputs.path }}
+          built-charm-path: ${{ inputs.charm-paths }}
+          tag-prefix: ${{ inputs.tag-prefix }}
+
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: charmcraft-logs-arm-${{ inputs.tag-prefix }}
+          path: /home/runner/.local/state/charmcraft/log/*.log
