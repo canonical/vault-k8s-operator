@@ -363,7 +363,10 @@ class VaultClient:
 
     def read_role_secret(self, name: str, id: str) -> dict:
         """Get definition of a secret tied to an AppRole."""
-        response = self._client.auth.approle.read_secret_id(name, id)
+        try:
+            response = self._client.auth.approle.read_secret_id(name, id)
+        except (VaultError, KeyError) as e:
+            raise VaultClientError(e) from e
         return response["data"]
 
     def enable_secrets_engine(self, backend_type: SecretsBackend, path: str) -> None:

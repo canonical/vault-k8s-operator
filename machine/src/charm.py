@@ -115,7 +115,7 @@ VAULT_SNAP_REVISIONS = {
     "x86_64": "2424",
     "aarch64": "2425",
 }
-VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS[platform.machine()]
+VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS.get(platform.machine(), "")
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 
 
@@ -308,14 +308,12 @@ class VaultOperatorCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        relations_without_credentials = (
-            self.vault_autounseal_provides.get_relations_without_credentials()
-        )
-        if relations_without_credentials:
+        outstanding_relations = autounseal_provider_manager.get_outstanding_requests()
+        if outstanding_relations:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in relations_without_credentials:
+        for relation in outstanding_relations:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
@@ -583,10 +581,13 @@ class VaultOperatorCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_vault_approle_secret():
+        if not (approle := self._get_vault_approle_secret()) or not vault.authenticate(approle):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
+            return
+        if not vault.is_active_or_standby():
+            event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
             return
         event.add_status(ActiveStatus())
 

@@ -69,6 +69,7 @@ from vault.juju_facade import (
     TransientJujuError,
 )
 from vault.vault_autounseal import (
+    AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX,
     AutounsealDetails,
     VaultAutounsealProvides,
     VaultAutounsealRequires,
@@ -1001,6 +1002,46 @@ class AutounsealProviderManager:
         )
         return key_name, role_id, secret_id
 
+    def get_outstanding_requests(self) -> list[Relation]:
+        """Get relations that need credentials created or re-created.
+
+        This includes relations that:
+        - Have no credentials issued yet (new requests)
+        - Have credentials in Juju that are stale in Vault (e.g. after a
+          Raft snapshot restore)
+
+        Returns:
+            A list of relations that need credentials to be (re-)created.
+        """
+        relations_without_credentials = self._provides.get_relations_without_credentials()
+        all_relations = self._juju_facade.get_active_relations(self._provides.relation_name)
+        relations_with_credentials = [
+            r for r in all_relations if r not in relations_without_credentials
+        ]
+        stale_relations = []
+        for relation in relations_with_credentials:
+            approle_name = Naming.autounseal_approle_name(relation.id)
+            label = f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation.id}"
+            try:
+                secret_id = self._juju_facade.get_latest_secret_content(
+                    label=label,
+                ).get("secret-id")
+            except NoSuchSecretError:
+                stale_relations.append(relation)
+                continue
+            if not secret_id:
+                stale_relations.append(relation)
+                continue
+            try:
+                self._client.read_role_secret(approle_name, secret_id)
+            except VaultClientError:
+                logger.warning(
+                    "Autounseal credentials for relation %s are stale, will re-create",
+                    relation.id,
+                )
+                stale_relations.append(relation)
+        return relations_without_credentials + stale_relations
+
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
 
@@ -1486,7 +1527,11 @@ class KVManager:
             return False
         if not role_secret_id:
             return False
-        role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        try:
+            role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        except VaultClientError:
+            logger.warning("Failed to read role secret for %s, will re-create credentials", role_name)
+            return False
         if egress_subnets == role_data["cidr_list"]:
             return True
         return False

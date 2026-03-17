@@ -411,12 +411,11 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_approle_auth_secret():
+        if not self._get_approle_auth_secret() or not self._authenticate_vault_client(vault):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        self._authenticate_vault_client(vault)
         if not vault.is_active_or_standby():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
             return
@@ -693,14 +692,12 @@ class VaultCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        relations_without_credentials = (
-            self.vault_autounseal_provides.get_relations_without_credentials()
-        )
-        if relations_without_credentials:
+        outstanding_relations = autounseal_provider_manager.get_outstanding_requests()
+        if outstanding_relations:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in relations_without_credentials:
+        for relation in outstanding_relations:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
