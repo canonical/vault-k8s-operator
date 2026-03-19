@@ -66,6 +66,17 @@ jobs:
       path: k8s
       artifact-suffix: k8s
 
+  k8s-build-arm:
+    needs:
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v1
+    secrets: inherit
+    with:
+      path: k8s
+      artifact-suffix: k8s
+
   k8s-build-kv-requirer:
     needs:
       - k8s-lint-report
@@ -85,6 +96,16 @@ jobs:
     with:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build.outputs.artifacts-key }}
+      kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
+
+  k8s-integration-test-arm:
+    needs:
+      - k8s-build-arm
+      - k8s-build-kv-requirer
+    uses: ./.github/workflows/k8s-integration-test-arm.yaml
+    with:
+      path: ./k8s/
+      vault-charm-artifact-name: ${{ needs.k8s-build-arm.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
 
   k8s-publish-charm:
@@ -108,6 +129,29 @@ jobs:
       path: k8s
       artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
+      tag-prefix: k8s
+
+  k8s-publish-charm-arm:
+    name: Publish K8s Charm (ARM)
+    needs:
+      - k8s-lint-report
+      - k8s-grafana-dashboard-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+      - k8s-integration-test-arm
+      - k8s-build-arm
+      - k8s-build-kv-requirer
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-charm-arm.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      destination_channel: 1.19/edge
+      path: k8s
+      artifacts-key: ${{ needs.k8s-build-arm.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build-arm.outputs.charm-paths }}
       tag-prefix: k8s
 
   machine-lint-report:
@@ -147,6 +191,17 @@ jobs:
       path: machine
       artifact-suffix: machine
 
+  machine-build-arm:
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v1
+    secrets: inherit
+    with:
+      path: machine
+      artifact-suffix: machine
+
   machine-build-kv-requirer:
     needs:
       - machine-lint-report
@@ -166,6 +221,16 @@ jobs:
     with:
       path: ./machine/
       vault-charm-artifact-name: ${{ needs.machine-build.outputs.artifacts-key }}
+      kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+
+  machine-integration-test-arm:
+    needs:
+      - machine-build-arm
+      - machine-build-kv-requirer
+    uses: ./.github/workflows/machine-integration-test-arm.yaml
+    with:
+      path: ./machine/
+      vault-charm-artifact-name: ${{ needs.machine-build-arm.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-machine-charm
 
   machine-publish-charm:
@@ -189,4 +254,27 @@ jobs:
       path: machine
       artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
+      tag-prefix: machine
+
+  machine-publish-charm-arm:
+    name: Publish Machine Charm (ARM)
+    needs:
+      - machine-lint-report
+      - machine-grafana-dashboard-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+      - machine-integration-test-arm
+      - machine-build-arm
+      - machine-build-kv-requirer
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-charm-arm.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      destination_channel: 1.19/edge
+      path: machine
+      artifacts-key: ${{ needs.machine-build-arm.outputs.artifacts-key }}
+      charm-paths: ${{ needs.machine-build-arm.outputs.charm-paths }}
       tag-prefix: machine

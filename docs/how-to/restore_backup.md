@@ -5,7 +5,6 @@
 To restore a Vault Backup, ensure you:
 
 - Have a Vault cluster deployed.
-- Have Vault initialized with the same key-shares and key-threshold as the one on which the backup was created
 - Your Vault deployment is in _active idle_ state.
 - Have access to S3 storage where your backup is saved.
 - Have [configured the settings for S3 storage](../reference/s3_storage.md).
@@ -17,7 +16,7 @@ Once the prerequisites are in place you can run the `restore-backup` action on t
 
 `juju run vault/leader restore-backup backup-id=<backup-id> `
 
-The restored Vault will be unsealed and it will require to be [unsealed](https://charmhub.io/vault-k8s/docs/h-unseal) an authorised using root token and unseal key that were in use at the time of creating the backup.
+The restored Vault will be sealed and it will require to be [unsealed](https://charmhub.io/vault-k8s/docs/h-unseal) and authorised using the root token and unseal keys that were in use at the time of creating the backup.
 
 ## List backups
 

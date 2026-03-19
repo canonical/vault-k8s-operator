@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 import asyncio
 import logging
+import platform
 import time
 from base64 import b64decode
 from pathlib import Path
@@ -308,6 +309,17 @@ async def authorize_charm(
     raise ActionFailedError("Failed to authorize charm")
 
 
+def _get_arch() -> str:
+    """Return the Juju architecture name for the current machine."""
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+    return arch_map.get(platform.machine(), "amd64")
+
+
+def _get_arch_constraint() -> str:
+    """Return arch constraint matching the current machine architecture."""
+    return f"arch={_get_arch()}"
+
+
 async def deploy_if_not_exists(
     model: Model,
     app_name: str,
@@ -319,6 +331,7 @@ async def deploy_if_not_exists(
     series: str | None = None,
     resources: Dict[str, str] | None = None,
     trust: bool = True,
+    constraints: str | None = None,
 ) -> None:
     if app_name not in model.applications:
         try:
@@ -332,6 +345,7 @@ async def deploy_if_not_exists(
                 series=series,
                 resources=resources if charm_path else None,
                 trust=trust,
+                constraints=constraints,
             )
         except JujuError as e:
             # This could be because the charm is already deployed, so we ignore it.
@@ -373,6 +387,7 @@ async def deploy_vault(
         resources=VAULT_RESOURCES,
         channel=channel,
         revision=revision,
+        constraints=_get_arch_constraint(),
     )
 
 
