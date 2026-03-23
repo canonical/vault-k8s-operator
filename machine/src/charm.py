@@ -12,6 +12,7 @@ import socket
 import subprocess
 from contextlib import contextmanager, suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 from charmlibs.interfaces.tls_certificates import (
@@ -81,6 +82,9 @@ CONFIG_TEMPLATE_NAME = "vault.hcl.j2"
 INGRESS_RELATION_NAME = "ingress"
 KV_RELATION_NAME = "vault-kv"
 KV_SECRET_PREFIX = "kv-creds-"
+LOGROTATE_PATH = Path("/etc/logrotate.d/rsyslog")
+LOGROTATE_DEFAULT_COUNT = 7
+LOGROTATE_DEFAULT_MAXSIZE = "10M"
 MACHINE_TLS_FILE_DIRECTORY_PATH = "/var/snap/vault/common/certs"
 METRICS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PEER_RELATION_NAME = "vault-peers"
@@ -595,6 +599,7 @@ class VaultOperatorCharm(CharmBase):
         """
         self._create_backend_directory()
         self._create_certs_directory()
+        self._generate_logrotate_conf()
         try:
             self._install_vault_snap()
         except snap.SnapError as e:
@@ -1061,6 +1066,42 @@ class VaultOperatorCharm(CharmBase):
 
     def _log_level_is_valid(self, log_level: str) -> bool:
         return log_level in ["trace", "debug", "info", "warn", "error"]
+
+    def _get_logrotate_frequency(self) -> str:
+        """Return the logrotate frequency config."""
+        logrotate_frequency = str(self.config.get("logrotate_frequency"))
+        if not self._logrotate_frequency_is_valid(str(logrotate_frequency)):
+            raise ValueError(f"Invalid logrotatde frequency: {logrotate_frequency}")
+        return logrotate_frequency
+
+    def _logrotate_frequency_is_valid(self, logrotate_frequency: str) -> bool:
+        return logrotate_frequency in ["daily", "weekly", "monthly"]
+
+    def _generate_logrotate_conf(self) -> None:
+        """Write the logrotate configuration file."""
+        logrotate_conf_template = """\
+        /var/log/syslog
+        {{
+            rotate {rotate_count}
+            {frequency}
+            maxsize {maxsize}
+            missingok
+            notifempty
+            compress
+            delaycompress
+            postrotate
+                /usr/lib/rsyslog/rsyslog-rotate
+            endscript
+        }}
+        """
+        logrotate_frequency = self._get_logrotate_frequency()
+        logrotate_conf = logrotate_conf_template.format(
+            rotate_count=LOGROTATE_DEFAULT_COUNT,
+            frequency=logrotate_frequency,
+            maxsize=LOGROTATE_DEFAULT_MAXSIZE,
+        )
+        logger.debug(logrotate_conf)
+        _ = LOGROTATE_PATH.write_text(logrotate_conf)
 
     def _get_vault_approle_secret(self) -> AppRole | None:
         """Get the approle details from the secret.

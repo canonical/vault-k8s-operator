@@ -64,7 +64,7 @@ requires:
     interface: tls-certificates
     limit: 1
     description: |
-      Communication between the vault units and from a client to Vault should 
+      Communication between the vault units and from a client to Vault should
       be done using the certificates provided by this integration.
     optional: true
   tls-certificates-pki:
@@ -124,7 +124,11 @@ config:
       default: "info"
       description: >-
         The log verbosity level. Supported values (in order of descending detail) are trace, debug, info, warn, and error.
-     # Access interface options
+    logrotate_frequency:
+      type: string
+      default: "daily"
+      description: "How often to rotate syslog (daily, weekly, monthly)"
+    # Access interface options
     access_sans_dns:
       type: string
       description: >-
@@ -287,8 +291,7 @@ config:
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
 
-
-# ACME engine options
+    # ACME engine options
     acme_ca_common_name:
       type: string
       description: >-
@@ -411,8 +414,8 @@ actions:
       secret-id:
         type: string
         description: >-
-          A secret id from juju that contains a token for Vault that can create 
-          new policies, such as the root token that is provided upon initializing 
+          A secret id from juju that contains a token for Vault that can create
+          new policies, such as the root token that is provided upon initializing
           Vault. Used to create the app role and policy for the charm. It is not
           stored by the charm.
     required: [secret-id]

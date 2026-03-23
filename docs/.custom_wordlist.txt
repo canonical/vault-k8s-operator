@@ -16,6 +16,7 @@ initialize
 initialized
 initializing
 integrations
+syslog
 kv
 lifecycle
 Loadbalancer
