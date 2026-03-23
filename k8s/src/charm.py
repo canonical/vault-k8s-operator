@@ -1103,7 +1103,14 @@ class VaultCharm(CharmBase):
 
     @property
     def _juju_proxy_environment(self) -> dict[str, str]:
-        """Extract proxy model environment variables."""
+        """Extract proxy model environment variables.
+
+        When any HTTP or HTTPS proxy is configured, `.svc.cluster.local` is
+        always included in NO_PROXY so that internal Kubernetes pod-to-pod
+        traffic (e.g. Vault raft cluster join requests using pod FQDNs) is
+        never routed through a corporate proxy.
+        """
+        cluster_local_domain = ".svc.cluster.local"
         env = {}
 
         if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
@@ -1112,6 +1119,14 @@ class VaultCharm(CharmBase):
             env["HTTPS_PROXY"] = https_proxy
         if no_proxy := get_env_var("JUJU_CHARM_NO_PROXY"):
             env["NO_PROXY"] = no_proxy
+
+        if env.get("HTTP_PROXY") or env.get("HTTPS_PROXY"):
+            no_proxy_value = env.get("NO_PROXY", "")
+            no_proxy_entries = [e.strip() for e in no_proxy_value.split(",") if e.strip()]
+            if cluster_local_domain not in no_proxy_entries:
+                no_proxy_entries.append(cluster_local_domain)
+            env["NO_PROXY"] = ",".join(no_proxy_entries)
+
         return env
 
     @property
