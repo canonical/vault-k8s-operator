@@ -66,10 +66,10 @@ from vault.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
+    SecretRemovedError,
     TransientJujuError,
 )
 from vault.vault_autounseal import (
-    AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX,
     AutounsealDetails,
     VaultAutounsealProvides,
     VaultAutounsealRequires,
@@ -1013,34 +1013,41 @@ class AutounsealProviderManager:
         Returns:
             A list of relations that need credentials to be (re-)created.
         """
-        relations_without_credentials = self._provides.get_relations_without_credentials()
+        outstanding: list[Relation] = []
         all_relations = self._juju_facade.get_active_relations(self._provides.relation_name)
-        relations_with_credentials = [
-            r for r in all_relations if r not in relations_without_credentials
-        ]
-        stale_relations = []
-        for relation in relations_with_credentials:
-            approle_name = Naming.autounseal_approle_name(relation.id)
-            label = f"{AUTOUNSEAL_CREDENTIALS_SECRET_LABEL_PREFIX}{relation.id}"
+        for relation in all_relations:
             try:
-                secret_id = self._juju_facade.get_latest_secret_content(
-                    label=label,
-                ).get("secret-id")
-            except NoSuchSecretError:
-                stale_relations.append(relation)
+                credentials_secret_id = self._juju_facade.get_app_relation_data(
+                    self._provides.relation_name, relation.id
+                ).get("credentials_secret_id")
+            except Exception:
+                outstanding.append(relation)
+                continue
+            if not credentials_secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                _, secret_id = self._juju_facade.get_secret_content_values(
+                    "role-id",
+                    "secret-id",
+                    id=credentials_secret_id,
+                )
+            except (NoSuchSecretError, SecretRemovedError):
+                outstanding.append(relation)
                 continue
             if not secret_id:
-                stale_relations.append(relation)
+                outstanding.append(relation)
                 continue
             try:
+                approle_name = Naming.autounseal_approle_name(relation.id)
                 self._client.read_role_secret(approle_name, secret_id)
             except VaultClientError:
                 logger.warning(
                     "Autounseal credentials for relation %s are stale, will re-create",
                     relation.id,
                 )
-                stale_relations.append(relation)
-        return relations_without_credentials + stale_relations
+                outstanding.append(relation)
+        return outstanding
 
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
