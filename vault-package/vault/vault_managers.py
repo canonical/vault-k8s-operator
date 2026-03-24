@@ -1020,7 +1020,7 @@ class AutounsealProviderManager:
                 credentials_secret_id = self._juju_facade.get_app_relation_data(
                     self._provides.relation_name, relation.id
                 ).get("credentials_secret_id")
-            except Exception:
+            except FacadeError:
                 outstanding.append(relation)
                 continue
             if not credentials_secret_id:

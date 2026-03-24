@@ -345,32 +345,6 @@ class VaultAutounsealProvides(Object):
             },
         )
 
-    def get_relations_without_credentials(self, relation_id: int | None = None) -> List[Relation]:
-        """Get the relations which do not have credentials for auto-unseal."""
-        requirer_relations = self.juju_facade.get_active_relations(self.relation_name, relation_id)
-        return [
-            relation
-            for relation in requirer_relations
-            if not self._credentials_issued_for_relation(relation_id=relation.id)
-        ]
-
-    def _credentials_issued_for_relation(self, relation_id: int) -> bool:
-        try:
-            if not (
-                credentials_secret_id := self.juju_facade.get_app_relation_data(
-                    self.relation_name, relation_id
-                ).get("credentials_secret_id")
-            ):
-                return False
-            role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id",
-                "secret-id",
-                id=credentials_secret_id,
-            )
-            return bool(role_id and secret_id)
-        except (NoSuchSecretError, SecretRemovedError):
-            return False
-
 
 def _is_provider_data_valid(data: RelationDataContent) -> bool:
     """Use the pydantic schema to validate the data."""
