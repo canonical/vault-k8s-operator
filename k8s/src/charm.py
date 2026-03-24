@@ -411,7 +411,7 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_approle_auth_secret() or not self._authenticate_vault_client(vault):
+        if not (approle := self._get_approle_auth_secret()) or not vault.authenticate(approle):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
@@ -1049,7 +1049,7 @@ class VaultCharm(CharmBase):
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL, refresh=True
             )
         except NoSuchSecretError:
             logger.warning("Approle secret not yet created")

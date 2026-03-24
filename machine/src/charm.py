@@ -1114,7 +1114,7 @@ class VaultOperatorCharm(CharmBase):
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL, refresh=True
             )
         except NoSuchSecretError:
             logger.warning("Approle secret not yet created")
