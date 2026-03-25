@@ -103,6 +103,15 @@ class VaultClientError(Exception):
     """Base class for exceptions raised by the Vault client."""
 
 
+class VaultAuthenticationError(VaultClientError):
+    """Raised when Vault explicitly rejects authentication credentials.
+
+    This is raised for definitive authentication failures (e.g. invalid
+    credentials, locked-out users) as opposed to transient errors (e.g.
+    connection errors, Vault being sealed or unavailable).
+    """
+
+
 class PKICertificateError(VaultClientError):
     """Raised when the PKI engine fails to sign a certificate request."""
 
@@ -117,12 +126,21 @@ class VaultClient:
         """Find and use the token related with the given auth method.
 
         Returns:
-            bool: True if the authentication was successful and the token was accepted by vault.
+            bool: True if the authentication was successful and the token was
+                accepted by vault. False if the authentication failed due to a
+                transient error (e.g. connection error, Vault unavailable).
+
+        Raises:
+            VaultAuthenticationError: If Vault explicitly rejected the credentials
+                (e.g. invalid credentials, user lockout).
         """
         try:
             auth_details.login(self._client)
             self._client.auth.token.lookup_self()
-        except (VaultError, ConnectionError, Forbidden) as e:
+        except (Forbidden, InvalidRequest) as e:
+            logger.warning("Vault rejected authentication credentials: %s", e)
+            raise VaultAuthenticationError(str(e)) from e
+        except (VaultError, ConnectionError) as e:
             logger.warning("Failed login to Vault: %s", e)
             return False
         return True

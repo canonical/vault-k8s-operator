@@ -45,6 +45,7 @@ from vault.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
@@ -411,7 +412,16 @@ class VaultCharm(CharmBase):
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not (approle := self._get_approle_auth_secret()) or not vault.authenticate(approle):
+        if not (approle := self._get_approle_auth_secret()):
+            event.add_status(
+                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
+            )
+            return
+        try:
+            if not vault.authenticate(approle):
+                event.add_status(WaitingStatus("Waiting for Vault to become available"))
+                return
+        except VaultAuthenticationError:
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
@@ -795,7 +805,14 @@ class VaultCharm(CharmBase):
             )
             return
         vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
-        if not vault.authenticate(Token(token)):
+        try:
+            if not vault.authenticate(Token(token)):
+                logger.error("The token provided is not valid when authorizing charm.")
+                event.fail(
+                    "The token provided is not valid. Please use a Vault token with the appropriate permissions."
+                )
+                return
+        except VaultAuthenticationError:
             logger.error("The token provided is not valid when authorizing charm.")
             event.fail(
                 "The token provided is not valid. Please use a Vault token with the appropriate permissions."
@@ -1094,7 +1111,15 @@ class VaultCharm(CharmBase):
         """
         if not (approle := self._get_approle_auth_secret()):
             return False
-        if not vault.authenticate(approle):
+        try:
+            if not vault.authenticate(approle):
+                return False
+        except VaultAuthenticationError:
+            logger.warning(
+                "Vault rejected the charm's credentials. "
+                "Removing stored credentials to prevent lockout."
+            )
+            self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             return False
         return True
 
