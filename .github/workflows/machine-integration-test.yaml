@@ -92,6 +92,67 @@ jobs:
           sleep 30 # For some reason, the Juju controller needs some time to make itself available after restricting the storage buckets address
           sudo lxc storage bucket create default vault-integration-test
           sudo lxc storage bucket key create default vault-integration-test vault-integration-test --role admin --access-key vaultintegrationtest --secret-key vaultintegrationtest
+      - name: Install MicroCeph and configure RGW for backup tests
+        if: ${{ matrix.suite == 'test_backup_microceph.py' }}
+        run: |
+          echo "Installing MicroCeph snap..."
+          sudo snap install microceph
+          sudo snap refresh --hold microceph
+
+          echo "Bootstrapping MicroCeph cluster..."
+          sudo microceph cluster bootstrap
+
+          echo "Adding loop-file backed OSDs..."
+          sudo microceph disk add loop,4G,3
+
+          echo "Waiting for MicroCeph cluster to be healthy..."
+          sudo microceph.ceph status
+          for i in $(seq 1 30); do
+            health=$(sudo microceph.ceph health --format json | jq -r '.status')
+            if [ "$health" = "HEALTH_OK" ]; then
+              echo "Cluster is healthy."
+              break
+            fi
+            echo "Waiting for cluster health... (attempt $i/30, current: $health)"
+            sleep 10
+          done
+
+          echo "Enabling RGW (S3-compatible gateway) on port 80..."
+          sudo microceph enable rgw --port 80
+
+          echo "Waiting for RGW to be ready..."
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:80 | grep -q "200\|403"; then
+              echo "RGW is responding."
+              break
+            fi
+            echo "Waiting for RGW... (attempt $i/30)"
+            sleep 5
+          done
+
+          echo "Creating S3 user for Vault integration tests..."
+          sudo microceph.radosgw-admin user create \
+            --uid=vaultmicrocephtest \
+            --display-name="Vault MicroCeph Test" \
+            --access-key=vaultmicrocephtest \
+            --secret-key=vaultmicrocephtest
+
+          echo "Creating S3 bucket..."
+          sudo apt-get install -y python3-boto3
+          python3 -c "
+          import boto3
+          s3 = boto3.client(
+              's3',
+              endpoint_url='http://127.0.0.1:80',
+              aws_access_key_id='vaultmicrocephtest',
+              aws_secret_access_key='vaultmicrocephtest',
+          )
+          s3.create_bucket(Bucket='vault-microceph-test')
+          print('Bucket vault-microceph-test created successfully.')
+          "
+
+          echo "MicroCeph RGW setup complete."
+          sudo microceph status
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
         run: |

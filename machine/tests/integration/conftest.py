@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from config import APP_NAME
+from config import APP_NAME, MICROCEPH_RGW_PORT
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -75,3 +75,9 @@ async def host_ip(ops_test: OpsTest) -> str:
     if return_code != 0:
         raise RuntimeError(f"Failed to get host IP: {stderr}")
     return stdout.strip()
+
+
+@pytest.fixture(scope="module")
+async def microceph_endpoint(host_ip: str) -> str:
+    """Get the MicroCeph RGW S3-compatible endpoint reachable from the LXD units."""
+    return f"http://{host_ip}:{MICROCEPH_RGW_PORT}"
