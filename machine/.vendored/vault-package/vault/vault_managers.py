@@ -79,6 +79,7 @@ from vault.vault_client import (
     PKICertificateError,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
@@ -1104,7 +1105,11 @@ class AutounsealRequirerManager:
             existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
-        if not existing_token or not external_vault.authenticate(Token(existing_token)):
+        try:
+            token_valid = existing_token and external_vault.authenticate(Token(existing_token))
+        except VaultAuthenticationError:
+            token_valid = False
+        if not token_valid:
             external_vault.authenticate(
                 AppRole(autounseal_details.role_id, autounseal_details.secret_id)
             )
