@@ -92,6 +92,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -156,6 +157,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -232,6 +234,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -317,6 +320,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -402,6 +406,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -477,6 +482,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -573,6 +579,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -670,6 +677,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -906,6 +914,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)

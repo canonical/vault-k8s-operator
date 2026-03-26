@@ -674,8 +674,7 @@ class VaultOperatorCharm(CharmBase):
                     and unauthenticated_vault.is_seal_type_transit()
                 ):
                     logger.info(
-                        "Vault is sealed with transit seal type, "
-                        "restarting to trigger auto-unseal"
+                        "Vault is sealed with transit seal type, restarting to trigger auto-unseal"
                     )
                     self._restart_vault_service()
                     return
