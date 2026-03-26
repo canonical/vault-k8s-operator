@@ -407,6 +407,9 @@ class VaultCharm(CharmBase):
                 if vault.needs_migration():
                     event.add_status(BlockedStatus("Please migrate Vault"))
                     return
+                if vault.is_seal_type_transit():
+                    event.add_status(WaitingStatus("Waiting for transit auto-unseal"))
+                    return
                 event.add_status(BlockedStatus("Please unseal Vault"))
                 return
         except VaultClientError:
@@ -478,6 +481,16 @@ class VaultCharm(CharmBase):
             return
 
         if not vault.is_available_initialized_and_unsealed():
+            try:
+                if vault.is_api_available() and vault.is_initialized() and vault.is_sealed():
+                    if vault.is_seal_type_transit():
+                        logger.info(
+                            "Vault is sealed with transit seal type, "
+                            "restarting to trigger auto-unseal"
+                        )
+                        self._container.restart(self._service_name)
+            except VaultClientError:
+                pass
             return
         if not self._authenticate_vault_client(vault):
             return

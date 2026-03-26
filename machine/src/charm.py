@@ -598,6 +598,9 @@ class VaultOperatorCharm(CharmBase):
                 if vault.needs_migration():
                     event.add_status(BlockedStatus("Please migrate Vault"))
                     return
+                if vault.is_seal_type_transit():
+                    event.add_status(WaitingStatus("Waiting for transit auto-unseal"))
+                    return
                 event.add_status(BlockedStatus("Please unseal Vault"))
                 return
         except VaultClientError:
@@ -660,6 +663,24 @@ class VaultOperatorCharm(CharmBase):
                 logger.error("Failed to start Vault service: %s", e)
                 return
         self._set_peer_relation_node_api_address()
+
+        unauthenticated_vault = self._get_vault_client()
+        if unauthenticated_vault:
+            try:
+                if (
+                    unauthenticated_vault.is_api_available()
+                    and unauthenticated_vault.is_initialized()
+                    and unauthenticated_vault.is_sealed()
+                    and unauthenticated_vault.is_seal_type_transit()
+                ):
+                    logger.info(
+                        "Vault is sealed with transit seal type, "
+                        "restarting to trigger auto-unseal"
+                    )
+                    self._restart_vault_service()
+                    return
+            except VaultClientError:
+                pass
 
         vault = self._get_authenticated_vault_client()
         if not vault:
