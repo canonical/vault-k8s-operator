@@ -248,6 +248,12 @@ class VaultCharm(CharmBase):
             self.vault_kv.on.vault_kv_client_detached, self._on_vault_kv_client_detached
         )
 
+    @property
+    def _resource_config_is_set(self) -> bool:
+        """Return whether any resource limit/request config options are set."""
+        resource_config_keys = ("cpu-limit", "memory-limit", "cpu-request", "memory-request")
+        return any(self.juju_facade.get_string_config(key) for key in resource_config_keys)
+
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {
             k: v
@@ -276,7 +282,7 @@ class VaultCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
-        if not self.resources_patch.is_ready():
+        if self._resource_config_is_set and not self.resources_patch.is_ready():
             if isinstance(self.resources_patch.get_status(), WaitingStatus):
                 event.add_status(
                     WaitingStatus(
@@ -442,7 +448,7 @@ class VaultCharm(CharmBase):
         """
         if not self._container.can_connect():
             return
-        if not self.resources_patch.is_ready():
+        if self._resource_config_is_set and not self.resources_patch.is_ready():
             return
         if not self.juju_facade.relation_exists(PEER_RELATION_NAME):
             return
