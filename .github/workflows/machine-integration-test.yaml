@@ -107,6 +107,7 @@ jobs:
 
           echo "Waiting for MicroCeph cluster to be healthy..."
           sudo microceph.ceph status
+          health=""
           for i in $(seq 1 30); do
             health=$(sudo microceph.ceph health --format json | jq -r '.status')
             if [ "$health" = "HEALTH_OK" ]; then
@@ -116,19 +117,29 @@ jobs:
             echo "Waiting for cluster health... (attempt $i/30, current: $health)"
             sleep 10
           done
+          if [ "$health" != "HEALTH_OK" ]; then
+            echo "ERROR: Cluster did not become healthy after 300 seconds"
+            exit 1
+          fi
 
-          echo "Enabling RGW (S3-compatible gateway) on port 80..."
-          sudo microceph enable rgw --port 80
+          echo "Enabling RGW (S3-compatible gateway) on port 7480..."
+          sudo microceph enable rgw --port 7480
 
           echo "Waiting for RGW to be ready..."
+          rgw_ready=false
           for i in $(seq 1 30); do
-            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:80 | grep -q "200\|403"; then
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7480 | grep -q "200\|403"; then
               echo "RGW is responding."
+              rgw_ready=true
               break
             fi
             echo "Waiting for RGW... (attempt $i/30)"
             sleep 5
           done
+          if [ "$rgw_ready" != "true" ]; then
+            echo "ERROR: RGW did not become ready after 150 seconds"
+            exit 1
+          fi
 
           echo "Creating S3 user for Vault integration tests..."
           sudo microceph.radosgw-admin user create \
@@ -138,18 +149,13 @@ jobs:
             --secret-key=vaultmicrocephtest
 
           echo "Creating S3 bucket..."
-          sudo apt-get install -y python3-boto3
-          python3 -c "
-          import boto3
-          s3 = boto3.client(
-              's3',
-              endpoint_url='http://127.0.0.1:80',
-              aws_access_key_id='vaultmicrocephtest',
-              aws_secret_access_key='vaultmicrocephtest',
-          )
-          s3.create_bucket(Bucket='vault-microceph-test')
-          print('Bucket vault-microceph-test created successfully.')
-          "
+          sudo apt-get install -y -qq s3cmd > /dev/null
+          s3cmd --access_key=vaultmicrocephtest \
+            --secret_key=vaultmicrocephtest \
+            --host=127.0.0.1:7480 \
+            --host-bucket="127.0.0.1:7480/%(bucket)" \
+            --no-ssl \
+            mb s3://vault-microceph-test
 
           echo "MicroCeph RGW setup complete."
           sudo microceph status

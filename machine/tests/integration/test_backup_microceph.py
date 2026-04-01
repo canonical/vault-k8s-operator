@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from collections import namedtuple
 from pathlib import Path
@@ -16,16 +15,14 @@ from config import (
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
     S3_INTEGRATOR_REVISION,
-    SHORT_TIMEOUT,
 )
 from helpers import (
+    configure_s3_and_create_backup,
     deploy_vault,
-    get_leader_unit,
-    get_vault_client,
     get_vault_token_and_unseal_key,
-    has_relation,
     initialize_unseal_authorize_vault,
-    run_action_on_leader,
+    list_backups,
+    restore_backup,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,58 +78,23 @@ async def test_given_vault_integrated_with_s3_microceph_when_create_backup_then_
     deploy: VaultInit,
     microceph_endpoint: str,
 ):
-    assert ops_test.model
-
-    await run_action_on_leader(
+    await configure_s3_and_create_backup(
         ops_test,
-        S3_INTEGRATOR_APPLICATION_NAME,
-        "sync-s3-credentials",
-        access_key=MICROCEPH_S3_ACCESS_KEY,
-        secret_key=MICROCEPH_S3_SECRET_KEY,
+        root_token=deploy.root_token,
+        s3_endpoint=microceph_endpoint,
+        s3_access_key=MICROCEPH_S3_ACCESS_KEY,
+        s3_secret_key=MICROCEPH_S3_SECRET_KEY,
+        s3_bucket=MICROCEPH_S3_BUCKET,
+        s3_region="local",
+        kv_secret_value="microceph-value",
     )
-
-    s3_config = {
-        "endpoint": microceph_endpoint,
-        "bucket": MICROCEPH_S3_BUCKET,
-        "region": "default",
-    }
-    s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
-    await s3_integrator.set_config(s3_config)
-    await ops_test.model.wait_for_idle(
-        apps=[S3_INTEGRATOR_APPLICATION_NAME],
-        status="active",
-        timeout=SHORT_TIMEOUT,
-    )
-    vault_app = ops_test.model.applications[APP_NAME]
-    if not has_relation(vault_app, "s3-parameters"):
-        await ops_test.model.integrate(
-            relation1=APP_NAME,
-            relation2=S3_INTEGRATOR_APPLICATION_NAME,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            timeout=SHORT_TIMEOUT,
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        )
-    # Put a secret in the KV store so we have something to back up.
-    leader = await get_leader_unit(ops_test.model, APP_NAME)
-    vault = await get_vault_client(ops_test, leader, deploy.root_token)
-    vault.enable_kv_engine(path="kv/", description="Test KV Engine")
-    vault.write("kv/secret", {"key": "microceph-value"})
-
-    await run_action_on_leader(ops_test, APP_NAME, "create-backup", skip_verify=True)
 
 
 @pytest.mark.abort_on_fail
 async def test_given_vault_integrated_with_s3_microceph_when_list_backups_then_action_succeeds(
     ops_test: OpsTest, deploy: VaultInit
 ):
-    assert ops_test.model
-
-    results = await run_action_on_leader(ops_test, APP_NAME, "list-backups", skip_verify=True)
-    assert results["backup-ids"] is not None
-    assert len(json.loads(results["backup-ids"])) > 0
+    await list_backups(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -140,28 +102,8 @@ async def test_given_vault_integrated_with_s3_microceph_when_restore_backup_then
     ops_test: OpsTest,
     deploy: VaultInit,
 ):
-    assert ops_test.model
-
-    list_backups_output = await run_action_on_leader(
-        ops_test, APP_NAME, "list-backups", skip_verify=True
+    await restore_backup(
+        ops_test,
+        root_token=deploy.root_token,
+        kv_secret_value="microceph-value",
     )
-
-    # Get the most recent backup ID
-    backup_id = json.loads(list_backups_output["backup-ids"])[-1]
-
-    leader = await get_leader_unit(ops_test.model, APP_NAME)
-    vault = await get_vault_client(ops_test, leader, deploy.root_token)
-    # Verify the secret is there
-    assert vault.read("kv/secret") == {"key": "microceph-value"}
-    vault.delete("kv/secret")
-
-    # Ensure the secret is deleted before restoring
-    assert vault.read("kv/secret") is None
-
-    backup_action_output = await run_action_on_leader(
-        ops_test, APP_NAME, "restore-backup", skip_verify=True, backup_id=backup_id
-    )
-
-    # Check that the secret is restored
-    assert vault.read("kv/secret") == {"key": "microceph-value"}
-    assert backup_action_output["restored"] == backup_id
