@@ -13,6 +13,11 @@ INGRESS_RELATION_NAME = "ingress"
 MINIO_APPLICATION_NAME = "minio"
 MINIO_S3_ACCESS_KEY = "vaultintegrationtest"
 MINIO_S3_SECRET_KEY = "vaultintegrationtest"
+
+MICROCEPH_S3_ACCESS_KEY = "vaultmicrocephtest"
+MICROCEPH_S3_SECRET_KEY = "vaultmicrocephtest"
+MICROCEPH_S3_BUCKET = "vault-microceph-test"
+MICROCEPH_RGW_PORT = 7480
 NUM_VAULT_UNITS = 3
 PEER_RELATION_NAME = "vault-peers"
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
