@@ -40,6 +40,7 @@ class VaultCharmFixturesBase:
             self.mock_vault_autounseal_provider_manager = stack.enter_context(
                 patch("charm.AutounsealProviderManager", autospec=AutounsealProviderManager)
             ).return_value
+            self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = []
             self.mock_vault_autounseal_requirer_manager = stack.enter_context(
                 patch("charm.AutounsealRequirerManager", autospec=AutounsealRequirerManager)
             ).return_value
@@ -71,9 +72,6 @@ class VaultCharmFixturesBase:
             )
             self.mock_pki_provider_set_relation_certificate = stack.enter_context(
                 patch("charm.TLSCertificatesProvidesV4.set_relation_certificate")
-            )
-            self.mock_autounseal_provides_get_relations_without_credentials = stack.enter_context(
-                patch("charm.VaultAutounsealProvides.get_relations_without_credentials")
             )
             self.mock_autounseal_provides_set_data = stack.enter_context(
                 patch("charm.VaultAutounsealProvides.set_autounseal_data")

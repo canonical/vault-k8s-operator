@@ -45,6 +45,7 @@ from vault.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
@@ -406,17 +407,28 @@ class VaultCharm(CharmBase):
                 if vault.needs_migration():
                     event.add_status(BlockedStatus("Please migrate Vault"))
                     return
+                if vault.is_seal_type_transit():
+                    event.add_status(WaitingStatus("Waiting for transit auto-unseal"))
+                    return
                 event.add_status(BlockedStatus("Please unseal Vault"))
                 return
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_approle_auth_secret():
+        if not (approle := self._get_approle_auth_secret()):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        self._authenticate_vault_client(vault)
+        try:
+            if not vault.authenticate(approle):
+                event.add_status(WaitingStatus("Waiting for Vault to become available"))
+                return
+        except VaultAuthenticationError:
+            event.add_status(
+                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
+            )
+            return
         if not vault.is_active_or_standby():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
             return
@@ -469,6 +481,16 @@ class VaultCharm(CharmBase):
             return
 
         if not vault.is_available_initialized_and_unsealed():
+            try:
+                if vault.is_api_available() and vault.is_initialized() and vault.is_sealed():
+                    if vault.is_seal_type_transit():
+                        logger.info(
+                            "Vault is sealed with transit seal type, "
+                            "restarting to trigger auto-unseal"
+                        )
+                        self._container.restart(self._service_name)
+            except VaultClientError:
+                pass
             return
         if not self._authenticate_vault_client(vault):
             return
@@ -693,14 +715,12 @@ class VaultCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        relations_without_credentials = (
-            self.vault_autounseal_provides.get_relations_without_credentials()
-        )
-        if relations_without_credentials:
+        outstanding_relations = autounseal_provider_manager.get_outstanding_requests()
+        if outstanding_relations:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in relations_without_credentials:
+        for relation in outstanding_relations:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
@@ -798,7 +818,14 @@ class VaultCharm(CharmBase):
             )
             return
         vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
-        if not vault.authenticate(Token(token)):
+        try:
+            if not vault.authenticate(Token(token)):
+                logger.error("The token provided is not valid when authorizing charm.")
+                event.fail(
+                    "The token provided is not valid. Please use a Vault token with the appropriate permissions."
+                )
+                return
+        except VaultAuthenticationError:
             logger.error("The token provided is not valid when authorizing charm.")
             event.fail(
                 "The token provided is not valid. Please use a Vault token with the appropriate permissions."
@@ -1052,7 +1079,7 @@ class VaultCharm(CharmBase):
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL, refresh=True
             )
         except NoSuchSecretError:
             logger.warning("Approle secret not yet created")
@@ -1097,7 +1124,15 @@ class VaultCharm(CharmBase):
         """
         if not (approle := self._get_approle_auth_secret()):
             return False
-        if not vault.authenticate(approle):
+        try:
+            if not vault.authenticate(approle):
+                return False
+        except VaultAuthenticationError:
+            logger.warning(
+                "Vault rejected the charm's credentials. "
+                "Removing stored credentials to prevent lockout."
+            )
+            self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             return False
         return True
 

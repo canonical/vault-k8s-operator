@@ -66,6 +66,7 @@ from vault.juju_facade import (
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
+    SecretRemovedError,
     TransientJujuError,
 )
 from vault.vault_autounseal import (
@@ -78,6 +79,7 @@ from vault.vault_client import (
     PKICertificateError,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
@@ -1001,6 +1003,53 @@ class AutounsealProviderManager:
         )
         return key_name, role_id, secret_id
 
+    def get_outstanding_requests(self) -> list[Relation]:
+        """Get relations that need credentials created or re-created.
+
+        This includes relations that:
+        - Have no credentials issued yet (new requests)
+        - Have credentials in Juju that are stale in Vault (e.g. after a
+          Raft snapshot restore)
+
+        Returns:
+            A list of relations that need credentials to be (re-)created.
+        """
+        outstanding: list[Relation] = []
+        all_relations = self._juju_facade.get_active_relations(self._provides.relation_name)
+        for relation in all_relations:
+            try:
+                credentials_secret_id = self._juju_facade.get_app_relation_data(
+                    self._provides.relation_name, relation.id
+                ).get("credentials_secret_id")
+            except FacadeError:
+                outstanding.append(relation)
+                continue
+            if not credentials_secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                _, secret_id = self._juju_facade.get_secret_content_values(
+                    "role-id",
+                    "secret-id",
+                    id=credentials_secret_id,
+                )
+            except (NoSuchSecretError, SecretRemovedError):
+                outstanding.append(relation)
+                continue
+            if not secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                approle_name = Naming.autounseal_approle_name(relation.id)
+                self._client.read_role_secret(approle_name, secret_id)
+            except VaultClientError:
+                logger.warning(
+                    "Autounseal credentials for relation %s are stale, will re-create",
+                    relation.id,
+                )
+                outstanding.append(relation)
+        return outstanding
+
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
 
@@ -1056,7 +1105,11 @@ class AutounsealRequirerManager:
             existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
-        if not existing_token or not external_vault.authenticate(Token(existing_token)):
+        try:
+            token_valid = existing_token and external_vault.authenticate(Token(existing_token))
+        except VaultAuthenticationError:
+            token_valid = False
+        if not token_valid:
             external_vault.authenticate(
                 AppRole(autounseal_details.role_id, autounseal_details.secret_id)
             )
@@ -1486,7 +1539,11 @@ class KVManager:
             return False
         if not role_secret_id:
             return False
-        role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        try:
+            role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        except VaultClientError:
+            logger.warning("Failed to read role secret for %s, will re-create credentials", role_name)
+            return False
         if egress_subnets == role_data["cidr_list"]:
             return True
         return False

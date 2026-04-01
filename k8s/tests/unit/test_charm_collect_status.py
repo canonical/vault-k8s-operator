@@ -636,6 +636,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
                 "is_initialized.return_value": True,
                 "is_sealed.return_value": True,
                 "needs_migration.return_value": False,
+                "is_seal_type_transit.return_value": False,
             },
         )
         container = testing.Container(
@@ -653,6 +654,41 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
         assert state_out.unit_status == BlockedStatus("Please unseal Vault")
+
+    def test_given_vault_is_sealed_with_transit_seal_when_collect_unit_status_then_status_is_waiting(
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": True,
+                "needs_migration.return_value": False,
+                "is_seal_type_transit.return_value": True,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == WaitingStatus("Waiting for transit auto-unseal")
 
     def test_given_vault_client_error_when_collect_unit_status_then_status_is_maintenance(self):
         self.mock_tls.configure_mock(

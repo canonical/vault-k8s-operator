@@ -184,7 +184,7 @@ class JujuFacade:
         return self._get_secret_content(label=label, id=id, refresh=True)
 
     def get_secret_content_values(
-        self, *keys: str, label: str | None = None, id: str | None = None
+        self, *keys: str, label: str | None = None, id: str | None = None, refresh: bool = False
     ) -> tuple[str | None, ...]:
         """Get secret content values by keys.
 
@@ -192,6 +192,7 @@ class JujuFacade:
             keys: Keys of the requested values
             label: The secret label
             id: The secret id
+            refresh: If True, fetch the latest revision of the secret
 
         Returns:
             tuple[str | None, ...]: The secret content values,
@@ -202,7 +203,7 @@ class JujuFacade:
             NoSuchSecretError
             SecretRemovedError
         """
-        secret_content = self._get_secret_content(label=label, id=id)
+        secret_content = self._get_secret_content(label=label, id=id, refresh=refresh)
         for key in keys:
             if key not in secret_content:
                 logger.warning("Secret %s does not have key %s", label or id, key)
@@ -272,6 +273,7 @@ class JujuFacade:
                 return secret
             logger.info("Setting secret content to %s", label or secret.id)
             secret.set_content(content)
+            secret.get_content(refresh=True)
             return secret
         except ModelError as e:
             raise TransientJujuError(e) from e
