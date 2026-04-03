@@ -48,3 +48,4 @@ jobs:
           destination-channel: 1.17/${{ env.promote-to }}
           origin-channel: 1.17/${{ env.promote-from }}
           charmcraft-channel: latest/stable
+          tag-prefix: ${{ github.event.inputs.charm }}
