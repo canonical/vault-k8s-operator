@@ -45,6 +45,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
             secrets=[ca_certificate_secret],
             leader=True,
+            config={"cpu-limit": "1"},
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
@@ -84,10 +85,37 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
             relations=[peer_relation],
             secrets=[ca_certificate_secret],
             leader=True,
+            config={"cpu-limit": "1"},
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
         assert state_out.unit_status == BlockedStatus(
+            "Failed to apply resources patch. Please monitor the logs for errors."
+        )
+
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.is_ready",
+        return_value=False,
+    )
+    @patch(
+        "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch.get_status",
+        return_value=BlockedStatus("Some blocked status message"),
+    )
+    def test_given_resources_patch_not_ready_and_no_resource_config_when_collect_unit_status_then_status_is_not_blocked(
+        self,
+        _: MagicMock,
+        __: MagicMock,
+    ):
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        state_in = testing.State(
+            containers=[container],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+        assert state_out.unit_status != BlockedStatus(
             "Failed to apply resources patch. Please monitor the logs for errors."
         )
 
