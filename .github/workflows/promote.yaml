@@ -49,3 +49,4 @@ jobs:
           destination-channel: ${{ env.TRACK }}/${{ env.PROMOTE_TO }}
           origin-channel: ${{ env.TRACK }}/${{ env.PROMOTE_FROM }}
           charmcraft-channel: latest/stable
+          tag-prefix: ${{ inputs.charm }}
