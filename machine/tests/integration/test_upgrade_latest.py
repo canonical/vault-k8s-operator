@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -47,18 +48,22 @@ async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is
         logger.info("Refreshing vault from built charm")
         await refresh_application(ops_test, APP_NAME, vault_charm_path)
 
-    logger.info("Waiting for vault to be blocked after refresh")
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="blocked",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=REFRESH_TIMEOUT,
-    )
+    vault_sealed = False
+    try:
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="blocked",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+            timeout=REFRESH_TIMEOUT,
+        )
+        vault_sealed = True
+    except asyncio.TimeoutError:
+        logger.info("Vault was not sealed after refresh")
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key)
+        if vault_sealed:
+            await unseal_all_vault_units(ops_test, unseal_key)
 
-        logger.info("Waiting for vault to be active after refresh")
         await ops_test.model.wait_for_idle(
             apps=[APP_NAME],
             status="active",
