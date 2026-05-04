@@ -40,7 +40,7 @@ resources:
   vault-image:
     type: oci-image
     description: OCI image for Vault
-    upstream-source: ghcr.io/canonical/vault:1.19.5
+    upstream-source: ghcr.io/canonical/vault:2.0.0
 
 storage:
   vault-raft:
