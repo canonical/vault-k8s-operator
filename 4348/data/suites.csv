@@ -1,0 +1,2 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","632422","test_given_first_stable_revision_in_track_when_refresh_then_status_is_active","k8s.tests.integration","Tue May 05 08:28:39 UTC 2026","passed","Tue May 05 08:39:11 UTC 2026","","test_upgrade_first","",""
