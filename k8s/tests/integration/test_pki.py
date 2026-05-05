@@ -113,7 +113,7 @@ async def test_given_vault_pki_relation_and_unmatching_common_name_when_integrat
         relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
     )
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        asyncio.gather(
+        await asyncio.gather(
             ops_test.model.wait_for_idle(
                 apps=[APPLICATION_NAME],
                 status="active",
@@ -147,31 +147,34 @@ async def test_given_vault_pki_relation_and_matching_common_name_configured_when
 
     vault_app = ops_test.model.applications[APPLICATION_NAME]
     common_name = "example.com"
-    common_name_config = {
-        "pki_ca_common_name": common_name,
-    }
-    await vault_app.set_config(common_name_config)
-    await vault_app.set_config({"pki_allow_subdomains": "true"})
-    asyncio.gather(
-        ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="active",
-            timeout=SHORT_TIMEOUT,
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        ),
-        ops_test.model.wait_for_idle(
-            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
-            status="active",
-            timeout=SHORT_TIMEOUT,
-            wait_for_exact_units=1,
-        ),
+    await vault_app.set_config(
+        {
+            "pki_ca_common_name": common_name,
+            "pki_allow_subdomains": "true",
+        }
     )
-    await wait_for_status_message(
-        ops_test,
-        expected_message="Unit certificate is available",
-        app_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
-        count=1,
-    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[APPLICATION_NAME],
+                status="active",
+                timeout=SHORT_TIMEOUT,
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+                status="active",
+                timeout=SHORT_TIMEOUT,
+                wait_for_exact_units=1,
+            ),
+        )
+        await wait_for_status_message(
+            ops_test,
+            expected_message="Unit certificate is available",
+            app_name=VAULT_PKI_REQUIRER_APPLICATION_NAME,
+            count=1,
+            timeout=SHORT_TIMEOUT,
+        )
 
     leader_unit = await get_leader_unit(ops_test.model, APPLICATION_NAME)
     leader_unit_address = await get_unit_address(ops_test, leader_unit.name)
