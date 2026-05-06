@@ -10,12 +10,13 @@ The Vault charm uses the [raft](https://developer.hashicorp.com/vault/docs/confi
 ## 1. Validate that Vault is an active state
 
 Run `juju status`:
+
 ```
 Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:52:32-04:00
 
 App    Version  Status   Scale  Charm      Channel    Rev  Address         Exposed  Message
-vault           waiting      1  vault-k8s  1.19/edge  198  10.152.183.208  no       installing agent
+vault           waiting      1  vault-k8s  2.0/edge  198  10.152.183.208  no       installing agent
 
 Unit      Workload  Agent  Address      Ports  Message
 vault/0*  active    idle   10.1.182.38
@@ -36,15 +37,16 @@ Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:54:51-04:00
 
 App    Version  Status   Scale  Charm      Channel    Rev  Address         Exposed  Message
-vault           waiting      3  vault-k8s  1.19/edge  198  10.152.183.208  no       installing agent
+vault           waiting      3  vault-k8s  2.0/edge  198  10.152.183.208  no       installing agent
 
 Unit      Workload  Agent  Address      Ports  Message
-vault/0*  active    idle   10.1.182.38         
+vault/0*  active    idle   10.1.182.38
 vault/1   blocked   idle   10.1.182.51         Please unseal Vault
 vault/2   blocked   idle   10.1.182.34         Please unseal Vault
 ```
 
 Set the `VAULT_ADDR` variable to the `vault/1` unit:
+
 ```
 export VAULT_ADDR=https://$(juju status vault/1 --format=yaml |  yq -r '.applications.vault.units.vault/1.address'):8200; echo $VAULT_ADDR
 ```
@@ -78,12 +80,12 @@ Model  Controller          Cloud/Region        Version  SLA          Timestamp
 demo   microk8s-localhost  microk8s/localhost  3.4.0    unsupported  12:57:52-04:00
 
 App    Version  Status  Scale  Charm      Channel    Rev  Address         Exposed  Message
-vault           active      3  vault-k8s  1.19/edge  198  10.152.183.208  no       
+vault           active      3  vault-k8s  2.0/edge  198  10.152.183.208  no
 
 Unit      Workload  Agent  Address      Ports  Message
-vault/0*  active    idle   10.1.182.38         
-vault/1   active    idle   10.1.182.51         
-vault/2   active    idle   10.1.182.34 
+vault/0*  active    idle   10.1.182.38
+vault/1   active    idle   10.1.182.51
+vault/2   active    idle   10.1.182.34
 ```
 
 And they should all be part of the raft cluster:
