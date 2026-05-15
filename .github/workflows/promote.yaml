@@ -20,7 +20,7 @@ on:
 env:
   PROMOTE_FROM: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
   PROMOTE_TO: ${{ inputs.promotion == 'edge -> beta' && 'beta' || inputs.promotion == 'beta -> candidate' && 'candidate' || inputs.promotion == 'candidate -> stable' && 'stable' || '' }}
-  TRACK: ${{ inputs.charm == 'k8s' && '2.0' || '1.19' }}
+  TRACK: "2.0"
 
 jobs:
   scan:
@@ -29,7 +29,7 @@ jobs:
     with:
       charm: ${{ inputs.charm == 'k8s' && 'vault-k8s' || inputs.charm == 'machine' && 'vault' || '' }}
       # We have to compute the channel here again because we can't pass env variables to a reusable workflow
-      track: ${{ inputs.charm == 'k8s' && '2.0' || '1.19' }}
+      track: "2.0"
       channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
       arch: amd64
       create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
