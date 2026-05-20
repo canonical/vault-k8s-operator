@@ -110,11 +110,11 @@ VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
 VAULT_PORT = 8200
-VAULT_SNAP_CHANNEL = "1.19/stable"
+VAULT_SNAP_CHANNEL = "2.0/stable"
 VAULT_SNAP_NAME = "vault"
 VAULT_SNAP_REVISIONS = {
-    "x86_64": "2424",
-    "aarch64": "2425",
+    "x86_64": "2487",
+    "aarch64": "2489",
 }
 VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS.get(platform.machine(), "")
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
