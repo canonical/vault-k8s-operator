@@ -112,7 +112,6 @@ jobs:
     name: Publish K8s Charm
     needs:
       - k8s-lint-report
-      - k8s-grafana-dashboard-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test
@@ -135,7 +134,6 @@ jobs:
     name: Publish K8s Charm (ARM)
     needs:
       - k8s-lint-report
-      - k8s-grafana-dashboard-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
       - k8s-integration-test-arm
@@ -237,7 +235,6 @@ jobs:
     name: Publish Machine Charm
     needs:
       - machine-lint-report
-      - machine-grafana-dashboard-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
       - machine-integration-test
@@ -260,11 +257,9 @@ jobs:
     name: Publish Machine Charm (ARM)
     needs:
       - machine-lint-report
-      - machine-grafana-dashboard-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
       - machine-integration-test-arm
-      - machine-build-arm
       - machine-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
