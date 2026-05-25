@@ -1125,6 +1125,8 @@ class AutounsealRequirerManager:
 class PKIManager:
     """Encapsulates the business logic for managing PKI certificates in Vault from a Charm."""
 
+    SELF_SIGNED_CA_SECRET_LABEL = "vault-pki-self-signed-ca"
+
     def __init__(
         self,
         charm: CharmBase,
@@ -1143,7 +1145,8 @@ class PKIManager:
         province: str | None,
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
-        tls_certificates_pki: TLSCertificatesRequiresV4,
+        tls_certificates_pki: TLSCertificatesRequiresV4 | None,
+        self_signed_ca: bool = False,
     ):
         """Create a new PKIManager object.
 
@@ -1167,6 +1170,8 @@ class PKIManager:
             country: The country to be included in the issued certificate
             province: The province to be included in the issued certificate
             locality: The locality to be included in the issued certificate
+            self_signed_ca: Whether to use a Vault self-signed CA instead of
+                an external CA from the tls-certificates-pki relation.
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1192,6 +1197,7 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
+        self._self_signed_ca = self_signed_ca
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1221,16 +1227,23 @@ class PKIManager:
         Additionally, this method ensures that the intermediate CA certificate
         is renewed if necessary.
         """
-        update_ca_certificate = True
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
-            return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
             return
         self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
         logger.info("Enabled PKI secrets engine at %s", self._mount_point)
 
+        if self._self_signed_ca:
+            self._configure_self_signed_ca()
+        else:
+            self._configure_external_ca()
+
+    def _configure_external_ca(self):
+        """Configure the PKI backend using an external CA from the relation."""
+        if not self._tls_certificates_pki:
+            logger.debug("No TLS Certificates PKI relation helper available")
+            return
+        update_ca_certificate = True
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             return
@@ -1262,7 +1275,90 @@ class PKIManager:
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
 
+    def _configure_self_signed_ca(self):
+        """Configure the PKI backend using a Vault self-signed CA."""
+        existing_cert, existing_key = self._get_self_signed_ca_from_secret()
+        if existing_cert and existing_key:
+            vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
+                logger.debug("Self-signed CA already configured in the PKI secrets engine")
+                issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
+                    vault_service_ca_certificate
+                )
+                self._create_or_update_pki_role(issued_certificates_validity)
+                self.make_latest_pki_issuer_default()
+                return
+            # CA cert in secret differs from what's in Vault, re-import
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(existing_cert),
+                private_key=str(existing_key),
+                mount=self._mount_point,
+            )
+            issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
+                existing_cert
+            )
+            self._create_or_update_pki_role(issued_certificates_validity)
+            self.make_latest_pki_issuer_default()
+            return
+
+        new_cert, new_key = self._generate_self_signed_ca()
+        self._vault_client.import_ca_certificate_and_key(
+            certificate=new_cert,
+            private_key=new_key,
+            mount=self._mount_point,
+        )
+        self._juju_facade.set_app_secret_content(
+            {"certificate": new_cert, "private_key": new_key},
+            label=self.SELF_SIGNED_CA_SECRET_LABEL,
+        )
+        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
+            Certificate.from_string(new_cert)
+        )
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
+
+    def _generate_self_signed_ca(self) -> tuple[str, str]:
+        """Generate a new self-signed CA using Vault.
+
+        Returns:
+            tuple: (certificate_pem, private_key_pem)
+        """
+        attrs = self._certificate_request_attributes
+        return self._vault_client.generate_self_signed_ca(
+            mount=self._mount_point,
+            common_name=attrs.common_name,
+            ttl="87600h",  # 10 years default for self-signed CA
+            sans_dns=list(attrs.sans_dns) if attrs.sans_dns else None,
+            country=attrs.country_name,
+            province=attrs.state_or_province_name,
+            locality=attrs.locality_name,
+            organization=attrs.organization,
+            organizational_unit=attrs.organizational_unit,
+        )
+
+    def _get_self_signed_ca_from_secret(self) -> tuple[Certificate | None, str | None]:
+        """Retrieve the self-signed CA from Juju secrets.
+
+        Returns:
+            tuple: (certificate, private_key) or (None, None) if not found.
+        """
+        try:
+            cert_pem, key_pem = self._juju_facade.get_secret_content_values(
+                "certificate",
+                "private_key",
+                label=self.SELF_SIGNED_CA_SECRET_LABEL,
+            )
+            if cert_pem and key_pem:
+                return Certificate.from_string(cert_pem), key_pem
+        except (FacadeError, SecretRemovedError, NoSuchSecretError, TLSCertificatesError):
+            logger.debug("Self-signed CA secret not found or incomplete")
+        return None, None
+
+    def _create_or_update_pki_role(self, issued_certificates_validity: int) -> None:
+        """Create or update the PKI role if the configuration has changed."""
         if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
@@ -1294,7 +1390,6 @@ class PKIManager:
                 province=self._province,
                 locality=self._locality,
             )
-        self.make_latest_pki_issuer_default()
 
     def make_latest_pki_issuer_default(self):
         """Make the latest issuer the default issuer."""
@@ -1308,7 +1403,9 @@ class PKIManager:
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki request")
             return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+        if not self._self_signed_ca and not self._juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ):
             logger.debug("TLS Certificates PKI relation not created")
             return
         outstanding_pki_requests = self._vault_pki.get_outstanding_certificate_requests()
@@ -1317,18 +1414,29 @@ class PKIManager:
                 requirer_csr=pki_request,
             )
 
+    def _get_ca_certificate(self) -> Certificate | None:
+        """Get the CA certificate for signing, from relation or self-signed secret."""
+        if self._self_signed_ca:
+            cert, _ = self._get_self_signed_ca_from_secret()
+            if cert:
+                return cert
+            vault_ca = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_ca:
+                return vault_ca
+            return None
+        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
+        return provider_certificate.certificate if provider_certificate else None
+
     def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCertificateRequest):
         if not self._vault_client.is_pki_role_created(
             role=self._role_name, mount=self._mount_point
         ):
             logger.debug("PKI role not created")
             return
-        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
-        if not provider_certificate:
+        ca_certificate = self._get_ca_certificate()
+        if not ca_certificate:
             return
-        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
-            provider_certificate.certificate
-        )
+        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
         try:
             certificate = self._vault_client.sign_pki_certificate_signing_request(
                 mount=self._mount_point,

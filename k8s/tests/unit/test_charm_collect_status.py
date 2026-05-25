@@ -129,23 +129,52 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == BlockedStatus("log_level config is not valid")
 
-    def test_given_pki_relation_and_tls_certificates_pki_relation_missing_when_collect_unit_status_then_status_is_blocked(
+    def test_given_pki_relation_and_tls_certificates_pki_relation_missing_when_common_name_valid_then_status_is_active(
         self,
     ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": True,
+                "tls_file_pushed_to_workload.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+                "needs_migration.return_value": False,
+                "is_seal_type_transit.return_value": False,
+                "is_active_or_standby.return_value": True,
+            },
+        )
+        approle_secret = testing.Secret(
+            label="vault-approle-auth-details",
+            tracked_content={"role-id": "role id", "secret-id": "secret id"},
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
         pki_relation = testing.Relation(
             endpoint="vault-pki",
             interface="tls-certificates",
         )
         state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, pki_relation],
+            secrets=[approle_secret],
+            leader=True,
             config={"pki_ca_common_name": "domain.com"},
-            relations=[pki_relation],
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
-        assert state_out.unit_status == BlockedStatus(
-            "tls-certificates-pki relation is missing, cannot configure PKI secrets engine"
-        )
+        assert isinstance(state_out.unit_status, ActiveStatus)
 
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
         container = testing.Container(

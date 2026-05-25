@@ -618,6 +618,164 @@ class TestPKIManager:
         assert provider_error.error.code == CertificateRequestErrorCode.OTHER
 
 
+class TestPKIManagerSelfSigned:
+    @pytest.fixture(autouse=True)
+    @patch("vault.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock):
+        self.juju_facade = juju_facade_mock.return_value
+        self.juju_facade.is_leader = True
+        self.charm = MagicMock(spec=VaultCharm)
+        self.vault = MagicMock(spec=VaultClient)
+        self.certificate_request_attributes = CertificateRequestAttributes(
+            common_name="common_name",
+            is_ca=True,
+        )
+        self.mount_point = "mount_point"
+        self.role_name = "role_name"
+        self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
+        self.allowed_domains = "common_name"
+        self.allow_subdomains = False
+        self.allow_wildcard_certificates = True
+        self.allow_any_name = False
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
+
+        self.pki_manager = PKIManager(
+            charm=self.charm,
+            vault_client=self.vault,
+            certificate_request_attributes=self.certificate_request_attributes,
+            mount_point=self.mount_point,
+            role_name=self.role_name,
+            vault_pki=self.vault_pki,
+            tls_certificates_pki=None,
+            allowed_domains=self.allowed_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
+            self_signed_ca=True,
+        )
+
+    def test_given_no_existing_self_signed_ca_when_configure_then_ca_generated_and_stored(
+        self,
+    ):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (None, None)
+        self.vault.generate_self_signed_ca.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.role_config_matches_given_config.return_value = True
+        self.vault.get_role_max_ttl.return_value = 43200
+
+        self.pki_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.PKI, self.mount_point
+        )
+        self.vault.generate_self_signed_ca.assert_called_once_with(
+            mount=self.mount_point,
+            common_name=self.certificate_request_attributes.common_name,
+            ttl="87600h",
+            sans_dns=None,
+            country=None,
+            province=None,
+            locality=None,
+            organization=None,
+            organizational_unit=None,
+        )
+        self.vault.import_ca_certificate_and_key.assert_called_once_with(
+            certificate=str(provider_certificate.certificate),
+            private_key=str(private_key),
+            mount=self.mount_point,
+        )
+        self.juju_facade.set_app_secret_content.assert_called_once_with(
+            {
+                "certificate": str(provider_certificate.certificate),
+                "private_key": str(private_key),
+            },
+            label=PKIManager.SELF_SIGNED_CA_SECRET_LABEL,
+        )
+
+    def test_given_existing_self_signed_ca_in_secret_when_configure_then_ca_reused(
+        self,
+    ):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.get_intermediate_ca.return_value = str(provider_certificate.certificate)
+        self.vault.role_config_matches_given_config.return_value = True
+        self.vault.get_role_max_ttl.return_value = 43200
+
+        self.pki_manager.configure()
+
+        self.vault.generate_self_signed_ca.assert_not_called()
+        self.vault.import_ca_certificate_and_key.assert_not_called()
+        self.juju_facade.set_app_secret_content.assert_not_called()
+
+    def test_given_self_signed_ca_when_sync_then_certificates_issued(self):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        signed_certificate = sign_certificate(
+            provider_certificate.certificate, private_key, csr.certificate_signing_request
+        )
+        cert = VaultClientCertificate(
+            certificate=str(signed_certificate),
+            ca=str(provider_certificate.certificate),
+            chain=[str(provider_certificate.certificate)],
+        )
+        self.vault.sign_pki_certificate_signing_request.return_value = cert
+
+        self.pki_manager.sync()
+
+        self.vault.sign_pki_certificate_signing_request.assert_called_once_with(
+            mount=self.mount_point,
+            role=self.role_name,
+            csr=str(csr.certificate_signing_request),
+            common_name=self.certificate_request_attributes.common_name,
+            ttl=f"{12 * SECONDS_IN_HOUR}s",
+        )
+        self.vault_pki.set_relation_certificate.assert_called_once()
+
+    def test_given_non_leader_when_configure_then_no_action(self):
+        self.juju_facade.is_leader = False
+
+        self.pki_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_not_called()
+
+    def test_given_non_leader_when_sync_then_no_action(self):
+        self.juju_facade.is_leader = False
+
+        self.pki_manager.sync()
+
+        self.vault_pki.get_outstanding_certificate_requests.assert_not_called()
+
+
 class TestACMEManager:
     @pytest.fixture(autouse=True)
     def setup(self):

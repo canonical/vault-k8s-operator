@@ -13,7 +13,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from io import IOBase
-from typing import List, MutableMapping, Protocol
+from typing import List, MutableMapping, Optional, Protocol
 
 import hvac
 import requests
@@ -417,6 +417,63 @@ class VaultClient:
     def get_intermediate_ca(self, mount: str) -> str:
         """Get the intermediate CA for the PKI backend."""
         return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
+
+    def generate_self_signed_ca(
+        self,
+        mount: str,
+        common_name: str,
+        ttl: str,
+        sans_dns: Optional[List[str]] = None,
+        country: Optional[str] = None,
+        province: Optional[str] = None,
+        locality: Optional[str] = None,
+        organization: Optional[str] = None,
+        organizational_unit: Optional[str] = None,
+    ) -> tuple[str, str]:
+        """Generate a self-signed CA using Vault's PKI root/generate/internal endpoint.
+
+        Args:
+            mount: The PKI mount point.
+            common_name: The common name for the CA certificate.
+            ttl: The TTL for the CA certificate, e.g. "8760h".
+            sans_dns: Optional list of DNS subject alternative names.
+            country: Optional country name.
+            province: Optional province/state name.
+            locality: Optional locality name.
+            organization: Optional organization name.
+            organizational_unit: Optional organizational unit name.
+
+        Returns:
+            tuple: (certificate_pem, private_key_pem)
+
+        Raises:
+            VaultClientError: If Vault fails to generate the CA.
+        """
+        extra_params: dict = {}
+        if sans_dns:
+            extra_params["allowed_domains"] = sans_dns
+        if country:
+            extra_params["country"] = country
+        if province:
+            extra_params["province"] = province
+        if locality:
+            extra_params["locality"] = locality
+        if organization:
+            extra_params["organization"] = organization
+        if organizational_unit:
+            extra_params["organizational_unit"] = organizational_unit
+        try:
+            response = self._client.secrets.pki.generate_root(
+                type="internal",
+                common_name=common_name,
+                ttl=ttl,
+                mount_point=mount,
+                extra_params=extra_params,
+            )
+            data = response["data"]
+            return str(data["certificate"]), str(data["private_key"])
+        except (InvalidRequest, VaultError) as e:
+            raise VaultClientError(e) from e
 
     def import_ca_certificate_and_key(self, mount: str, certificate: str, private_key: str):
         """Import the CA certificate and private key for the PKI backend."""

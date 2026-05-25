@@ -496,15 +496,11 @@ class VaultOperatorCharm(CharmBase):
                     )
                 )
                 return
-        if self.juju_facade.relation_exists(PKI_RELATION_NAME):
-            if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-                event.add_status(
-                    BlockedStatus(
-                        f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
-                    )
-                )
-                return
-        if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+        pki_config_needed = (
+            self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
+            or self.juju_facade.relation_exists(PKI_RELATION_NAME)
+        )
+        if pki_config_needed:
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
             ):
@@ -915,6 +911,7 @@ class VaultOperatorCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        self_signed_ca = not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
         manager = PKIManager(
             charm=self,
             vault_client=vault_client,
@@ -935,6 +932,7 @@ class VaultOperatorCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca=self_signed_ca,
         )
         manager.sync()
 
@@ -962,6 +960,7 @@ class VaultOperatorCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        self_signed_ca = not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
         manager = PKIManager(
             charm=self,
             vault_client=vault,
@@ -982,6 +981,7 @@ class VaultOperatorCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca=self_signed_ca,
         )
         manager.configure()
 
