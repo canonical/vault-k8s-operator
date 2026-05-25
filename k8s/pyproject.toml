@@ -7,6 +7,7 @@ dependencies = [
     "ops>=3.7.0",
     "vault-package",
     "charmlibs-interfaces-tls-certificates~=1.8",
+    "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
     "pydantic==2.13.0",
     # via charm_tracing
