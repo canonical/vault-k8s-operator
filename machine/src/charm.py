@@ -496,10 +496,9 @@ class VaultOperatorCharm(CharmBase):
                     )
                 )
                 return
-        pki_config_needed = (
-            self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
-            or self.juju_facade.relation_exists(PKI_RELATION_NAME)
-        )
+        pki_config_needed = self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) or self.juju_facade.relation_exists(PKI_RELATION_NAME)
         if pki_config_needed:
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
