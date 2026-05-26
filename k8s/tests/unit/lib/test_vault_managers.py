@@ -651,7 +651,7 @@ class TestPKIManagerSelfSigned:
             mount_point=self.mount_point,
             role_name=self.role_name,
             vault_pki=self.vault_pki,
-            tls_certificates_pki=None,
+            tls_certificates_pki=None,  # None triggers self-signed CA mode
             allowed_domains=self.allowed_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
@@ -662,7 +662,6 @@ class TestPKIManagerSelfSigned:
             country=self.country,
             province=self.province,
             locality=self.locality,
-            self_signed_ca=True,
         )
 
     def test_given_no_existing_self_signed_ca_when_configure_then_ca_generated_and_stored(

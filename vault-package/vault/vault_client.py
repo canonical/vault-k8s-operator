@@ -449,7 +449,7 @@ class VaultClient:
         Raises:
             VaultClientError: If Vault fails to generate the CA.
         """
-        extra_params: dict = {}
+        extra_params: dict = {"ttl": ttl}
         if sans_dns:
             extra_params["alt_names"] = ",".join(sans_dns)
         if country:
@@ -466,7 +466,6 @@ class VaultClient:
             response = self._client.secrets.pki.generate_root(
                 type="exported",
                 common_name=common_name,
-                ttl=ttl,
                 mount_point=mount,
                 extra_params=extra_params,
             )

@@ -129,7 +129,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == BlockedStatus("log_level config is not valid")
 
-    def test_given_pki_relation_and_tls_certificates_pki_relation_missing_when_common_name_valid_then_status_is_active(
+    def test_given_vault_pki_relation_without_external_ca_when_common_name_configured_then_status_is_active(
         self,
     ):
         self.mock_tls.configure_mock(

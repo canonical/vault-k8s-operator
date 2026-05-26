@@ -635,9 +635,8 @@ def test_when_generate_self_signed_ca_then_returns_certificate_and_key(
     patch_generate_root.assert_called_once_with(
         type="exported",
         common_name="my-ca",
-        ttl="8760h",
         mount_point="pki",
-        extra_params={},
+        extra_params={"ttl": "8760h"},
     )
 
 
@@ -668,9 +667,9 @@ def test_when_generate_self_signed_ca_with_optional_params_then_extra_params_pas
     patch_generate_root.assert_called_once_with(
         type="exported",
         common_name="my-ca",
-        ttl="8760h",
         mount_point="pki",
         extra_params={
+            "ttl": "8760h",
             "alt_names": "example.com,www.example.com",
             "country": "US",
             "province": "CA",

@@ -1126,6 +1126,7 @@ class PKIManager:
     """Encapsulates the business logic for managing PKI certificates in Vault from a Charm."""
 
     SELF_SIGNED_CA_SECRET_LABEL = "vault-pki-self-signed-ca"
+    DEFAULT_SELF_SIGNED_CA_VALIDITY_HOURS = 87600  # 10 years
 
     def __init__(
         self,
@@ -1145,8 +1146,8 @@ class PKIManager:
         province: str | None,
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
-        tls_certificates_pki: TLSCertificatesRequiresV4 | None,
-        self_signed_ca: bool = False,
+        tls_certificates_pki: TLSCertificatesRequiresV4 | None = None,
+        self_signed_ca_validity_hours: int | None = None,
     ):
         """Create a new PKIManager object.
 
@@ -1159,7 +1160,8 @@ class PKIManager:
             mount_point: The mount point in Vault for the PKI backend
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
-            tls_certificates_pki: The tls_certificates_pki requirer relation helper library
+            tls_certificates_pki: The tls_certificates_pki requirer relation helper library.
+                If provided, external CA mode is used. If None, self-signed CA mode is used.
             allowed_domains: The domains that the PKI engine will allow certificates to be issued for
             allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
             allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
@@ -1170,8 +1172,8 @@ class PKIManager:
             country: The country to be included in the issued certificate
             province: The province to be included in the issued certificate
             locality: The locality to be included in the issued certificate
-            self_signed_ca: Whether to use a Vault self-signed CA instead of
-                an external CA from the tls-certificates-pki relation.
+            self_signed_ca_validity_hours: The validity period in hours for self-signed CA.
+                Only used when tls_certificates_pki is None. Defaults to 87600 (10 years).
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1197,7 +1199,16 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
-        self._self_signed_ca = self_signed_ca
+        self._self_signed_ca_validity_hours = (
+            self_signed_ca_validity_hours
+            if self_signed_ca_validity_hours is not None
+            else self.DEFAULT_SELF_SIGNED_CA_VALIDITY_HOURS
+        )
+
+    @property
+    def _self_signed_ca(self) -> bool:
+        """Return True if self-signed CA mode should be used (no external CA relation)."""
+        return self._tls_certificates_pki is None
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1206,6 +1217,8 @@ class PKIManager:
 
         This is the CA certificate that the provider charm has issued to Vault.
         """
+        if not self._tls_certificates_pki:
+            return None, None
         provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
             certificate_request=self._certificate_request_attributes
         )
@@ -1241,7 +1254,7 @@ class PKIManager:
     def _configure_external_ca(self):
         """Configure the PKI backend using an external CA from the relation."""
         if not self._tls_certificates_pki:
-            logger.debug("No TLS Certificates PKI relation helper available")
+            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
             return
         update_ca_certificate = True
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
@@ -1335,7 +1348,7 @@ class PKIManager:
         return self._vault_client.generate_self_signed_ca(
             mount=self._mount_point,
             common_name=attrs.common_name,
-            ttl="87600h",  # 10 years default for self-signed CA
+            ttl=f"{self._self_signed_ca_validity_hours}h",
             sans_dns=list(attrs.sans_dns) if attrs.sans_dns else None,
             country=attrs.country_name,
             province=attrs.state_or_province_name,
