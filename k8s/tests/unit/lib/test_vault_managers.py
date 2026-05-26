@@ -695,11 +695,7 @@ class TestPKIManagerSelfSigned:
             organization=None,
             organizational_unit=None,
         )
-        self.vault.import_ca_certificate_and_key.assert_called_once_with(
-            certificate=str(provider_certificate.certificate),
-            private_key=str(private_key),
-            mount=self.mount_point,
-        )
+        self.vault.import_ca_certificate_and_key.assert_not_called()
         self.juju_facade.set_app_secret_content.assert_called_once_with(
             {
                 "certificate": str(provider_certificate.certificate),

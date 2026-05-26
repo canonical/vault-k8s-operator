@@ -1282,34 +1282,39 @@ class PKIManager:
         """Configure the PKI backend using a Vault self-signed CA."""
         existing_cert, existing_key = self._get_self_signed_ca_from_secret()
         if existing_cert and existing_key:
-            vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
-            if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
-                logger.debug("Self-signed CA already configured in the PKI secrets engine")
+            # Check if config has changed (e.g. common_name rotation)
+            if existing_cert.common_name != self._certificate_request_attributes.common_name:
+                logger.info(
+                    "Self-signed CA common name changed from %s to %s, regenerating",
+                    existing_cert.common_name,
+                    self._certificate_request_attributes.common_name,
+                )
+            else:
+                vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+                if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
+                    logger.debug("Self-signed CA already configured in the PKI secrets engine")
+                    issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
+                        vault_service_ca_certificate
+                    )
+                    self._create_or_update_pki_role(issued_certificates_validity)
+                    self.make_latest_pki_issuer_default()
+                    return
+                # CA cert in secret differs from what's in Vault, re-import
+                self._vault_client.import_ca_certificate_and_key(
+                    certificate=str(existing_cert),
+                    private_key=str(existing_key),
+                    mount=self._mount_point,
+                )
                 issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
-                    vault_service_ca_certificate
+                    existing_cert
                 )
                 self._create_or_update_pki_role(issued_certificates_validity)
                 self.make_latest_pki_issuer_default()
                 return
-            # CA cert in secret differs from what's in Vault, re-import
-            self._vault_client.import_ca_certificate_and_key(
-                certificate=str(existing_cert),
-                private_key=str(existing_key),
-                mount=self._mount_point,
-            )
-            issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
-                existing_cert
-            )
-            self._create_or_update_pki_role(issued_certificates_validity)
-            self.make_latest_pki_issuer_default()
-            return
 
+        # Generate a new self-signed CA (first time or after config change)
         new_cert, new_key = self._generate_self_signed_ca()
-        self._vault_client.import_ca_certificate_and_key(
-            certificate=new_cert,
-            private_key=new_key,
-            mount=self._mount_point,
-        )
+        # generate_root already creates the issuer in Vault, no need to import
         self._juju_facade.set_app_secret_content(
             {"certificate": new_cert, "private_key": new_key},
             label=self.SELF_SIGNED_CA_SECRET_LABEL,

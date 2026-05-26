@@ -633,7 +633,7 @@ def test_when_generate_self_signed_ca_then_returns_certificate_and_key(
     assert cert == "cert-pem"
     assert key == "key-pem"
     patch_generate_root.assert_called_once_with(
-        type="internal",
+        type="exported",
         common_name="my-ca",
         ttl="8760h",
         mount_point="pki",
@@ -666,12 +666,12 @@ def test_when_generate_self_signed_ca_with_optional_params_then_extra_params_pas
     )
 
     patch_generate_root.assert_called_once_with(
-        type="internal",
+        type="exported",
         common_name="my-ca",
         ttl="8760h",
         mount_point="pki",
         extra_params={
-            "allowed_domains": ["example.com", "www.example.com"],
+            "alt_names": "example.com,www.example.com",
             "country": "US",
             "province": "CA",
             "locality": "San Francisco",

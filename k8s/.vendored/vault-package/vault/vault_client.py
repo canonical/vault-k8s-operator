@@ -430,7 +430,7 @@ class VaultClient:
         organization: Optional[str] = None,
         organizational_unit: Optional[str] = None,
     ) -> tuple[str, str]:
-        """Generate a self-signed CA using Vault's PKI root/generate/internal endpoint.
+        """Generate a self-signed CA using Vault's PKI root/generate/exported endpoint.
 
         Args:
             mount: The PKI mount point.
@@ -451,7 +451,7 @@ class VaultClient:
         """
         extra_params: dict = {}
         if sans_dns:
-            extra_params["allowed_domains"] = sans_dns
+            extra_params["alt_names"] = ",".join(sans_dns)
         if country:
             extra_params["country"] = country
         if province:
@@ -464,7 +464,7 @@ class VaultClient:
             extra_params["organizational_unit"] = organizational_unit
         try:
             response = self._client.secrets.pki.generate_root(
-                type="internal",
+                type="exported",
                 common_name=common_name,
                 ttl=ttl,
                 mount_point=mount,
