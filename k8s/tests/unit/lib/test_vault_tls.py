@@ -25,7 +25,7 @@ from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charmlibs.interfaces.tls_certificates"
-CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
+CERTIFICATE_TRANSFER_LIB_PATH = "charmlibs.interfaces.certificate_transfer"
 VAULT_MANAGERS_PATH = "vault.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
 
