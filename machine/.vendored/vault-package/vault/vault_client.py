@@ -531,6 +531,7 @@ class VaultClient:
         allowed_domains: str,
         max_ttl: str,
         mount: str,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -566,6 +567,8 @@ class VaultClient:
             "max_ttl": max_ttl,
         }
 
+        if allow_bare_domains is not None:
+            extra_params["allow_bare_domains"] = "true" if allow_bare_domains else "false"
         if allow_subdomains is not None:
             extra_params["allow_subdomains"] = "true" if allow_subdomains else "false"
         if allow_wildcard_certificates is not None:
@@ -728,6 +731,7 @@ class VaultClient:
         role: str,
         mount: str,
         allowed_domains: List[str],
+        allow_bare_domains: bool,
         allow_subdomains: bool,
         allow_wildcard_certificates: bool,
         allow_any_name: bool,
@@ -751,6 +755,7 @@ class VaultClient:
                 return False
 
             expected_config = {
+                "allow_bare_domains": allow_bare_domains,
                 "allow_subdomains": allow_subdomains,
                 "allow_wildcard_certificates": allow_wildcard_certificates,
                 "allow_any_name": allow_any_name,

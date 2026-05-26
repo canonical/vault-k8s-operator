@@ -236,6 +236,13 @@ config:
         A comma-separated list of domain names for which the Vault charm can sign certificates.
         The Vault charm will use this configuration option in the context of acting as an intermediate CA.
         Certificate requests for charms integrating with Vault using the `vault-pki` integration will need to use a domain name from this list.
+    pki_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the exact value of the domains listed in `pki_allowed_domains` (or `pki_ca_common_name` if not set).
+        For example, if `pki_allowed_domains` is `example.com`, this option allows issuing a certificate for `example.com` itself.
+        When disabled, only subdomains (if `pki_allow_subdomains` is true) can be issued, not the base domain.
     pki_allow_subdomains:
       type: boolean
       default: false

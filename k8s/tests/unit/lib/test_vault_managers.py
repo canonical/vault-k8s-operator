@@ -370,6 +370,7 @@ class TestPKIManager:
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
         self.allowed_domains = "common_name"
+        self.allow_bare_domains = True
         self.allow_subdomains = False
         self.allow_wildcard_certificates = True
         self.allow_any_name = False
@@ -389,6 +390,7 @@ class TestPKIManager:
             vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
             allowed_domains=self.allowed_domains,
+            allow_bare_domains=self.allow_bare_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
@@ -501,6 +503,7 @@ class TestPKIManager:
             mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{12 * SECONDS_IN_HOUR}s",
+            allow_bare_domains=self.allow_bare_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
@@ -634,6 +637,7 @@ class TestPKIManagerSelfSigned:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.allowed_domains = "common_name"
+        self.allow_bare_domains = True
         self.allow_subdomains = False
         self.allow_wildcard_certificates = True
         self.allow_any_name = False
@@ -653,6 +657,7 @@ class TestPKIManagerSelfSigned:
             vault_pki=self.vault_pki,
             tls_certificates_pki=None,  # None triggers self-signed CA mode
             allowed_domains=self.allowed_domains,
+            allow_bare_domains=self.allow_bare_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,

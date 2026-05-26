@@ -1136,6 +1136,7 @@ class PKIManager:
         mount_point: str,
         role_name: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1163,6 +1164,7 @@ class PKIManager:
             tls_certificates_pki: The tls_certificates_pki requirer relation helper library.
                 If provided, external CA mode is used. If None, self-signed CA mode is used.
             allowed_domains: The domains that the PKI engine will allow certificates to be issued for
+            allow_bare_domains: Whether the PKI engine will allow the exact domains in allowed_domains
             allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
             allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
             allow_any_name: Whether the PKI engine will allow any name to be issued for
@@ -1186,6 +1188,7 @@ class PKIManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1381,6 +1384,7 @@ class PKIManager:
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -1398,6 +1402,7 @@ class PKIManager:
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
