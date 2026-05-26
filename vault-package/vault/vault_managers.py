@@ -1329,7 +1329,7 @@ class PKIManager:
         new_cert, new_key = self._generate_self_signed_ca()
         # generate_root already creates the issuer in Vault, no need to import
         self._juju_facade.set_app_secret_content(
-            {"certificate": new_cert, "private_key": new_key},
+            {"certificate": new_cert, "privatekey": new_key},
             label=self.SELF_SIGNED_CA_SECRET_LABEL,
         )
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
@@ -1366,7 +1366,7 @@ class PKIManager:
         try:
             cert_pem, key_pem = self._juju_facade.get_secret_content_values(
                 "certificate",
-                "private_key",
+                "privatekey",
                 label=self.SELF_SIGNED_CA_SECRET_LABEL,
             )
             if cert_pem and key_pem:

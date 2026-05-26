@@ -698,7 +698,7 @@ class TestPKIManagerSelfSigned:
         self.juju_facade.set_app_secret_content.assert_called_once_with(
             {
                 "certificate": str(provider_certificate.certificate),
-                "private_key": str(private_key),
+                "privatekey": str(private_key),
             },
             label=PKIManager.SELF_SIGNED_CA_SECRET_LABEL,
         )
