@@ -590,7 +590,8 @@ class VaultCharm(CharmBase):
             locality=self.juju_facade.get_string_config("pki_locality"),
             self_signed_ca_validity_hours=self.juju_facade.get_int_config(
                 "pki_self_signed_ca_validity"
-            ),
+            )
+            or 87600,
         )
         manager.configure()
 
@@ -783,7 +784,8 @@ class VaultCharm(CharmBase):
             locality=self.juju_facade.get_string_config("pki_locality"),
             self_signed_ca_validity_hours=self.juju_facade.get_int_config(
                 "pki_self_signed_ca_validity"
-            ),
+            )
+            or 87600,
         )
         manager.sync()
 

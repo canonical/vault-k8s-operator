@@ -149,10 +149,10 @@ async def test_given_self_signed_ca_configured_when_integrate_vault_pki_then_cer
         )
         await wait_for_certificate_to_be_provided(ops_test)
 
-    leader_unit_address = await get_leader_unit_address(ops_test)
+    leader_unit_address = await get_leader_unit_address(ops_test.model)
     current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
-        endpoint=leader_unit_address,
+        unit_address=leader_unit_address,
         mount="charm-pki",
     )
     assert current_issuers_common_name == common_name
@@ -179,10 +179,10 @@ async def test_given_self_signed_ca_when_common_name_changed_then_new_ca_is_gene
     new_common_name = "rotated-ca.example.com"
 
     # First verify the current CA common name
-    leader_unit_address = await get_leader_unit_address(ops_test)
+    leader_unit_address = await get_leader_unit_address(ops_test.model)
     old_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
-        endpoint=leader_unit_address,
+        unit_address=leader_unit_address,
         mount="charm-pki",
     )
 
@@ -206,7 +206,7 @@ async def test_given_self_signed_ca_when_common_name_changed_then_new_ca_is_gene
     # Verify the CA common name has changed
     current_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
-        endpoint=leader_unit_address,
+        unit_address=leader_unit_address,
         mount="charm-pki",
     )
     assert current_common_name == new_common_name
