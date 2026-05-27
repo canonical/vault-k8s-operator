@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
-
-"""Integration tests for PKI self-signed CA functionality.
-
-This module tests the PKI feature when Vault uses its own self-signed CA
-instead of relying on an external CA provider via the tls-certificates-pki relation.
-"""
-
 import asyncio
 import logging
 from collections import namedtuple
@@ -43,12 +33,7 @@ VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 async def deploy(
     ops_test: OpsTest, vault_charm_path: Path, pki_requirer_charm_path: Path, skip_deploy: bool
 ) -> VaultInit:
-    """Build and deploy the application without external CA.
-
-    This fixture deploys Vault and the PKI requirer charm, but deliberately
-    does NOT deploy the self-signed-certificates charm. This tests the
-    self-signed CA functionality where Vault generates its own CA.
-    """
+    """Build and deploy the application."""
     assert ops_test.model
     if skip_deploy:
         logger.info("Skipping deployment due to --no-deploy flag")

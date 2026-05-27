@@ -1126,7 +1126,6 @@ class PKIManager:
     """Encapsulates the business logic for managing PKI certificates in Vault from a Charm."""
 
     SELF_SIGNED_CA_SECRET_LABEL = "vault-pki-self-signed-ca"
-    DEFAULT_SELF_SIGNED_CA_VALIDITY_HOURS = 87600  # 10 years
 
     def __init__(
         self,
@@ -1148,7 +1147,7 @@ class PKIManager:
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
         tls_certificates_pki: TLSCertificatesRequiresV4 | None = None,
-        self_signed_ca_validity_hours: int | None = None,
+        self_signed_ca_validity_hours: int = 87600,
     ):
         """Create a new PKIManager object.
 
@@ -1202,11 +1201,7 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
-        self._self_signed_ca_validity_hours = (
-            self_signed_ca_validity_hours
-            if self_signed_ca_validity_hours is not None
-            else self.DEFAULT_SELF_SIGNED_CA_VALIDITY_HOURS
-        )
+        self._self_signed_ca_validity_hours = self_signed_ca_validity_hours
 
     @property
     def _self_signed_ca(self) -> bool:
@@ -1296,50 +1291,60 @@ class PKIManager:
 
     def _configure_self_signed_ca(self):
         """Configure the PKI backend using a Vault self-signed CA."""
+        ca_certificate = self._ensure_self_signed_ca_in_vault()
+        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
+
+    def _ensure_self_signed_ca_in_vault(self) -> Certificate:
+        """Ensure a self-signed CA exists in both Juju secrets and Vault.
+
+        Handles three scenarios:
+        1. CA exists in secret and Vault - no action needed (idempotent)
+        2. CA exists in secret but not Vault - re-import (e.g. after Raft restore)
+        3. No CA or config changed - generate a new one
+
+        Returns:
+            The CA certificate that is now active in Vault.
+        """
         existing_cert, existing_key = self._get_self_signed_ca_from_secret()
+
         if existing_cert and existing_key:
-            # Check if config has changed (e.g. common_name rotation)
+            # Config changed (e.g. common_name rotation) - regenerate
             if existing_cert.common_name != self._certificate_request_attributes.common_name:
                 logger.info(
                     "Self-signed CA common name changed from %s to %s, regenerating",
                     existing_cert.common_name,
                     self._certificate_request_attributes.common_name,
                 )
-            else:
-                vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
-                if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
-                    logger.debug("Self-signed CA already configured in the PKI secrets engine")
-                    issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
-                        vault_service_ca_certificate
-                    )
-                    self._create_or_update_pki_role(issued_certificates_validity)
-                    self.make_latest_pki_issuer_default()
-                    return
-                # CA cert in secret differs from what's in Vault, re-import
-                self._vault_client.import_ca_certificate_and_key(
-                    certificate=str(existing_cert),
-                    private_key=str(existing_key),
-                    mount=self._mount_point,
-                )
-                issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
-                    existing_cert
-                )
-                self._create_or_update_pki_role(issued_certificates_validity)
-                self.make_latest_pki_issuer_default()
-                return
+                return self._generate_and_store_self_signed_ca()
 
-        # Generate a new self-signed CA (first time or after config change)
+            # CA in secret matches Vault - nothing to do
+            vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
+                logger.debug("Self-signed CA already configured in the PKI secrets engine")
+                return existing_cert
+
+            # CA exists in secret but not in Vault (e.g. after Raft snapshot restore)
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(existing_cert),
+                private_key=str(existing_key),
+                mount=self._mount_point,
+            )
+            return existing_cert
+
+        # No CA exists yet - generate a new one
+        return self._generate_and_store_self_signed_ca()
+
+    def _generate_and_store_self_signed_ca(self) -> Certificate:
+        """Generate a new self-signed CA, store in Juju secret, and return the certificate."""
         new_cert, new_key = self._generate_self_signed_ca()
         # generate_root already creates the issuer in Vault, no need to import
         self._juju_facade.set_app_secret_content(
             {"certificate": new_cert, "privatekey": new_key},
             label=self.SELF_SIGNED_CA_SECRET_LABEL,
         )
-        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
-            Certificate.from_string(new_cert)
-        )
-        self._create_or_update_pki_role(issued_certificates_validity)
-        self.make_latest_pki_issuer_default()
+        return Certificate.from_string(new_cert)
 
     def _generate_self_signed_ca(self) -> tuple[str, str]:
         """Generate a new self-signed CA using Vault.
@@ -1458,6 +1463,7 @@ class PKIManager:
             return
         ca_certificate = self._get_ca_certificate()
         if not ca_certificate:
+            logger.debug("No CA certificate available for the PKI backend, cannot sign certificate requests")
             return
         allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
         try:
