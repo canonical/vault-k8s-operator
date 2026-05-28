@@ -8,6 +8,7 @@ CA's
 CSR's
 distroless
 dns
+HashiCorp
 HashiCorp's
 hcl
 https
