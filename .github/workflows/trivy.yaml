@@ -12,14 +12,14 @@ jobs:
       security-events: write
       actions: read
       contents: read
-    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v1.3.0
+    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v2.0.3
     with:
-      uv-lock-path: "./k8s/uv.lock"
+      path: ./k8s
   scan-machine:
     permissions:
       security-events: write
       actions: read
       contents: read
-    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v1.3.0
+    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v2.0.3
     with:
-      uv-lock-path: "./machine/uv.lock"
+      path: ./machine
