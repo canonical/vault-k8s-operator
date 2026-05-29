@@ -333,3 +333,6 @@ zSystems
 hostname
 Configurator
 configurator
+XFS
+filesystem
+filesystems
