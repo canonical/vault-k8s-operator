@@ -32,26 +32,26 @@ jobs:
   k8s-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v2.0.3
     with:
       path: ./k8s/
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v2.0.3
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v2.0.3
     with:
       path: ./k8s/
 
   k8s-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v2.0.3
     with:
       path: ./k8s/
 
@@ -60,7 +60,7 @@ jobs:
       - k8s-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v2.0.3
     secrets: inherit
     with:
       path: k8s
@@ -71,7 +71,7 @@ jobs:
       - k8s-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v2.0.3
     secrets: inherit
     with:
       path: k8s
@@ -120,7 +120,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v2.0.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -155,26 +155,26 @@ jobs:
   machine-lint-report:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v2.0.3
     with:
       path: ./machine/
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v2.0.3
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-static-analysis:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v2.0.3
     with:
       path: ./machine/
 
   machine-unit-tests-with-coverage:
     needs:
       - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v2.0.3
     with:
       path: ./machine/
 
@@ -183,7 +183,7 @@ jobs:
       - machine-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-amd.yaml@v2.0.3
     secrets: inherit
     with:
       path: machine
@@ -194,7 +194,7 @@ jobs:
       - machine-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm-arm.yaml@v2.0.3
     secrets: inherit
     with:
       path: machine
@@ -243,7 +243,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v2.0.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
