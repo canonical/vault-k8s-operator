@@ -1941,6 +1941,7 @@ class ACMEManager:
         role_name: str,
         vault_address: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1963,6 +1964,7 @@ class ACMEManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -2034,6 +2036,7 @@ class ACMEManager:
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -2050,6 +2053,7 @@ class ACMEManager:
                 role=self._role_name,
                 max_ttl=f"{max_ttl}s",
                 mount=self._mount_point,
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,

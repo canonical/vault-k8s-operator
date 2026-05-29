@@ -50,6 +50,7 @@ class TestCharmConfig:
         "acme_ca_organizational_unit": "IT",
         "acme_ca_email_address": "info@example.com",
         "acme_allowed_domains": "example.com",
+        "acme_allow_bare_domains": True,
         "acme_allow_subdomains": False,
         "acme_allow_wildcard_certificates": True,
         "acme_allow_any_name": False,

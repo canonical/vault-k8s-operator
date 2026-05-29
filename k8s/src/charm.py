@@ -701,6 +701,7 @@ class VaultCharm(CharmBase):
             role_name=ACME_ROLE_NAME,
             vault_address=f"https://{self._ingress_address}:{self.VAULT_PORT}",
             allowed_domains=self.juju_facade.get_string_config("acme_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("acme_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("acme_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "acme_allow_wildcard_certificates"

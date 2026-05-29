@@ -370,6 +370,12 @@ config:
         Specifies if clients can request certificates with common names that are subdomains of the common name in the `allowed_domains` list.
         This includes wildcard subdomains.
         For example, an allowed_domains value of `example.com` with this option set to `true` will allow `foo.example.com` and `fou.bar.example.com` as well as `*.example.com`.
+    acme_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the value of the actual domains themselves.
+        For example, if `allowed_domains` contains `example.com`, setting this to `true` allows clients to actually request a certificate for `example.com`.
     acme_allow_wildcard_certificates:
       type: boolean
       default: true
