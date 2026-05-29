@@ -45,16 +45,16 @@ resources:
 storage:
   vault-raft:
     type: filesystem
-    minimum-size: 1G
+    minimum-size: 10G
   config:
     type: filesystem
-    minimum-size: 100M
+    minimum-size: 5M
   certs:
     type: filesystem
-    minimum-size: 100M
+    minimum-size: 5M
   tmp:
     type: filesystem
-    minimum-size: 1G
+    minimum-size: 5G
 
 peers:
   vault-peers:
