@@ -51,6 +51,13 @@ Deploy the Vault K8s operator:
 juju deploy vault-k8s vault --channel=2.0/edge --trust
 ```
 
+```{tip}
+The charm declares minimum storage sizes (e.g. 10G for Raft data). You can provision
+larger volumes at deploy time using `--storage vault-raft=50G`. Storage sizes cannot
+be changed after deployment on Kubernetes. See the
+[Production blueprint](../reference/production_blueprint_k8s.md) for details.
+```
+
 Deploying Vault will take several minutes, wait for the unit to be in the `blocked/idle` state, awaiting initialisation.
 
 ```shell

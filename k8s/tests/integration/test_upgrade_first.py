@@ -21,8 +21,8 @@ from helpers import (
 
 logger = logging.getLogger(__name__)
 
-CURRENT_TRACK_LATEST_STABLE_CHANNEL = "1.18/stable"
-CURRENT_TRACK_FIRST_STABLE_REVISION = 446
+CURRENT_TRACK_LATEST_STABLE_CHANNEL = "1.19/stable"
+CURRENT_TRACK_FIRST_STABLE_REVISION = 528
 
 
 @pytest.mark.abort_on_fail
