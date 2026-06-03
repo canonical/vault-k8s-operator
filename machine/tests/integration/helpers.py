@@ -379,7 +379,7 @@ async def get_leader_unit_address(model: Model, app_name: str = APP_NAME) -> str
 
 def _get_arch() -> str:
     """Return the Juju architecture name for the current machine."""
-    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64", "s390x": "s390x"}
     return arch_map.get(platform.machine(), "amd64")
 
 

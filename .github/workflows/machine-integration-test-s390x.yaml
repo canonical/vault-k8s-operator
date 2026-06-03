@@ -1,0 +1,81 @@
+name: s390x Integration Tests (Machine)
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the charm's root directory
+        required: true
+        type: string
+      vault-charm-artifact-name:
+        description: Name of the artifact to be downloaded for the vault charm
+        required: true
+        type: string
+
+jobs:
+  integration-test-deploy-s390x:
+    name: Integration Test Deploy (s390x)
+    runs-on: [self-hosted-linux-s390x-noble-medium]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.6/stable
+          provider: lxd
+          lxd-channel: 5.21/stable
+
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+      - name: Install system libsodium
+        run: sudo apt-get install -y libsodium-dev pkg-config
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.vault-charm-artifact-name }}
+          path: ${{ inputs.path }}built/
+      - name: Get Charm Path
+        id: charm-path
+        working-directory: ${{ inputs.path }}
+        run: |
+          VAULT_CHARM=$(ls built/*.charm | grep -v kv-requirer | head -1)
+          echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
+      - name: Run test_deploy_unseal integration test
+        working-directory: ${{ inputs.path }}
+        env:
+          SODIUM_INSTALL: system
+          PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
+        run: |
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            -k "test_deploy_unseal.py"
+      - name: Collect Juju debug logs
+        if: failure()
+        working-directory: ${{ inputs.path }}
+        run: |
+          juju debug-log --lines 10000 > juju-debug.log 2>&1 || true
+          juju status --format=yaml >> juju-debug.log 2>&1 || true
+          juju-crashdump -s -m $(juju models --format json 2>/dev/null | jq -r '.["current-model"]') -o . 2>/dev/null || true
+      - name: Archive Juju debug log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: juju-debug-log-machine-s390x
+          path: ${{ inputs.path }}/juju-debug.log
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: charmcraft-logs-test_deploy_unseal-machine-s390x
+          path: /home/runner/.local/state/charmcraft/log/*.log
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: juju-crashdump-machine-test_deploy_unseal-s390x
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
