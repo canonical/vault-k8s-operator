@@ -205,6 +205,19 @@ jobs:
       runner: '["self-hosted", "linux", "ARM64", "medium", "noble"]'
       artifact-suffix: machine
 
+  machine-build-s390x:
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    secrets: inherit
+    with:
+      path: machine
+      arch: s390x
+      runner: '["self-hosted-linux-s390x-noble-medium"]'
+      artifact-suffix: machine
+
   machine-build-kv-requirer:
     needs:
       - machine-lint-report
@@ -235,6 +248,14 @@ jobs:
       path: ./machine/
       vault-charm-artifact-name: ${{ needs.machine-build-arm.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-machine-charm
+
+  machine-integration-test-s390x:
+    needs:
+      - machine-build-s390x
+    uses: ./.github/workflows/machine-integration-test-s390x.yaml
+    with:
+      path: ./machine/
+      vault-charm-artifact-name: ${{ needs.machine-build-s390x.outputs.artifacts-key }}
 
   machine-publish-charm:
     name: Publish Machine Charm

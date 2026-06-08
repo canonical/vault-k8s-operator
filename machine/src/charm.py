@@ -110,13 +110,19 @@ VAULT_DEFAULT_POLICY_NAME = "default"
 VAULT_PKI_MOUNT = "charm-pki"
 VAULT_PKI_ROLE = "charm-pki"
 VAULT_PORT = 8200
-VAULT_SNAP_CHANNEL = "2.0/stable"
 VAULT_SNAP_NAME = "vault"
 VAULT_SNAP_REVISIONS = {
     "x86_64": "2487",
     "aarch64": "2489",
+    "s390x": "2500",
+}
+VAULT_SNAP_CHANNELS = {
+    "x86_64": "2.0/stable",
+    "aarch64": "2.0/stable",
+    "s390x": "2.0/edge",
 }
 VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS.get(platform.machine(), "")
+VAULT_SNAP_CHANNEL_FOR_ARCH = VAULT_SNAP_CHANNELS.get(platform.machine(), "2.0/stable")
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 
 
@@ -1205,7 +1211,9 @@ class VaultOperatorCharm(CharmBase):
                 return
             with self.temp_maintenance_status("Installing Vault"):
                 vault_snap.ensure(
-                    snap.SnapState.Latest, channel=VAULT_SNAP_CHANNEL, revision=VAULT_SNAP_REVISION
+                    snap.SnapState.Latest,
+                    channel=VAULT_SNAP_CHANNEL_FOR_ARCH,
+                    revision=VAULT_SNAP_REVISION,
                 )
                 vault_snap.hold()
             logger.info("Vault snap installed")
