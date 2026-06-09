@@ -285,6 +285,7 @@ jobs:
       - machine-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
+      - machine-build-arm
       - machine-integration-test-arm
       - machine-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
@@ -300,3 +301,25 @@ jobs:
       charm-paths: ${{ needs.machine-build-arm.outputs.charm-paths }}
       tag-prefix: machine
       runner: '["self-hosted", "linux", "ARM64", "medium", "noble"]'
+
+  machine-publish-charm-s390x:
+    name: Publish Machine Charm (s390x)
+    needs:
+      - machine-lint-report
+      - machine-static-analysis
+      - machine-unit-tests-with-coverage
+      - machine-build-s390x
+      - machine-integration-test-s390x
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      destination_channel: 2.0/edge
+      path: machine
+      artifacts-key: ${{ needs.machine-build-s390x.outputs.artifacts-key }}
+      charm-paths: ${{ needs.machine-build-s390x.outputs.charm-paths }}
+      tag-prefix: machine
+      runner: '["self-hosted-linux-s390x-noble-medium"]'
