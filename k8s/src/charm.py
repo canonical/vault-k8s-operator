@@ -304,15 +304,10 @@ class VaultCharm(CharmBase):
                     )
                 )
                 return
-        if self.juju_facade.relation_exists(PKI_RELATION_NAME):
-            if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-                event.add_status(
-                    BlockedStatus(
-                        f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
-                    )
-                )
-                return
-        if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+        pki_config_needed = self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) or self.juju_facade.relation_exists(PKI_RELATION_NAME)
+        if pki_config_needed:
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
             ):
@@ -566,6 +561,12 @@ class VaultCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        # Pass tls_certificates_pki only if relation exists; PKIManager derives mode from this
+        tls_certificates_pki = (
+            self.tls_certificates_pki
+            if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
+            else None
+        )
         manager = PKIManager(
             charm=self,
             vault_client=vault,
@@ -573,8 +574,9 @@ class VaultCharm(CharmBase):
             mount_point=PKI_MOUNT,
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
-            tls_certificates_pki=self.tls_certificates_pki,
+            tls_certificates_pki=tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("pki_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
@@ -586,6 +588,10 @@ class VaultCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca_validity_hours=self.juju_facade.get_int_config(
+                "pki_self_signed_ca_validity"
+            )
+            or 87600,
         )
         manager.configure()
 
@@ -695,6 +701,7 @@ class VaultCharm(CharmBase):
             role_name=ACME_ROLE_NAME,
             vault_address=f"https://{self._ingress_address}:{self.VAULT_PORT}",
             allowed_domains=self.juju_facade.get_string_config("acme_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("acme_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("acme_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "acme_allow_wildcard_certificates"
@@ -749,6 +756,12 @@ class VaultCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        # Pass tls_certificates_pki only if relation exists; PKIManager derives mode from this
+        tls_certificates_pki = (
+            self.tls_certificates_pki
+            if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
+            else None
+        )
         manager = PKIManager(
             charm=self,
             vault_client=vault,
@@ -756,8 +769,9 @@ class VaultCharm(CharmBase):
             mount_point=PKI_MOUNT,
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
-            tls_certificates_pki=self.tls_certificates_pki,
+            tls_certificates_pki=tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("pki_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
@@ -769,6 +783,10 @@ class VaultCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca_validity_hours=self.juju_facade.get_int_config(
+                "pki_self_signed_ca_validity"
+            )
+            or 87600,
         )
         manager.sync()
 

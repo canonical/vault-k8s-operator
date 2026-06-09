@@ -1125,6 +1125,8 @@ class AutounsealRequirerManager:
 class PKIManager:
     """Encapsulates the business logic for managing PKI certificates in Vault from a Charm."""
 
+    SELF_SIGNED_CA_SECRET_LABEL = "vault-pki-self-signed-ca"
+
     def __init__(
         self,
         charm: CharmBase,
@@ -1133,6 +1135,7 @@ class PKIManager:
         mount_point: str,
         role_name: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1143,7 +1146,8 @@ class PKIManager:
         province: str | None,
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
-        tls_certificates_pki: TLSCertificatesRequiresV4,
+        tls_certificates_pki: TLSCertificatesRequiresV4 | None = None,
+        self_signed_ca_validity_hours: int = 87600,
     ):
         """Create a new PKIManager object.
 
@@ -1156,8 +1160,10 @@ class PKIManager:
             mount_point: The mount point in Vault for the PKI backend
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
-            tls_certificates_pki: The tls_certificates_pki requirer relation helper library
+            tls_certificates_pki: The tls_certificates_pki requirer relation helper library.
+                If provided, external CA mode is used. If None, self-signed CA mode is used.
             allowed_domains: The domains that the PKI engine will allow certificates to be issued for
+            allow_bare_domains: Whether the PKI engine will allow the exact domains in allowed_domains
             allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
             allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
             allow_any_name: Whether the PKI engine will allow any name to be issued for
@@ -1167,6 +1173,8 @@ class PKIManager:
             country: The country to be included in the issued certificate
             province: The province to be included in the issued certificate
             locality: The locality to be included in the issued certificate
+            self_signed_ca_validity_hours: The validity period in hours for self-signed CA.
+                Only used when tls_certificates_pki is None. Defaults to 87600 (10 years).
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1179,6 +1187,7 @@ class PKIManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1192,6 +1201,12 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
+        self._self_signed_ca_validity_hours = self_signed_ca_validity_hours
+
+    @property
+    def _self_signed_ca(self) -> bool:
+        """Return True if self-signed CA mode should be used (no external CA relation)."""
+        return self._tls_certificates_pki is None
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1200,6 +1215,8 @@ class PKIManager:
 
         This is the CA certificate that the provider charm has issued to Vault.
         """
+        if not self._tls_certificates_pki:
+            return None, None
         provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
             certificate_request=self._certificate_request_attributes
         )
@@ -1221,16 +1238,23 @@ class PKIManager:
         Additionally, this method ensures that the intermediate CA certificate
         is renewed if necessary.
         """
-        update_ca_certificate = True
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
-            return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
             return
         self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
         logger.info("Enabled PKI secrets engine at %s", self._mount_point)
 
+        if self._self_signed_ca:
+            self._configure_self_signed_ca()
+        else:
+            self._configure_external_ca()
+
+    def _configure_external_ca(self):
+        """Configure the PKI backend using an external CA from the relation."""
+        if not self._tls_certificates_pki:
+            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
+            return
+        update_ca_certificate = True
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             return
@@ -1262,11 +1286,110 @@ class PKIManager:
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
 
+    def _configure_self_signed_ca(self):
+        """Configure the PKI backend using a Vault self-signed CA."""
+        ca_certificate = self._ensure_self_signed_ca_in_vault()
+        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
+
+    def _ensure_self_signed_ca_in_vault(self) -> Certificate:
+        """Ensure a self-signed CA exists in both Juju secrets and Vault.
+
+        Handles three scenarios:
+        1. CA exists in secret and Vault - no action needed (idempotent)
+        2. CA exists in secret but not Vault - re-import (e.g. after Raft restore)
+        3. No CA or config changed - generate a new one
+
+        Returns:
+            The CA certificate that is now active in Vault.
+        """
+        existing_cert, existing_key = self._get_self_signed_ca_from_secret()
+
+        if existing_cert and existing_key:
+            # Config changed (e.g. common_name rotation) - regenerate
+            if existing_cert.common_name != self._certificate_request_attributes.common_name:
+                logger.info(
+                    "Self-signed CA common name changed from %s to %s, regenerating",
+                    existing_cert.common_name,
+                    self._certificate_request_attributes.common_name,
+                )
+                return self._generate_and_store_self_signed_ca()
+
+            # CA in secret matches Vault - nothing to do
+            vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
+                logger.debug("Self-signed CA already configured in the PKI secrets engine")
+                return existing_cert
+
+            # CA exists in secret but not in Vault (e.g. after Raft snapshot restore)
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(existing_cert),
+                private_key=str(existing_key),
+                mount=self._mount_point,
+            )
+            return existing_cert
+
+        # No CA exists yet - generate a new one
+        return self._generate_and_store_self_signed_ca()
+
+    def _generate_and_store_self_signed_ca(self) -> Certificate:
+        """Generate a new self-signed CA, store in Juju secret, and return the certificate."""
+        new_cert, new_key = self._generate_self_signed_ca()
+        # generate_root already creates the issuer in Vault, no need to import
+        self._juju_facade.set_app_secret_content(
+            {"certificate": new_cert, "privatekey": new_key},
+            label=self.SELF_SIGNED_CA_SECRET_LABEL,
+        )
+        return Certificate.from_string(new_cert)
+
+    def _generate_self_signed_ca(self) -> tuple[str, str]:
+        """Generate a new self-signed CA using Vault.
+
+        Returns:
+            tuple: (certificate_pem, private_key_pem)
+        """
+        attrs = self._certificate_request_attributes
+        return self._vault_client.generate_self_signed_ca(
+            mount=self._mount_point,
+            common_name=attrs.common_name,
+            ttl=f"{self._self_signed_ca_validity_hours}h",
+            sans_dns=list(attrs.sans_dns) if attrs.sans_dns else None,
+            country=attrs.country_name,
+            province=attrs.state_or_province_name,
+            locality=attrs.locality_name,
+            organization=attrs.organization,
+            organizational_unit=attrs.organizational_unit,
+        )
+
+    def _get_self_signed_ca_from_secret(self) -> tuple[Certificate | None, str | None]:
+        """Retrieve the self-signed CA from Juju secrets.
+
+        Returns:
+            tuple: (certificate, private_key) or (None, None) if not found.
+        """
+        try:
+            cert_pem, key_pem = self._juju_facade.get_secret_content_values(
+                "certificate",
+                "privatekey",
+                label=self.SELF_SIGNED_CA_SECRET_LABEL,
+            )
+            if cert_pem and key_pem:
+                return Certificate.from_string(cert_pem), key_pem
+        except (FacadeError, SecretRemovedError, NoSuchSecretError, TLSCertificatesError):
+            logger.debug("Self-signed CA secret not found or incomplete")
+        return None, None
+
+    def _create_or_update_pki_role(self, issued_certificates_validity: int) -> None:
+        """Create or update the PKI role if the configuration has changed."""
         if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -1284,6 +1407,7 @@ class PKIManager:
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
@@ -1294,7 +1418,6 @@ class PKIManager:
                 province=self._province,
                 locality=self._locality,
             )
-        self.make_latest_pki_issuer_default()
 
     def make_latest_pki_issuer_default(self):
         """Make the latest issuer the default issuer."""
@@ -1308,7 +1431,9 @@ class PKIManager:
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki request")
             return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+        if not self._self_signed_ca and not self._juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ):
             logger.debug("TLS Certificates PKI relation not created")
             return
         outstanding_pki_requests = self._vault_pki.get_outstanding_certificate_requests()
@@ -1317,18 +1442,30 @@ class PKIManager:
                 requirer_csr=pki_request,
             )
 
+    def _get_ca_certificate(self) -> Certificate | None:
+        """Get the CA certificate for signing, from relation or self-signed secret."""
+        if self._self_signed_ca:
+            cert, _ = self._get_self_signed_ca_from_secret()
+            if cert:
+                return cert
+            vault_ca = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_ca:
+                return vault_ca
+            return None
+        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
+        return provider_certificate.certificate if provider_certificate else None
+
     def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCertificateRequest):
         if not self._vault_client.is_pki_role_created(
             role=self._role_name, mount=self._mount_point
         ):
             logger.debug("PKI role not created")
             return
-        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
-        if not provider_certificate:
+        ca_certificate = self._get_ca_certificate()
+        if not ca_certificate:
+            logger.debug("No CA certificate available for the PKI backend, cannot sign certificate requests")
             return
-        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
-            provider_certificate.certificate
-        )
+        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
         try:
             certificate = self._vault_client.sign_pki_certificate_signing_request(
                 mount=self._mount_point,
@@ -1804,6 +1941,7 @@ class ACMEManager:
         role_name: str,
         vault_address: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1826,6 +1964,7 @@ class ACMEManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1897,6 +2036,7 @@ class ACMEManager:
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -1913,6 +2053,7 @@ class ACMEManager:
                 role=self._role_name,
                 max_ttl=f"{max_ttl}s",
                 mount=self._mount_point,
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,

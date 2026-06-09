@@ -24,23 +24,59 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == BlockedStatus("log_level config is not valid")
 
-    def test_given_pki_relation_and_tls_certificates_pki_relation_missing_when_collect_unit_status_then_status_is_blocked(
+    def test_given_vault_pki_relation_without_external_ca_when_common_name_configured_then_status_is_active(
         self,
     ):
+        self.mock_snap_cache.return_value = {
+            "vault": MagicMock(
+                spec=Snap, revision="1.18/stable", services={"vaultd": {"active": True}}
+            )
+        }
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_pushed_to_workload.return_value": True,
+                "tls_file_available_in_charm.return_value": True,
+            },
+        )
+        self.mock_vault.configure_mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "is_sealed.return_value": False,
+                "needs_migration.return_value": False,
+                "is_seal_type_transit.return_value": False,
+            },
+        )
         pki_relation = testing.Relation(
             endpoint="vault-pki",
             interface="tls-certificates",
         )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+            peers_data={
+                1: {"node_api_address": "1.2.3.4"},
+                2: {"node_api_address": "1.2.3.5"},
+                3: {"node_api_address": "1.2.3.6"},
+            },
+        )
+        approle_secret = testing.Secret(
+            label="vault-approle-auth-details",
+            tracked_content={
+                "role-id": "existing role id",
+                "secret-id": "existing secret id",
+            },
+        )
         state_in = testing.State(
             config={"pki_ca_common_name": "domain.com"},
-            relations=[pki_relation],
+            relations=[pki_relation, peer_relation],
+            leader=True,
+            planned_units=3,
+            secrets=[approle_secret],
         )
 
         state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
 
-        assert state_out.unit_status == BlockedStatus(
-            "tls-certificates-pki relation is missing, cannot configure PKI secrets engine"
-        )
+        assert isinstance(state_out.unit_status, ActiveStatus)
 
     def test_given_pki_tls_relation_and_bad_common_name_when_collect_unit_status_then_status_is_blocked(
         self,

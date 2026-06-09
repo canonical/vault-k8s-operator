@@ -13,7 +13,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from io import IOBase
-from typing import List, MutableMapping, Protocol
+from typing import List, MutableMapping, Optional, Protocol
 
 import hvac
 import requests
@@ -418,6 +418,62 @@ class VaultClient:
         """Get the intermediate CA for the PKI backend."""
         return self._client.secrets.pki.read_ca_certificate(mount_point=mount)
 
+    def generate_self_signed_ca(
+        self,
+        mount: str,
+        common_name: str,
+        ttl: str,
+        sans_dns: Optional[List[str]] = None,
+        country: Optional[str] = None,
+        province: Optional[str] = None,
+        locality: Optional[str] = None,
+        organization: Optional[str] = None,
+        organizational_unit: Optional[str] = None,
+    ) -> tuple[str, str]:
+        """Generate a self-signed CA using Vault's PKI root/generate/exported endpoint.
+
+        Args:
+            mount: The PKI mount point.
+            common_name: The common name for the CA certificate.
+            ttl: The TTL for the CA certificate, e.g. "8760h".
+            sans_dns: Optional list of DNS subject alternative names.
+            country: Optional country name.
+            province: Optional province/state name.
+            locality: Optional locality name.
+            organization: Optional organization name.
+            organizational_unit: Optional organizational unit name.
+
+        Returns:
+            tuple: (certificate_pem, private_key_pem)
+
+        Raises:
+            VaultClientError: If Vault fails to generate the CA.
+        """
+        extra_params: dict = {"ttl": ttl}
+        if sans_dns:
+            extra_params["alt_names"] = ",".join(sans_dns)
+        if country:
+            extra_params["country"] = country
+        if province:
+            extra_params["province"] = province
+        if locality:
+            extra_params["locality"] = locality
+        if organization:
+            extra_params["organization"] = organization
+        if organizational_unit:
+            extra_params["organizational_unit"] = organizational_unit
+        try:
+            response = self._client.secrets.pki.generate_root(
+                type="exported",
+                common_name=common_name,
+                mount_point=mount,
+                extra_params=extra_params,
+            )
+            data = response["data"]
+            return str(data["certificate"]), str(data["private_key"])
+        except (InvalidRequest, VaultError) as e:
+            raise VaultClientError(e) from e
+
     def import_ca_certificate_and_key(self, mount: str, certificate: str, private_key: str):
         """Import the CA certificate and private key for the PKI backend."""
         pem_bundle = generate_pem_bundle(certificate=certificate, private_key=private_key)
@@ -475,6 +531,7 @@ class VaultClient:
         allowed_domains: str,
         max_ttl: str,
         mount: str,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -510,6 +567,8 @@ class VaultClient:
             "max_ttl": max_ttl,
         }
 
+        if allow_bare_domains is not None:
+            extra_params["allow_bare_domains"] = "true" if allow_bare_domains else "false"
         if allow_subdomains is not None:
             extra_params["allow_subdomains"] = "true" if allow_subdomains else "false"
         if allow_wildcard_certificates is not None:
@@ -549,6 +608,7 @@ class VaultClient:
         mount: str,
         max_ttl: str,
         allowed_domains: str,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -583,6 +643,7 @@ class VaultClient:
             role=role,
             mount=mount,
             max_ttl=max_ttl,
+            allow_bare_domains=allow_bare_domains,
             allow_subdomains=allow_subdomains,
             allow_wildcard_certificates=allow_wildcard_certificates,
             allow_any_name=allow_any_name,
@@ -672,6 +733,7 @@ class VaultClient:
         role: str,
         mount: str,
         allowed_domains: List[str],
+        allow_bare_domains: bool,
         allow_subdomains: bool,
         allow_wildcard_certificates: bool,
         allow_any_name: bool,
@@ -695,6 +757,7 @@ class VaultClient:
                 return False
 
             expected_config = {
+                "allow_bare_domains": allow_bare_domains,
                 "allow_subdomains": allow_subdomains,
                 "allow_wildcard_certificates": allow_wildcard_certificates,
                 "allow_any_name": allow_any_name,

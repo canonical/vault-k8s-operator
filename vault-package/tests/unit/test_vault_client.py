@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from hvac.exceptions import Forbidden, InternalServerError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidRequest
 
 from vault.vault_client import (
     AppRole,
@@ -17,6 +17,7 @@ from vault.vault_client import (
     Token,
     VaultAuthenticationError,
     VaultClient,
+    VaultClientError,
 )
 
 TEST_PATH = "./tests/unit"
@@ -609,6 +610,89 @@ def test_when_sign_pki_csr_succeeds_then_certificate_object_returned(patch_sign:
     assert certificate.certificate == "cert-pem"
     assert certificate.ca == "ca-pem"
     assert certificate.chain == ["chain-pem"]
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_then_returns_certificate_and_key(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.return_value = {
+        "data": {
+            "certificate": "cert-pem",
+            "private_key": "key-pem",
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    cert, key = vault.generate_self_signed_ca(
+        mount="pki",
+        common_name="my-ca",
+        ttl="8760h",
+    )
+
+    assert cert == "cert-pem"
+    assert key == "key-pem"
+    patch_generate_root.assert_called_once_with(
+        type="exported",
+        common_name="my-ca",
+        mount_point="pki",
+        extra_params={"ttl": "8760h"},
+    )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_with_optional_params_then_extra_params_passed(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.return_value = {
+        "data": {
+            "certificate": "cert-pem",
+            "private_key": "key-pem",
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    vault.generate_self_signed_ca(
+        mount="pki",
+        common_name="my-ca",
+        ttl="8760h",
+        sans_dns=["example.com", "www.example.com"],
+        country="US",
+        province="CA",
+        locality="San Francisco",
+        organization="Test Org",
+        organizational_unit="Test Unit",
+    )
+
+    patch_generate_root.assert_called_once_with(
+        type="exported",
+        common_name="my-ca",
+        mount_point="pki",
+        extra_params={
+            "ttl": "8760h",
+            "alt_names": "example.com,www.example.com",
+            "country": "US",
+            "province": "CA",
+            "locality": "San Francisco",
+            "organization": "Test Org",
+            "organizational_unit": "Test Unit",
+        },
+    )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_fails_then_vault_client_error_raised(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.side_effect = InvalidRequest("some error")
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    with pytest.raises(VaultClientError):
+        vault.generate_self_signed_ca(
+            mount="pki",
+            common_name="my-ca",
+            ttl="8760h",
+        )
 
 
 @patch("hvac.api.secrets_engines.pki.Pki.sign_certificate")

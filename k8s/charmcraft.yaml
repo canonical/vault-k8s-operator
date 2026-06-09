@@ -361,6 +361,13 @@ config:
         A comma-separated list of domain names for which the Vault charm can sign certificates.
         The Vault charm will use this configuration option in the context of acting as an intermediate CA.
         Certificate requests for charms integrating with Vault using the `vault-pki` integration will need to use a domain name from this list.
+    pki_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the exact value of the domains listed in `pki_allowed_domains` (or `pki_ca_common_name` if not set).
+        For example, if `pki_allowed_domains` is `example.com`, this option allows issuing a certificate for `example.com` itself.
+        When disabled, only subdomains (if `pki_allow_subdomains` is true) can be issued, not the base domain.
     pki_allow_subdomains:
       type: boolean
       default: false
@@ -416,6 +423,14 @@ config:
       description: >-
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
+    pki_self_signed_ca_validity:
+      type: int
+      default: 87600
+      description: >-
+        The validity period in hours for the self-signed CA certificate when using Vault's built-in PKI
+        without an external CA relation (tls-certificates-pki). Default is 87600 hours (10 years).
+        This option is only used when the `tls-certificates-pki` relation is not present and
+        `pki_ca_common_name` is configured.
 
 # ACME engine options
     acme_ca_common_name:
@@ -480,6 +495,12 @@ config:
         Specifies if clients can request certificates with common names that are subdomains of the common name in the `allowed_domains` list.
         This includes wildcard subdomains.
         For example, an allowed_domains value of `example.com` with this option set to `true` will allow `foo.example.com` and `fou.bar.example.com` as well as `*.example.com`.
+    acme_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the value of the actual domains themselves.
+        For example, if `allowed_domains` contains `example.com`, setting this to `true` allows clients to actually request a certificate for `example.com`.
     acme_allow_wildcard_certificates:
       type: boolean
       default: true
