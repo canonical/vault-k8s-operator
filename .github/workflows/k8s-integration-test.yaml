@@ -125,7 +125,7 @@ jobs:
           ref: gh-pages
           path: gh-pages
       - name: Build test report
-        uses: simple-elf/allure-report-action@v1.13
+        uses: simple-elf/allure-report-action@v1.14
         if: always()
         continue-on-error: true
         with:
