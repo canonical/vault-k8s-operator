@@ -7,7 +7,7 @@ on:
 
 jobs:
   analyze-k8s:
-    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v2.0.6
     with:
       project: vault-k8s-operator
       dir: k8s
@@ -15,7 +15,7 @@ jobs:
       TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
 
   analyze-machine:
-    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@v2.0.6
     with:
       project: vault-operator
       dir: machine
