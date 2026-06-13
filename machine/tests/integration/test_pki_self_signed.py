@@ -8,13 +8,12 @@ This module tests the PKI feature when Vault uses its own self-signed CA
 instead of relying on an external CA provider via the tls-certificates-pki relation.
 """
 
-import asyncio
 import logging
 from collections import namedtuple
 from pathlib import Path
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 from config import (
     APP_NAME,
@@ -27,6 +26,7 @@ from config import (
 )
 from helpers import (
     deploy_vault,
+    fast_forward,
     get_leader_unit_address,
     get_vault_pki_intermediate_ca_common_name,
     get_vault_token_and_unseal_key,
@@ -41,23 +41,15 @@ VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
 @pytest.fixture(scope="module")
-async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
+def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
     """Build and deploy the application."""
-    assert ops_test.model
     if skip_deploy:
         logger.info("Skipping deployment due to --no-deploy flag")
-        root_token, key = await get_vault_token_and_unseal_key(
-            ops_test.model,
-            APP_NAME,
-        )
+        root_token, key = get_vault_token_and_unseal_key(juju, APP_NAME)
         return VaultInit(root_token, key)
 
-    await deploy_vault(
-        ops_test,
-        charm_path=vault_charm_path,
-        num_vaults=NUM_VAULT_UNITS,
-    )
-    await ops_test.model.deploy(
+    deploy_vault(juju, charm_path=vault_charm_path, num_vaults=NUM_VAULT_UNITS)
+    juju.deploy(
         VAULT_PKI_REQUIRER_APPLICATION_NAME,
         channel="latest/stable",
         revision=VAULT_PKI_REQUIRER_REVISION,
@@ -67,89 +59,59 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         },
     )
 
-    # When waiting for Vault to go to the blocked state, we may need an update
-    # status event to recognize that the API is available, so we wait in
-    # fast-forward.
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await asyncio.gather(
-            ops_test.model.wait_for_idle(
-                apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, VAULT_PKI_REQUIRER_APPLICATION_NAME)
+                and jubilant.all_blocked(s, APP_NAME)
+                and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
             ),
-            ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="blocked",
-                wait_for_exact_units=NUM_VAULT_UNITS,
-            ),
+            timeout=1000,
         )
-    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APP_NAME)
+    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APP_NAME)
     return VaultInit(root_token, unseal_key)
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency()
-async def test_given_no_external_ca_and_common_name_configured_when_integrate_then_status_is_active(
-    ops_test: OpsTest, deploy: VaultInit
+def test_given_no_external_ca_and_common_name_configured_when_integrate_then_status_is_active(
+    juju: jubilant.Juju, deploy: VaultInit
 ):
     """Test that Vault becomes active when PKI is configured without external CA."""
-    assert ops_test.model
-
-    vault_app = ops_test.model.applications[APP_NAME]
     common_name = "self-signed-ca.example.com"
-    await vault_app.set_config(
-        {
-            "pki_ca_common_name": common_name,
-        }
-    )
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
+    juju.config(APP_NAME, {"pki_ca_common_name": common_name})
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: jubilant.all_active(s, APP_NAME),
             timeout=SHORT_TIMEOUT,
         )
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency(
-    depends=[
-        "test_given_no_external_ca_and_common_name_configured_when_integrate_then_status_is_active"
-    ]
-)
-async def test_given_self_signed_ca_configured_when_integrate_vault_pki_then_certificate_is_issued(
-    ops_test: OpsTest, deploy: VaultInit
+def test_given_self_signed_ca_configured_when_integrate_vault_pki_then_certificate_is_issued(
+    juju: jubilant.Juju, deploy: VaultInit
 ):
     """Test that certificates are issued using the self-signed CA."""
-    assert ops_test.model
-
-    vault_app = ops_test.model.applications[APP_NAME]
     common_name = MATCHING_COMMON_NAME
-    await vault_app.set_config(
-        {
-            "pki_ca_common_name": common_name,
-            "pki_allow_subdomains": "true",
-        }
+    juju.config(
+        APP_NAME,
+        {"pki_ca_common_name": common_name, "pki_allow_subdomains": "true"},
     )
-    await ops_test.model.integrate(
-        relation1=f"{APP_NAME}:vault-pki",
-        relation2=f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
+    juju.integrate(
+        f"{APP_NAME}:vault-pki",
+        f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}:certificates",
     )
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await asyncio.gather(
-            ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                timeout=SHORT_TIMEOUT,
-                wait_for_exact_units=NUM_VAULT_UNITS,
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, APP_NAME, VAULT_PKI_REQUIRER_APPLICATION_NAME)
+                and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+                and len(s.apps[VAULT_PKI_REQUIRER_APPLICATION_NAME].units) == 1
             ),
-            ops_test.model.wait_for_idle(
-                apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
-                status="active",
-                timeout=SHORT_TIMEOUT,
-                wait_for_exact_units=1,
-            ),
+            timeout=SHORT_TIMEOUT,
         )
-        await wait_for_certificate_to_be_provided(ops_test)
+        wait_for_certificate_to_be_provided(juju)
 
-    leader_unit_address = await get_leader_unit_address(ops_test.model)
+    leader_unit_address = get_leader_unit_address(juju)
     current_issuers_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
         unit_address=leader_unit_address,
@@ -157,53 +119,39 @@ async def test_given_self_signed_ca_configured_when_integrate_vault_pki_then_cer
     )
     assert current_issuers_common_name == common_name
 
-    action_output = await run_get_certificate_action(ops_test)
+    action_output = run_get_certificate_action(juju)
     assert action_output["certificate"] is not None
     assert action_output["ca-certificate"] is not None
     assert action_output["csr"] is not None
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.dependency(
-    depends=[
-        "test_given_self_signed_ca_configured_when_integrate_vault_pki_then_certificate_is_issued"
-    ]
-)
-async def test_given_self_signed_ca_when_common_name_changed_then_new_ca_is_generated(
-    ops_test: OpsTest, deploy: VaultInit
+def test_given_self_signed_ca_when_common_name_changed_then_new_ca_is_generated(
+    juju: jubilant.Juju, deploy: VaultInit
 ):
     """Test that changing pki_ca_common_name regenerates the self-signed CA."""
-    assert ops_test.model
-
-    vault_app = ops_test.model.applications[APP_NAME]
     new_common_name = "rotated-ca.example.com"
 
-    # First verify the current CA common name
-    leader_unit_address = await get_leader_unit_address(ops_test.model)
+    leader_unit_address = get_leader_unit_address(juju)
     old_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
         unit_address=leader_unit_address,
         mount="charm-pki",
     )
 
-    # Change the common name
-    await vault_app.set_config(
-        {
-            "pki_ca_common_name": new_common_name,
-            "pki_allow_subdomains": "true",
-        }
+    juju.config(
+        APP_NAME,
+        {"pki_ca_common_name": new_common_name, "pki_allow_subdomains": "true"},
     )
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, APP_NAME) and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            ),
             timeout=SHORT_TIMEOUT,
-            wait_for_exact_units=NUM_VAULT_UNITS,
         )
-        # Wait for the requirer to receive a new certificate
-        await wait_for_certificate_to_be_provided(ops_test)
+        wait_for_certificate_to_be_provided(juju)
 
-    # Verify the CA common name has changed
     current_common_name = get_vault_pki_intermediate_ca_common_name(
         root_token=deploy.root_token,
         unit_address=leader_unit_address,
