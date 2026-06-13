@@ -1,11 +1,9 @@
-import asyncio
 import logging
 from collections import namedtuple
 from pathlib import Path
 
+import jubilant
 import pytest
-from juju.application import Application
-from pytest_operator.plugin import OpsTest
 
 from config import (
     APP_NAME,
@@ -18,6 +16,7 @@ from helpers import (
     ActionFailedError,
     authorize_charm,
     deploy_vault,
+    fast_forward,
     get_vault_token_and_unseal_key,
     initialize_unseal_authorize_vault,
     initialize_vault_leader,
@@ -30,22 +29,19 @@ VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
 @pytest.fixture(scope="module")
-async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
+def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
     """Build and deploy the application."""
-    assert ops_test.model
     if skip_deploy:
         logger.info("Skipping deployment due to --no-deploy flag")
-        root_token, key = await get_vault_token_and_unseal_key(
-            ops_test.model,
-            APP_NAME,
-        )
+        root_token, key = get_vault_token_and_unseal_key(juju, APP_NAME)
         return VaultInit(root_token, key)
-    await deploy_vault(
-        ops_test,
+    deploy_vault(
+        juju,
         charm_path=vault_charm_path,
         num_vaults=NUM_VAULT_UNITS,
     )
-    await ops_test.model.deploy(
+    juju.deploy(
+        SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         channel="1/stable",
         revision=SELF_SIGNED_CERTIFICATES_REVISION,
@@ -54,96 +50,92 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
     # When waiting for Vault to go to the blocked state, we may need an update
     # status event to recognize that the API is available, so we wait in
     # fast-forward.
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await asyncio.gather(
-            ops_test.model.wait_for_idle(
-                apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME)
+                and jubilant.all_blocked(s, APP_NAME)
+                and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
             ),
-            ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="blocked",
-                wait_for_exact_units=NUM_VAULT_UNITS,
-            ),
+            timeout=1000,
         )
-    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APP_NAME)
+    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APP_NAME)
     return VaultInit(root_token, unseal_key)
 
 
 @pytest.mark.abort_on_fail
-async def test_given_vault_is_deployed_when_integrate_another_vault_then_autounseal_activated(
-    ops_test: OpsTest, deploy: VaultInit, vault_charm_path: Path
+def test_given_vault_is_deployed_when_integrate_another_vault_then_autounseal_activated(
+    juju: jubilant.Juju, deploy: VaultInit, vault_charm_path: Path
 ):
     # Arrange
-    assert ops_test.model
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await ops_test.model.deploy(
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.deploy(
             vault_charm_path,
-            application_name="vault-b",
+            "vault-b",
             trust=True,
             num_units=1,
         )
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="blocked",
-            wait_for_exact_units=1,
+        juju.wait(
+            lambda s: (
+                "vault-b" in s.apps
+                and jubilant.all_blocked(s, "vault-b")
+                and len(s.apps["vault-b"].units) == 1
+            ),
+            timeout=600,
         )
 
-    await ops_test.model.integrate(
-        relation1="vault-b:tls-certificates-access",
-        relation2=f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+    juju.integrate(
+        "vault-b:tls-certificates-access",
+        f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
     )
 
     # Act
-    await ops_test.model.integrate(
-        f"{APP_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires"
-    )
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"], status="blocked", wait_for_exact_units=1, idle_period=5
+    juju.integrate(f"{APP_NAME}:vault-autounseal-provides", "vault-b:vault-autounseal-requires")
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                "vault-b" in s.apps
+                and jubilant.all_blocked(s, "vault-b")
+                and len(s.apps["vault-b"].units) == 1
+            ),
+            timeout=300,
         )
 
-        await wait_for_status_message(
-            ops_test=ops_test,
+        wait_for_status_message(
+            juju=juju,
             count=1,
             expected_message="Please initialize Vault",
             app_name="vault-b",
         )
 
-        root_token, recovery_key = await initialize_vault_leader(ops_test, "vault-b")
-        await wait_for_status_message(
-            ops_test=ops_test,
+        root_token, recovery_key = initialize_vault_leader(juju, "vault-b")
+        wait_for_status_message(
+            juju=juju,
             count=1,
             expected_message="Please authorize charm (see `authorize-charm` action)",
             app_name="vault-b",
         )
         try:
-            await authorize_charm(ops_test, root_token, "vault-b")
+            authorize_charm(juju, root_token, "vault-b")
         except ActionFailedError:
             logger.warning("Failed to authorize charm")
 
     # Assert
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="active",
-            wait_for_exact_units=1,
-            idle_period=5,
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: jubilant.all_active(s, "vault-b") and len(s.apps["vault-b"].units) == 1,
+            timeout=300,
         )
 
 
 @pytest.mark.abort_on_fail
-async def test_given_vault_b_is_deployed_and_autounsealed_when_add_unit_then_status_is_active(
-    ops_test: OpsTest,
+def test_given_vault_b_is_deployed_and_autounsealed_when_add_unit_then_status_is_active(
+    juju: jubilant.Juju,
 ):
-    assert ops_test.model
-
-    app = ops_test.model.applications["vault-b"]
-    assert isinstance(app, Application)
-    assert len(app.units) == 1
-    await app.add_units(1)
-    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=["vault-b"],
-            status="active",
-            wait_for_exact_units=2,
+    assert len(juju.status().apps["vault-b"].units) == 1
+    juju.add_unit("vault-b", num_units=1)
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: jubilant.all_active(s, "vault-b") and len(s.apps["vault-b"].units) == 2,
+            timeout=300,
         )

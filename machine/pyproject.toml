@@ -31,11 +31,10 @@ dependencies = [
 test = [
     "coverage[toml]",
     "hvac",
-    "juju",
+    "jubilant",
     "pyhcl",             # import hcl
     "pytest",
-    "pytest-dependency",
-    "pytest-operator",
+    "pytest-jubilant",
 ]
 dev = ["codespell", "pyright", "ruff"]
 
