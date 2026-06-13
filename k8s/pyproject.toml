@@ -4,12 +4,12 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "ops>=3.7.0",
+    "ops>=3.7.1",
     "vault-package",
     "charmlibs-interfaces-tls-certificates~=1.8",
     "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
-    "pydantic==2.13.0",
+    "pydantic==2.13.4",
     # via charm_tracing
     "opentelemetry-exporter-otlp-proto-http",
     # via ingress_per_unit
