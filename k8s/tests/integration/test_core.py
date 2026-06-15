@@ -13,6 +13,8 @@ from config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
+    SELF_SIGNED_CERTIFICATES_REVISION,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -190,7 +192,8 @@ def test_given_application_is_deployed_when_self_signed_certificates_integrated_
 ):
     juju.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-        channel="1/stable",
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
+        revision=SELF_SIGNED_CERTIFICATES_REVISION,
         constraints={"arch": _get_arch()},
     )
     with fast_forward(juju, JUJU_FAST_INTERVAL):
@@ -198,16 +201,35 @@ def test_given_application_is_deployed_when_self_signed_certificates_integrated_
             lambda s: jubilant.all_active(s, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME),
             timeout=DEPLOY_TIMEOUT,
         )
+
+    leader_name = get_leader_unit_name(juju, APPLICATION_NAME)
+    initial_ca_cert = get_vault_ca_certificate(juju, leader_name)
+
     juju.integrate(
         f"{APPLICATION_NAME}:tls-certificates-access",
         f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
     )
+
+    # Integrating the TLS access relation replaces the self-signed certificate
+    # Vault generated for itself with the one issued by the provider. Swapping
+    # the cert reseals Vault, so the units go to blocked until they are unsealed.
     with fast_forward(juju, JUJU_FAST_INTERVAL):
         juju.wait(
-            lambda s: jubilant.all_active(
-                s, APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME
+            lambda s: (
+                jubilant.all_blocked(s, APPLICATION_NAME)
+                and jubilant.all_active(s, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME)
             ),
-            timeout=DEPLOY_TIMEOUT,
+            timeout=SHORT_TIMEOUT,
+        )
+
+    final_ca_cert = get_vault_ca_certificate(juju, leader_name)
+    assert initial_ca_cert != final_ca_cert
+
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        unseal_all_vault_units(juju, deploy.unseal_key, deploy.root_token)
+        juju.wait(
+            lambda s: jubilant.all_active(s, APPLICATION_NAME),
+            timeout=SHORT_TIMEOUT,
         )
 
 
@@ -248,4 +270,44 @@ def test_given_tls_certificates_integrated_when_vault_unit_crashes_then_vault_us
                 and len(s.apps[APPLICATION_NAME].units) == NUM_VAULT_UNITS
             ),
             timeout=1200,
+        )
+
+    # The recovered unit must serve Vault over the provider-issued TLS CA,
+    # i.e. the same CA as the rest of the cluster, rather than a self-signed one.
+    leader_name = get_leader_unit_name(juju, APPLICATION_NAME)
+    leader_ca_cert = get_vault_ca_certificate(juju, leader_name)
+    recovered_ca_cert = get_vault_ca_certificate(juju, crashed_unit_name)
+    assert recovered_ca_cert
+    assert recovered_ca_cert == leader_ca_cert
+
+
+@pytest.mark.abort_on_fail
+def test_given_tls_access_relation_destroyed_then_self_signed_cert_created(
+    juju: jubilant.Juju, deploy: VaultInit
+):
+    leader_name = get_leader_unit_name(juju, APPLICATION_NAME)
+    initial_ca_cert = get_vault_ca_certificate(juju, leader_name)
+
+    juju.remove_relation(
+        f"{APPLICATION_NAME}:tls-certificates-access",
+        f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:certificates",
+    )
+
+    # Removing the relation makes Vault fall back to generating its own
+    # self-signed certificate. Regenerating the cert reseals Vault, so the units
+    # go to blocked until they are unsealed again.
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: jubilant.all_blocked(s, APPLICATION_NAME),
+            timeout=SHORT_TIMEOUT,
+        )
+
+    final_ca_cert = get_vault_ca_certificate(juju, leader_name)
+    assert initial_ca_cert != final_ca_cert
+
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        unseal_all_vault_units(juju, deploy.unseal_key, deploy.root_token)
+        juju.wait(
+            lambda s: jubilant.all_active(s, APPLICATION_NAME),
+            timeout=SHORT_TIMEOUT,
         )

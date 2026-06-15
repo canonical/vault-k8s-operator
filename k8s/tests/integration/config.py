@@ -1,6 +1,11 @@
+import platform
 from pathlib import Path
 
 import yaml
+
+# Juju architecture name for the host running the tests. Charm revisions are
+# published per-architecture, so revision pins must be selected accordingly.
+_ARCH = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), "amd64")
 
 # There is a dependency here on the `idle_period` we use in `wait_for_idle()`.
 # This value should be greater than the `idle_period` used, otherwise the
@@ -32,7 +37,7 @@ S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
 S3_INTEGRATOR_REVISION = 146
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
-SELF_SIGNED_CERTIFICATES_REVISION = 263
+SELF_SIGNED_CERTIFICATES_REVISION = {"amd64": 586, "arm64": 585}[_ARCH]
 VAULT_KV_REQUIRER_1_APPLICATION_NAME = "vault-kv-requirer-a"
 VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
 MATCHING_COMMON_NAME = "example.com"

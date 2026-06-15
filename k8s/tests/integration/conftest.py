@@ -11,16 +11,43 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+# jubilant's default ``wait_timeout`` is 180s, which is too short for several
+# deploy/settle waits that don't pass an explicit timeout. Match the previous
+# pytest-operator behaviour with a more generous default.
+DEFAULT_WAIT_TIMEOUT = 60 * 10
+
 _module_failures: set[str] = set()
+_aborted_modules: set[str] = set()
+
+
+def _module_file(item: pytest.Item) -> str | None:
+    return getattr(getattr(item, "module", None), "__file__", None)
 
 
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
-    """Track which test modules have failures so we can run juju-crashdump."""
-    if call.when == "call" and call.excinfo is not None:
-        module = getattr(item, "module", None)
-        module_file = getattr(module, "__file__", None) if module is not None else None
-        if module_file:
-            _module_failures.add(str(module_file))
+    """Track module failures for juju-crashdump and ``abort_on_fail`` handling."""
+    if call.when != "call" or call.excinfo is None:
+        return
+    module_file = _module_file(item)
+    if not module_file:
+        return
+    _module_failures.add(module_file)
+    if item.get_closest_marker("abort_on_fail") is not None:
+        _aborted_modules.add(module_file)
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Skip remaining tests in a module once an ``abort_on_fail`` test has failed."""
+    if item.get_closest_marker("abort_on_fail") is None:
+        return
+    if _module_file(item) in _aborted_modules:
+        pytest.skip("Previous test marked with abort_on_fail failed in this module.")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def set_juju_wait_timeout(juju: jubilant.Juju) -> None:
+    """Raise the default ``juju.wait`` timeout for waits without an explicit one."""
+    juju.wait_timeout = DEFAULT_WAIT_TIMEOUT
 
 
 @pytest.fixture(autouse=True, scope="module")

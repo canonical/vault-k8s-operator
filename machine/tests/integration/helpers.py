@@ -369,7 +369,10 @@ def deploy_if_not_exists(
             **kwargs,
         )
     except jubilant.CLIError as e:
-        logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)
+        if "already exists" in (e.stderr or ""):
+            logger.warning("Application `%s` already exists, skipping deploy", app_name)
+            return
+        raise
 
 
 def get_juju_secret(juju: jubilant.Juju, label: str, fields: List[str]) -> List[str]:

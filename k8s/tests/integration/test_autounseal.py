@@ -26,6 +26,7 @@ from helpers import (
     initialize_unseal_authorize_vault,
     initialize_vault_leader,
     revoke_token,
+    scale,
     wait_for_status_message,
 )
 from vault_helpers import Vault
@@ -104,8 +105,6 @@ def test_given_vault_b_is_deployed_and_unsealed_when_scale_up_then_status_is_act
     juju: jubilant.Juju, deploy: VaultInit
 ):
     with fast_forward(juju, JUJU_FAST_INTERVAL):
-        from helpers import scale
-
         scale(juju, "vault-b", 1)
         juju.wait(
             lambda s: jubilant.all_active(s, "vault-b") and len(s.apps["vault-b"].units) == 1,
