@@ -10,9 +10,11 @@ import pytest
 from config import (
     APPLICATION_NAME,
     LOKI_APPLICATION_NAME,
+    LOKI_CHANNEL,
     LOKI_REVISION,
     NUM_VAULT_UNITS,
     PROMETHEUS_APPLICATION_NAME,
+    PROMETHEUS_CHANNEL,
     PROMETHEUS_REVISION,
     SHORT_TIMEOUT,
 )
@@ -42,13 +44,13 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
     juju.deploy(
         PROMETHEUS_APPLICATION_NAME,
         trust=True,
-        channel="1/stable",
+        channel=PROMETHEUS_CHANNEL,
         revision=PROMETHEUS_REVISION,
     )
     juju.deploy(
         LOKI_APPLICATION_NAME,
         trust=True,
-        channel="1/stable",
+        channel=LOKI_CHANNEL,
         revision=LOKI_REVISION,
     )
     juju.wait(

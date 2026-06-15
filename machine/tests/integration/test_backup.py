@@ -12,6 +12,7 @@ from config import (
     MINIO_S3_SECRET_KEY,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
+    S3_INTEGRATOR_CHANNEL,
     S3_INTEGRATOR_REVISION,
 )
 from helpers import (
@@ -45,7 +46,7 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
     juju.deploy(
         S3_INTEGRATOR_APPLICATION_NAME,
         S3_INTEGRATOR_APPLICATION_NAME,
-        channel="stable",
+        channel=S3_INTEGRATOR_CHANNEL,
         revision=S3_INTEGRATOR_REVISION,
         trust=True,
     )

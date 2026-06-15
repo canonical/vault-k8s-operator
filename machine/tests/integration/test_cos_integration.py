@@ -8,6 +8,7 @@ import pytest
 from config import (
     APP_NAME,
     GRAFANA_AGENT_APPLICATION_NAME,
+    GRAFANA_AGENT_CHANNEL,
     GRAFANA_AGENT_REVISION,
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
@@ -41,7 +42,7 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
         GRAFANA_AGENT_APPLICATION_NAME,
         GRAFANA_AGENT_APPLICATION_NAME,
         base="ubuntu@24.04",
-        channel="1/stable",
+        channel=GRAFANA_AGENT_CHANNEL,
         revision=GRAFANA_AGENT_REVISION,
     )
 

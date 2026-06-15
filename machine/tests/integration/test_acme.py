@@ -12,6 +12,7 @@ from config import (
     JUJU_FAST_INTERVAL,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
     SELF_SIGNED_CERTIFICATES_REVISION,
     UNMATCHING_COMMON_NAME,
 )
@@ -45,7 +46,7 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
     juju.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-        channel="1/stable",
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
         revision=SELF_SIGNED_CERTIFICATES_REVISION,
     )
 

@@ -22,6 +22,7 @@ from config import (
     NUM_VAULT_UNITS,
     SHORT_TIMEOUT,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
+    VAULT_PKI_REQUIRER_CHANNEL,
     VAULT_PKI_REQUIRER_REVISION,
 )
 from helpers import (
@@ -51,7 +52,7 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
     deploy_vault(juju, charm_path=vault_charm_path, num_vaults=NUM_VAULT_UNITS)
     juju.deploy(
         VAULT_PKI_REQUIRER_APPLICATION_NAME,
-        channel="latest/stable",
+        channel=VAULT_PKI_REQUIRER_CHANNEL,
         revision=VAULT_PKI_REQUIRER_REVISION,
         config={
             "common_name": f"test.{MATCHING_COMMON_NAME}",

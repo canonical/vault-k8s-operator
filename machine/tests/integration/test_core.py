@@ -10,6 +10,7 @@ from config import (
     NUM_VAULT_UNITS,
     REFRESH_TIMEOUT,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
     SHORT_TIMEOUT,
 )
 from helpers import (
@@ -42,7 +43,7 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool):
     juju.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-        channel="1/stable",
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
         revision={"amd64": 586, "arm64": 585}[_get_arch()],
         constraints={"arch": _get_arch()},
     )

@@ -13,10 +13,12 @@ from config import (
     MATCHING_COMMON_NAME,
     NUM_VAULT_UNITS,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SELF_SIGNED_CERTIFICATES_CHANNEL,
     SELF_SIGNED_CERTIFICATES_REVISION,
     SHORT_TIMEOUT,
     UNMATCHING_COMMON_NAME,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
+    VAULT_PKI_REQUIRER_CHANNEL,
     VAULT_PKI_REQUIRER_REVISION,
 )
 from helpers import (
@@ -45,12 +47,12 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
     deploy_vault(juju, charm_path=vault_charm_path, num_units=NUM_VAULT_UNITS)
     juju.deploy(
         SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
-        channel="1/stable",
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
         revision=SELF_SIGNED_CERTIFICATES_REVISION,
     )
     juju.deploy(
         VAULT_PKI_REQUIRER_APPLICATION_NAME,
-        channel="latest/stable",
+        channel=VAULT_PKI_REQUIRER_CHANNEL,
         revision=VAULT_PKI_REQUIRER_REVISION,
         config={
             "common_name": f"test.{MATCHING_COMMON_NAME}",

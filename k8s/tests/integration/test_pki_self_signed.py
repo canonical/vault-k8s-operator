@@ -13,6 +13,7 @@ from config import (
     NUM_VAULT_UNITS,
     SHORT_TIMEOUT,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
+    VAULT_PKI_REQUIRER_CHANNEL,
     VAULT_PKI_REQUIRER_REVISION,
 )
 from helpers import (
@@ -51,7 +52,7 @@ def deploy(
         else VAULT_PKI_REQUIRER_APPLICATION_NAME,
         VAULT_PKI_REQUIRER_APPLICATION_NAME,
         revision=VAULT_PKI_REQUIRER_REVISION,
-        channel="stable",
+        channel=VAULT_PKI_REQUIRER_CHANNEL,
         config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
     )
     juju.wait(
