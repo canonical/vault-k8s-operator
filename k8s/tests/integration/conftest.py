@@ -45,12 +45,13 @@ def pytest_configure(config: pytest.Config) -> None:
     kv_requirer_charm_path = str(config.getoption("--kv_requirer_charm_path"))
     if not charm_path:
         pytest.exit("The --charm_path option is required. Tests aborted.")
-    if not kv_requirer_charm_path:
-        pytest.exit("The --kv_requirer_charm_path option is required. Tests aborted.")
     if not os.path.exists(charm_path):
         pytest.exit(f"The path specified for the charm under test does not exist: {charm_path}")
-    if not os.path.exists(kv_requirer_charm_path):
-        pytest.exit(f"The path specified for KV Requirer does not exist: {kv_requirer_charm_path}")
+    if kv_requirer_charm_path and kv_requirer_charm_path != "None":
+        if not os.path.exists(kv_requirer_charm_path):
+            pytest.exit(
+                f"The path specified for KV Requirer does not exist: {kv_requirer_charm_path}"
+            )
 
 
 @pytest.fixture(scope="session")
@@ -59,8 +60,11 @@ def vault_charm_path(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.fixture(scope="session")
-def kv_requirer_charm_path(request: pytest.FixtureRequest) -> Path:
-    return Path(str(request.config.getoption("--kv_requirer_charm_path"))).resolve()
+def kv_requirer_charm_path(request: pytest.FixtureRequest) -> Path | None:
+    path = request.config.getoption("--kv_requirer_charm_path")
+    if not path:
+        return None
+    return Path(str(path)).resolve()
 
 
 @pytest.fixture(scope="session")

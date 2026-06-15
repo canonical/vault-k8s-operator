@@ -311,7 +311,7 @@ async def authorize_charm(
 
 def _get_arch() -> str:
     """Return the Juju architecture name for the current machine."""
-    arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64", "s390x": "s390x"}
     return arch_map.get(platform.machine(), "amd64")
 
 
