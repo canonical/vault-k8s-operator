@@ -79,6 +79,19 @@ jobs:
       runner: '["self-hosted", "linux", "ARM64", "medium", "noble"]'
       artifact-suffix: k8s
 
+  k8s-build-s390x:
+    needs:
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    secrets: inherit
+    with:
+      path: k8s
+      arch: s390x
+      runner: '["self-hosted-linux-s390x-noble-medium"]'
+      artifact-suffix: k8s
+
   k8s-build-kv-requirer:
     needs:
       - k8s-lint-report
@@ -109,6 +122,14 @@ jobs:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build-arm.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
+
+  k8s-integration-test-s390x:
+    needs:
+      - k8s-build-s390x
+    uses: ./.github/workflows/k8s-integration-test-s390x.yaml
+    with:
+      path: ./k8s/
+      vault-charm-artifact-name: ${{ needs.k8s-build-s390x.outputs.artifacts-key }}
 
   k8s-publish-charm:
     name: Publish K8s Charm
@@ -154,6 +175,28 @@ jobs:
       charm-paths: ${{ needs.k8s-build-arm.outputs.charm-paths }}
       tag-prefix: k8s
       runner: '["self-hosted", "linux", "ARM64", "medium", "noble"]'
+
+  k8s-publish-charm-s390x:
+    name: Publish K8s Charm (s390x)
+    needs:
+      - k8s-lint-report
+      - k8s-static-analysis
+      - k8s-unit-tests-with-coverage
+      - k8s-build-s390x
+      - k8s-integration-test-s390x
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      destination_channel: 2.0/edge
+      path: k8s
+      artifacts-key: ${{ needs.k8s-build-s390x.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build-s390x.outputs.charm-paths }}
+      tag-prefix: k8s
+      runner: '["self-hosted-linux-s390x-noble-medium"]'
 
   machine-lint-report:
     needs:
