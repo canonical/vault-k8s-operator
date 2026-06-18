@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
-import asyncio
+import contextlib
 import logging
 import platform
+import tempfile
 import time
-from base64 import b64decode
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Generator, List, Tuple
 
 import hvac
-import yaml
+import jubilant
 from cryptography import x509
-from juju.application import Application
-from juju.errors import JujuError
-from juju.model import Model
-from juju.unit import Unit
 from lightkube.core.client import Client as KubernetesClient
 from lightkube.resources.core_v1 import Pod
-from pytest_operator.plugin import OpsTest
 
 from config import (
     APPLICATION_NAME,
@@ -43,16 +38,17 @@ def crash_pod(name: str, namespace: str) -> None:
     k8s.delete(Pod, name=name, namespace=namespace)
 
 
-async def get_leader_unit(model: Model, application_name: str) -> Unit:
-    """Return the leader unit for the given application."""
-    for unit in model.units.values():
-        if unit.application == application_name and await unit.is_leader_from_status():
-            return unit
+def get_leader_unit_name(juju: jubilant.Juju, application_name: str) -> str:
+    """Return the name of the leader unit for the given application."""
+    status = juju.status()
+    for unit_name, unit_status in status.apps[application_name].units.items():
+        if unit_status.leader:
+            return unit_name
     raise RuntimeError(f"Leader unit for `{application_name}` not found.")
 
 
-async def get_unit_status_messages(
-    ops_test: OpsTest, app_name: str = APPLICATION_NAME
+def get_unit_status_messages(
+    juju: jubilant.Juju, app_name: str = APPLICATION_NAME
 ) -> List[tuple[str, str]]:
     """Get the status messages from all the units of the given application.
 
@@ -60,34 +56,20 @@ async def get_unit_status_messages(
         A list of tuples with the unit name in the first entry, and the status
         message in the second
     """
-    return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", app_name)
-    if return_code:
-        raise RuntimeError(stderr)
-    output = yaml.safe_load(stdout)
-    unit_statuses = output["applications"][app_name]["units"]
-    return [
-        (unit_name, unit_status["workload-status"].get("message", ""))
-        for (unit_name, unit_status) in unit_statuses.items()
-    ]
+    status = juju.status()
+    units = status.apps[app_name].units
+    return [(unit_name, unit.workload_status.message) for unit_name, unit in units.items()]
 
 
-def get_first(d: dict) -> Any:
-    return next(iter(d.values()))
-
-
-async def get_unit_address(ops_test: OpsTest, unit_name: str) -> str:
+def get_unit_address(juju: jubilant.Juju, unit_name: str) -> str:
     """Get the address of a unit."""
-    # TODO: Can we use `ops_test.model.get_status()` instead?
-    return_code, stdout, stderr = await ops_test.juju("status", "--format", "yaml", unit_name)
-    if return_code:
-        raise RuntimeError(stderr)
-    output = yaml.safe_load(stdout)
-    unit_status = get_first(get_first(output["applications"])["units"])
-    return unit_status["address"]
+    app_name = unit_name.rsplit("/", 1)[0]
+    status = juju.status()
+    return status.apps[app_name].units[unit_name].address
 
 
-async def wait_for_status_message(
-    ops_test: OpsTest,
+def wait_for_status_message(
+    juju: jubilant.Juju,
     expected_message: str,
     app_name: str = APPLICATION_NAME,
     count: int = 1,
@@ -98,7 +80,7 @@ async def wait_for_status_message(
     """Wait for the correct status messages to appear.
 
     Args:
-        ops_test: Ops test Framework.
+        juju: Jubilant Juju instance.
         app_name: Application name of the Vault, defaults to "vault-k8s"
         count: How many units are expected to be emitting the message
         expected_message: The message that vault units should be setting as a status message
@@ -109,50 +91,50 @@ async def wait_for_status_message(
     Raises:
         TimeoutError: If the expected amount of statuses weren't found in the given timeout.
     """
-    seen = 0
-    unit_statuses = []
     if unit_name and count > 1:
         raise ValueError("Cannot specify unit name and count > 1")
-    while timeout > 0:
-        unit_statuses = await get_unit_status_messages(ops_test, app_name=app_name)
-        seen = 0
-        for current_unit_name, unit_status_message in unit_statuses:
-            if unit_name:
-                if current_unit_name == unit_name:
-                    if unit_status_message == expected_message:
-                        return
-            elif unit_status_message == expected_message:
-                seen += 1
 
-        if seen == count:
-            return
-        time.sleep(cadence)
-        timeout -= cadence
+    def ready(status: jubilant.Status) -> bool:
+        if app_name not in status.apps:
+            return False
+        units = status.apps[app_name].units
+        if unit_name:
+            if unit_name not in units:
+                return False
+            return units[unit_name].workload_status.message == expected_message
+        seen = sum(1 for u in units.values() if u.workload_status.message == expected_message)
+        return seen == count
 
-    raise TimeoutError(
-        f"`{app_name}` didn't show the expected status: `{expected_message}`. Last statuses: {unit_statuses}"
-    )
+    juju.wait(ready, timeout=timeout, delay=cadence)
 
 
-async def get_vault_client(
-    ops_test: OpsTest, unit_name: str, token: str, ca_file_name: str | None = None
+def get_vault_client(
+    juju: jubilant.Juju, unit_name: str, token: str, ca_file_name: str | None = None
 ) -> Vault:
     """Get a Vault client for the given application."""
-    address = await get_unit_address(ops_test, unit_name)
+    address = get_unit_address(juju, unit_name)
     return Vault(url=f"https://{address}:8200", token=token, ca_file_location=ca_file_name)
 
 
-async def get_model_secret_field(ops_test: OpsTest, label: str, field: str) -> str:
-    secrets = await ops_test.model.list_secrets(show_secrets=True)  # type: ignore
-    secret = next(secret for secret in secrets if secret.label == label)
-    field_content = b64decode(secret.value.data[field]).decode("utf-8")
-    return field_content
+def get_model_secret_field(juju: jubilant.Juju, label: str, field: str) -> str:
+    secrets = juju.secrets()
+    try:
+        secret = next(s for s in secrets if s.label == label)
+        revealed = juju.show_secret(secret.uri, reveal=True)
+    except StopIteration:
+        revealed = juju.show_secret(label, reveal=True)
+    return revealed.content[field]
 
 
-async def get_model_secret_id(ops_test: OpsTest, label: str) -> str:
-    secrets = await ops_test.model.list_secrets(show_secrets=True)  # type: ignore
-    secret = next(secret for secret in secrets if secret.label == label)
-    return secret.uri
+def get_model_secret_id(juju: jubilant.Juju, label: str) -> str:
+    secrets = juju.secrets()
+    try:
+        secret = next(s for s in secrets if s.label == label)
+        return str(secret.uri)
+    except StopIteration:
+        # Fallback: look up directly by label in case juju.secrets() listing is incomplete
+        secret = juju.show_secret(label)
+        return str(secret.uri)
 
 
 def get_vault_pki_intermediate_ca_common_name(root_token: str, endpoint: str, mount: str) -> str:
@@ -172,23 +154,16 @@ def revoke_token(token_to_revoke: str, root_token: str, endpoint: str):
     client.revoke_token(token=token_to_revoke)
 
 
-async def get_leader(app: Application) -> Unit:
-    for unit in app.units:
-        if await unit.is_leader_from_status():
-            return unit
-    raise Exception("Leader unit not found.")
-
-
-async def get_vault_token_and_unseal_key(
-    model: Model, app_name: str = APPLICATION_NAME
+def get_vault_token_and_unseal_key(
+    juju: jubilant.Juju, app_name: str = APPLICATION_NAME
 ) -> Tuple[str, str]:
-    root_token, unseal_key = await get_juju_secret(
-        model, label=f"root-token-key-{app_name}", fields=["root-token", "key"]
+    root_token, unseal_key = get_juju_secret(
+        juju, label=f"root-token-key-{app_name}", fields=["root-token", "key"]
     )
     return root_token, unseal_key
 
 
-async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str, str]:
+def initialize_vault_leader(juju: jubilant.Juju, app_name: str) -> Tuple[str, str]:
     """Initialize the leader vault unit and return the root token and unseal key.
 
     Also adds the root token and unseal key to the model secrets so they can be
@@ -198,113 +173,98 @@ async def initialize_vault_leader(ops_test: OpsTest, app_name: str) -> Tuple[str
     Returns:
         Tuple[str, str]: Root token and unseal key
     """
-    assert ops_test.model
-
-    leader = await get_leader(ops_test.model.applications[app_name])
-    address = await get_unit_address(ops_test, leader.name)
+    leader_name = get_leader_unit_name(juju, app_name)
+    address = get_unit_address(juju, leader_name)
 
     vault_url = f"https://{address}:8200"
 
-    vault = Vault(
-        url=vault_url, ca_file_location=await get_ca_cert_file_location(ops_test, app_name)
-    )
+    vault = Vault(url=vault_url, ca_file_location=get_ca_cert_file_location(juju, app_name))
     if not vault.is_initialized():
         root_token, key = vault.initialize()
-        await ops_test.model.add_secret(
-            f"root-token-key-{app_name}", [f"root-token={root_token}", f"key={key}"]
-        )
+        juju.add_secret(f"root-token-key-{app_name}", {"root-token": root_token, "key": key})
         logger.info("Vault initialized")
         return root_token, key
 
-    root_token, key = await get_vault_token_and_unseal_key(ops_test.model, app_name=app_name)
+    root_token, key = get_vault_token_and_unseal_key(juju, app_name=app_name)
     logger.info("Vault is already initialized")
     return root_token, key
 
 
-async def authorize_charm_and_wait(
-    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME
+def authorize_charm_and_wait(
+    juju: jubilant.Juju, root_token: str, app_name: str = APPLICATION_NAME
 ) -> Any | Dict:
     """Authorize the charm and wait for it to be authorized.
 
     Args:
-        ops_test: Ops test Framework
+        juju: Jubilant Juju instance.
         root_token: The root token for the vault
         app_name: Application name of the Vault, defaults to "vault-k8s"
 
     Returns:
         Any | Dict: The result of the authorization
     """
-    assert ops_test.model
-    result = await authorize_charm(ops_test, root_token, app_name)
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[app_name],
-            status="active",
-            timeout=60,  # Since we're not raising on error, don't wait too long. This should be quick.
-            wait_for_at_least_units=1,
-            raise_on_error=False,  # Sometimes the charm reports an InternalServerError immediately after authorization, but it resolves itself.
+    result = authorize_charm(juju, root_token, app_name)
+    with fast_forward(juju):
+        juju.wait(
+            lambda s: jubilant.all_active(s, app_name),
+            timeout=60,
         )
     logger.info("Charm authorized")
     return result
 
 
-async def unseal_all_vault_units(
-    ops_test: OpsTest, unseal_key: str, token: str, ca_file_name: str | None = None
+def unseal_all_vault_units(
+    juju: jubilant.Juju, unseal_key: str, token: str, ca_file_name: str | None = None
 ) -> None:
     """Unseal all the vault units."""
-    assert ops_test.model
-    app = ops_test.model.applications[APPLICATION_NAME]
+    status = juju.status()
+    units = status.apps[APPLICATION_NAME].units
 
-    # We need to unseal the leader first, since this is the one we initialized.
-    leader = await get_leader(app)
-    vault = await get_vault_client(ops_test, leader.name, unseal_key, ca_file_name)
+    # Find the leader first, since this is the one we initialized.
+    leader_name = get_leader_unit_name(juju, APPLICATION_NAME)
+    vault = get_vault_client(juju, leader_name, unseal_key, ca_file_name)
     if vault.is_sealed():
         vault.unseal(unseal_key)
-    await vault.wait_for_node_to_be_unsealed()
+    vault.wait_for_node_to_be_unsealed()
 
-    for unit in app.units:
-        vault = await get_vault_client(ops_test, unit.name, token, ca_file_name)
+    for unit_name in units:
+        vault = get_vault_client(juju, unit_name, token, ca_file_name)
         vault.unseal(unseal_key)
-        await vault.wait_for_node_to_be_unsealed()
+        vault.wait_for_node_to_be_unsealed()
 
 
-async def authorize_charm(
-    ops_test: OpsTest, root_token: str, app_name: str = APPLICATION_NAME, attempts: int = 12
+def authorize_charm(
+    juju: jubilant.Juju, root_token: str, app_name: str = APPLICATION_NAME, attempts: int = 12
 ) -> Any | Dict:
-    assert ops_test.model
-    leader_unit = await get_leader_unit(ops_test.model, app_name)
     try:
-        secret = await ops_test.model.add_secret(
-            f"approle-token-{app_name}", [f"token={root_token}"]
-        )
-    except JujuError:
-        await ops_test.model.update_secret(
-            f"approle-token-{app_name}",
-            [f"token={root_token}"],
-            new_name=f"approle-token-{app_name}",
-        )
-        secret = await get_model_secret_id(ops_test, f"approle-token-{app_name}")
-    secret_id = secret.split(":")[-1]
-    await ops_test.model.grant_secret(f"approle-token-{app_name}", app_name)
-    # TODO: I have never seen this help. Should we remove it?
+        secret_uri = juju.add_secret(f"approle-token-{app_name}", {"token": root_token})
+    except jubilant.CLIError:
+        try:
+            secret_id_str = get_model_secret_id(juju, f"approle-token-{app_name}")
+            juju.update_secret(secret_id_str, {"token": root_token})
+            secret_uri = secret_id_str
+        except StopIteration:
+            secret_uri = juju.add_secret(f"approle-token-{app_name}", {"token": root_token})
+    secret_id = str(secret_uri).split(":")[-1]
+    juju.grant_secret(f"approle-token-{app_name}", app_name)
     for attempt in range(1, attempts + 1):
-        authorize_action = await leader_unit.run_action(
-            action_name="authorize-charm",
-            **{
-                "secret-id": secret_id,
-            },
-        )
-        result = await ops_test.model.get_action_output(
-            action_uuid=authorize_action.entity_id, wait=120
-        )
-        if result and "result" in result:
-            return result
-        logger.warning(
-            "Failed to authorize charm. Attempt %d/%d. Waiting for 5 seconds...",
-            attempt,
-            attempts,
-        )
-        await asyncio.sleep(5)
+        try:
+            task = juju.run(
+                f"{app_name}/leader",
+                "authorize-charm",
+                {"secret-id": secret_id},
+                wait=120,
+            )
+            if task.results and "result" in task.results:
+                return task.results
+        except (jubilant.TaskError, jubilant.CLIError) as e:
+            logger.warning(
+                "Failed to authorize charm. Attempt %d/%d: %s",
+                attempt,
+                attempts,
+                e,
+            )
+        time.sleep(5)
     logger.error("Failed to authorize charm")
     raise ActionFailedError("Failed to authorize charm")
 
@@ -320,67 +280,68 @@ def _get_arch_constraint() -> str:
     return f"arch={_get_arch()}"
 
 
-async def deploy_if_not_exists(
-    model: Model,
+def deploy_if_not_exists(
+    juju: jubilant.Juju,
     app_name: str,
     charm_path: Path | None = None,
     num_units: int = 1,
     config: dict | None = None,
     channel: str | None = None,
     revision: int | None = None,
-    series: str | None = None,
     resources: Dict[str, str] | None = None,
     trust: bool = True,
     constraints: str | None = None,
 ) -> None:
-    if app_name not in model.applications:
-        try:
-            await model.deploy(
-                charm_path if charm_path else app_name,
-                application_name=app_name,
-                num_units=num_units,
-                config=config,
-                channel=channel,
-                revision=revision,
-                series=series,
-                resources=resources if charm_path else None,
-                trust=trust,
-                constraints=constraints,
-            )
-        except JujuError as e:
-            # This could be because the charm is already deployed, so we ignore it.
-            # We may want to handle this more specifically in the future.
-            logger.warning("Failed to deploy the `%s` charm: `%s`", app_name, e)
+    status = juju.status()
+    if app_name in status.apps:
+        return
+    try:
+        juju.deploy(
+            charm_path if charm_path else app_name,
+            app_name,
+            config=config,
+            channel=channel,
+            revision=revision,
+            resources=resources if charm_path else None,
+            trust=trust,
+            num_units=num_units,
+            constraints={"arch": constraints.split("=")[1]} if constraints else None,
+        )
+    except jubilant.CLIError as e:
+        if "already exists" in (e.stderr or ""):
+            logger.warning("Application `%s` already exists, skipping deploy", app_name)
+            return
+        raise
 
 
-async def get_juju_secret(model: Model, label: str, fields: List[str]) -> List[str]:
+def get_juju_secret(juju: jubilant.Juju, label: str, fields: List[str]) -> List[str]:
     """Get a Juju secret from the model and return the specified fields.
 
-    Ops doesn't provide a way to get the secret values, so we have to do it a
-    little more manually.
-
     Args:
-        model (Model): The Juju model to get the secret from.
+        juju: Jubilant Juju instance.
         label (str): The label of the secret to get.
         fields (List[str]): The fields to return from the secret.
     """
-    secrets = await model.list_secrets(show_secrets=True)
-    secret = next(secret for secret in secrets if secret.label == label)
+    secrets = juju.secrets()
+    try:
+        secret = next(s for s in secrets if s.label == label)
+        revealed = juju.show_secret(secret.uri, reveal=True)
+    except StopIteration:
+        # Fallback: look up directly by label in case juju.secrets() listing is incomplete
+        revealed = juju.show_secret(label, reveal=True)
+    return [revealed.content[field] for field in fields]
 
-    return [b64decode(secret.value.data[field]).decode("utf-8") for field in fields]
 
-
-async def deploy_vault(
-    ops_test: OpsTest,
+def deploy_vault(
+    juju: jubilant.Juju,
     num_units: int,
     charm_path: Path | None = None,
     channel: str | None = None,
     revision: int | None = None,
 ) -> None:
     """Ensure the Vault charm is deployed."""
-    assert ops_test.model
-    await deploy_if_not_exists(
-        ops_test.model,
+    deploy_if_not_exists(
+        juju,
         app_name=APPLICATION_NAME,
         charm_path=charm_path,
         num_units=num_units,
@@ -391,78 +352,113 @@ async def deploy_vault(
     )
 
 
-async def get_ca_cert_file_location(
-    ops_test: OpsTest, app_name: str = APPLICATION_NAME
-) -> str | None:
+def has_relation(juju: jubilant.Juju, app_name: str, relation_name: str) -> bool:
+    """Check if the application has the relation with the given name."""
+    status = juju.status()
+    if app_name not in status.apps:
+        return False
+    return relation_name in status.apps[app_name].relations
+
+
+def get_ca_cert_file_location(juju: jubilant.Juju, app_name: str = APPLICATION_NAME) -> str | None:
     """Get the location of the CA certificate file."""
-    assert ops_test.model
-    app = ops_test.model.applications[app_name]
-    if not has_relation(app, "tls-certificates-access"):
+    if not has_relation(juju, app_name, "tls-certificates-access"):
         return None
-    action_output = await run_get_ca_certificate_action(ops_test)
-    ca_certificate = action_output["ca-certificate"]
-    assert ca_certificate
-    ca_file_location = str(ops_test.tmp_path / f"ca_file_{app_name}.txt")
-    with open(ca_file_location, mode="w+") as ca_file:
-        ca_file.write(ca_certificate)
-    return ca_file_location
-
-
-def has_relation(app: Application, relation_name: str) -> bool:
-    """Check if the application has the relation with the given name.
-
-    This is a hack since `app.related_applications` does not seem to work.
-    """
-    for relation in app.relations:
-        for endpoint in relation.endpoints:
-            if endpoint.application_name != app.name:
-                continue
-            if endpoint.name == relation_name:
-                return True
-    return False
-
-
-async def run_get_ca_certificate_action(ops_test: OpsTest, timeout: int = 60) -> dict:
-    """Run the `get-certificate` on the `self-signed-certificates` unit.
-
-    Args:
-        ops_test (OpsTest): OpsTest
-        timeout (int, optional): Timeout in seconds. Defaults to 60.
-
-    Returns:
-        dict: Action output
-    """
-    assert ops_test.model
-    self_signed_certificates_unit = ops_test.model.units[
-        f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0"
-    ]
-    action = await self_signed_certificates_unit.run_action(
-        action_name="get-ca-certificate",
+    task = juju.run(
+        f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}/0", "get-ca-certificate", wait=60
     )
-    return await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=timeout)
+    ca_certificate = task.results.get("ca-certificate")
+    assert ca_certificate
+    ca_file = tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False)
+    ca_file.write(ca_certificate)
+    ca_file.close()
+    return ca_file.name
 
 
-async def initialize_unseal_authorize_vault(ops_test: OpsTest, app_name: str) -> tuple[str, str]:
-    assert ops_test.model
-    root_token, unseal_key = await initialize_vault_leader(ops_test, app_name)
-    leader = await get_leader_unit(ops_test.model, app_name)
-    vault = await get_vault_client(ops_test, leader.name, root_token)
+def initialize_unseal_authorize_vault(juju: jubilant.Juju, app_name: str) -> tuple[str, str]:
+    root_token, unseal_key = initialize_vault_leader(juju, app_name)
+    leader_name = get_leader_unit_name(juju, app_name)
+    vault = get_vault_client(juju, leader_name, root_token)
     assert vault.is_sealed()
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key, root_token)
-        await authorize_charm_and_wait(ops_test, root_token)
+    with fast_forward(juju):
+        unseal_all_vault_units(juju, unseal_key, root_token)
+        authorize_charm_and_wait(juju, root_token)
     return root_token, unseal_key
 
 
-async def get_vault_ca_certificate(vault_unit: Unit) -> str:
-    action = await vault_unit.run("cat /var/lib/juju/storage/certs/0/ca.pem")
-    await action.wait()
-    return action.results["stdout"]
+def get_vault_ca_certificate(juju: jubilant.Juju, unit_name: str) -> str:
+    task = juju.exec("cat /var/lib/juju/storage/certs/0/ca.pem", unit=unit_name)
+    return task.stdout
 
 
-async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path) -> None:
-    assert ops_test.model
-    app = ops_test.model.applications[app_name]
-    assert isinstance(app, Application)
-    await app.refresh(path=charm_path)
+def refresh_application(juju: jubilant.Juju, app_name: str, charm_path: Path) -> None:
+    juju.refresh(app_name, path=charm_path)
+
+
+def scale(juju: jubilant.Juju, app_name: str, target: int) -> None:
+    """Scale a K8s application to the target number of units."""
+    status = juju.status()
+    current = len(status.apps[app_name].units)
+    if current < target:
+        juju.add_unit(app_name, num_units=target - current)
+    elif current > target:
+        juju.remove_unit(app_name, num_units=current - target)
+
+
+@contextlib.contextmanager
+def fast_forward(
+    juju: jubilant.Juju, fast_interval: str = JUJU_FAST_INTERVAL
+) -> Generator[None, None, None]:
+    """Context manager that sets a fast update-status interval and resets it on exit."""
+    juju.model_config({"update-status-hook-interval": fast_interval})
+    try:
+        yield
+    finally:
+        juju.model_config(reset="update-status-hook-interval")
+
+
+def configure_s3_and_create_backup(
+    juju: jubilant.Juju,
+    root_token: str,
+    app_name: str = APPLICATION_NAME,
+) -> None:
+    """Configure S3 and create a backup."""
+    task = juju.run(f"{app_name}/leader", "create-backup", wait=300)
+    task.raise_on_failure()
+
+
+def list_backups(juju: jubilant.Juju, app_name: str = APPLICATION_NAME) -> List[str]:
+    """List all backups."""
+    task = juju.run(f"{app_name}/leader", "list-backups", wait=120)
+    task.raise_on_failure()
+    backups_str = task.results.get("backups", "")
+    if not backups_str:
+        return []
+    return [b.strip() for b in backups_str.split(",") if b.strip()]
+
+
+def restore_backup(
+    juju: jubilant.Juju,
+    backup_name: str,
+    root_token: str,
+    app_name: str = APPLICATION_NAME,
+) -> None:
+    """Restore a backup."""
+    task = juju.run(
+        f"{app_name}/leader",
+        "restore-backup",
+        {"backup-name": backup_name},
+        wait=300,
+    )
+    task.raise_on_failure()
+
+
+def run_action_on_leader(
+    juju: jubilant.Juju,
+    app_name: str,
+    action_name: str,
+    **kwargs: Any,
+) -> Any:
+    """Run an action on the leader unit."""
+    return juju.run(f"{app_name}/leader", action_name, kwargs, wait=120)

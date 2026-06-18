@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 from config import (
     APP_NAME,
@@ -13,6 +13,7 @@ from config import (
 )
 from helpers import (
     deploy_vault_and_wait,
+    fast_forward,
     initialize_unseal_authorize_vault,
     refresh_application,
     unseal_all_vault_units,
@@ -24,44 +25,43 @@ CURRENT_TRACK_LATEST_STABLE_CHANNEL = "1.18/stable"
 
 
 @pytest.mark.abort_on_fail
-async def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
-    ops_test: OpsTest, vault_charm_path: Path
+def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_active(
+    juju: jubilant.Juju, vault_charm_path: Path
 ):
-    assert ops_test.model
     logger.info("Deploying vault from Charmhub")
-    await deploy_vault_and_wait(
-        ops_test,
+    deploy_vault_and_wait(
+        juju,
         num_units=NUM_VAULT_UNITS,
         status="blocked",
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
     )
-    _, unseal_key = await initialize_unseal_authorize_vault(ops_test, APP_NAME)
+    _, unseal_key = initialize_unseal_authorize_vault(juju, APP_NAME)
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            wait_for_exact_units=NUM_VAULT_UNITS,
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, APP_NAME) and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            ),
             timeout=SHORT_TIMEOUT,
         )
         logger.info("Refreshing vault from built charm")
-        await refresh_application(ops_test, APP_NAME, vault_charm_path)
+        refresh_application(juju, APP_NAME, vault_charm_path)
 
     logger.info("Waiting for vault to be blocked after refresh")
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="blocked",
-        wait_for_exact_units=NUM_VAULT_UNITS,
+    juju.wait(
+        lambda s: (
+            jubilant.all_blocked(s, APP_NAME) and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+        ),
         timeout=REFRESH_TIMEOUT,
     )
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key)
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        unseal_all_vault_units(juju, unseal_key)
 
         logger.info("Waiting for vault to be active after refresh")
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            wait_for_exact_units=NUM_VAULT_UNITS,
+        juju.wait(
+            lambda s: (
+                jubilant.all_active(s, APP_NAME) and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            ),
             timeout=SHORT_TIMEOUT,
         )

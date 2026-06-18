@@ -1,17 +1,20 @@
-import asyncio
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
 import logging
 from collections import namedtuple
 from pathlib import Path
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 from config import (
     APPLICATION_NAME,
     LOKI_APPLICATION_NAME,
+    LOKI_CHANNEL,
     LOKI_REVISION,
     NUM_VAULT_UNITS,
     PROMETHEUS_APPLICATION_NAME,
+    PROMETHEUS_CHANNEL,
     PROMETHEUS_REVISION,
     SHORT_TIMEOUT,
 )
@@ -27,77 +30,66 @@ VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
 @pytest.fixture(scope="module")
-async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
+def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
     """Build and deploy the application."""
-    assert ops_test.model
     if skip_deploy:
         logger.info("Skipping deployment due to --no-deploy flag")
-        root_token, key = await get_vault_token_and_unseal_key(
-            ops_test.model,
-            APPLICATION_NAME,
-        )
+        root_token, key = get_vault_token_and_unseal_key(juju, APPLICATION_NAME)
         return VaultInit(root_token, key)
-    await deploy_vault(
-        ops_test,
+    deploy_vault(
+        juju,
         charm_path=vault_charm_path,
         num_units=NUM_VAULT_UNITS,
     )
-    await ops_test.model.deploy(
+    juju.deploy(
         PROMETHEUS_APPLICATION_NAME,
-        application_name=PROMETHEUS_APPLICATION_NAME,
         trust=True,
-        channel="1/stable",
+        channel=PROMETHEUS_CHANNEL,
         revision=PROMETHEUS_REVISION,
     )
-    await ops_test.model.deploy(
+    juju.deploy(
         LOKI_APPLICATION_NAME,
-        application_name=LOKI_APPLICATION_NAME,
         trust=True,
-        channel="1/stable",
+        channel=LOKI_CHANNEL,
         revision=LOKI_REVISION,
     )
-    await asyncio.gather(
-        ops_test.model.wait_for_idle(
-            apps=[PROMETHEUS_APPLICATION_NAME, LOKI_APPLICATION_NAME],
-            raise_on_error=False,  # Prometheus-k8s can fail on deploy sometimes
+    juju.wait(
+        lambda s: (
+            APPLICATION_NAME in s.apps
+            and PROMETHEUS_APPLICATION_NAME in s.apps
+            and LOKI_APPLICATION_NAME in s.apps
+            and jubilant.all_blocked(s, APPLICATION_NAME)
+            and len(s.apps[APPLICATION_NAME].units) == NUM_VAULT_UNITS
         ),
-        ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="blocked",
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        ),
+        error=None,
     )
-    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
+    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APPLICATION_NAME)
     return VaultInit(root_token, unseal_key)
 
 
 @pytest.mark.abort_on_fail
-async def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
-    ops_test: OpsTest, deploy: VaultInit
+def test_given_prometheus_deployed_when_relate_vault_to_prometheus_then_status_is_active(
+    juju: jubilant.Juju, deploy: VaultInit
 ):
-    assert ops_test.model
-    await ops_test.model.integrate(
-        relation1=f"{APPLICATION_NAME}:metrics-endpoint",
-        relation2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
+    juju.integrate(
+        f"{APPLICATION_NAME}:metrics-endpoint",
+        f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint",
     )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME, PROMETHEUS_APPLICATION_NAME],
-        status="active",
+    juju.wait(
+        lambda s: jubilant.all_active(s, APPLICATION_NAME, PROMETHEUS_APPLICATION_NAME),
         timeout=SHORT_TIMEOUT,
     )
 
 
 @pytest.mark.abort_on_fail
-async def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_active(
-    ops_test: OpsTest, deploy: VaultInit
+def test_given_loki_deployed_when_relate_vault_to_loki_then_status_is_active(
+    juju: jubilant.Juju, deploy: VaultInit
 ):
-    assert ops_test.model
-    await ops_test.model.integrate(
-        relation1=f"{APPLICATION_NAME}:logging",
-        relation2=f"{LOKI_APPLICATION_NAME}",
+    juju.integrate(
+        f"{APPLICATION_NAME}:logging",
+        LOKI_APPLICATION_NAME,
     )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME, LOKI_APPLICATION_NAME],
-        status="active",
+    juju.wait(
+        lambda s: jubilant.all_active(s, APPLICATION_NAME, LOKI_APPLICATION_NAME),
         timeout=SHORT_TIMEOUT,
     )

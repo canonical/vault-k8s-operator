@@ -43,13 +43,13 @@ test = [
     "allure-pytest",
     "coverage[toml]",
     "hvac",
-    "juju",
+    "jubilant",
     "lightkube",
     "lightkube-models",
     "ops[testing]",
     "pyhcl",  # import hcl
     "pytest",
-    "pytest-operator",
+    "pytest-jubilant",
     "requests",
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]

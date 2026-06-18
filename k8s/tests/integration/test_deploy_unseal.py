@@ -7,14 +7,15 @@
 import logging
 from pathlib import Path
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 from config import APPLICATION_NAME, JUJU_FAST_INTERVAL
 from helpers import (
     authorize_charm_and_wait,
     deploy_vault,
-    get_leader_unit,
+    fast_forward,
+    get_leader_unit_name,
     get_vault_client,
     initialize_vault_leader,
     unseal_all_vault_units,
@@ -25,29 +26,27 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_and_unseal(ops_test: OpsTest, vault_charm_path: Path):
+def test_deploy_and_unseal(juju: jubilant.Juju, vault_charm_path: Path):
     """Deploy Vault K8s, initialize, and unseal."""
-    assert ops_test.model
-    await deploy_vault(ops_test, num_units=1, charm_path=vault_charm_path)
+    deploy_vault(juju, num_units=1, charm_path=vault_charm_path)
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await wait_for_status_message(
-            ops_test,
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        wait_for_status_message(
+            juju,
             expected_message="Please initialize Vault or integrate with an auto-unseal provider",
             app_name=APPLICATION_NAME,
             timeout=600,
         )
 
-    root_token, unseal_key = await initialize_vault_leader(ops_test, APPLICATION_NAME)
+    root_token, unseal_key = initialize_vault_leader(juju, APPLICATION_NAME)
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await unseal_all_vault_units(ops_test, unseal_key, root_token)
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        unseal_all_vault_units(juju, unseal_key, root_token)
 
-    leader = await get_leader_unit(ops_test.model, APPLICATION_NAME)
-    vault = await get_vault_client(ops_test, leader.name, root_token)
+    leader_name = get_leader_unit_name(juju, APPLICATION_NAME)
+    vault = get_vault_client(juju, leader_name, root_token)
     assert not vault.is_sealed(), "Vault should be unsealed"
 
-    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
-        await authorize_charm_and_wait(ops_test, root_token)
+    authorize_charm_and_wait(juju, root_token)
 
     logger.info("Vault K8s deployed, unsealed, and active on s390x")

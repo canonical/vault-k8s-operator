@@ -1,6 +1,11 @@
+import platform
 from pathlib import Path
 
 import yaml
+
+# Juju architecture name for the host running the tests. Charm revisions are
+# published per-architecture, so revision pins must be selected accordingly.
+_ARCH = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), "amd64")
 
 # There is a dependency here on the `idle_period` we use in `wait_for_idle()`.
 # This value should be greater than the `idle_period` used, otherwise the
@@ -17,6 +22,7 @@ DEPLOY_TIMEOUT = 60 * 10  # How long to wait for apps to settle after deploying 
 APPLICATION_NAME = "vault-k8s"
 AUTOUNSEAL_TOKEN_SECRET_LABEL = "vault-autounseal-token"
 LOKI_APPLICATION_NAME = "loki-k8s"
+LOKI_CHANNEL = "1/stable"
 LOKI_REVISION = 199
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 MINIO_APPLICATION_NAME = "minio"
@@ -25,15 +31,19 @@ MINIO_S3_ACCESS_KEY = "minio_access_key"
 MINIO_S3_SECRET_KEY = "minio_secret_key"
 NUM_VAULT_UNITS = 3
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
+PROMETHEUS_CHANNEL = "1/stable"
 PROMETHEUS_REVISION = 247
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
 S3_INTEGRATOR_REVISION = 146
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
-SELF_SIGNED_CERTIFICATES_REVISION = 263
+SELF_SIGNED_CERTIFICATES_REVISION = {"amd64": 586, "arm64": 585}[_ARCH]
 VAULT_KV_REQUIRER_1_APPLICATION_NAME = "vault-kv-requirer-a"
 VAULT_KV_REQUIRER_2_APPLICATION_NAME = "vault-kv-requirer-b"
+MATCHING_COMMON_NAME = "example.com"
+UNMATCHING_COMMON_NAME = "unmatching-the-requirer.com"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+VAULT_PKI_REQUIRER_CHANNEL = "latest/stable"
 VAULT_PKI_REQUIRER_REVISION = 93
 
 

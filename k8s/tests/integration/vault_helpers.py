@@ -4,7 +4,6 @@
 
 """Vault helper functions."""
 
-import asyncio
 import logging
 import time
 from os.path import abspath
@@ -60,17 +59,12 @@ class Vault:
         response = self.client.sys.read_health_status()
         return response.status_code == VAULT_STATUS_ACTIVE
 
-    async def wait_for_node_to_be_unsealed(self) -> None:
-        """Wait for the vault unit to be unsealed.
-
-        Args:
-            endpoint (str): The endpoint of the vault unit
-            ca_file_location (str): The path to the CA file
-        """
+    def wait_for_node_to_be_unsealed(self) -> None:
+        """Wait for the vault unit to be unsealed."""
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            await asyncio.sleep(5)
+            time.sleep(5)
             try:
                 if not self.is_sealed():
                     logger.info("Vault unit is unsealed.")
@@ -81,31 +75,18 @@ class Vault:
         raise TimeoutError("Timed out waiting for vault to be unsealed.")
 
     def unseal(self, unseal_key: str) -> None:
-        """Unseal a vault unit.
-
-        Args:
-            endpoint (str): The endpoint of the vault unit
-            ca_file_location (str): The path to the CA file
-            unseal_key (str): The unseal key
-        """
+        """Unseal a vault unit."""
         if not self.client.sys.is_sealed():
             return
         self.client.sys.submit_unseal_key(unseal_key)
         logger.info("Unsealed vault unit: %s.", self.url)
 
-    async def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
-        """Wait for the specified number of units to join the raft cluster.
-
-        Args:
-            endpoint (str): The endpoint of the Vault unit
-            token (str): The root token
-            ca_file_location (str): The path to the CA file
-            expected_num_nodes (int): The number of units to wait for
-        """
+    def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
+        """Wait for the specified number of units to join the raft cluster."""
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            await asyncio.sleep(5)
+            time.sleep(5)
             response = self.client.sys.read_raft_config()
             servers = response["data"]["config"]["servers"]
             current_num_voters = sum(1 for server in servers if server.get("voter", False))
@@ -131,16 +112,7 @@ class Vault:
         raise TimeoutError("Timed out waiting for nodes to be part of the raft cluster.")
 
     def number_of_raft_nodes(self) -> int:
-        """Get the number of nodes in the raft cluster.
-
-        Args:
-            endpoint (str): The endpoint of the Vault unit
-            token (str): The root token
-            ca_file_location (str): The path to the CA file
-
-        Returns:
-            int: The number of nodes in the raft cluster
-        """
+        """Get the number of nodes in the raft cluster."""
         response = self.client.sys.read_raft_config()
         servers = response["data"]["config"]["servers"]
         return len(servers)
