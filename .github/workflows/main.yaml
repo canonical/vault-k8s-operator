@@ -29,49 +29,59 @@ jobs:
           echo "$STATUS"
           test -z "$STATUS"
 
-  k8s-lint-report:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v2.0.3
-    with:
-      path: ./k8s/
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      k8s: ${{ steps.filter.outputs.k8s }}
+      machine: ${{ steps.filter.outputs.machine }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            k8s:
+              - 'k8s/**'
+              - 'vault-package/**'
+              - '.github/workflows/k8s-integration-test*.yaml'
+            machine:
+              - 'machine/**'
+              - 'vault-package/**'
+              - '.github/workflows/machine-integration-test*.yaml'
+
+  k8s-quality:
+    name: K8s Quality
+    needs: [ensure-shared-code-in-sync]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+        with:
+          working-directory: k8s
+          python-enabled: "true"
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+        with:
+          working-directory: k8s
+          python-enabled: "true"
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
     with:
       path: ./k8s/src/grafana_dashboards/*
 
-  k8s-static-analysis:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v2.0.3
-    with:
-      path: ./k8s/
-
-  k8s-unit-tests-with-coverage:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v2.0.3
-    with:
-      path: ./k8s/
-
   k8s-build:
-    needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    needs: [k8s-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: k8s
       artifact-suffix: k8s
 
   k8s-build-arm:
-    needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    if: github.event_name == 'push'
+    needs: [k8s-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: k8s
@@ -80,11 +90,9 @@ jobs:
       artifact-suffix: k8s
 
   k8s-build-s390x:
-    needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    if: github.event_name == 'push'
+    needs: [k8s-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: k8s
@@ -93,10 +101,7 @@ jobs:
       artifact-suffix: k8s
 
   k8s-build-kv-requirer:
-    needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
+    needs: [k8s-quality]
     uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
     with:
@@ -104,7 +109,9 @@ jobs:
       artifact-name: kv-requirer-k8s-charm
 
   k8s-integration-test:
+    if: github.event_name == 'push' || needs.changes.outputs.k8s == 'true'
     needs:
+      - changes
       - k8s-build
       - k8s-build-kv-requirer
     uses: ./.github/workflows/k8s-integration-test.yaml
@@ -112,6 +119,7 @@ jobs:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
+      event-name: ${{ github.event_name }}
 
   k8s-integration-test-arm:
     needs:
@@ -134,16 +142,14 @@ jobs:
   k8s-publish-charm:
     name: Publish K8s Charm
     needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
+      - k8s-quality
       - k8s-integration-test
       - k8s-build
       - k8s-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -156,16 +162,14 @@ jobs:
   k8s-publish-charm-arm:
     name: Publish K8s Charm (ARM)
     needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
+      - k8s-quality
       - k8s-integration-test-arm
       - k8s-build-arm
       - k8s-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -179,15 +183,13 @@ jobs:
   k8s-publish-charm-s390x:
     name: Publish K8s Charm (s390x)
     needs:
-      - k8s-lint-report
-      - k8s-static-analysis
-      - k8s-unit-tests-with-coverage
+      - k8s-quality
       - k8s-build-s390x
       - k8s-integration-test-s390x
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -198,49 +200,38 @@ jobs:
       tag-prefix: k8s
       runner: '["self-hosted-linux-s390x-noble-medium"]'
 
-  machine-lint-report:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v2.0.3
-    with:
-      path: ./machine/
+  machine-quality:
+    name: Machine Quality
+    needs: [ensure-shared-code-in-sync]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+        with:
+          working-directory: machine
+          python-enabled: "true"
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+        with:
+          working-directory: machine
+          python-enabled: "true"
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
     with:
       path: ./machine/src/grafana_dashboards/*
 
-  machine-static-analysis:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v2.0.3
-    with:
-      path: ./machine/
-
-  machine-unit-tests-with-coverage:
-    needs:
-      - ensure-shared-code-in-sync
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v2.0.3
-    with:
-      path: ./machine/
-
   machine-build:
-    needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    needs: [machine-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: machine
       artifact-suffix: machine
 
   machine-build-arm:
-    needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    if: github.event_name == 'push'
+    needs: [machine-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: machine
@@ -249,11 +240,9 @@ jobs:
       artifact-suffix: machine
 
   machine-build-s390x:
-    needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v2.0.3
+    if: github.event_name == 'push'
+    needs: [machine-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
     with:
       path: machine
@@ -262,10 +251,7 @@ jobs:
       artifact-suffix: machine
 
   machine-build-kv-requirer:
-    needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
+    needs: [machine-quality]
     uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
     with:
@@ -273,7 +259,9 @@ jobs:
       artifact-name: kv-requirer-machine-charm
 
   machine-integration-test:
+    if: github.event_name == 'push' || needs.changes.outputs.machine == 'true'
     needs:
+      - changes
       - machine-build
       - machine-build-kv-requirer
     uses: ./.github/workflows/machine-integration-test.yaml
@@ -303,16 +291,14 @@ jobs:
   machine-publish-charm:
     name: Publish Machine Charm
     needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
+      - machine-quality
       - machine-integration-test
       - machine-build
       - machine-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -325,16 +311,14 @@ jobs:
   machine-publish-charm-arm:
     name: Publish Machine Charm (ARM)
     needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
+      - machine-quality
       - machine-build-arm
       - machine-integration-test-arm
       - machine-build-kv-requirer
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -348,15 +332,13 @@ jobs:
   machine-publish-charm-s390x:
     name: Publish Machine Charm (s390x)
     needs:
-      - machine-lint-report
-      - machine-static-analysis
-      - machine-unit-tests-with-coverage
+      - machine-quality
       - machine-build-s390x
       - machine-integration-test-s390x
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v2.0.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
