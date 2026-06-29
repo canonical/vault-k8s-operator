@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ops",
     "hvac",
-    "pydantic==2.9.2",
+    "pydantic==2.13.0",
     "pytest-interface-tester",
 ]
 

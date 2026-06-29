@@ -22,6 +22,7 @@ storage:
 type: charm
 platforms:
   ubuntu@24.04:amd64:
+  ubuntu@26.04:amd64:
 
 parts:
   charm:
@@ -33,9 +34,7 @@ parts:
       - pkg-config
     build-snaps:
       - astral-uv
-      - rustup
     override-build: |
-      rustup default stable
       craftctl default
 
 actions:
