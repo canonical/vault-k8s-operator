@@ -15,11 +15,6 @@ on:
         description: Name of the artifact to be uploaded for the kv-requirer charm
         required: true
         type: string
-      runner:
-        description: JSON-encoded runner label(s) for the integration test jobs
-        required: false
-        default: '["self-hosted", "linux", "X64", "large", "noble"]'
-        type: string
 
 jobs:
   integration-matrix:
@@ -40,7 +35,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ${{ fromJSON(inputs.runner) }}
+    runs-on: [self-hosted, linux, X64, large, noble]
     needs: [integration-matrix]
     strategy:
       fail-fast: false
@@ -57,8 +52,6 @@ jobs:
           provider: lxd
           lxd-channel: 5.21/stable
 
-      - name: Install system build dependencies
-        run: sudo apt-get install -y libffi-dev
       - name: Install UV and Tox
         run: |
           pipx uninstall tox
