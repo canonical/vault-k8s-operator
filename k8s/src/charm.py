@@ -16,6 +16,7 @@ from typing import Any, Generator
 from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     Mode,
+    ProviderCapabilities,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
 )
@@ -133,6 +134,7 @@ class VaultCharm(CharmBase):
         self.vault_pki = TLSCertificatesProvidesV4(
             charm=self,
             relationship_name=PKI_RELATION_NAME,
+            provider_capabilities=self._get_pki_provider_capabilities(),
         )
         pki_certificate_request = self._get_pki_certificate_request()
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
@@ -599,6 +601,26 @@ class VaultCharm(CharmBase):
             or 87600,
         )
         manager.configure()
+
+    def _get_pki_provider_capabilities(self) -> ProviderCapabilities | None:
+        """Build the capabilities advertised to `vault-pki` requirers.
+
+        Returns None when PKI is not configured (no common name), so requirers
+        see the capabilities as unavailable rather than an assumed default.
+        """
+        common_name = self.juju_facade.get_string_config("pki_ca_common_name")
+        if not common_name_config_is_valid(common_name):
+            return None
+        return PKIManager.build_provider_capabilities(
+            common_name=common_name,
+            allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config(
+                "pki_allow_wildcard_certificates"
+            ),
+            allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
+            allow_ip_sans=self.juju_facade.get_bool_config("pki_allow_ip_sans"),
+        )
 
     def _get_pki_certificate_request(self) -> CertificateRequestAttributes | None:
         common_name = self.juju_facade.get_string_config("pki_ca_common_name")
