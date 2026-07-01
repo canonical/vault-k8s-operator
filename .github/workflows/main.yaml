@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request:
     branches: ["main", "release-*"]
+    # `labeled` lets a PR opt in to arm64/s390x tests by adding the
+    # `test-arm` / `test-s390x` labels (see the arch build jobs below).
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: ["main", "release-*"]
 
@@ -66,11 +69,15 @@ jobs:
           python-enabled: "true"
 
   k8s-grafana-dashboard-lint-report:
+    # A pure label-add (`labeled`) re-triggers CI only to run the arch jobs; the
+    # AMD-path jobs below already ran, so skip them on that event to save runners.
+    if: github.event.action != 'labeled'
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-build:
+    if: github.event.action != 'labeled'
     needs: [k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
@@ -79,7 +86,8 @@ jobs:
       artifact-suffix: k8s
 
   k8s-build-arm:
-    if: github.event_name == 'push'
+    # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-arm')
     needs: [k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
@@ -90,7 +98,8 @@ jobs:
       artifact-suffix: k8s
 
   k8s-build-s390x:
-    if: github.event_name == 'push'
+    # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-s390x')
     needs: [k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
@@ -216,11 +225,15 @@ jobs:
           python-enabled: "true"
 
   machine-grafana-dashboard-lint-report:
+    # A pure label-add (`labeled`) re-triggers CI only to run the arch jobs; the
+    # AMD-path jobs below already ran, so skip them on that event to save runners.
+    if: github.event.action != 'labeled'
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-build:
+    if: github.event.action != 'labeled'
     needs: [machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
@@ -229,7 +242,8 @@ jobs:
       artifact-suffix: machine
 
   machine-build-arm:
-    if: github.event_name == 'push'
+    # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-arm')
     needs: [machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
@@ -240,7 +254,8 @@ jobs:
       artifact-suffix: machine
 
   machine-build-s390x:
-    if: github.event_name == 'push'
+    # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-s390x')
     needs: [machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
     secrets: inherit
