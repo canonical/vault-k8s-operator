@@ -15,11 +15,6 @@ on:
         description: Name of the artifact to be uploaded for the kv-requirer charm
         required: true
         type: string
-      event-name:
-        description: The event that triggered the parent workflow (pull_request or push)
-        required: false
-        default: push
-        type: string
 
 jobs:
   integration-matrix:
@@ -34,34 +29,9 @@ jobs:
         id: suites
         run: |
           cd ${{ inputs.path }}
-          mapfile -t files < <(find tests/integration -name 'test_*.py' -printf '%f\n' | sort)
-          batches=()
-          batch=()
-          if [ "${{ inputs.event-name }}" = "pull_request" ]; then
-            # On PRs: single runner, all tests run serially
-            for f in "${files[@]}"; do batch+=("${f%.py}"); done
-            printf -v joined '%s or ' "${batch[@]}"
-            batches+=("${joined% or }")
-          else
-            # On push: batches of 3 for parallelism
-            BATCH_SIZE=3
-            for f in "${files[@]}"; do
-              name="${f%.py}"
-              batch+=("$name")
-              if [ "${#batch[@]}" -eq "$BATCH_SIZE" ]; then
-                printf -v joined '%s or ' "${batch[@]}"
-                batches+=("${joined% or }")
-                batch=()
-              fi
-            done
-            if [ "${#batch[@]}" -gt 0 ]; then
-              printf -v joined '%s or ' "${batch[@]}"
-              batches+=("${joined% or }")
-            fi
-          fi
-          json=$(printf '%s\n' "${batches[@]}" | jq -R . | jq -s -c .)
-          echo "suites=$json"
-          echo "suites=$json" >> "$GITHUB_OUTPUT"
+          list="$(find tests/integration -name 'test_*.py' -printf '%f\n' | sort | sed 's/\.py$//' | jq -R . | jq -s -c .)"
+          echo "suites=$list"
+          echo "suites=$list" >> "$GITHUB_OUTPUT"
 
   integration-tests:
     name: Integration Tests

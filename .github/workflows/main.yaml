@@ -128,7 +128,6 @@ jobs:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build.outputs.artifacts-key }}
       kv-requirer-charm-artifact-name: kv-requirer-k8s-charm
-      event-name: ${{ github.event_name }}
 
   k8s-integration-test-arm:
     needs:
