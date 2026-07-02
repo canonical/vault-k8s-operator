@@ -29,7 +29,7 @@ jobs:
         id: suites
         run: |
           cd ${{ inputs.path }}
-          list="$(find tests/integration -name 'test_*.py' -printf '%f\n' | jq -r -ncR '[inputs]')"
+          list="$(find tests/integration -name 'test_*.py' -printf '%f\n' | sort | sed 's/\.py$//' | jq -R . | jq -s -c .)"
           echo "suites=$list"
           echo "suites=$list" >> "$GITHUB_OUTPUT"
 
@@ -89,20 +89,20 @@ jobs:
       - name: Upload Allure results
         uses: actions/upload-artifact@v7
         with:
-          name: allure-results-${{ matrix.suite }}
+          name: allure-results-${{ strategy.job-index }}
           path: ${{ inputs.path }}/allure-results
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: charmcraft-logs-${{ matrix.suite }}
+          name: charmcraft-logs-k8s-${{ strategy.job-index }}
           path: /home/runner/.local/state/charmcraft/log/*.log
 
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: juju-crashdump-k8s-${{ matrix.suite }}
+          name: juju-crashdump-k8s-${{ strategy.job-index }}
           path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
 
   aggregate-integration-results:
