@@ -35,7 +35,7 @@ dependencies = [
     "protobuf<4.21; platform_machine == 's390x'",
     # pynacl >= 1.6 requires libsodium >= 1.0.20 (AEGIS support) but Ubuntu Noble
     # ships 1.0.18; pin to 1.5.x which works with system libsodium.
-    "pynacl<1.6; platform_machine == 's390x'",
+    "pynacl<1.7; platform_machine == 's390x'",
 ]
 
 [dependency-groups]
