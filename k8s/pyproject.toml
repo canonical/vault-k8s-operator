@@ -4,12 +4,12 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "ops>=3.7.0",
+    "ops>=3.8.0",
     "vault-package",
     "charmlibs-interfaces-tls-certificates~=1.8",
     "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
-    "pydantic==2.13.0",
+    "pydantic==2.13.4",
     # via charm_tracing
     "opentelemetry-exporter-otlp-proto-http",
     # via ingress_per_unit
@@ -25,7 +25,7 @@ dependencies = [
     "lightkube",
     "lightkube-models",
     # Defense-in-depth: cffi 2.0.0 may also have calling-convention issues on s390x.
-    "cffi<2; platform_machine == 's390x'",
+    "cffi<3; platform_machine == 's390x'",
     # cryptography >= 44 builds from source on s390x (no wheel) using Rust+aws-lc-rs;
     # version 43.x uses cffi wrapping system OpenSSL and is confirmed to work.
     "cryptography<44; platform_machine == 's390x'",
