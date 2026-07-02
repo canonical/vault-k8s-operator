@@ -24,7 +24,7 @@ jobs:
       suites: ${{ steps.suites.outputs.suites }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Generate matrix list
         id: suites
         run: |
@@ -43,7 +43,7 @@ jobs:
         suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -118,14 +118,14 @@ jobs:
           path: allure-results
           merge-multiple: true
       - name: Load test report history
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         if: always()
         continue-on-error: true
         with:
           ref: gh-pages
           path: gh-pages
       - name: Build test report
-        uses: simple-elf/allure-report-action@v1.13
+        uses: simple-elf/allure-report-action@v1.14
         if: always()
         continue-on-error: true
         with:

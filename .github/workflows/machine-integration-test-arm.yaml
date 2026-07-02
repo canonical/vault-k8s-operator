@@ -22,7 +22,7 @@ jobs:
     runs-on: [self-hosted, linux, ARM64, medium, noble]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
