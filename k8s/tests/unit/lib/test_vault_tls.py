@@ -220,7 +220,7 @@ class TestCharmTLS:
                 certificate_request=CertificateRequestAttributes(
                     common_name=ingress_address,
                     sans_dns=frozenset({self.fqdn}),
-                    sans_ip=frozenset({ingress_address}),
+                    sans_ip=frozenset({ingress_address, "192.0.2.1"}),
                     sans_oid=frozenset(),
                     email_address=None,
                     organization=None,
@@ -306,7 +306,7 @@ class TestCharmTLS:
                 certificate_request=CertificateRequestAttributes(
                     common_name=ingress_address,
                     sans_dns=frozenset({self.fqdn, "mydomain.com", "mydomain.org"}),
-                    sans_ip=frozenset({ingress_address}),
+                    sans_ip=frozenset({ingress_address, "192.0.2.1"}),
                     sans_oid=frozenset(),
                     email_address="my@email.com",
                     organization="My Organization",
@@ -530,7 +530,7 @@ class TestCharmTLS:
                 private_key=private_key,
                 common_name=ingress_address,
                 sans_dns=frozenset([self.fqdn]),
-                sans_ip=frozenset([ingress_address]),
+                sans_ip=frozenset([ingress_address, "192.0.2.1"]),
             )
             certificate = generate_certificate(
                 csr=csr,
