@@ -185,6 +185,11 @@ class VaultCharm(CharmBase):
                 access_sans_dns_list = []
             else:
                 access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
+        ip_addresses: set[str] = set()
+        if self._bind_address:
+            ip_addresses.add(self._bind_address)
+        if self._ingress_address:
+            ip_addresses.add(self._ingress_address)
         self.tls = TLSManager(
             charm=self,
             workload=self._container,  # type: ignore[arg-type]
@@ -192,7 +197,7 @@ class VaultCharm(CharmBase):
             tls_directory_path=CONTAINER_TLS_FILE_DIRECTORY_PATH,
             common_name=self._ingress_address if self._ingress_address else "",
             sans_dns=frozenset(access_sans_dns_list),
-            sans_ip=frozenset([self._ingress_address] if self._ingress_address else []),
+            sans_ip=frozenset(ip_addresses),
             country_name=self.juju_facade.get_string_config("access_country_name"),
             state_or_province_name=self.juju_facade.get_string_config(
                 "access_state_or_province_name"
@@ -1253,6 +1258,15 @@ class VaultCharm(CharmBase):
         Example: "https://vault-k8s-1.vault-k8s-endpoints.test.svc.cluster.local:8201"
         """
         return f"https://{socket.getfqdn()}:{self.VAULT_CLUSTER_PORT}"
+
+    @property
+    def _bind_address(self) -> str | None:
+        """Fetch the bind address from peer relation and returns it.
+
+        Returns:
+            str: Bind address
+        """
+        return self.juju_facade.get_bind_address(PEER_RELATION_NAME)
 
     @property
     def _ingress_address(self) -> str | None:
