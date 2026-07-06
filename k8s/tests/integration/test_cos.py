@@ -41,6 +41,15 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
         charm_path=vault_charm_path,
         num_units=NUM_VAULT_UNITS,
     )
+    juju.wait(
+        lambda s: (
+            APPLICATION_NAME in s.apps
+            and jubilant.all_blocked(s, APPLICATION_NAME)
+            and len(s.apps[APPLICATION_NAME].units) == NUM_VAULT_UNITS
+        ),
+        error=None,
+    )
+    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APPLICATION_NAME)
     juju.deploy(
         PROMETHEUS_APPLICATION_NAME,
         trust=True,
@@ -58,12 +67,11 @@ def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> Va
             APPLICATION_NAME in s.apps
             and PROMETHEUS_APPLICATION_NAME in s.apps
             and LOKI_APPLICATION_NAME in s.apps
-            and jubilant.all_blocked(s, APPLICATION_NAME)
+            and jubilant.all_active(s, APPLICATION_NAME)
             and len(s.apps[APPLICATION_NAME].units) == NUM_VAULT_UNITS
         ),
         error=None,
     )
-    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APPLICATION_NAME)
     return VaultInit(root_token, unseal_key)
 
 

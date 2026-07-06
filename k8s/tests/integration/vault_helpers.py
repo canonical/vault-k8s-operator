@@ -76,10 +76,19 @@ class Vault:
 
     def unseal(self, unseal_key: str) -> None:
         """Unseal a vault unit."""
-        if not self.client.sys.is_sealed():
-            return
-        self.client.sys.submit_unseal_key(unseal_key)
-        logger.info("Unsealed vault unit: %s.", self.url)
+        timeout = 300
+        t0 = time.time()
+        while time.time() < t0 + timeout:
+            try:
+                if not self.client.sys.is_sealed():
+                    return
+                self.client.sys.submit_unseal_key(unseal_key)
+                logger.info("Unsealed vault unit: %s.", self.url)
+                return
+            except requests.exceptions.RequestException:
+                logger.debug("Vault is not yet available. Waiting...")
+                time.sleep(5)
+        raise TimeoutError("Timed out unsealing vault unit.")
 
     def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
         """Wait for the specified number of units to join the raft cluster."""
