@@ -381,6 +381,7 @@ class TestS3(unittest.TestCase):
             secret_key=self.VALID_S3_PARAMETERS["secret-key"],
             region=self.VALID_S3_PARAMETERS["region"],
             endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            application="vault",
             skip_verify=False,
         )
         patch_session.return_value.resource.assert_called_with(
@@ -388,4 +389,34 @@ class TestS3(unittest.TestCase):
             endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
             config=ANY,
             verify=None,
+        )
+
+    @patch.dict(
+        "os.environ",
+        {
+            "JUJU_CHARM_HTTP_PROXY": "http://proxy.example:8080",
+            "JUJU_CHARM_HTTPS_PROXY": "https://proxy.example:8443",
+        },
+    )
+    @patch("boto3.session.Session")
+    def test_given_juju_proxy_env_when_create_s3_session_then_config_uses_proxies(
+        self,
+        patch_session: MagicMock,
+    ):
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            application="vault",
+            skip_verify=False,
+        )
+        config = patch_session.return_value.resource.call_args.kwargs["config"]
+
+        self.assertEqual(
+            config.proxies,
+            {
+                "http": "http://proxy.example:8080",
+                "https": "https://proxy.example:8443",
+            },
         )
