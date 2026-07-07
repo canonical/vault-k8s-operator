@@ -24,7 +24,9 @@ from botocore.response import StreamingBody
 from mypy_boto3_s3.literals import BucketLocationConstraintType
 from mypy_boto3_s3.service_resource import Bucket
 from mypy_boto3_s3.type_defs import CreateBucketConfigurationTypeDef
+
 from .security_logger import _OWASPLogger
+from .vault_helpers import get_env_var
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -42,6 +44,16 @@ logger = LogAdapter(logging.getLogger(__name__), {})
 AWS_DEFAULT_REGION = "us-east-1"
 
 
+def _juju_proxy_settings() -> dict[str, str]:
+    """Return botocore proxy settings from Juju model proxy variables."""
+    proxies = {}
+    if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
+        proxies["http"] = http_proxy
+    if https_proxy := get_env_var("JUJU_CHARM_HTTPS_PROXY"):
+        proxies["https"] = https_proxy
+    return proxies
+
+
 class S3Error(Exception):
     """Base class for S3 errors."""
 
@@ -56,7 +68,7 @@ class S3:
         access_key: str,
         secret_key: str,
         endpoint: str,
-        application: str,
+        application: str = "vault",
         region: str | None = AWS_DEFAULT_REGION,
         skip_verify: bool = False,
     ):
@@ -81,8 +93,9 @@ class S3:
                 retries={
                     "max_attempts": 1,
                 },
-                request_checksum_calculation="WHEN_REQUIRED",
-                response_checksum_validation="WHEN_REQUIRED",
+                request_checksum_calculation="when_required",
+                response_checksum_validation="when_required",
+                proxies=_juju_proxy_settings() or None,
             )
             self.s3 = self.session.resource(
                 "s3",
