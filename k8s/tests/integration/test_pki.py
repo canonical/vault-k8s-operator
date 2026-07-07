@@ -54,6 +54,18 @@ async def deploy(
         channel="1/stable",
         num_units=1,
     )
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=[SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
+            status="active",
+        ),
+    )
+    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
     await ops_test.model.deploy(
         pki_requirer_charm_path
         if pki_requirer_charm_path
@@ -63,18 +75,10 @@ async def deploy(
         channel="stable",
         config={"common_name": "test.example.com", "sans_dns": "test.example.com"},
     )
-    await asyncio.gather(
-        ops_test.model.wait_for_idle(
-            apps=[APPLICATION_NAME],
-            status="blocked",
-            wait_for_exact_units=NUM_VAULT_UNITS,
-        ),
-        ops_test.model.wait_for_idle(
-            apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME, SELF_SIGNED_CERTIFICATES_APPLICATION_NAME],
-            status="active",
-        ),
+    await ops_test.model.wait_for_idle(
+        apps=[VAULT_PKI_REQUIRER_APPLICATION_NAME],
+        status="active",
     )
-    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
     return VaultInit(root_token, unseal_key)
 
 
