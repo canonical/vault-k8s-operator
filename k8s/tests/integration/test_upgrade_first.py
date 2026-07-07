@@ -37,12 +37,13 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
         revision=CURRENT_TRACK_FIRST_STABLE_REVISION,
     )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="blocked",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=DEPLOY_TIMEOUT,
-    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+            timeout=DEPLOY_TIMEOUT,
+        )
     root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
@@ -56,12 +57,13 @@ async def test_given_first_stable_revision_in_track_when_refresh_then_status_is_
         await refresh_application(ops_test, APPLICATION_NAME, vault_charm_path)
 
     logger.info("Waiting for vault to be blocked after refresh")
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_NAME],
-        status="blocked",
-        wait_for_exact_units=NUM_VAULT_UNITS,
-        timeout=SHORT_TIMEOUT,
-    )
+    async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
+        await ops_test.model.wait_for_idle(
+            apps=[APPLICATION_NAME],
+            status="blocked",
+            wait_for_exact_units=NUM_VAULT_UNITS,
+            timeout=SHORT_TIMEOUT,
+        )
 
     async with ops_test.fast_forward(fast_interval=JUJU_FAST_INTERVAL):
         await unseal_all_vault_units(
