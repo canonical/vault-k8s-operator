@@ -95,6 +95,16 @@ platforms:
   ubuntu@24.04:arm64:
   ubuntu@24.04:s390x:
 
+charm-libs:
+  - lib: data_platform_libs.s3
+    version: "0.5"
+  - lib: grafana_agent.cos_agent
+    version: "0.20"
+  - lib: operator_libs_linux.snap
+    version: "2.10"
+  - lib: traefik_k8s.ingress
+    version: "2.15"
+
 parts:
   charm:
     source: .

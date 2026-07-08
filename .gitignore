@@ -16,6 +16,12 @@ __pycache__/
 *.pem
 k8s/tests/integration/vault_kv_requirer_operator/lib/*
 machine/tests/integration/vault_kv_requirer_operator/lib/*
+
+# Charm libs are fetched with `charmcraft fetch-libs`; keep the project-owned vault_k8s lib
+k8s/lib/charms/*
+!k8s/lib/charms/vault_k8s
+machine/lib/charms/*
+!machine/lib/charms/vault_k8s
 .charm_tracing_buffer.raw
 
 # Ignore allure report and results if running locally

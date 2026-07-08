@@ -59,6 +59,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Fetch charmcraft libs
+        working-directory: k8s
+        run: charmcraft fetch-libs
       - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
         with:
           working-directory: k8s
@@ -214,6 +219,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Fetch charmcraft libs
+        working-directory: machine
+        run: charmcraft fetch-libs
       - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
         with:
           working-directory: machine
