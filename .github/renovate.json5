@@ -12,4 +12,173 @@
       enabled: false,
     },
   ],
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: data_platform_libs\\.s3[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "data_platform_libs.s3",
+      datasourceTemplate: "custom.charmhub-data-platform-s3",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: grafana_k8s\\.grafana_dashboard[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "grafana_k8s.grafana_dashboard",
+      datasourceTemplate: "custom.charmhub-grafana-dashboard",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: grafana_agent\\.cos_agent[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "grafana_agent.cos_agent",
+      datasourceTemplate: "custom.charmhub-grafana-agent-cos-agent",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: loki_k8s\\.loki_push_api[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "loki_k8s.loki_push_api",
+      datasourceTemplate: "custom.charmhub-loki-push-api",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: observability_libs\\.kubernetes_compute_resources_patch[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "observability_libs.kubernetes_compute_resources_patch",
+      datasourceTemplate: "custom.charmhub-observability-kubernetes-compute-resources-patch",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: operator_libs_linux\\.snap[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "operator_libs_linux.snap",
+      datasourceTemplate: "custom.charmhub-operator-libs-linux-snap",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: prometheus_k8s\\.prometheus_scrape[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "prometheus_k8s.prometheus_scrape",
+      datasourceTemplate: "custom.charmhub-prometheus-scrape",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: tempo_coordinator_k8s\\.charm_tracing[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "tempo_coordinator_k8s.charm_tracing",
+      datasourceTemplate: "custom.charmhub-tempo-charm-tracing",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: tempo_coordinator_k8s\\.tracing[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "tempo_coordinator_k8s.tracing",
+      datasourceTemplate: "custom.charmhub-tempo-tracing",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: traefik_k8s\\.ingress_per_unit[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "traefik_k8s.ingress_per_unit",
+      datasourceTemplate: "custom.charmhub-traefik-ingress-per-unit",
+      versioningTemplate: "loose",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/charmcraft.yaml/"],
+      matchStrings: [
+        "- lib: traefik_k8s\\.ingress[\\s\\S]*?version: [\"'](?<currentValue>[^\"']+)[\"']",
+      ],
+      depNameTemplate: "traefik_k8s.ingress",
+      datasourceTemplate: "custom.charmhub-traefik-ingress",
+      versioningTemplate: "loose",
+    },
+  ],
+  customDatasources: {
+    "charmhub-data-platform-s3": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/data-platform-libs/fca396f6254246c9bfa565b1f85ab528?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-grafana-dashboard": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/grafana-k8s/c49eb9c7dfef40c7b6235ebd67010a3f?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-grafana-agent-cos-agent": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/grafana-agent/dc15fa84cef84ce58155fb84f6c6213a?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-loki-push-api": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/loki-k8s/bf76f23cdd03464b877c52bd1d2f563e?api=1",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-observability-kubernetes-compute-resources-patch": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/observability-libs/2a6066f701444e8db44ba2f6af28da90?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-operator-libs-linux-snap": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/operator-libs-linux/05394e5893f94f2d90feb7cbe6b633cd?api=2",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-prometheus-scrape": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/prometheus-k8s/bc84295fef5f4049878f07b131968ee2?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-tempo-charm-tracing": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/tempo-coordinator-k8s/01780f1e588c42c3976d26780fdf9b89?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-tempo-tracing": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/tempo-coordinator-k8s/d2f02b1f8d1244b5989fd55bc3a28943?api=0",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-traefik-ingress-per-unit": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/traefik-k8s/7ef06111da2945ed84f4f5d4eb5b353a?api=1",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+    "charmhub-traefik-ingress": {
+      defaultRegistryUrlTemplate: "https://api.charmhub.io/v1/charm/libraries/traefik-k8s/e6de2a5cd5b34422a204668f3b8f90d2?api=2",
+      format: "json",
+      transformTemplates: ['{"releases":[{"version": api & "." & patch}]}'],
+    },
+  },
 }
