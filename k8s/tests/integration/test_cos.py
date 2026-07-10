@@ -42,6 +42,12 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         charm_path=vault_charm_path,
         num_units=NUM_VAULT_UNITS,
     )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_NAME],
+        status="blocked",
+        wait_for_exact_units=NUM_VAULT_UNITS,
+    )
+    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
     await ops_test.model.deploy(
         PROMETHEUS_APPLICATION_NAME,
         application_name=PROMETHEUS_APPLICATION_NAME,
@@ -63,11 +69,10 @@ async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -
         ),
         ops_test.model.wait_for_idle(
             apps=[APPLICATION_NAME],
-            status="blocked",
+            status="active",
             wait_for_exact_units=NUM_VAULT_UNITS,
         ),
     )
-    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APPLICATION_NAME)
     return VaultInit(root_token, unseal_key)
 
 
