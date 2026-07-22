@@ -25,6 +25,7 @@ from vault.vault_managers import (
     ManagerError,
     PKIManager,
     PrivateKey,
+    ProviderCapabilities,
     ProviderCertificate,
     RaftManager,
     TLSCertificatesProvidesV4,
@@ -619,6 +620,74 @@ class TestPKIManager:
         provider_error = self.vault_pki.set_relation_error.call_args.kwargs["provider_error"]
         assert provider_error.relation_id == csr.relation_id
         assert provider_error.error.code == CertificateRequestErrorCode.OTHER
+
+
+class TestPKIManagerProviderCapabilities:
+    def test_given_config_values_when_build_provider_capabilities_then_values_reflect_role_config(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com,sub.example.com",
+            allow_subdomains=True,
+            allow_wildcard_certificates=False,
+            allow_any_name=False,
+            allow_ip_sans=True,
+        )
+
+        assert capabilities == ProviderCapabilities(
+            supports_ip_sans=True,
+            supports_wildcard_dns=False,
+            supports_subdomain=True,
+            supports_ca_certificates=False,
+            allowed_domains=["example.com", "sub.example.com"],
+            provider_type="vault",
+        )
+
+    def test_given_no_allowed_domains_when_build_provider_capabilities_then_common_name_is_used(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains=None,
+            allow_subdomains=False,
+            allow_wildcard_certificates=True,
+            allow_any_name=False,
+            allow_ip_sans=False,
+        )
+
+        assert capabilities.allowed_domains == ["example.com"]
+
+    def test_given_allow_any_name_when_build_provider_capabilities_then_allowed_domains_is_none(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com",
+            allow_subdomains=False,
+            allow_wildcard_certificates=True,
+            allow_any_name=True,
+            allow_ip_sans=False,
+        )
+
+        assert capabilities.allowed_domains is None
+
+    def test_given_unset_bool_config_when_build_provider_capabilities_then_advertised_as_unspecified(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com",
+            allow_subdomains=None,
+            allow_wildcard_certificates=None,
+            allow_any_name=None,
+            allow_ip_sans=None,
+        )
+
+        assert capabilities.supports_subdomain is None
+        assert capabilities.supports_wildcard_dns is None
+        assert capabilities.supports_ip_sans is None
+        assert capabilities.provider_type == "vault"
 
 
 class TestPKIManagerSelfSigned:

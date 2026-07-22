@@ -45,6 +45,7 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     CertificateRequestErrorCode,
     PrivateKey,
+    ProviderCapabilities,
     ProviderCertificate,
     ProviderCertificateError,
     RequirerCertificateRequest,
@@ -1509,6 +1510,35 @@ class PKIManager:
     def _allowed_domains_list(self) -> list[str]:
         """Return the allowed domains for the ACME server in Vault as a list."""
         return [domain.strip() for domain in self._allowed_domains.split(",")]
+
+    @staticmethod
+    def build_provider_capabilities(
+        *,
+        common_name: str,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
+        allow_ip_sans: bool | None,
+    ) -> ProviderCapabilities:
+        """Build the capabilities advertised to `vault-pki` requirers.
+
+        This is the single source of truth for the capabilities: it maps the
+        exact same config values used to configure the Vault PKI role, so the
+        advertised capabilities can never drift out of sync with what the role
+        actually enforces. Values are advertised as-is; an unset config option
+        is advertised as unspecified (``None``) rather than an assumed default.
+        """
+        resolved_domains = allowed_domains if allowed_domains else common_name
+        allowed_domains_list = [domain.strip() for domain in resolved_domains.split(",")]
+        return ProviderCapabilities(
+            supports_ip_sans=allow_ip_sans,
+            supports_wildcard_dns=allow_wildcard_certificates,
+            supports_subdomain=allow_subdomains,
+            supports_ca_certificates=False,
+            allowed_domains=None if allow_any_name else allowed_domains_list,
+            provider_type="vault",
+        )
 
 
 class KVManager:

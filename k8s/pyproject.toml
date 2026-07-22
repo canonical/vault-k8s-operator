@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ops>=3.7.0",
     "vault-package",
-    "charmlibs-interfaces-tls-certificates~=1.8",
+    "charmlibs-interfaces-tls-certificates~=1.9",
     "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
     "pydantic==2.13.0",
