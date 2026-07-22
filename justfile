@@ -8,4 +8,4 @@
 
 # just --list
 
-import? "https://raw.githubusercontent.com/canonical/identity-credentials-workflows/refs/tags/v3.1.2/common.just"
+import? "https://raw.githubusercontent.com/canonical/identity-credentials-workflows/refs/tags/v3.1.3/common.just"
