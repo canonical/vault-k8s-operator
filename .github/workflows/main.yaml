@@ -58,17 +58,23 @@ jobs:
     needs: [ensure-shared-code-in-sync]
     runs-on: ubuntu-24.04
     steps:
-      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.3
+        with:
+          workflows-ref: v3.1.3
+      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.3
+        with:
+          working-directory: k8s
+          toolchains: python
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
       - name: Fetch charmcraft libs
         working-directory: k8s
         run: charmcraft fetch-libs
-      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.3
         with:
           working-directory: k8s
           python-enabled: "true"
-      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.3
         with:
           working-directory: k8s
           python-enabled: "true"
@@ -77,14 +83,14 @@ jobs:
     # A pure label-add (`labeled`) re-triggers CI only to run the arch jobs; the
     # AMD-path jobs below already ran, so skip them on that event to save runners.
     if: github.event.action != 'labeled'
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.3
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-build:
     if: github.event.action != 'labeled'
     needs: [k8s-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: k8s
@@ -94,7 +100,7 @@ jobs:
     # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-arm')
     needs: [k8s-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: k8s
@@ -106,7 +112,7 @@ jobs:
     # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-s390x')
     needs: [k8s-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: k8s
@@ -162,7 +168,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -182,7 +188,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -202,7 +208,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -218,17 +224,23 @@ jobs:
     needs: [ensure-shared-code-in-sync]
     runs-on: ubuntu-24.04
     steps:
-      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.3
+        with:
+          workflows-ref: v3.1.3
+      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.3
+        with:
+          working-directory: machine
+          toolchains: python
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
       - name: Fetch charmcraft libs
         working-directory: machine
         run: charmcraft fetch-libs
-      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.3
         with:
           working-directory: machine
           python-enabled: "true"
-      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.3
         with:
           working-directory: machine
           python-enabled: "true"
@@ -237,14 +249,14 @@ jobs:
     # A pure label-add (`labeled`) re-triggers CI only to run the arch jobs; the
     # AMD-path jobs below already ran, so skip them on that event to save runners.
     if: github.event.action != 'labeled'
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.3
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-build:
     if: github.event.action != 'labeled'
     needs: [machine-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: machine
@@ -254,7 +266,7 @@ jobs:
     # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-arm')
     needs: [machine-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: machine
@@ -266,7 +278,7 @@ jobs:
     # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-s390x')
     needs: [machine-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     secrets: inherit
     with:
       path: machine
@@ -322,7 +334,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -342,7 +354,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -362,7 +374,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
