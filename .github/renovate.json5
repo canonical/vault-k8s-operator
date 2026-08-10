@@ -1,6 +1,8 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: ["github>canonical/identity-credentials-workflows//renovate.json5"],
+  extends: [
+    "github>canonical/identity-credentials-workflows//renovate.json5#v3.1.3",
+  ],
   baseBranchPatterns: ["main", "release-*"],
   useBaseBranchConfig: "merge",
   packageRules: [
