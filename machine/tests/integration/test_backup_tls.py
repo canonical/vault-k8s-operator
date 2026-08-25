@@ -33,7 +33,8 @@ def bucket_ca_cert(host_ip: str) -> str:
 
     Used to configure the s3-integrator's ``tls-ca-chain`` config value.
     """
-    ctx = ssl.create_default_context()
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     with socket.create_connection((host_ip, BUCKET_SERVER_PORT), timeout=10) as sock:

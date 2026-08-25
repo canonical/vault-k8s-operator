@@ -2,6 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import base64
 import contextlib
 import json
 import logging
@@ -478,7 +479,7 @@ def configure_s3_and_create_backup(
     if s3_path is not None:
         s3_config["path"] = s3_path
     if s3_tls_ca_chain is not None:
-        s3_config["tls-ca-chain"] = s3_tls_ca_chain
+        s3_config["tls-ca-chain"] = base64.b64encode(s3_tls_ca_chain.encode()).decode()
     juju.config(S3_INTEGRATOR_APPLICATION_NAME, s3_config)
     juju.wait(
         lambda s: jubilant.all_active(s, S3_INTEGRATOR_APPLICATION_NAME),
