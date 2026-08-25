@@ -28,14 +28,16 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
+import contextlib
 import json
 import logging
 import os
+import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from functools import cached_property
-from typing import FrozenSet, List, MutableMapping, Optional, Sequence, TextIO
+from typing import FrozenSet, Iterator, List, Mapping, MutableMapping, TextIO
 
 from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
 from charms.data_platform_libs.v0.s3 import S3Requirer
@@ -1759,40 +1761,43 @@ class BackupManager:
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    skip_verify=skip_verify,
+                    application=self._charm.app.name,
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error as e:
+                logger.error("Failed to create S3 session. %s", e)
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-                skip_verify=skip_verify,
-                application=self._charm.app.name,
+            if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+                raise ManagerError("Failed to create S3 bucket")
+            backup_key = f"{path_prefix}{Naming.backup_s3_key_name(self._charm.model.name)}"
+
+            response = vault_client.create_snapshot()
+            content_uploaded = s3.upload_content(
+                content=response.raw,  # type: ignore[reportArgumentType]
+                bucket_name=s3_parameters["bucket"],
+                key=backup_key,
             )
-        except S3Error as e:
-            logger.error("Failed to create S3 session. %s", e)
-            raise ManagerError("Failed to create S3 session")
-
-        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-            raise ManagerError("Failed to create S3 bucket")
-        backup_key = Naming.backup_s3_key_name(self._charm.model.name)
-
-        response = vault_client.create_snapshot()
-        content_uploaded = s3.upload_content(
-            content=response.raw,  # type: ignore[reportArgumentType]
-            bucket_name=s3_parameters["bucket"],
-            key=backup_key,
-        )
-        if not content_uploaded:
-            raise ManagerError("Failed to upload backup to S3 bucket")
-        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
-        return backup_key
+            if not content_uploaded:
+                raise ManagerError("Failed to upload backup to S3 bucket")
+            logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
+            return backup_key
 
     def list_backups(self, skip_verify: bool = False) -> list[str]:
         """List all the backups available in the S3 bucket.
 
         Backups are identified by the key prefix from
-        ``Naming.backup_s3_key_prefix``.
+        ``Naming.backup_s3_key_prefix``, prepended with the S3 relation
+        ``path`` when one is configured.
 
         Args:
             skip_verify: Whether to skip verification of the S3 connection.
@@ -1803,26 +1808,29 @@ class BackupManager:
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    skip_verify=skip_verify,
+                    application=self._charm.app.name,
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error:
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-                skip_verify=skip_verify,
-                application=self._charm.app.name,
-            )
-        except S3Error:
-            raise ManagerError("Failed to create S3 session")
-
-        try:
-            backup_ids = s3.get_object_key_list(
-                bucket_name=s3_parameters["bucket"], prefix=Naming.backup_s3_key_prefix
-            )
-        except S3Error as e:
-            raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
-        return backup_ids
+            try:
+                backup_ids = s3.get_object_key_list(
+                    bucket_name=s3_parameters["bucket"],
+                    prefix=f"{path_prefix}{Naming.backup_s3_key_prefix}",
+                )
+            except S3Error as e:
+                raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
+            return backup_ids
 
     def restore_backup(
         self, vault_client: VaultClient, backup_key: str, skip_verify: bool = False
@@ -1837,35 +1845,45 @@ class BackupManager:
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    skip_verify=skip_verify,
+                    application=self._charm.app.name,
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error:
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-                skip_verify=skip_verify,
-                application=self._charm.app.name,
-            )
-        except S3Error:
-            raise ManagerError("Failed to create S3 session")
+            # Try the path-prefixed key first, then fall back to the raw key.
+            # When no path is configured only one fetch is performed.
+            prefixed_key = f"{path_prefix}{backup_key}"
+            candidates = [prefixed_key] if prefixed_key == backup_key else [prefixed_key, backup_key]
+            try:
+                snapshot = None
+                for candidate in candidates:
+                    snapshot = s3.get_content(
+                        bucket_name=s3_parameters["bucket"],
+                        object_key=candidate,
+                    )
+                    if snapshot:
+                        break
+            except S3Error as e:
+                raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
+            if not snapshot:
+                raise ManagerError(
+                    f"Snapshot not found in S3 bucket. ({s3_parameters['bucket']}/{backup_key})"
+                )
 
-        try:
-            snapshot = s3.get_content(
-                bucket_name=s3_parameters["bucket"],
-                object_key=backup_key,
-            )
-        except S3Error as e:
-            raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
-        if not snapshot:
-            raise ManagerError(
-                f"Snapshot not found in S3 bucket. ({s3_parameters['bucket']}/{backup_key})"
-            )
-
-        try:
-            vault_client.restore_snapshot(snapshot=snapshot)
-        except VaultClientError as e:
-            raise ManagerError(f"Failed to restore snapshot: {e}")
+            try:
+                vault_client.restore_snapshot(snapshot=snapshot)
+            except VaultClientError as e:
+                raise ManagerError(f"Failed to restore snapshot: {e}")
 
     def _validate_s3_prerequisites(self) -> str | None:
         """Validate the S3 pre-requisites are met.
@@ -1902,6 +1920,53 @@ class BackupManager:
             if isinstance(value, str):
                 s3_parameters[key] = value.strip()
         return s3_parameters
+
+    def _normalize_path(self, s3_parameters: Mapping[str, object]) -> str:
+        """Return the S3 relation ``path`` as a normalized key prefix.
+
+        Strips leading and trailing slashes from the ``path`` field and
+        appends a trailing slash so it can be prepended to object keys.
+        Returns an empty string when no path is configured, so it is a no-op
+        when ``path`` is absent.
+
+        Args:
+            s3_parameters: S3 relation parameters.
+
+        Returns:
+            A prefix such as ``"vault/"`` or an empty string.
+        """
+        path = s3_parameters.get("path")
+        if not path or not isinstance(path, str):
+            return ""
+        stripped = path.strip("/")
+        if not stripped:
+            return ""
+        return f"{stripped}/"
+
+    @contextlib.contextmanager
+    def _ca_cert_bundle(self, s3_parameters: Mapping[str, object]) -> Iterator[str | None]:
+        """Extract the S3 relation ``tls-ca-chain`` to a temporary PEM file.
+
+        The s3-integrator relation provides ``tls-ca-chain`` as a JSON list of
+        PEM strings. boto3's ``verify`` parameter accepts a path to a CA bundle
+        file, so the chain is written to a temporary file and its path yielded.
+        The file is removed once the enclosing ``with`` block exits.
+
+        Yields:
+            The path to the temporary CA bundle file, or ``None`` when the
+            relation does not provide a ``tls-ca-chain`` or it is malformed.
+        """
+        tls_ca_chain = s3_parameters.get("tls-ca-chain")
+        if not tls_ca_chain or not isinstance(tls_ca_chain, list):
+            yield None
+            return
+        fd, path = tempfile.mkstemp(suffix=".pem")
+        try:
+            with os.fdopen(fd, "w") as ca_file:
+                ca_file.write("\n".join(tls_ca_chain))
+            yield path
+        finally:
+            os.unlink(path)
 
 
 class RaftManager:

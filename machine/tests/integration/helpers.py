@@ -9,6 +9,7 @@ import os
 import platform
 import tempfile
 import time
+from collections import namedtuple
 from pathlib import Path
 from typing import Any, List, Tuple
 
@@ -27,6 +28,10 @@ from config import (
 from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
+
+# Returned by the shared ``deploy`` fixture in ``conftest.py`` for backup test
+# modules. Defined here so both conftest.py and test modules can import it.
+VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
 class ActionFailedError(Exception):
@@ -449,8 +454,14 @@ def configure_s3_and_create_backup(
     s3_bucket: str,
     s3_region: str,
     kv_secret_value: str,
-) -> None:
-    """Configure the S3 integrator, write a KV secret, and create a backup."""
+    s3_path: str | None = None,
+    s3_tls_ca_chain: str | None = None,
+    skip_verify: bool = True,
+) -> str:
+    """Configure the S3 integrator, write a KV secret, and create a backup.
+
+    Returns the backup-id returned by the ``create-backup``.
+    """
     run_action_on_leader(
         juju,
         S3_INTEGRATOR_APPLICATION_NAME,
@@ -459,11 +470,15 @@ def configure_s3_and_create_backup(
         secret_key=s3_secret_key,
     )
 
-    s3_config = {
+    s3_config: dict[str, str | bool] = {
         "endpoint": s3_endpoint,
         "bucket": s3_bucket,
         "region": s3_region,
     }
+    if s3_path is not None:
+        s3_config["path"] = s3_path
+    if s3_tls_ca_chain is not None:
+        s3_config["tls-ca-chain"] = s3_tls_ca_chain
     juju.config(S3_INTEGRATOR_APPLICATION_NAME, s3_config)
     juju.wait(
         lambda s: jubilant.all_active(s, S3_INTEGRATOR_APPLICATION_NAME),
@@ -486,12 +501,13 @@ def configure_s3_and_create_backup(
     vault.enable_kv_engine(path="kv/", description="Test KV Engine")
     vault.write("kv/secret", {"key": kv_secret_value})
 
-    run_action_on_leader(juju, APP_NAME, "create-backup", skip_verify=True)
+    results = run_action_on_leader(juju, APP_NAME, "create-backup", skip_verify=skip_verify)
+    return results["backup-id"]
 
 
-def list_backups(juju: jubilant.Juju) -> list[str]:
+def list_backups(juju: jubilant.Juju, skip_verify: bool = True) -> list[str]:
     """List backups and return the backup IDs."""
-    results = run_action_on_leader(juju, APP_NAME, "list-backups", skip_verify=True)
+    results = run_action_on_leader(juju, APP_NAME, "list-backups", skip_verify=skip_verify)
     assert results["backup-ids"] is not None
     backup_ids = json.loads(results["backup-ids"])
     assert len(backup_ids) > 0
@@ -502,9 +518,13 @@ def restore_backup(
     juju: jubilant.Juju,
     root_token: str,
     kv_secret_value: str,
-) -> None:
-    """Restore the most recent backup and verify the KV secret is restored."""
-    backup_ids = list_backups(juju)
+    skip_verify: bool = True,
+) -> str:
+    """Restore the most recent backup and verify the KV secret is restored.
+
+    Returns the restored backup-id.
+    """
+    backup_ids = list_backups(juju, skip_verify=skip_verify)
     backup_id = backup_ids[-1]
 
     leader_name = get_leader_unit_name(juju, APP_NAME)
@@ -515,8 +535,9 @@ def restore_backup(
     assert vault.read("kv/secret") is None
 
     backup_action_output = run_action_on_leader(
-        juju, APP_NAME, "restore-backup", skip_verify=True, backup_id=backup_id
+        juju, APP_NAME, "restore-backup", skip_verify=skip_verify, backup_id=backup_id
     )
 
     assert vault.read("kv/secret") == {"key": kv_secret_value}
     assert backup_action_output["restored"] == backup_id
+    return backup_id

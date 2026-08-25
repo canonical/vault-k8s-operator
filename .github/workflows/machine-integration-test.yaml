@@ -76,7 +76,7 @@ jobs:
           echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
           echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
       - name: Install minio binaries and configure storage buckets for backup tests
-        if: ${{ matrix.suite == 'test_backup.py' }}
+        if: ${{ matrix.suite == 'test_backup.py' || matrix.suite == 'test_backup_tls.py' }}
         run: |
           minio_binaries_path="/var/snap/lxd/common/minio"
           sudo mkdir -p ${minio_binaries_path}
