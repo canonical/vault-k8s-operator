@@ -1860,10 +1860,15 @@ class BackupManager:
             except S3Error:
                 raise ManagerError("Failed to create S3 session")
 
-            # Try the path-prefixed key first, then fall back to the raw key.
-            # When no path is configured only one fetch is performed.
-            prefixed_key = f"{path_prefix}{backup_key}"
-            candidates = [prefixed_key] if prefixed_key == backup_key else [prefixed_key, backup_key]
+            # If the supplied key is already prefixed, fetch it directly.
+            # Otherwise try the path-prefixed key first and fall back to the raw key.
+            if path_prefix and backup_key.startswith(path_prefix):
+                candidates = [backup_key]
+            else:
+                prefixed_key = f"{path_prefix}{backup_key}"
+                candidates = (
+                    [prefixed_key] if prefixed_key == backup_key else [prefixed_key, backup_key]
+                )
             try:
                 snapshot = None
                 for candidate in candidates:

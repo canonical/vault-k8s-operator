@@ -1380,6 +1380,25 @@ class TestBackupManager:
         self.s3.get_content.assert_called_once()
         assert self.s3.get_content.call_args.kwargs["object_key"] == "vault-backup-my-model-1"
 
+    def test_given_already_prefixed_key_when_restore_backup_then_key_not_prefixed_again(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        self.s3.get_content.return_value = "snapshot content"
+        already_prefixed_key = "vault/vault-backup-my-model-1"
+
+        self.manager.restore_backup(self.vault_client, already_prefixed_key)
+
+        # Only one fetch is performed and the key is not double-prefixed.
+        self.s3.get_content.assert_called_once()
+        assert self.s3.get_content.call_args.kwargs["object_key"] == already_prefixed_key
+        self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
+
     def test_given_tls_ca_chain_when_create_backup_then_ca_cert_path_passed_to_s3(self):
         self.s3_requirer.get_s3_connection_info.return_value = {
             "bucket": "my-bucket",
