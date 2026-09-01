@@ -391,6 +391,71 @@ class TestS3(unittest.TestCase):
             verify=None,
         )
 
+    @patch("boto3.session.Session")
+    def test_given_ca_cert_path_when_create_s3_session_then_verify_is_ca_cert_path(
+        self,
+        patch_session: MagicMock,
+    ):
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            application="vault",
+            skip_verify=False,
+            ca_cert_path="/tmp/ca-chain.pem",
+        )
+        patch_session.return_value.resource.assert_called_with(
+            "s3",
+            endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
+            config=ANY,
+            verify="/tmp/ca-chain.pem",
+        )
+
+    @patch("boto3.session.Session")
+    def test_given_ca_cert_path_and_skip_verify_when_create_s3_session_then_verify_is_false(
+        self,
+        patch_session: MagicMock,
+    ):
+        # skip_verify takes precedence over ca_cert_path so that operators can
+        # explicitly opt out of TLS verification even when a CA chain is set.
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            application="vault",
+            skip_verify=True,
+            ca_cert_path="/tmp/ca-chain.pem",
+        )
+        patch_session.return_value.resource.assert_called_with(
+            "s3",
+            endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
+            config=ANY,
+            verify=False,
+        )
+
+    @patch("boto3.session.Session")
+    def test_given_no_ca_cert_path_and_skip_verify_false_when_create_s3_session_then_verify_is_none(
+        self,
+        patch_session: MagicMock,
+    ):
+        S3(
+            access_key=self.VALID_S3_PARAMETERS["access-key"],
+            secret_key=self.VALID_S3_PARAMETERS["secret-key"],
+            region=self.VALID_S3_PARAMETERS["region"],
+            endpoint=self.VALID_S3_PARAMETERS["endpoint"],
+            application="vault",
+            skip_verify=False,
+            ca_cert_path=None,
+        )
+        patch_session.return_value.resource.assert_called_with(
+            "s3",
+            endpoint_url=self.VALID_S3_PARAMETERS["endpoint"],
+            config=ANY,
+            verify=None,
+        )
+
     @patch.dict(
         "os.environ",
         {

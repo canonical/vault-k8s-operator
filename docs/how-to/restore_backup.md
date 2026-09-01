@@ -24,6 +24,21 @@ You can get a list of the identifiers of all the backups that are stored on the 
 
 `juju run vault/leader list-backups`
 
+If you are using the [S3-integrator](https://charmhub.io/s3-integrator) charm, when a `path` is configured,
+`list-backups` only returns backups stored under that path. Backups created *before* a `path` was set are stored
+at the bucket root and will no longer appear in the output, even though they are still present in the bucket.
+You can get a list of these root-level backups by setting the `path` to empty and running `list-backups`:
+
+```
+S3_PATH=$(juju config s3-integrator path)
+juju config s3-integrator path=""
+juju run vault/leader list-backups
+juju config s3-integrator path="$S3_PATH"
+```
+
+To restore a legacy root-level backups, pass its key to the `restore-backup` action; even though a `path`
+may be configured, any existing root-level backups are still accessible by their key.
+
 ## Restore Backups created in different environments
 
 To restore a snapshot that wasn't created using the Vault charm's `create-backup` action, you'll need to manually upload it to the S3 storage accessible by the Vault charm where the `restore-backup` action will run.

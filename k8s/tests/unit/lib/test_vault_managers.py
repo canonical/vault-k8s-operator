@@ -1278,6 +1278,147 @@ class TestBackupManager:
         self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
         self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
 
+    def test_given_path_when_create_backup_then_key_is_prefixed(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        key = self.manager.create_backup(self.vault_client)
+
+        assert key.startswith("vault/vault-backup-my-model-")
+        self.s3.upload_content.assert_called_once()
+        assert self.s3.upload_content.call_args.kwargs["key"] == key
+
+    def test_path_with_surrounding_slashes_is_normalized_when_create_backup(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "/vault/",
+        }
+        key = self.manager.create_backup(self.vault_client)
+
+        assert key.startswith("vault/vault-backup-my-model-")
+
+    def test_given_no_path_when_create_backup_then_key_is_not_prefixed(self):
+        key = self.manager.create_backup(self.vault_client)
+
+        assert key.startswith("vault-backup-my-model-")
+        assert not key.startswith("/")
+
+    def test_given_path_when_list_backups_then_prefix_is_prefixed(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        self.manager.list_backups()
+
+        self.s3.get_object_key_list.assert_called_once()
+        assert self.s3.get_object_key_list.call_args.kwargs["prefix"] == "vault/vault-backup-"
+
+    def test_given_no_path_when_list_backups_then_prefix_is_unprefixed(self):
+        self.manager.list_backups()
+
+        assert self.s3.get_object_key_list.call_args.kwargs["prefix"] == "vault-backup-"
+
+    def test_given_path_when_restore_backup_then_prefixed_key_tried_first(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        self.s3.get_content.return_value = "snapshot content"
+
+        self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+
+        self.s3.get_content.assert_called_once()
+        assert self.s3.get_content.call_args.kwargs["object_key"] == (
+            "vault/vault-backup-my-model-1"
+        )
+
+    def test_given_prefixed_key_missing_when_restore_backup_then_falls_back_to_raw_key(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        # First get_content (prefixed key) returns None, second (raw key) returns content.
+        self.s3.get_content.side_effect = [None, "snapshot content"]
+
+        self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+
+        assert self.s3.get_content.call_count == 2
+        assert self.s3.get_content.call_args_list[0].kwargs["object_key"] == (
+            "vault/vault-backup-my-model-1"
+        )
+        assert self.s3.get_content.call_args_list[1].kwargs["object_key"] == (
+            "vault-backup-my-model-1"
+        )
+        self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
+
+    def test_given_no_path_when_restore_backup_then_raw_key_used(self):
+        self.s3.get_content.return_value = "snapshot content"
+
+        self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+
+        self.s3.get_content.assert_called_once()
+        assert self.s3.get_content.call_args.kwargs["object_key"] == "vault-backup-my-model-1"
+
+    def test_given_already_prefixed_key_when_restore_backup_then_key_not_prefixed_again(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "path": "vault",
+        }
+        self.s3.get_content.return_value = "snapshot content"
+        already_prefixed_key = "vault/vault-backup-my-model-1"
+
+        self.manager.restore_backup(self.vault_client, already_prefixed_key)
+
+        # Only one fetch is performed and the key is not double-prefixed.
+        self.s3.get_content.assert_called_once()
+        assert self.s3.get_content.call_args.kwargs["object_key"] == already_prefixed_key
+        self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
+
+    def test_given_tls_ca_chain_when_create_backup_then_ca_cert_path_passed_to_s3(self):
+        self.s3_requirer.get_s3_connection_info.return_value = {
+            "bucket": "my-bucket",
+            "access-key": "my-access-key",
+            "secret-key": "my-secret-key",
+            "endpoint": "my-endpoint",
+            "region": "my-region",
+            "tls-ca-chain": ["-----BEGIN CERTIFICATE-----\nfoo\n-----END CERTIFICATE-----"],
+        }
+
+        self.manager.create_backup(self.vault_client)
+
+        assert self.s3_class.call_args.kwargs["ca_cert_path"] is not None
+        assert self.s3_class.call_args.kwargs["ca_cert_path"].endswith(".pem")
+
+    def test_given_no_tls_ca_chain_when_create_backup_then_ca_cert_path_is_none(self):
+        self.manager.create_backup(self.vault_client)
+
+        assert self.s3_class.call_args.kwargs["ca_cert_path"] is None
+
 
 class TestRaftManager:
     @pytest.fixture(autouse=True)

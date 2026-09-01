@@ -11,7 +11,22 @@ from pathlib import Path
 import jubilant
 import pytest
 
-from config import APP_NAME, MICROCEPH_RGW_PORT
+from config import (
+    APP_NAME,
+    JUJU_FAST_INTERVAL,
+    MICROCEPH_RGW_PORT,
+    NUM_VAULT_UNITS,
+    S3_INTEGRATOR_APPLICATION_NAME,
+    S3_INTEGRATOR_CHANNEL,
+    S3_INTEGRATOR_REVISION,
+)
+from helpers import (
+    VaultInit,
+    deploy_vault,
+    fast_forward,
+    get_vault_token_and_unseal_key,
+    initialize_unseal_authorize_vault,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,3 +157,39 @@ def host_ip(juju: jubilant.Juju) -> str:
 def microceph_endpoint(host_ip: str) -> str:
     """Get the MicroCeph RGW S3-compatible endpoint reachable from the LXD units."""
     return f"http://{host_ip}:{MICROCEPH_RGW_PORT}"
+
+
+@pytest.fixture(scope="module")
+def deploy(juju: jubilant.Juju, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
+    """Deploy Vault and the S3 integrator, then initialize/unseal/authorize Vault."""
+    if skip_deploy:
+        logger.info("Skipping deployment due to --no-deploy flag")
+        root_token, key = get_vault_token_and_unseal_key(juju, APP_NAME)
+        return VaultInit(root_token, key)
+    deploy_vault(
+        juju,
+        charm_path=vault_charm_path,
+        num_vaults=NUM_VAULT_UNITS,
+    )
+    juju.deploy(
+        S3_INTEGRATOR_APPLICATION_NAME,
+        S3_INTEGRATOR_APPLICATION_NAME,
+        channel=S3_INTEGRATOR_CHANNEL,
+        revision=S3_INTEGRATOR_REVISION,
+        trust=True,
+    )
+
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda s: (
+                all(
+                    u.juju_status.current == "idle"
+                    for u in s.apps[S3_INTEGRATOR_APPLICATION_NAME].units.values()
+                )
+                and jubilant.all_blocked(s, APP_NAME)
+                and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            ),
+            timeout=1000,
+        )
+    root_token, unseal_key = initialize_unseal_authorize_vault(juju, APP_NAME)
+    return VaultInit(root_token, unseal_key)
