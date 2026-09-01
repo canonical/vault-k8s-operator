@@ -12,4 +12,4 @@ permissions:
 
 jobs:
   main:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-pr.yaml@v3.1.3
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-pr.yaml@v3.1.4
