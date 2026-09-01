@@ -197,7 +197,7 @@ def test_given_legacy_root_level_backup_when_restore_backup_then_falls_back(
     # Take a real raft snapshot via the leader's Vault API.
     leader_name = get_leader_unit_name(juju, APP_NAME)
     vault = get_vault_client(juju, leader_name, deploy.root_token)
-    snapshot_bytes = b"".join(vault.client.sys.read_raft_snapshot())
+    snapshot_bytes = vault.client.sys.take_raft_snapshot().content
 
     # Upload the snapshot as a legacy root-level object (no path prefix).
     with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as ca_file:
