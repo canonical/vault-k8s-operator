@@ -24,7 +24,7 @@ jobs:
           channel: 5.21/stable
 
       - name: Install charmcraft
-        run: sudo snap install charmcraft --classic
+        run: sudo snap install charmcraft --classic --revision=8022
 
       - name: Build KV Requirer charm
         working-directory: ${{ inputs.path }}
