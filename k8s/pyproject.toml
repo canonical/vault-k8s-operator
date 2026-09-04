@@ -32,7 +32,7 @@ dependencies = [
     # protobuf >= 4.21 uses the upb C extension which crashes on s390x (unaligned
     # memory access in upb_strtable_lookup2) both at import time and during interpreter
     # shutdown. Version 4.20.x uses the older implementation that works correctly.
-    "protobuf<4.21; platform_machine == 's390x'",
+    "protobuf<5.30; platform_machine == 's390x'",
     # pynacl >= 1.6 requires libsodium >= 1.0.20 (AEGIS support) but Ubuntu Noble
     # ships 1.0.18; pin to 1.5.x which works with system libsodium.
     "pynacl<1.7; platform_machine == 's390x'",
