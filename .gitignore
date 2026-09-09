@@ -4,6 +4,7 @@ build/
 .tox
 .venv/
 *.egg-info/
+uv.lock
 
 .coverage
 __pycache__/

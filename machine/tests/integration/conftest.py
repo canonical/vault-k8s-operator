@@ -2,13 +2,29 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import asyncio
+import logging
 import os
 from pathlib import Path
 
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from config import APP_NAME
+from config import (
+    APP_NAME,
+    JUJU_FAST_INTERVAL,
+    NUM_VAULT_UNITS,
+    S3_INTEGRATOR_APPLICATION_NAME,
+    S3_INTEGRATOR_REVISION,
+)
+from helpers import (
+    VaultInit,
+    deploy_vault,
+    get_vault_token_and_unseal_key,
+    initialize_unseal_authorize_vault,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -75,3 +91,44 @@ async def host_ip(ops_test: OpsTest) -> str:
     if return_code != 0:
         raise RuntimeError(f"Failed to get host IP: {stderr}")
     return stdout.strip()
+
+
+@pytest.fixture(scope="module")
+async def deploy(ops_test: OpsTest, vault_charm_path: Path, skip_deploy: bool) -> VaultInit:
+    """Deploy Vault and the S3 integrator, then initialize/unseal/authorize Vault."""
+    assert ops_test.model
+    if skip_deploy:
+        logger.info("Skipping deployment due to --no-deploy flag")
+        root_token, key = await get_vault_token_and_unseal_key(
+            ops_test.model,
+            APP_NAME,
+        )
+        return VaultInit(root_token, key)
+    await deploy_vault(
+        ops_test,
+        charm_path=vault_charm_path,
+        num_vaults=NUM_VAULT_UNITS,
+    )
+    await ops_test.model.deploy(
+        S3_INTEGRATOR_APPLICATION_NAME,
+        channel="stable",
+        revision=S3_INTEGRATOR_REVISION,
+        trust=True,
+    )
+
+    # When waiting for Vault to go to the blocked state, we may need an update
+    # status event to recognize that the API is available, so we wait in
+    # fast-forward.
+    async with ops_test.fast_forward(JUJU_FAST_INTERVAL):
+        await asyncio.gather(
+            ops_test.model.wait_for_idle(
+                apps=[S3_INTEGRATOR_APPLICATION_NAME],
+            ),
+            ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="blocked",
+                wait_for_exact_units=NUM_VAULT_UNITS,
+            ),
+        )
+    root_token, unseal_key = await initialize_unseal_authorize_vault(ops_test, APP_NAME)
+    return VaultInit(root_token, unseal_key)

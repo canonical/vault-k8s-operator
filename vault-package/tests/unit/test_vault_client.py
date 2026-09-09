@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from hvac.exceptions import Forbidden, InternalServerError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidRequest
 
 from vault.vault_client import (
     AppRole,
@@ -16,6 +16,7 @@ from vault.vault_client import (
     SecretsBackend,
     Token,
     VaultClient,
+    VaultClientError,
 )
 
 TEST_PATH = "./tests/unit"

@@ -3,9 +3,12 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import base64
+import json
 import logging
 import time
 from base64 import b64decode
+from collections import namedtuple
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -21,12 +24,19 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
+    NUM_VAULT_UNITS,
+    S3_INTEGRATOR_APPLICATION_NAME,
     SELF_SIGNED_CERTIFICATES_APPLICATION_NAME,
+    SHORT_TIMEOUT,
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
 )
 from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
+
+# Returned by the shared ``deploy`` fixture in ``conftest.py`` for backup test
+# modules. Defined here so both conftest.py and test modules can import it.
+VaultInit = namedtuple("VaultInit", ["root_token", "unseal_key"])
 
 
 class ActionFailedError(Exception):
@@ -467,3 +477,111 @@ async def refresh_application(ops_test: OpsTest, app_name: str, charm_path: Path
     app = ops_test.model.applications[app_name]
     assert isinstance(app, Application)
     await app.refresh(path=charm_path)
+
+
+async def configure_s3_and_create_backup(
+    ops_test: OpsTest,
+    root_token: str,
+    s3_endpoint: str,
+    s3_access_key: str,
+    s3_secret_key: str,
+    s3_bucket: str,
+    s3_region: str,
+    kv_secret_value: str,
+    s3_path: str | None = None,
+    s3_tls_ca_chain: str | None = None,
+    skip_verify: bool = True,
+) -> str:
+    """Configure the S3 integrator, write a KV secret, and create a backup.
+
+    Returns the backup-id returned by the ``create-backup``.
+    """
+    assert ops_test.model
+    await run_action_on_leader(
+        ops_test,
+        S3_INTEGRATOR_APPLICATION_NAME,
+        "sync-s3-credentials",
+        access_key=s3_access_key,
+        secret_key=s3_secret_key,
+    )
+
+    s3_config: dict[str, str | bool] = {
+        "endpoint": s3_endpoint,
+        "bucket": s3_bucket,
+        "region": s3_region,
+    }
+    if s3_path is not None:
+        s3_config["path"] = s3_path
+    if s3_tls_ca_chain is not None:
+        s3_config["tls-ca-chain"] = base64.b64encode(s3_tls_ca_chain.encode()).decode()
+    s3_integrator = ops_test.model.applications[S3_INTEGRATOR_APPLICATION_NAME]
+    await s3_integrator.set_config(s3_config)
+    await ops_test.model.wait_for_idle(
+        apps=[S3_INTEGRATOR_APPLICATION_NAME],
+        status="active",
+        timeout=SHORT_TIMEOUT,
+    )
+
+    vault_app = ops_test.model.applications[APP_NAME]
+    if not has_relation(vault_app, "s3-parameters"):
+        await ops_test.model.integrate(
+            relation1=APP_NAME,
+            relation2=S3_INTEGRATOR_APPLICATION_NAME,
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="active",
+            timeout=SHORT_TIMEOUT,
+            wait_for_exact_units=NUM_VAULT_UNITS,
+        )
+
+    leader = await get_leader_unit(ops_test.model, APP_NAME)
+    vault = await get_vault_client(ops_test, leader, root_token)
+    vault.enable_kv_engine(path="kv/", description="Test KV Engine")
+    vault.write("kv/secret", {"key": kv_secret_value})
+
+    results = await run_action_on_leader(
+        ops_test, APP_NAME, "create-backup", skip_verify=skip_verify
+    )
+    return results["backup-id"]
+
+
+async def list_backups(ops_test: OpsTest, skip_verify: bool = True) -> list[str]:
+    """List backups and return the backup IDs."""
+    results = await run_action_on_leader(
+        ops_test, APP_NAME, "list-backups", skip_verify=skip_verify
+    )
+    assert results["backup-ids"] is not None
+    backup_ids = json.loads(results["backup-ids"])
+    assert len(backup_ids) > 0
+    return backup_ids
+
+
+async def restore_backup(
+    ops_test: OpsTest,
+    root_token: str,
+    kv_secret_value: str,
+    skip_verify: bool = True,
+) -> str:
+    """Restore the most recent backup and verify the KV secret is restored.
+
+    Returns the restored backup-id.
+    """
+    assert ops_test.model
+    backup_ids = await list_backups(ops_test, skip_verify=skip_verify)
+    backup_id = backup_ids[-1]
+
+    leader = await get_leader_unit(ops_test.model, APP_NAME)
+    vault = await get_vault_client(ops_test, leader, root_token)
+
+    assert vault.read("kv/secret") == {"key": kv_secret_value}
+    vault.delete("kv/secret")
+    assert vault.read("kv/secret") is None
+
+    backup_action_output = await run_action_on_leader(
+        ops_test, APP_NAME, "restore-backup", skip_verify=skip_verify, backup_id=backup_id
+    )
+
+    assert vault.read("kv/secret") == {"key": kv_secret_value}
+    assert backup_action_output["restored"] == backup_id
+    return backup_id
