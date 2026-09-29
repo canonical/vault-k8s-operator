@@ -161,7 +161,7 @@ wheels = [
 
 [[package]]
 name = "charmlibs-interfaces-tls-certificates"
-version = "1.10.0"
+version = "1.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography", version = "43.0.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 's390x'" },
@@ -169,9 +169,9 @@ dependencies = [
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/ee/e44db33dd3b9d9a83eda97dca7f6c42054f093ae43f7f37032a2b1f20a93/charmlibs_interfaces_tls_certificates-1.10.0.tar.gz", hash = "sha256:df29a5dd551bba51049ea40741662a8e99afb18c16a38d287d58836caf32c744", size = 130758, upload-time = "2026-07-13T15:49:04.323Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/e0/0a5fde26b3464cbc156f90ad253239c6e838dc6ebfdf4eae99f353256ae6/charmlibs_interfaces_tls_certificates-1.12.0.tar.gz", hash = "sha256:30ea1ca8cc69c7817415ec82612e519810b271d28314e43a4da416dd2c4570ff", size = 139288, upload-time = "2026-09-29T12:47:56.16Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/7b/9ebc21050c47fe0add7c0a7793e86c08a76c56c2b3162570c0461616a639/charmlibs_interfaces_tls_certificates-1.10.0-py3-none-any.whl", hash = "sha256:65a97f71241ff3cb8a8babaf5b6e64c239ba2f87d76fed5c3fd9d9ca1ea2b99a", size = 33168, upload-time = "2026-07-13T15:49:03.028Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/1e/75c263c0a76ec5a9f7ab769209ff5440fe98b689da88f7db1fc9a13f39be/charmlibs_interfaces_tls_certificates-1.12.0-py3-none-any.whl", hash = "sha256:6fcae560314aab1190e722fcb907bea15a01444c9755ed18ada18f23625814b1", size = 34545, upload-time = "2026-09-29T12:47:54.723Z" },
 ]
 
 [[package]]
@@ -1317,7 +1317,7 @@ test = [
 requires-dist = [
     { name = "cffi", marker = "platform_machine == 's390x'", specifier = "<2" },
     { name = "charmlibs-interfaces-certificate-transfer" },
-    { name = "charmlibs-interfaces-tls-certificates", specifier = "~=1.9" },
+    { name = "charmlibs-interfaces-tls-certificates", specifier = "~=1.12" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "cryptography", marker = "platform_machine == 's390x'", specifier = "<44" },

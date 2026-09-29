@@ -44,6 +44,7 @@ class TestCharmConfig(VaultCharmFixtures):
         "pki_province": "CA",
         "pki_locality": "San Francisco",
         "pki_self_signed_ca_validity": 87600,
+        "pki_ca_key_type": "rsa-2048",
         "acme_ca_common_name": "example.com",
         "acme_ca_sans_dns": "example.com",
         "acme_ca_country_name": "US",
@@ -63,6 +64,7 @@ class TestCharmConfig(VaultCharmFixtures):
         "acme_country": "US",
         "acme_province": "CA",
         "acme_locality": "San Francisco",
+        "acme_ca_key_type": "rsa-2048",
     }
 
     def test_given_config_with_defaults_then_default_config_values_are_correct(self):

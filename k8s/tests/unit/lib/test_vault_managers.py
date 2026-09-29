@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from charmlibs.interfaces.tls_certificates import KeyAlgorithm
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
@@ -370,6 +371,10 @@ class TestPKIManager:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.tls_certificates_pki.private_key = None
+        self.tls_certificates_pki.key_algorithm = KeyAlgorithm.RSA
+        self.tls_certificates_pki.key_size = 2048
+        self.tls_certificates_pki.relationship_name = "tls-certificates-pki"
         self.allowed_domains = "common_name"
         self.allow_bare_domains = True
         self.allow_subdomains = False
@@ -443,6 +448,18 @@ class TestPKIManager:
         self.pki_manager.make_latest_pki_issuer_default()
 
         assert is_error_logged(caplog, "Failed to get the first issuer")
+
+    def test_given_private_key_type_changed_when_configure_then_private_key_is_regenerated(self):
+        self.tls_certificates_pki.private_key = PrivateKey.generate(
+            key_algorithm=KeyAlgorithm.RSA, key_size=2048
+        )
+        self.tls_certificates_pki.key_algorithm = KeyAlgorithm.ECDSA
+        self.tls_certificates_pki.key_size = 256
+
+        self.pki_manager.configure()
+
+        self.tls_certificates_pki.regenerate_private_key.assert_called_once_with()
+        self.tls_certificates_pki.get_assigned_certificate.assert_not_called()
 
     def test_given_existing_pki_issuers_when_make_latest_pki_issuer_default_then_config_written_to_path(
         self, issuer_is_not_default: None
@@ -852,6 +869,10 @@ class TestACMEManager:
         self.vault = MagicMock(spec=VaultClient)
         self.mount_point = "acme-charm"
         self.tls_certificates_acme = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.tls_certificates_acme.private_key = None
+        self.tls_certificates_acme.key_algorithm = KeyAlgorithm.RSA
+        self.tls_certificates_acme.key_size = 2048
+        self.tls_certificates_acme.relationship_name = "tls-certificates-acme"
         self.certificate_request_attributes = CertificateRequestAttributes(
             common_name="common_name",
             is_ca=True,

@@ -1,10 +1,10 @@
 """This library contains helper function used when configuring the Vault service."""
 
-import logging
-from dataclasses import dataclass
-import os
-from typing import Dict, List
 import ipaddress
+import logging
+import os
+from dataclasses import dataclass
+from typing import Dict, List
 
 import hcl
 from jinja2 import Environment, FileSystemLoader
@@ -20,6 +20,29 @@ class AutounsealConfiguration:
     mount_path: str
     key_name: str
     ca_cert_path: str
+
+
+DEFAULT_CA_KEY_TYPE = "rsa-2048"
+CA_KEY_TYPES: Dict[str, tuple[str, int]] = {
+    "rsa-2048": ("rsa", 2048),
+    "rsa-3072": ("rsa", 3072),
+    "rsa-4096": ("rsa", 4096),
+    "ecdsa-p256": ("ecdsa", 256),
+    "ecdsa-p384": ("ecdsa", 384),
+}
+
+
+def ca_key_type_config_is_valid(key_type: str) -> bool:
+    """Return whether the config value for a CA private key type is supported."""
+    return key_type in CA_KEY_TYPES
+
+
+def get_ca_key_algorithm_and_size(key_type: str) -> tuple[str, int]:
+    """Return the key algorithm and size for a CA private key type config value.
+
+    Falls back to the default key type if the value is not supported.
+    """
+    return CA_KEY_TYPES.get(key_type, CA_KEY_TYPES[DEFAULT_CA_KEY_TYPE])
 
 
 def common_name_config_is_valid(common_name: str) -> bool:

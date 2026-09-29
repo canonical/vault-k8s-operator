@@ -37,10 +37,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from functools import cached_property
-from typing import FrozenSet, Iterator, List, Mapping, MutableMapping, TextIO
+from typing import FrozenSet, Iterator, Mapping, MutableMapping, TextIO
 
 from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
-from charms.data_platform_libs.v0.s3 import S3Requirer
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
     CertificateError,
@@ -59,9 +58,11 @@ from charmlibs.interfaces.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import PathError
+
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
@@ -138,7 +139,7 @@ def _map_vault_pki_errors(
         the error cannot be classified into a specific category.
     """
     error_text = str(error).lower()
-    
+
     # Use mutually exclusive conditions to avoid order dependency
     is_ip_error = (
         "ip_san" in error_text
@@ -151,14 +152,14 @@ def _map_vault_pki_errors(
         or "common name" in error_text
         or ("subject alternative name" in error_text and not is_ip_error)
     )
-    
+
     if is_ip_error:
         code = CertificateRequestErrorCode.IP_NOT_ALLOWED
     elif is_domain_error:
         code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
     else:
         code = CertificateRequestErrorCode.OTHER
-    
+
     return CertificateError(
         code=code,
         name=code.name,
@@ -652,12 +653,12 @@ class TLSManager(Object):
         """
         try:
             unit_cert = Certificate.from_string(unit_cert_content)
-            
+
             cert_sans_dns = set(unit_cert.sans_dns) if unit_cert.sans_dns else set()
             cert_sans_ip = set(unit_cert.sans_ip) if unit_cert.sans_ip else set()
             current_sans_dns = set(self.sans_dns) if self.sans_dns else set()
             current_sans_ip = set(self.sans_ip) if self.sans_ip else set()
-            
+
             return (
                 cert_sans_dns == current_sans_dns
                 and cert_sans_ip == current_sans_ip
@@ -789,6 +790,40 @@ class _PKIUtils:
     def __init__(self, vault_client: VaultClient, mount_point: str):
         self._vault_client = vault_client
         self._mount_point = mount_point
+
+    @staticmethod
+    def regenerate_private_key_if_type_changed(requirer: TLSCertificatesRequiresV4) -> bool:
+        """Regenerate the requirer's private key if it doesn't match the configured key type.
+
+        The TLS library keeps an existing private key when the requested key algorithm or size
+        changes, so the key has to be regenerated explicitly. Regenerating it also sends a new
+        certificate request to the provider.
+
+        Returns:
+            True if the private key was regenerated, False otherwise.
+        """
+        private_key = requirer.private_key
+        if not private_key:
+            return False
+        try:
+            if (
+                private_key.algorithm == requirer.key_algorithm
+                and private_key.key_size == requirer.key_size
+            ):
+                return False
+            logger.info(
+                "Private key for %s is %s-%s but %s-%s is configured, regenerating it",
+                requirer.relationship_name,
+                private_key.algorithm.value,
+                private_key.key_size,
+                requirer.key_algorithm.value,
+                requirer.key_size,
+            )
+            requirer.regenerate_private_key()
+        except TLSCertificatesError as e:
+            logger.error("Failed to regenerate private key: %s", e)
+            return False
+        return True
 
     def get_vault_service_ca_certificate(self) -> Certificate | None:
         """Get the current intermediate CA certificate from the Vault service."""
@@ -1256,6 +1291,9 @@ class PKIManager:
         """Configure the PKI backend using an external CA from the relation."""
         if not self._tls_certificates_pki:
             logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
+            return
+        if self._pki_utils.regenerate_private_key_if_type_changed(self._tls_certificates_pki):
+            logger.info("Waiting for a new PKI intermediate CA certificate")
             return
         update_ca_certificate = True
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
@@ -2184,6 +2222,9 @@ class ACMEManager:
                 "No TLS relation exists to configure ACME server: `%s`",
                 TLS_CERTIFICATES_ACME_RELATION_NAME,
             )
+            return
+        if self._pki_utils.regenerate_private_key_if_type_changed(self._tls_certificates_acme):
+            logger.info("Waiting for a new ACME intermediate CA certificate")
             return
         self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
 

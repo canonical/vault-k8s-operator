@@ -213,16 +213,16 @@ wheels = [
 
 [[package]]
 name = "charmlibs-interfaces-tls-certificates"
-version = "1.10.0"
+version = "1.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/ee/e44db33dd3b9d9a83eda97dca7f6c42054f093ae43f7f37032a2b1f20a93/charmlibs_interfaces_tls_certificates-1.10.0.tar.gz", hash = "sha256:df29a5dd551bba51049ea40741662a8e99afb18c16a38d287d58836caf32c744", size = 130758, upload-time = "2026-07-13T15:49:04.323Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/e0/0a5fde26b3464cbc156f90ad253239c6e838dc6ebfdf4eae99f353256ae6/charmlibs_interfaces_tls_certificates-1.12.0.tar.gz", hash = "sha256:30ea1ca8cc69c7817415ec82612e519810b271d28314e43a4da416dd2c4570ff", size = 139288, upload-time = "2026-09-29T12:47:56.16Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/7b/9ebc21050c47fe0add7c0a7793e86c08a76c56c2b3162570c0461616a639/charmlibs_interfaces_tls_certificates-1.10.0-py3-none-any.whl", hash = "sha256:65a97f71241ff3cb8a8babaf5b6e64c239ba2f87d76fed5c3fd9d9ca1ea2b99a", size = 33168, upload-time = "2026-07-13T15:49:03.028Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/1e/75c263c0a76ec5a9f7ab769209ff5440fe98b689da88f7db1fc9a13f39be/charmlibs_interfaces_tls_certificates-1.12.0-py3-none-any.whl", hash = "sha256:6fcae560314aab1190e722fcb907bea15a01444c9755ed18ada18f23625814b1", size = 34545, upload-time = "2026-09-29T12:47:54.723Z" },
 ]
 
 [[package]]
@@ -511,7 +511,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1163,7 +1163,7 @@ resolution-markers = [
     "python_full_version >= '3.14' and platform_machine == 's390x' and platform_python_implementation != 'PyPy'",
 ]
 dependencies = [
-    { name = "cffi" },
+    { name = "cffi", marker = "python_full_version >= '3.14' and platform_machine == 's390x' and platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/22/27582568be639dfe22ddb3902225f91f2f17ceff88ce80e4db396c8986da/PyNaCl-1.5.0.tar.gz", hash = "sha256:8ac7448f09ab85811607bdd21ec2464495ac8b7c66d146bf545b0f08fb9220ba", size = 3392854, upload-time = "2022-01-07T22:05:41.134Z" }
 wheels = [
@@ -1181,7 +1181,7 @@ resolution-markers = [
     "python_full_version < '3.11' and platform_machine == 's390x' and platform_python_implementation == 'PyPy'",
 ]
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "cffi", marker = "python_full_version < '3.14' and platform_machine == 's390x' and platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/c6/a3124dee667a423f2c637cfd262a54d67d8ccf3e160f3c50f622a85b7723/pynacl-1.6.0.tar.gz", hash = "sha256:cb36deafe6e2bce3b286e5d1f3e1c246e0ccdb8808ddb4550bb2792f2df298f2", size = 3505641, upload-time = "2025-09-10T23:39:22.308Z" }
 wheels = [
@@ -1840,7 +1840,7 @@ test = [
 requires-dist = [
     { name = "cffi", marker = "platform_machine == 's390x'", specifier = "<2" },
     { name = "charmlibs-interfaces-certificate-transfer" },
-    { name = "charmlibs-interfaces-tls-certificates", specifier = "~=1.9" },
+    { name = "charmlibs-interfaces-tls-certificates", specifier = "~=1.12" },
     { name = "cosl", specifier = ">0.0.50" },
     { name = "cryptography" },
     { name = "cryptography", marker = "platform_machine == 's390x'", specifier = "<44" },
