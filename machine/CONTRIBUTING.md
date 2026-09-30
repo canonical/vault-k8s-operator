@@ -64,30 +64,32 @@ At this time, each integration test suite must be run separately.
 
 #### Backup tests
 
-To run the backup tests, you will need to have an S3 compatible storage service running, such as MinIO. You can find instructions to configure LXD to manage the MinIO service at <https://documentation.ubuntu.com/lxd/latest/howto/storage_buckets/#howto-storage-buckets>.
-
-The following is a summary of the steps, and may not be up to date with the latest LXD documentation or your system. Use with care.
+The backup integration tests use MicroCeph's RADOS Gateway as their S3-compatible
+storage service. Install and initialize MicroCeph before running either backup suite:
 
 ```shell
-sudo wget --no-clobber https://dl.min.io/server/minio/release/linux-amd64/minio -O /usr/bin/minio && sudo chmod +x /usr/bin/minio
-sudo wget --no-clobber https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/bin/mc && sudo chmod +x /usr/bin/mc
-snap set lxd minio.path=/usr/bin
-snap restart lxd
-lxc config set core.storage_buckets_address :8555
+sudo snap install microceph
+sudo microceph cluster bootstrap
+sudo microceph disk add loop,4G,3
+sudo microceph enable rgw --port 7480
+sudo microceph.radosgw-admin user create \
+  --uid=vaultmicrocephtest \
+  --display-name="Vault MicroCeph Test" \
+  --access-key=vaultmicrocephtest \
+  --secret-key=vaultmicrocephtest
+sudo apt-get install --yes s3cmd
+s3cmd --access_key=vaultmicrocephtest \
+  --secret_key=vaultmicrocephtest \
+  --host=127.0.0.1:7480 \
+  --host-bucket="127.0.0.1:7480/%(bucket)" \
+  --no-ssl \
+  mb s3://vault-microceph-test
 ```
 
-It would, however, be best to lock down the storage buckets to only allow access from other LXD containers.
+The backup suite also requires `socat` for its TLS scenarios:
 
 ```shell
-lxd_bridge_ip=$(lxc network list --format yaml | yq -r '.[] | select(.name == "lxdbr0") | .config["ipv4.address"]' | cut -d'/' -f1) && echo "LXD bridge IP: ${lxd_bridge_ip}"
-lxc config set core.storage_buckets_address ${lxd_bridge_ip}:8555
-```
-
-Finally, create the bucket and the access keys for the integration tests:
-
-```shell
-lxc storage bucket create default vault-integration-test
-lxc storage bucket key create default vault-integration-test vault-integration-test --role admin --access-key vaultintegrationtest --secret-key vaultintegrationtest
+sudo apt-get install --yes socat
 ```
 
 ## Build the charm

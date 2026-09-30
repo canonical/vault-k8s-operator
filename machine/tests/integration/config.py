@@ -11,10 +11,6 @@ GRAFANA_AGENT_REVISION = 606
 HAPROXY_APPLICATION_NAME = "haproxy"
 HAPROXY_REVISION = 290
 INGRESS_RELATION_NAME = "ingress"
-MINIO_APPLICATION_NAME = "minio"
-MINIO_S3_ACCESS_KEY = "vaultintegrationtest"
-MINIO_S3_SECRET_KEY = "vaultintegrationtest"
-
 MICROCEPH_S3_ACCESS_KEY = "vaultmicrocephtest"
 MICROCEPH_S3_SECRET_KEY = "vaultmicrocephtest"
 MICROCEPH_S3_BUCKET = "vault-microceph-test"
