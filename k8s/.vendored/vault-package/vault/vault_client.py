@@ -21,6 +21,7 @@ from hvac.exceptions import Forbidden, InternalServerError, InvalidPath, Invalid
 from requests.exceptions import ConnectionError, RequestException
 
 RAFT_STATE_ENDPOINT = "v1/sys/storage/raft/autopilot/state"
+PKI_ROLE_KEY_TYPE = "any"
 
 
 class LogAdapter(logging.LoggerAdapter):
@@ -565,6 +566,9 @@ class VaultClient:
         extra_params = {
             "allowed_domains": allowed_domains,
             "max_ttl": max_ttl,
+            # Accept RSA and EC CSRs. Vault still enforces a minimum key size.
+            "key_type": PKI_ROLE_KEY_TYPE,
+            "key_bits": 0,
         }
 
         if allow_bare_domains is not None:
@@ -757,6 +761,7 @@ class VaultClient:
                 return False
 
             expected_config = {
+                "key_type": PKI_ROLE_KEY_TYPE,
                 "allow_bare_domains": allow_bare_domains,
                 "allow_subdomains": allow_subdomains,
                 "allow_wildcard_certificates": allow_wildcard_certificates,

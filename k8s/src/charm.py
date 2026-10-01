@@ -53,8 +53,10 @@ from vault.vault_client import (
 from vault.vault_helpers import (
     AutounsealConfiguration,
     allowed_domains_config_is_valid,
+    ca_key_type_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_ca_key_algorithm_and_size,
     get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
@@ -137,20 +139,30 @@ class VaultCharm(CharmBase):
             provider_capabilities=self._get_pki_provider_capabilities(),
         )
         pki_certificate_request = self._get_pki_certificate_request()
+        pki_key_algorithm, pki_key_size = get_ca_key_algorithm_and_size(
+            self.juju_facade.get_string_config("pki_ca_key_type")
+        )
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
             certificate_requests=[pki_certificate_request] if pki_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
+            key_algorithm=pki_key_algorithm,
+            key_size=pki_key_size,
         )
         acme_certificate_request = self._get_acme_certificate_request()
+        acme_key_algorithm, acme_key_size = get_ca_key_algorithm_and_size(
+            self.juju_facade.get_string_config("acme_ca_key_type")
+        )
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
             certificate_requests=[acme_certificate_request] if acme_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
+            key_algorithm=acme_key_algorithm,
+            key_size=acme_key_size,
         )
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
         self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
@@ -315,6 +327,13 @@ class VaultCharm(CharmBase):
             TLS_CERTIFICATES_PKI_RELATION_NAME
         ) or self.juju_facade.relation_exists(PKI_RELATION_NAME)
         if pki_config_needed:
+            if self.juju_facade.relation_exists(
+                TLS_CERTIFICATES_PKI_RELATION_NAME
+            ) and not ca_key_type_config_is_valid(
+                self.juju_facade.get_string_config("pki_ca_key_type")
+            ):
+                event.add_status(BlockedStatus("pki_ca_key_type config is not valid"))
+                return
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
             ):
@@ -341,6 +360,11 @@ class VaultCharm(CharmBase):
                 )
                 return
         if self.juju_facade.relation_exists(TLS_CERTIFICATES_ACME_RELATION_NAME):
+            if not ca_key_type_config_is_valid(
+                self.juju_facade.get_string_config("acme_ca_key_type")
+            ):
+                event.add_status(BlockedStatus("acme_ca_key_type config is not valid"))
+                return
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("acme_ca_common_name")
             ):
@@ -623,6 +647,13 @@ class VaultCharm(CharmBase):
         )
 
     def _get_pki_certificate_request(self) -> CertificateRequestAttributes | None:
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) and not ca_key_type_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_key_type")
+        ):
+            logger.warning("pki_ca_key_type is not valid")
+            return None
         common_name = self.juju_facade.get_string_config("pki_ca_common_name")
         if not common_name:
             logger.warning("pki_ca_common_name is not set in the charm config")
@@ -660,6 +691,9 @@ class VaultCharm(CharmBase):
         )
 
     def _get_acme_certificate_request(self) -> CertificateRequestAttributes | None:
+        if not ca_key_type_config_is_valid(self.juju_facade.get_string_config("acme_ca_key_type")):
+            logger.warning("acme_ca_key_type is not valid")
+            return None
         common_name = self.juju_facade.get_string_config("acme_ca_common_name")
         if not common_name:
             logger.warning("acme_ca_common_name is not set in the charm config")

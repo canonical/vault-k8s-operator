@@ -176,6 +176,40 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert isinstance(state_out.unit_status, ActiveStatus)
 
+    def test_given_invalid_pki_ca_key_type_when_collect_unit_status_then_status_is_blocked(self):
+        relation = testing.Relation(
+            endpoint="tls-certificates-pki",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "pki_ca_common_name": "domain.com",
+                "pki_ca_key_type": "invalid",
+            },
+            relations=[relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus("pki_ca_key_type config is not valid")
+
+    def test_given_invalid_acme_ca_key_type_when_collect_unit_status_then_status_is_blocked(self):
+        relation = testing.Relation(
+            endpoint="tls-certificates-acme",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            config={
+                "acme_ca_common_name": "domain.com",
+                "acme_ca_key_type": "invalid",
+            },
+            relations=[relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus("acme_ca_key_type config is not valid")
+
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
         container = testing.Container(
             name="vault",

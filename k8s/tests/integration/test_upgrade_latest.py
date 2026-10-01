@@ -19,6 +19,7 @@ from helpers import (
     initialize_unseal_authorize_vault,
     refresh_application,
     unseal_all_vault_units,
+    wait_for_old_vault_to_be_blocked,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,8 @@ def test_given_latest_stable_revision_in_track_when_refresh_then_status_is_activ
         num_units=NUM_VAULT_UNITS,
         channel=CURRENT_TRACK_LATEST_STABLE_CHANNEL,
     )
-    juju.wait(
-        lambda s: (
-            jubilant.all_blocked(s, APPLICATION_NAME)
-            and len(s.apps[APPLICATION_NAME].units) == NUM_VAULT_UNITS
-        ),
-        timeout=DEPLOY_TIMEOUT,
-    )
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        wait_for_old_vault_to_be_blocked(juju, NUM_VAULT_UNITS, DEPLOY_TIMEOUT)
     root_token, unseal_key = initialize_unseal_authorize_vault(juju, APPLICATION_NAME)
 
     with fast_forward(juju, JUJU_FAST_INTERVAL):

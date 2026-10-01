@@ -316,6 +316,16 @@ config:
         without an external CA relation (tls-certificates-pki). Default is 87600 hours (10 years).
         This option is only used when the `tls-certificates-pki` relation is not present and
         `pki_ca_common_name` is configured.
+    pki_ca_key_type:
+      type: string
+      default: rsa-2048
+      description: >-
+        The private key algorithm and size for the PKI CA certificate.
+        Supported values are: rsa-2048, rsa-3072, rsa-4096, ecdsa-p256, ecdsa-p384.
+        Changing this option will rotate the private key on the next configuration change,
+        and the PKI CA certificate will be re-issued with the new key type.
+        This option is used when requesting a CA certificate from a TLS provider using the
+        `tls-certificates-pki` charm relation interface.
 
     # ACME engine options
     acme_ca_common_name:
@@ -434,6 +444,16 @@ config:
       description: >-
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
+    acme_ca_key_type:
+      type: string
+      default: rsa-2048
+      description: >-
+        The private key algorithm and size for the ACME CA certificate.
+        Supported values are: rsa-2048, rsa-3072, rsa-4096, ecdsa-p256, ecdsa-p384.
+        Changing this option will rotate the private key on the next configuration change,
+        and the ACME CA certificate will be re-issued with the new key type.
+        This option is used when requesting a CA certificate from a TLS provider using the
+        `tls-certificates-acme` charm relation interface.
 
 actions:
   authorize-charm:

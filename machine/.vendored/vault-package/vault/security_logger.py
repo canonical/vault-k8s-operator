@@ -15,7 +15,6 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-
 NESTED_JSON_KEY = "owasp_event"
 
 
