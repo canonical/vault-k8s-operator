@@ -25,6 +25,9 @@ from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 
+UPDATE_STATUS_HOOK_ERROR = 'hook failed: "update-status"'
+WORKLOAD_PEBBLE_SOCKET = "/charm/containers/vault/pebble.socket"
+
 
 class ActionFailedError(Exception):
     """Exception raised when an action fails."""
@@ -350,6 +353,45 @@ def deploy_vault(
         revision=revision,
         constraints=_get_arch_constraint(),
     )
+
+
+def wait_for_old_vault_to_be_blocked(juju: jubilant.Juju, num_units: int, timeout: int) -> None:
+    """Wait for an old Vault charm to settle, recovering its Pebble startup race."""
+    deadline = time.monotonic() + timeout
+    retried_units: set[str] = set()
+    status = juju.status()
+    while time.monotonic() < deadline:
+        vault = status.apps.get(APPLICATION_NAME)
+        if (
+            vault
+            and jubilant.all_blocked(status, APPLICATION_NAME)
+            and len(vault.units) == num_units
+        ):
+            return
+
+        if vault:
+            for unit_name, unit in vault.units.items():
+                if unit.workload_status.current != "error":
+                    continue
+                if unit.workload_status.message != UPDATE_STATUS_HOOK_ERROR:
+                    raise RuntimeError(f"Unexpected error on {unit_name}: {unit.workload_status}")
+                if unit_name in retried_units:
+                    continue
+
+                # Old revisions do not handle update-status racing Pebble startup (#1047).
+                try:
+                    juju.cli("ssh", unit_name, "test", "-S", WORKLOAD_PEBBLE_SOCKET)
+                except jubilant.CLIError:
+                    continue
+
+                logger.warning("Retrying failed update-status hook on %s", unit_name)
+                juju.cli("resolved", unit_name)
+                retried_units.add(unit_name)
+
+        time.sleep(10)
+        status = juju.status()
+
+    raise TimeoutError(f"Vault did not reach blocked status within {timeout}s\n{status}")
 
 
 def has_relation(juju: jubilant.Juju, app_name: str, relation_name: str) -> bool:
