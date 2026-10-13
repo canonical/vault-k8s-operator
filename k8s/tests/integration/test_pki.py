@@ -1,11 +1,14 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
+import json
 import logging
 from collections import namedtuple
 from pathlib import Path
 
 import jubilant
 import pytest
+from charmlibs.interfaces.tls_certificates import Certificate, chain_has_valid_order
+from cryptography import x509
 
 from config import (
     APPLICATION_NAME,
@@ -176,3 +179,26 @@ def test_given_vault_pki_relation_and_matching_common_name_configured_when_integ
     assert task.results.get("certificate") is not None
     assert task.results.get("ca-certificate") is not None
     assert task.results.get("csr") is not None
+
+    requirer_unit = f"{VAULT_PKI_REQUIRER_APPLICATION_NAME}/0"
+    unit_data = json.loads(juju.cli("show-unit", requirer_unit, "--format=json"))[requirer_unit]
+    relation = next(
+        relation
+        for relation in unit_data["relation-info"]
+        if relation["endpoint"] == "certificates" and relation["related-endpoint"] == "vault-pki"
+    )
+    certificates = json.loads(relation["application-data"]["certificates"])
+    issued = next(
+        certificate
+        for certificate in certificates
+        if certificate["certificate_signing_request"] == task.results["csr"]
+    )
+    chain = [Certificate.from_string(pem) for pem in issued["chain"]]
+    assert len(chain) == 3
+    assert len(set(chain)) == len(chain)
+    assert chain[0] == Certificate.from_string(issued["certificate"])
+    assert chain[1] == Certificate.from_string(issued["ca"])
+    assert chain_has_valid_order(issued["chain"])
+    assert chain[-1].is_ca
+    root = x509.load_pem_x509_certificate(str(chain[-1]).encode())
+    root.verify_directly_issued_by(root)

@@ -64,9 +64,8 @@ jobs:
       - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.5
         with:
           working-directory: k8s
-          toolchains: python
-      - name: Install charmcraft
-        run: sudo snap install charmcraft --classic
+          toolchains: python charmcraft
+          charmcraft-channel: latest/stable
       - name: Fetch charmcraft libs
         working-directory: k8s
         run: charmcraft fetch-libs
@@ -230,9 +229,8 @@ jobs:
       - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.5
         with:
           working-directory: machine
-          toolchains: python
-      - name: Install charmcraft
-        run: sudo snap install charmcraft --classic
+          toolchains: python charmcraft
+          charmcraft-channel: latest/stable
       - name: Fetch charmcraft libs
         working-directory: machine
         run: charmcraft fetch-libs
