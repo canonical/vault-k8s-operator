@@ -7,19 +7,21 @@ on:
 
 jobs:
   analyze-k8s:
-    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@348c9f1e6f1d3f12a0bf79f4230e0b64b1be43b3
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@43bece1429ac5793954edd57ad8f7a41ae578ab8
     with:
       project: vault-k8s-operator
       dir: k8s
       fetch_libs: true
+      exclude_paths: "tests .vendored"
     secrets:
       TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
 
   analyze-machine:
-    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@348c9f1e6f1d3f12a0bf79f4230e0b64b1be43b3
+    uses: canonical/identity-credentials-workflows/.github/workflows/tics-tox.yaml@43bece1429ac5793954edd57ad8f7a41ae578ab8
     with:
       project: vault-operator
       dir: machine
       fetch_libs: true
+      exclude_paths: "tests .vendored"
     secrets:
       TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
