@@ -1,7 +1,7 @@
 // Replaces rtd-address with new-address in links
 
 const rtd_address = 'canonical-vault-charms.readthedocs-hosted.com';
-const new_address = 'ubuntu.com/docs/vault-charms';
+const new_address = 'canonical.com/juju/docs/vault-charms';
 const new_path = '/' + new_address.split('/').slice(1).join('/');
 
 function escapeRegExp(value) {
