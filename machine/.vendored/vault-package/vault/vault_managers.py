@@ -53,6 +53,7 @@ from charmlibs.interfaces.tls_certificates import (
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
+    chain_has_valid_order,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -1522,12 +1523,19 @@ class PKIManager:
             )
             self._report_certificate_request_error(requirer_csr, error)
             return
+        chain = [Certificate.from_string(certificate.certificate)] + [
+            Certificate.from_string(cert) for cert in certificate.chain
+        ]
+        if not self._self_signed_ca:
+            external_ca, _ = self._get_pki_intermediate_ca_from_relation()
+            if external_ca and external_ca.ca not in chain:
+                chain.append(external_ca.ca)
         provider_certificate = ProviderCertificate(
             relation_id=requirer_csr.relation_id,
             certificate=Certificate.from_string(certificate.certificate),
             certificate_signing_request=requirer_csr.certificate_signing_request,
             ca=Certificate.from_string(certificate.ca),
-            chain=[Certificate.from_string(certificate.certificate)] + [Certificate.from_string(cert) for cert in certificate.chain],
+            chain=chain,
         )
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,

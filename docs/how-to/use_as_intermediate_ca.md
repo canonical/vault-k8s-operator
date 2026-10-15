@@ -4,6 +4,9 @@ In this how-to guide, we will configure Vault to act as an intermediate Certific
 
 The certificates issued by Vault will have a validity period that is half of its intermediate CA's, which is determined by the root provider's configuration, in this case, the self-signed certificates.
 
+Vault automatically includes the root CA supplied by its parent in the certificate chain provided to
+applications requesting certificates.
+
 ![image|690x129](upload://9Fqp2fx6aXCVzucptBL9PdlJp8n.png)
 
 ```{note}

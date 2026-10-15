@@ -476,7 +476,7 @@ class VaultClient:
             raise VaultClientError(e) from e
 
     def import_ca_certificate_and_key(self, mount: str, certificate: str, private_key: str):
-        """Import the CA certificate and private key for the PKI backend."""
+        """Import a CA certificate (or full PEM CA chain) and its signing key."""
         pem_bundle = generate_pem_bundle(certificate=certificate, private_key=private_key)
         self._client.secrets.pki.submit_ca_information(
             pem_bundle=pem_bundle,
