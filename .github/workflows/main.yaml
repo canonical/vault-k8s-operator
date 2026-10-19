@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: ["main", "release-*"]
+    branches: ["main", "release-*", "ci-decision-classifier"]
     # `labeled` lets a PR opt in to arm64/s390x tests by adding the
     # `test-arm` / `test-s390x` labels (see the arch build jobs below).
     types: [opened, synchronize, reopened, labeled]
@@ -14,6 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-decision-prototype-test:
+    name: CI decision prototype (shadow)
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/ci-decision-shadow.yaml
+    secrets: inherit
+
   ensure-shared-code-in-sync:
     runs-on: ubuntu-latest
     steps:

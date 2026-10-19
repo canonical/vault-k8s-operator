@@ -1,10 +1,7 @@
 name: CI decision prototype
 
 on:
-  # Temporary same-repository test trigger; remove before opening the real PR.
-  pull_request:
-    branches: ["ci-decision-classifier"]
-    types: [opened, synchronize, reopened]
+  workflow_call:
   pull_request_target:
     branches: ["main", "release-*", "ci-decision-classifier"]
     types: [opened, synchronize, reopened]
