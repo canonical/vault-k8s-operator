@@ -2,7 +2,7 @@ name: CI decision prototype
 
 on:
   pull_request_target:
-    branches: ["main", "release-*"]
+    branches: ["main", "release-*", "ci-decision-classifier"]
     types: [opened, synchronize, reopened]
 
 permissions:
