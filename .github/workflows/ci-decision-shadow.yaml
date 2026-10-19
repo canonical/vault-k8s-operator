@@ -249,7 +249,7 @@ jobs:
             }' > decision-input/evidence.json
 
           jq -n \
-            --arg model "perplexity/pplx-decider-flash-v1.2" \
+            --arg model "typesafe/jev-1.14" \
             --slurpfile candidates decision-input/candidates.json \
             --slurpfile evidence decision-input/evidence.json \
             '{
