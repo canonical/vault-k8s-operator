@@ -26,7 +26,10 @@ jobs:
 
   ensure-shared-code-in-sync:
     needs: [ci-decision]
-    if: needs.ci-decision.outputs.shared_code == 'run'
+    if: >-
+      needs.ci-decision.outputs.shared_code == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-shared-code-sync') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -69,8 +72,16 @@ jobs:
     name: K8s Quality
     needs: [ci-decision, ensure-shared-code-in-sync]
     if: >-
-      always() && needs.ci-decision.outputs.k8s_quality == 'run' &&
-      needs.ensure-shared-code-in-sync.result == 'success'
+      always() && (
+      needs.ci-decision.outputs.k8s_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-quality') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
+      (needs.ensure-shared-code-in-sync.result == 'success' ||
+      needs.ensure-shared-code-in-sync.result == 'skipped')
     runs-on: ubuntu-26.04
     steps:
       - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.5
@@ -103,8 +114,16 @@ jobs:
 
   k8s-build:
     if: >-
-      always() && github.event.action != 'labeled' &&
-      needs.ci-decision.outputs.k8s_quality == 'run' &&
+      always() && (
+      github.event.action != 'labeled' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.k8s_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
       needs.k8s-quality.result == 'success'
     needs: [ci-decision, k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -120,8 +139,14 @@ jobs:
       ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
       github.event_name == 'push') ||
       needs.ci-decision.outputs.k8s_additional_platforms == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.k8s_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
       contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
-      needs.ci-decision.outputs.k8s_quality == 'run' &&
       needs.k8s-quality.result == 'success'
     needs: [ci-decision, k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -139,8 +164,14 @@ jobs:
       ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
       github.event_name == 'push') ||
       needs.ci-decision.outputs.k8s_additional_platforms == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.k8s_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
       contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
-      needs.ci-decision.outputs.k8s_quality == 'run' &&
       needs.k8s-quality.result == 'success'
     needs: [ci-decision, k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -154,7 +185,13 @@ jobs:
   k8s-build-kv-requirer:
     needs: [ci-decision, k8s-quality]
     if: >-
-      always() && needs.ci-decision.outputs.k8s_quality == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.k8s_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.k8s-quality.result == 'success'
     uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
@@ -164,7 +201,10 @@ jobs:
 
   k8s-integration-test:
     if: >-
-      always() && needs.ci-decision.outputs.k8s_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.k8s_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
       needs.k8s-build.result == 'success' &&
       needs.k8s-build-kv-requirer.result == 'success'
     needs:
@@ -180,7 +220,11 @@ jobs:
 
   k8s-integration-test-arm:
     if: >-
-      always() && needs.ci-decision.outputs.k8s_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.k8s_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
       needs.k8s-build-arm.result == 'success' &&
       needs.k8s-build-kv-requirer.result == 'success'
     needs:
@@ -195,7 +239,11 @@ jobs:
 
   k8s-integration-test-s390x:
     if: >-
-      always() && needs.ci-decision.outputs.k8s_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.k8s_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-k8s-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.k8s-build-s390x.result == 'success'
     needs:
       - ci-decision
@@ -270,8 +318,16 @@ jobs:
     name: Machine Quality
     needs: [ci-decision, ensure-shared-code-in-sync]
     if: >-
-      always() && needs.ci-decision.outputs.machine_quality == 'run' &&
-      needs.ensure-shared-code-in-sync.result == 'success'
+      always() && (
+      needs.ci-decision.outputs.machine_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-quality') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
+      (needs.ensure-shared-code-in-sync.result == 'success' ||
+      needs.ensure-shared-code-in-sync.result == 'skipped')
     runs-on: ubuntu-26.04
     steps:
       - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.5
@@ -304,8 +360,16 @@ jobs:
 
   machine-build:
     if: >-
-      always() && github.event.action != 'labeled' &&
-      needs.ci-decision.outputs.machine_quality == 'run' &&
+      always() && (
+      github.event.action != 'labeled' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.machine_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
       needs.machine-quality.result == 'success'
     needs: [ci-decision, machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -321,8 +385,14 @@ jobs:
       ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
       github.event_name == 'push') ||
       needs.ci-decision.outputs.machine_additional_platforms == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.machine_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
       contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
-      needs.ci-decision.outputs.machine_quality == 'run' &&
       needs.machine-quality.result == 'success'
     needs: [ci-decision, machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -340,8 +410,14 @@ jobs:
       ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
       github.event_name == 'push') ||
       needs.ci-decision.outputs.machine_additional_platforms == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
+      (
+      needs.ci-decision.outputs.machine_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
       contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
-      needs.ci-decision.outputs.machine_quality == 'run' &&
       needs.machine-quality.result == 'success'
     needs: [ci-decision, machine-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.5
@@ -355,7 +431,13 @@ jobs:
   machine-build-kv-requirer:
     needs: [ci-decision, machine-quality]
     if: >-
-      always() && needs.ci-decision.outputs.machine_quality == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.machine_quality == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-build') ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.machine-quality.result == 'success'
     uses: ./.github/workflows/build-kv-requirer.yaml
     secrets: inherit
@@ -365,7 +447,10 @@ jobs:
 
   machine-integration-test:
     if: >-
-      always() && needs.ci-decision.outputs.machine_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.machine_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci')) &&
       needs.machine-build.result == 'success' &&
       needs.machine-build-kv-requirer.result == 'success'
     needs:
@@ -381,7 +466,11 @@ jobs:
 
   machine-integration-test-arm:
     if: >-
-      always() && needs.ci-decision.outputs.machine_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.machine_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
       needs.machine-build-arm.result == 'success' &&
       needs.machine-build-kv-requirer.result == 'success'
     needs:
@@ -396,7 +485,11 @@ jobs:
 
   machine-integration-test-s390x:
     if: >-
-      always() && needs.ci-decision.outputs.machine_integration == 'run' &&
+      always() && (
+      needs.ci-decision.outputs.machine_integration == 'run' ||
+      contains(github.event.pull_request.labels.*.name, 'run-machine-integration') ||
+      contains(github.event.pull_request.labels.*.name, 'run-all-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.machine-build-s390x.result == 'success'
     needs:
       - ci-decision

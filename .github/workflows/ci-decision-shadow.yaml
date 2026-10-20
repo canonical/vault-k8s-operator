@@ -553,8 +553,6 @@ jobs:
             echo "- Head SHA: \`${PR_HEAD_SHA}\`"
             echo "- Direct parent SHA: \`${PARENT_SHA:-none}\`"
             echo "- Direct parent is part of this pull request: \`${PARENT_IS_IN_PR}\`"
-            echo "- K8s additional platforms: \`$(jq -r '.platform_decisions.k8s.choice' decision-input/model-decision.json)\`"
-            echo "- Machine additional platforms: \`$(jq -r '.platform_decisions.machine.choice' decision-input/model-decision.json)\`"
             echo
             echo "### Candidate workflow recommendations"
             echo
@@ -562,4 +560,21 @@ jobs:
             echo "| --- | --- | --- | --- | --- |"
             jq -r '.decisions[] | "| \(.workflow) | \(.decision) | \(.probability) | \(.confidence) | \(.candidate_reason) |"' \
               decision-input/model-decision.json
+            echo
+            echo "### Additional platform recommendations"
+            echo
+            echo "| Stack | Platforms | Decision | Run probability | Confidence |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r '
+              .platform_decisions
+              | to_entries[]
+              | "| \(.key) | ARM64 and s390x | \(.value.choice) | \(.value.probabilities.run) | \(.value.confidence) |"
+            ' decision-input/model-decision.json
+            echo
+            echo "### Maintainer overrides"
+            echo
+            echo "Labels override the classifier: \`run-shared-code-sync\`, \`run-k8s-quality\`,"
+            echo "\`run-machine-quality\`, \`run-k8s-build\`, \`run-machine-build\`,"
+            echo "\`run-k8s-integration\`, \`run-machine-integration\`, and \`run-all-ci\`."
+            echo "Use \`test-arm\` or \`test-s390x\` to force that architecture."
           } >> "$GITHUB_STEP_SUMMARY"
