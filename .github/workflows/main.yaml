@@ -116,7 +116,10 @@ jobs:
   k8s-build-arm:
     # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
     if: >-
-      always() && (github.event_name == 'push' ||
+      always() && (
+      ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
+      github.event_name == 'push') ||
+      needs.ci-decision.outputs.all_platforms == 'run' ||
       contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
       needs.ci-decision.outputs.k8s_quality == 'run' &&
       needs.k8s-quality.result == 'success'
@@ -132,7 +135,10 @@ jobs:
   k8s-build-s390x:
     # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
     if: >-
-      always() && (github.event_name == 'push' ||
+      always() && (
+      ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
+      github.event_name == 'push') ||
+      needs.ci-decision.outputs.all_platforms == 'run' ||
       contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.ci-decision.outputs.k8s_quality == 'run' &&
       needs.k8s-quality.result == 'success'
@@ -311,7 +317,10 @@ jobs:
   machine-build-arm:
     # Runs on merge, or on a PR labelled `test-arm` to verify arm64-specific fixes.
     if: >-
-      always() && (github.event_name == 'push' ||
+      always() && (
+      ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
+      github.event_name == 'push') ||
+      needs.ci-decision.outputs.all_platforms == 'run' ||
       contains(github.event.pull_request.labels.*.name, 'test-arm')) &&
       needs.ci-decision.outputs.machine_quality == 'run' &&
       needs.machine-quality.result == 'success'
@@ -327,7 +336,10 @@ jobs:
   machine-build-s390x:
     # Runs on merge, or on a PR labelled `test-s390x` to verify s390x-specific fixes.
     if: >-
-      always() && (github.event_name == 'push' ||
+      always() && (
+      ((github.ref_name == 'main' || startsWith(github.ref_name, 'release-')) &&
+      github.event_name == 'push') ||
+      needs.ci-decision.outputs.all_platforms == 'run' ||
       contains(github.event.pull_request.labels.*.name, 'test-s390x')) &&
       needs.ci-decision.outputs.machine_quality == 'run' &&
       needs.machine-quality.result == 'success'
