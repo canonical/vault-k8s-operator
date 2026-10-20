@@ -1,1 +1,1 @@
-"""Vault charm common code."""
+"""Shared Vault charm code used by both Kubernetes and machine charms."""
