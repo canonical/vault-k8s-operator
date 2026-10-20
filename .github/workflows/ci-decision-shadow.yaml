@@ -476,11 +476,20 @@ jobs:
             --slurpfile parent_workflow_jobs decision-input/parent-workflow-jobs.json '
               . as $response
               | def prior_validation_success($candidate):
-                  any(
+                  (
+                    any(
+                      $parent_workflow_runs[0][];
+                      .name == $candidate.prior_validation.workflow_name
+                      and .status == "completed"
+                      and .conclusion == "cancelled"
+                    )
+                    | not
+                  )
+                  and any(
                     $parent_workflow_runs[0][] as $workflow_run
                     | select(
-                        $workflow_run.name == $candidate.prior_validation.workflow_name
-                        and $workflow_run.status == "completed"
+                      $workflow_run.name == $candidate.prior_validation.workflow_name
+                      and $workflow_run.status == "completed"
                       and $workflow_run.conclusion != "cancelled"
                       )
                     | any(
