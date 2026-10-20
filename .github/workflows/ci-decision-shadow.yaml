@@ -18,10 +18,6 @@ on:
       machine_integration:
         description: Whether machine integration validation must run.
         value: ${{ jobs.decide.outputs.machine_integration }}
-  # Temporary trigger for the disposable test branch. The normal workflow uses
-  # pull_request_target only.
-  push:
-    branches: ["ci-decision-classifier-shadow-test"]
   # Temporary same-repository test trigger; remove before opening the real PR.
   pull_request:
     branches: ["ci-decision-classifier"]
