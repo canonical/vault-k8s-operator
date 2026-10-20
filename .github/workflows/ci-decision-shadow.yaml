@@ -1,4 +1,4 @@
-name: CI decision prototype
+name: CI decision
 
 on:
   workflow_call:
@@ -24,13 +24,6 @@ on:
       machine_additional_platforms:
         description: Whether machine ARM64 and s390x validation must run in addition to AMD64.
         value: ${{ jobs.decide.outputs.machine_additional_platforms }}
-  # Temporary same-repository test trigger; remove before opening the real PR.
-  pull_request:
-    branches: ["ci-decision-classifier"]
-    types: [opened, synchronize, reopened]
-  pull_request_target:
-    branches: ["main", "release-*", "ci-decision-classifier"]
-    types: [opened, synchronize, reopened]
 
 permissions:
   actions: read
@@ -38,13 +31,9 @@ permissions:
   contents: read
   pull-requests: read
 
-concurrency:
-  group: ci-decision-prototype-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
-
 jobs:
   decide:
-    name: CI decision prototype (shadow)
+    name: CI decision
     runs-on: ubuntu-latest
     outputs:
       shared_code: ${{ steps.classify.outputs.shared_code }}
@@ -78,7 +67,7 @@ jobs:
 
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
             {
-              echo "## CI decision prototype"
+              echo "## CI decision"
               echo
               echo "No decision was made because the \`OPENROUTER_API_KEY\` secret is unavailable."
               echo "This is expected for pull requests where GitHub does not provide repository secrets."
@@ -102,10 +91,10 @@ jobs:
 
           if [[ -z "$PR_NUMBER" ]]; then
             {
-              echo "## CI decision prototype"
+              echo "## CI decision"
               echo
               echo "No open pull request matches head \`$PR_HEAD_SHA\`."
-              echo "Existing CI behavior is unchanged."
+              echo "Candidate checks will run because no matching pull request was found."
             } >> "$GITHUB_STEP_SUMMARY"
             set_safe_defaults
             exit 0
@@ -130,10 +119,10 @@ jobs:
 
           if [[ -z "$PARENT_SHA" ]]; then
             {
-              echo "## CI decision prototype"
+              echo "## CI decision"
               echo
               echo "No decision was made because the current head has no parent commit."
-              echo "Existing CI behavior is unchanged."
+              echo "Candidate checks will run because the commit comparison was incomplete."
             } >> "$GITHUB_STEP_SUMMARY"
             set_safe_defaults
             exit 0
@@ -427,14 +416,14 @@ jobs:
             --retry-all-errors \
             -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
             -H "Content-Type: application/json" \
-            -H "X-Title: Vault CI decision prototype" \
+            -H "X-Title: Vault CI decision" \
             -d @decision-input/openrouter-request.json \
             https://openrouter.ai/api/alpha/decisions \
             -o decision-input/openrouter-response.json; then
             {
-              echo "## CI decision prototype"
+              echo "## CI decision"
               echo
-              echo "The OpenRouter request failed. Existing CI behavior is unchanged."
+              echo "The OpenRouter request failed; candidate checks will run."
             } >> "$GITHUB_STEP_SUMMARY"
             set_safe_defaults
             exit 0
@@ -461,10 +450,10 @@ jobs:
               )
             ' decision-input/openrouter-response.json > /dev/null; then
             {
-              echo "## CI decision prototype"
+              echo "## CI decision"
               echo
               echo "OpenRouter returned a response that was not a valid Decisions API answer."
-              echo "Existing CI behavior is unchanged."
+              echo "Candidate checks will run because the classifier response was invalid."
             } >> "$GITHUB_STEP_SUMMARY"
             set_safe_defaults
             exit 0
@@ -559,7 +548,7 @@ jobs:
           echo "machine_additional_platforms=$(additional_platforms_for machine)" >> "$GITHUB_OUTPUT"
 
           {
-            echo "## CI decision prototype (shadow mode)"
+            echo "## CI decision"
             echo
             echo "This workflow only records model recommendations. It does not skip, cancel,"
             echo "or modify any existing CI workflow."
