@@ -2,6 +2,30 @@ name: CI decision prototype
 
 on:
   workflow_call:
+    outputs:
+      shared_code:
+        description: Whether shared-code synchronization must run.
+        value: ${{ jobs.decide.outputs.shared_code }}
+      k8s_quality:
+        description: Whether k8s quality validation must run.
+        value: ${{ jobs.decide.outputs.k8s_quality }}
+      machine_quality:
+        description: Whether machine quality validation must run.
+        value: ${{ jobs.decide.outputs.machine_quality }}
+      k8s_integration:
+        description: Whether k8s integration validation must run.
+        value: ${{ jobs.decide.outputs.k8s_integration }}
+      machine_integration:
+        description: Whether machine integration validation must run.
+        value: ${{ jobs.decide.outputs.machine_integration }}
+  # Temporary trigger for the disposable test branch. The normal workflow uses
+  # pull_request_target only.
+  push:
+    branches: ["ci-decision-classifier-shadow-test"]
+  # Temporary same-repository test trigger; remove before opening the real PR.
+  pull_request:
+    branches: ["ci-decision-classifier"]
+    types: [opened, synchronize, reopened]
   pull_request_target:
     branches: ["main", "release-*", "ci-decision-classifier"]
     types: [opened, synchronize, reopened]
@@ -13,24 +37,38 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-decision-prototype-${{ github.event.pull_request.number }}
+  group: ci-decision-prototype-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   decide:
     name: CI decision prototype (shadow)
     runs-on: ubuntu-latest
+    outputs:
+      shared_code: ${{ steps.classify.outputs.shared_code }}
+      k8s_quality: ${{ steps.classify.outputs.k8s_quality }}
+      machine_quality: ${{ steps.classify.outputs.machine_quality }}
+      k8s_integration: ${{ steps.classify.outputs.k8s_integration }}
+      machine_integration: ${{ steps.classify.outputs.machine_integration }}
     steps:
       - name: Gather CI evidence and ask the classifier
+        id: classify
         env:
           GH_TOKEN: ${{ github.token }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_HEAD_REF: ${{ github.head_ref || github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
+
+          set_all_to_run() {
+            for decision in shared_code k8s_quality machine_quality k8s_integration machine_integration; do
+              echo "${decision}=run" >> "$GITHUB_OUTPUT"
+            done
+          }
 
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
             {
@@ -39,10 +77,34 @@ jobs:
               echo "No decision was made because the \`OPENROUTER_API_KEY\` secret is unavailable."
               echo "This is expected for pull requests where GitHub does not provide repository secrets."
             } >> "$GITHUB_STEP_SUMMARY"
+            set_all_to_run
             exit 0
           fi
 
           mkdir -p decision-input
+          if [[ -z "$PR_NUMBER" ]]; then
+            gh pr list \
+              --repo "$REPOSITORY" \
+              --head "$PR_HEAD_REF" \
+              --state open \
+              --json number,headRefOid > decision-input/open-head-prs.json
+            PR_NUMBER=$(jq -r \
+              --arg head_sha "$PR_HEAD_SHA" \
+              '[.[] | select(.headRefOid == $head_sha)][0].number // empty' \
+              decision-input/open-head-prs.json)
+          fi
+
+          if [[ -z "$PR_NUMBER" ]]; then
+            {
+              echo "## CI decision prototype"
+              echo
+              echo "No open pull request matches head \`$PR_HEAD_SHA\`."
+              echo "Existing CI behavior is unchanged."
+            } >> "$GITHUB_STEP_SUMMARY"
+            set_all_to_run
+            exit 0
+          fi
+
           gh api --paginate \
             "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
             > decision-input/pr-file-pages.json
@@ -67,6 +129,7 @@ jobs:
               echo "No decision was made because the current head has no parent commit."
               echo "Existing CI behavior is unchanged."
             } >> "$GITHUB_STEP_SUMMARY"
+            set_all_to_run
             exit 0
           fi
 
@@ -308,6 +371,7 @@ jobs:
               echo
               echo "The OpenRouter request failed. Existing CI behavior is unchanged."
             } >> "$GITHUB_STEP_SUMMARY"
+            set_all_to_run
             exit 0
           fi
 
@@ -352,6 +416,17 @@ jobs:
                 ]
               }
             ' decision-input/openrouter-response.json > decision-input/model-decision.json
+
+          decision_for() {
+            jq -r --arg workflow "$1" \
+              '[.decisions[] | select(.workflow == $workflow)][0].decision // "skip"' \
+              decision-input/model-decision.json
+          }
+          echo "shared_code=$(decision_for ensure-shared-code-in-sync)" >> "$GITHUB_OUTPUT"
+          echo "k8s_quality=$(decision_for k8s-quality)" >> "$GITHUB_OUTPUT"
+          echo "machine_quality=$(decision_for machine-quality)" >> "$GITHUB_OUTPUT"
+          echo "k8s_integration=$(decision_for k8s-integration-test)" >> "$GITHUB_OUTPUT"
+          echo "machine_integration=$(decision_for machine-integration-test)" >> "$GITHUB_OUTPUT"
 
           {
             echo "## CI decision prototype (shadow mode)"
