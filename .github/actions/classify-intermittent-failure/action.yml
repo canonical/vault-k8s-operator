@@ -37,7 +37,19 @@ runs:
             echo "### Intermittent failure classifier: \`${STEP_NAME}\`"
             echo
             echo "${message}"
+            if [[ -f "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt" ]]; then
+              echo
+              echo "#### Failure excerpt from \`${STEP_NAME}\`"
+              echo '```text'
+              tail -n 40 "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt" ]]; then
+            echo "=== Failure excerpt from '${STEP_NAME}' (note: main step used continue-on-error so this classifier could run) ==="
+            tail -n 40 "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"
+            echo "===================================================================================================================="
+          fi
           echo "::error::${STEP_NAME} failed and will not be retried (${message})"
           exit 1
         }
@@ -51,7 +63,33 @@ runs:
         fi
 
         mkdir -p "${RUNNER_TEMP}/retry-classifier"
-        tail -c 20000 "${LOG_PATH}" > "${RUNNER_TEMP}/retry-classifier/log-tail.txt" || true
+        awk '
+          /jubilant\.wait:_juju\.py/ || /^[[:space:]]*[-+] \.apps\[/ { next }
+          { lines[++n] = $0 }
+          /FAILED |ERROR |TimeoutError|ActionFailedError|AssertionError|charmcraft internal error|evaluation failed|=== FAILURES ===|=== ERRORS ===|=== short test summary info ===/ {
+            summary[++s] = $0
+          }
+          END {
+            start = (n > 200 ? n - 199 : 1)
+            for (i = start; i <= n; i++) print lines[i] > "'"${RUNNER_TEMP}/retry-classifier/filtered-tail.txt"'"
+            s_start = (s > 35 ? s - 34 : 1)
+            for (i = s_start; i <= s; i++) print summary[i] > "'"${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"'"
+          }
+        ' "${LOG_PATH}" || true
+        {
+          if [[ -s "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt" ]]; then
+            echo "=== FAILURE SUMMARY EXCERPT ==="
+            cat "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"
+            echo
+          fi
+          if [[ -s "${RUNNER_TEMP}/retry-classifier/filtered-tail.txt" ]]; then
+            echo "=== FILTERED LOG TAIL (status polling collapsed) ==="
+            tail -c 16000 "${RUNNER_TEMP}/retry-classifier/filtered-tail.txt"
+            echo
+          fi
+          echo "=== RAW LOG TAIL ==="
+          tail -c 6000 "${LOG_PATH}"
+        } | tail -c 24000 > "${RUNNER_TEMP}/retry-classifier/log-tail.txt" || true
 
         JQ_BIN="/usr/bin/jq"
         if [[ ! -x "${JQ_BIN}" ]]; then
@@ -85,14 +123,15 @@ runs:
                     retry: (
                       "Choose when the failure is likely transient or intermittent, such as "
                       + "network/DNS timeouts, apt/snap/charmcraft/LXD/microk8s/Juju bootstrap or "
-                      + "provisioning timeouts, temporary HTTP 429/5xx errors, transient Vault "
-                      + "unseal/authorize/status readiness timeouts in integration tests, or flaky "
-                      + "runner infrastructure."
+                      + "provisioning timeouts, temporary HTTP 429/5xx errors, `jubilant.wait` / "
+                      + "`TimeoutError: wait timed out` / Vault unseal or authorize readiness "
+                      + "timeouts in integration tests, or flaky runner infrastructure."
                     ),
                     do_not_retry: (
                       "Choose when the failure is deterministic, such as unit test assertion "
-                      + "errors, Python syntax/type/lint/format errors, missing files, packaging "
-                      + "or vendoring mismatches, configuration errors, or deterministic code bugs."
+                      + "errors (`AssertionError`), Python syntax/type/lint/format errors, "
+                      + "missing files, packaging or vendoring mismatches, configuration errors, "
+                      + "or deterministic code bugs."
                     ),
                     unknown: (
                       "Choose when the log does not provide enough evidence to determine whether "
@@ -158,8 +197,20 @@ runs:
           echo "| Step | Decision | Retry probability | Confidence | Repeat step |"
           echo "| --- | --- | --- | --- | --- |"
           echo "| \`${STEP_NAME}\` | \`${CHOICE}\` | ${PROBABILITY} | ${CONFIDENCE} | \`${RETRY}\` |"
+          if [[ -f "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt" ]]; then
+            echo
+            echo "#### Failure excerpt from \`${STEP_NAME}\`"
+            echo '```text'
+            tail -n 40 "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"
+            echo '```'
+          fi
         } >> "$GITHUB_STEP_SUMMARY"
 
+        if [[ -f "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt" ]]; then
+          echo "=== Failure excerpt from '${STEP_NAME}' (note: main step used continue-on-error so this classifier could run) ==="
+          tail -n 40 "${RUNNER_TEMP}/retry-classifier/failure-excerpt.txt"
+          echo "===================================================================================================================="
+        fi
         echo "Classifier decision for '${STEP_NAME}': choice=${CHOICE}, retry_probability=${PROBABILITY}, confidence=${CONFIDENCE}, repeat=${RETRY}"
 
         if [[ "${RETRY}" == "true" ]]; then
