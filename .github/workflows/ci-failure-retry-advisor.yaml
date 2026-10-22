@@ -1,6 +1,12 @@
 name: CI failure retry classifier
 
 on:
+  workflow_call:
+    inputs:
+      run_id:
+        description: GitHub Actions run ID whose failed jobs should be classified.
+        required: true
+        type: string
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -14,8 +20,9 @@ jobs:
   retry:
     name: Classify and retry failed CI jobs
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.run_attempt == 1
+      github.event_name == 'workflow_call' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt == 1)
     runs-on: ubuntu-latest
     steps:
       - name: Collect failed job evidence
@@ -23,7 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -92,10 +99,10 @@ jobs:
         if: steps.evidence.outputs.has_failed_jobs == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || github.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name || github.workflow }}
         shell: bash
         run: |
           set -euo pipefail
@@ -237,7 +244,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
