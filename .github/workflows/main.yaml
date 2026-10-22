@@ -47,27 +47,6 @@ jobs:
           echo "$STATUS"
           test -z "$STATUS"
 
-  changes:
-    name: Detect changed paths
-    runs-on: ubuntu-latest
-    outputs:
-      k8s: ${{ steps.filter.outputs.k8s }}
-      machine: ${{ steps.filter.outputs.machine }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            k8s:
-              - 'k8s/**'
-              - 'vault-package/**'
-              - '.github/workflows/k8s-integration-test*.yaml'
-            machine:
-              - 'machine/**'
-              - 'vault-package/**'
-              - '.github/workflows/machine-integration-test*.yaml'
-
   k8s-quality:
     name: K8s Quality
     needs: [ci-decision, ensure-shared-code-in-sync]
@@ -209,7 +188,6 @@ jobs:
       needs.k8s-build-kv-requirer.result == 'success'
     needs:
       - ci-decision
-      - changes
       - k8s-build
       - k8s-build-kv-requirer
     uses: ./.github/workflows/k8s-integration-test.yaml
@@ -458,7 +436,6 @@ jobs:
       needs.machine-build-kv-requirer.result == 'success'
     needs:
       - ci-decision
-      - changes
       - machine-build
       - machine-build-kv-requirer
     uses: ./.github/workflows/machine-integration-test.yaml
