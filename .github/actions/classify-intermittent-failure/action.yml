@@ -53,13 +53,18 @@ runs:
         mkdir -p "${RUNNER_TEMP}/retry-classifier"
         tail -c 20000 "${LOG_PATH}" > "${RUNNER_TEMP}/retry-classifier/log-tail.txt" || true
 
-        jq -n \
+        JQ_BIN="/usr/bin/jq"
+        if [[ ! -x "${JQ_BIN}" ]]; then
+          JQ_BIN="jq"
+        fi
+
+        "${JQ_BIN}" -R -s \
           --arg model "typesafe/jev-1.14" \
           --arg workflow_name "${WORKFLOW_NAME}" \
           --arg job_name "${JOB_NAME}" \
-          --arg step_name "${STEP_NAME}" \
-          --rawfile failed_log "${RUNNER_TEMP}/retry-classifier/log-tail.txt" '
-            {
+          --arg step_name "${STEP_NAME}" '
+            . as $failed_log
+            | {
               model: $model,
               state: {
                 workflow: $workflow_name,
@@ -97,7 +102,7 @@ runs:
                 }
               }
             }
-          ' > "${RUNNER_TEMP}/retry-classifier/request.json"
+          ' "${RUNNER_TEMP}/retry-classifier/log-tail.txt" > "${RUNNER_TEMP}/retry-classifier/request.json"
 
         if ! curl --fail --silent --show-error \
           --connect-timeout 10 \
@@ -113,11 +118,11 @@ runs:
           fail_without_retry "The OpenRouter request failed."
         fi
 
-        if ! jq -e '
+        if ! "${JQ_BIN}" -e '
           (.answers | type == "object")
           and ([.answers | keys[]] == ["retry_step"])
           and (.answers.retry_step.type == "choice")
-          and (.answers.retry_step.choice | IN("retry", "do_not_retry", "unknown"))
+          and (.answers.retry_step.choice == "retry" or .answers.retry_step.choice == "do_not_retry" or .answers.retry_step.choice == "unknown")
           and (.answers.retry_step.confidence | type == "number" and . >= 0 and . <= 1)
           and (.answers.retry_step.probabilities | type == "object")
           and (
@@ -128,7 +133,7 @@ runs:
           fail_without_retry "OpenRouter returned an invalid decision response."
         fi
 
-        jq '
+        "${JQ_BIN}" '
           .answers.retry_step as $answer
           | {
               choice: $answer.choice,
@@ -142,10 +147,10 @@ runs:
             }
         ' "${RUNNER_TEMP}/retry-classifier/response.json" > "${RUNNER_TEMP}/retry-classifier/decision.json"
 
-        CHOICE=$(jq -r '.choice' "${RUNNER_TEMP}/retry-classifier/decision.json")
-        PROBABILITY=$(jq -r '.retry_probability' "${RUNNER_TEMP}/retry-classifier/decision.json")
-        CONFIDENCE=$(jq -r '.confidence' "${RUNNER_TEMP}/retry-classifier/decision.json")
-        RETRY=$(jq -r '.retry' "${RUNNER_TEMP}/retry-classifier/decision.json")
+        CHOICE=$("${JQ_BIN}" -r '.choice' "${RUNNER_TEMP}/retry-classifier/decision.json")
+        PROBABILITY=$("${JQ_BIN}" -r '.retry_probability' "${RUNNER_TEMP}/retry-classifier/decision.json")
+        CONFIDENCE=$("${JQ_BIN}" -r '.confidence' "${RUNNER_TEMP}/retry-classifier/decision.json")
+        RETRY=$("${JQ_BIN}" -r '.retry' "${RUNNER_TEMP}/retry-classifier/decision.json")
 
         {
           echo "### Intermittent failure classifier: \`${STEP_NAME}\`"
