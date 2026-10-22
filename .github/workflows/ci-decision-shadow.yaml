@@ -223,19 +223,20 @@ jobs:
                 | not
               )
               and any(
-                $parent_workflow_runs[0][] as $workflow_run
-                | select(
-                    $workflow_run.name == $workflow_name
-                    and $workflow_run.status == "completed"
-                    and $workflow_run.conclusion != "cancelled"
-                  )
-                | any(
-                    $parent_workflow_jobs[0][];
-                    .workflow_run_id == $workflow_run.id
-                    and .name == $job_name
-                    and .status == "completed"
-                    and .conclusion == "success"
-                  )
+                $parent_workflow_runs[0][];
+                .name == $workflow_name
+                and .status == "completed"
+                and .conclusion != "cancelled"
+                and (
+                  .id as $workflow_run_id
+                  | any(
+                      $parent_workflow_jobs[0][];
+                      .workflow_run_id == $workflow_run_id
+                      and .name == $job_name
+                      and .status == "completed"
+                      and .conclusion == "success"
+                    )
+                )
               );
             [
               {
