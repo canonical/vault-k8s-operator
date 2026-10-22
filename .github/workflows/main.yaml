@@ -213,6 +213,7 @@ jobs:
       - k8s-build
       - k8s-build-kv-requirer
     uses: ./.github/workflows/k8s-integration-test.yaml
+    secrets: inherit
     with:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build.outputs.artifacts-key }}
@@ -232,6 +233,7 @@ jobs:
       - k8s-build-arm
       - k8s-build-kv-requirer
     uses: ./.github/workflows/k8s-integration-test-arm.yaml
+    secrets: inherit
     with:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build-arm.outputs.artifacts-key }}
@@ -249,6 +251,7 @@ jobs:
       - ci-decision
       - k8s-build-s390x
     uses: ./.github/workflows/k8s-integration-test-s390x.yaml
+    secrets: inherit
     with:
       path: ./k8s/
       vault-charm-artifact-name: ${{ needs.k8s-build-s390x.outputs.artifacts-key }}
@@ -459,6 +462,7 @@ jobs:
       - machine-build
       - machine-build-kv-requirer
     uses: ./.github/workflows/machine-integration-test.yaml
+    secrets: inherit
     with:
       path: ./machine/
       vault-charm-artifact-name: ${{ needs.machine-build.outputs.artifacts-key }}
@@ -478,6 +482,7 @@ jobs:
       - machine-build-arm
       - machine-build-kv-requirer
     uses: ./.github/workflows/machine-integration-test-arm.yaml
+    secrets: inherit
     with:
       path: ./machine/
       vault-charm-artifact-name: ${{ needs.machine-build-arm.outputs.artifacts-key }}
@@ -495,6 +500,7 @@ jobs:
       - ci-decision
       - machine-build-s390x
     uses: ./.github/workflows/machine-integration-test-s390x.yaml
+    secrets: inherit
     with:
       path: ./machine/
       vault-charm-artifact-name: ${{ needs.machine-build-s390x.outputs.artifacts-key }}

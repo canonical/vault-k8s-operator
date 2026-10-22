@@ -46,6 +46,29 @@ jobs:
           VAULT_CHARM=$(ls built/*.charm | grep -v kv-requirer | head -1)
           echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
       - name: Run test_deploy_unseal integration test
+        id: main-step
+        continue-on-error: true
+        working-directory: ${{ inputs.path }}
+        env:
+          SODIUM_INSTALL: system
+          PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
+        run: |
+          set -o pipefail
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            -k "test_deploy_unseal.py" 2>&1 | tee "${RUNNER_TEMP}/integration.log"
+
+      - name: Classify integration test failure
+        id: classify-failure
+        if: steps.main-step.outcome == 'failure'
+        uses: ./.github/actions/classify-intermittent-failure
+        with:
+          step-name: Run test_deploy_unseal integration test (Machine s390x)
+          log-path: ${{ runner.temp }}/integration.log
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Retry test_deploy_unseal integration test
+        if: steps.main-step.outcome == 'failure' && steps.classify-failure.outputs.retry == 'true'
         working-directory: ${{ inputs.path }}
         env:
           SODIUM_INSTALL: system
