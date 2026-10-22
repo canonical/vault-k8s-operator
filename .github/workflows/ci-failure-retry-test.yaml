@@ -1,0 +1,74 @@
+name: CI failure retry test
+
+on:
+  pull_request:
+    branches: ["ci-decision-classifier"]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  wait-for-ci:
+    name: Wait for CI completion
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+      conclusion: ${{ steps.find.outputs.conclusion }}
+      run_attempt: ${{ steps.find.outputs.run_attempt }}
+    steps:
+      - name: Find the matching CI run
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for _ in $(seq 1 90); do
+            gh api \
+              "repos/${REPOSITORY}/actions/workflows/main.yaml/runs?event=pull_request&head_sha=${HEAD_SHA}&per_page=100" \
+              > ci-runs.json
+            RUN=$(jq -c --argjson pr_number "$PR_NUMBER" '
+              [
+                .workflow_runs[]
+                | select(any(.pull_requests[]?; .number == $pr_number))
+              ]
+              | sort_by(.created_at)
+              | last // empty
+            ' ci-runs.json)
+
+            if [[ -n "$RUN" && "$RUN" != "null" ]]; then
+              STATUS=$(jq -r '.status' <<<"$RUN")
+              if [[ "$STATUS" == "completed" ]]; then
+                echo "run_id=$(jq -r '.id' <<<"$RUN")" >> "$GITHUB_OUTPUT"
+                echo "conclusion=$(jq -r '.conclusion' <<<"$RUN")" >> "$GITHUB_OUTPUT"
+                echo "run_attempt=$(jq -r '.run_attempt' <<<"$RUN")" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+
+            sleep 20
+          done
+
+          echo "Timed out waiting for the matching CI run." >&2
+          exit 1
+
+  retry:
+    name: Test CI failure retry classifier
+    needs: wait-for-ci
+    if: >-
+      needs.wait-for-ci.outputs.conclusion == 'failure' &&
+      needs.wait-for-ci.outputs.run_attempt == '1'
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/ci-failure-retry-advisor.yaml
+    with:
+      run_id: ${{ needs.wait-for-ci.outputs.run_id }}
+    secrets: inherit
