@@ -2,7 +2,8 @@ name: CI
 
 on:
   pull_request:
-    branches: ["main", "release-*"]
+    # Temporary test target for the disposable CI decision PR.
+    branches: ["main", "release-*", "ci-decision-classifier"]
     # `labeled` lets a PR opt in to arm64/s390x tests by adding the
     # `test-arm` / `test-s390x` labels (see the arch build jobs below).
     types: [opened, synchronize, reopened, labeled]
