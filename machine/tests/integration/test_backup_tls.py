@@ -16,7 +16,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pytest_operator.plugin import OpsTest
 
-from config import APP_NAME, MINIO_S3_ACCESS_KEY, MINIO_S3_SECRET_KEY
+from config import (
+    APP_NAME,
+    MICROCEPH_RGW_PORT,
+    MICROCEPH_S3_ACCESS_KEY,
+    MICROCEPH_S3_BUCKET,
+    MICROCEPH_S3_SECRET_KEY,
+)
 from helpers import (
     VaultInit,
     configure_s3_and_create_backup,
@@ -29,25 +35,13 @@ from helpers import (
 
 # Path prefix configured on the s3-integrator.
 S3_PATH = "vault"
-# The bucket name used by the test MinIO instance.
-S3_BUCKET = "vault-integration-test"
-# The port for the test MinIO server (avoid conflicts with LXD bucket server's 8555).
-MINIO_PORT = 16666
+TLS_PROXY_PORT = 16666
 
 
 @pytest.fixture(scope="module")
-async def minio_endpoint_and_ca_cert(
-    ops_test: OpsTest, host_ip: str
-) -> AsyncIterator[tuple[str, str]]:
-    """Start a MinIO server with a self-signed TLS cert and return its endpoint + CA cert.
-
-    The cert's SAN includes the lxdbr0 gateway IP so that hostname verification
-    passes when Vault units connect to the endpoint from inside LXD containers.
-    Yields a ``(endpoint, ca_cert_pem)`` tuple. The MinIO process and temp
-    files are cleaned up when the fixture goes out of scope.
-    """
-    cert_dir = tempfile.mkdtemp(prefix="minio-certs-")
-    data_dir = tempfile.mkdtemp(prefix="minio-data-")
+async def s3_tls_endpoint_and_ca_cert(host_ip: str) -> AsyncIterator[tuple[str, str]]:
+    """Start a TLS proxy for MicroCeph RGW and return its endpoint and CA certificate."""
+    cert_dir = tempfile.mkdtemp(prefix="s3-tls-certs-")
     try:
         # Generate a self-signed cert with the lxdbr0 IP as a SAN.
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -82,79 +76,55 @@ async def minio_endpoint_and_ca_cert(
             f.write(cert.public_bytes(serialization.Encoding.PEM))
         ca_cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
 
-        # Find the minio binary.
-        # In github ci it's installed to /var/snap/lxd/common/minio/minio.
-        # When testing locally, it may be on PATH.
-        minio_bin = shutil.which("minio") or "/var/snap/lxd/common/minio/minio"
-
-        # Start MinIO with TLS.
         proc = subprocess.Popen(
             [
-                minio_bin,
-                "server",
-                f"--address={host_ip}:{MINIO_PORT}",
-                f"--certs-dir={cert_dir}",
-                data_dir,
+                "socat",
+                (
+                    f"OPENSSL-LISTEN:{TLS_PROXY_PORT},bind={host_ip},reuseaddr,fork,"
+                    f"cert={cert_path},key={key_path},verify=0"
+                ),
+                f"TCP:127.0.0.1:{MICROCEPH_RGW_PORT}",
             ],
-            env={
-                **os.environ,
-                "MINIO_ROOT_USER": MINIO_S3_ACCESS_KEY,
-                "MINIO_ROOT_PASSWORD": MINIO_S3_SECRET_KEY,
-            },
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         try:
-            # Wait for MinIO to start listening.
             for _ in range(30):
+                if proc.poll() is not None:
+                    stderr = proc.stderr.read() if proc.stderr else ""
+                    raise RuntimeError(f"TLS proxy exited unexpectedly: {stderr}")
                 try:
-                    with socket.create_connection((host_ip, MINIO_PORT), timeout=2):
+                    with socket.create_connection((host_ip, TLS_PROXY_PORT), timeout=2):
                         break
                 except (ConnectionRefusedError, OSError):
                     time.sleep(1)
             else:
-                raise RuntimeError("MinIO did not start within 30s")
+                raise RuntimeError("TLS proxy did not start within 30s")
 
-            session = boto3.session.Session(
-                aws_access_key_id=MINIO_S3_ACCESS_KEY,
-                aws_secret_access_key=MINIO_S3_SECRET_KEY,
-                region_name="local",
-            )
-            s3 = session.resource(
-                "s3",
-                endpoint_url=f"https://{host_ip}:{MINIO_PORT}",
-                verify=cert_path,
-                config=BotoConfig(
-                    request_checksum_calculation="when_required",
-                    response_checksum_validation="when_required",
-                ),
-            )
-            s3.create_bucket(Bucket=S3_BUCKET)
-
-            endpoint = f"https://{host_ip}:{MINIO_PORT}"
+            endpoint = f"https://{host_ip}:{TLS_PROXY_PORT}"
             yield endpoint, ca_cert_pem
         finally:
             proc.terminate()
             proc.wait(timeout=10)
     finally:
         shutil.rmtree(cert_dir, ignore_errors=True)
-        shutil.rmtree(data_dir, ignore_errors=True)
 
 
 @pytest.mark.abort_on_fail
 async def test_given_self_signed_tls_endpoint_and_ca_chain_when_create_backup_then_succeeds_with_prefixed_key(
     ops_test: OpsTest,
     deploy: VaultInit,
-    minio_endpoint_and_ca_cert: tuple[str, str],
+    s3_tls_endpoint_and_ca_cert: tuple[str, str],
 ):
-    endpoint, ca_cert = minio_endpoint_and_ca_cert
+    endpoint, ca_cert = s3_tls_endpoint_and_ca_cert
     backup_id = await configure_s3_and_create_backup(
         ops_test,
         root_token=deploy.root_token,
         s3_endpoint=endpoint,
-        s3_access_key=MINIO_S3_ACCESS_KEY,
-        s3_secret_key=MINIO_S3_SECRET_KEY,
-        s3_bucket=S3_BUCKET,
+        s3_access_key=MICROCEPH_S3_ACCESS_KEY,
+        s3_secret_key=MICROCEPH_S3_SECRET_KEY,
+        s3_bucket=MICROCEPH_S3_BUCKET,
         s3_region="local",
         kv_secret_value="tls-value",
         s3_path=S3_PATH,
@@ -192,9 +162,9 @@ async def test_given_prefixed_backup_when_restore_backup_then_succeeds(
 async def test_given_legacy_root_level_backup_when_restore_backup_then_falls_back(
     ops_test: OpsTest,
     deploy: VaultInit,
-    minio_endpoint_and_ca_cert: tuple[str, str],
+    s3_tls_endpoint_and_ca_cert: tuple[str, str],
 ):
-    endpoint, ca_cert = minio_endpoint_and_ca_cert
+    endpoint, ca_cert = s3_tls_endpoint_and_ca_cert
 
     # Take a real raft snapshot via the leader's Vault API.
     assert ops_test.model
@@ -208,8 +178,8 @@ async def test_given_legacy_root_level_backup_when_restore_backup_then_falls_bac
         ca_path = ca_file.name
     try:
         session = boto3.session.Session(
-            aws_access_key_id=MINIO_S3_ACCESS_KEY,
-            aws_secret_access_key=MINIO_S3_SECRET_KEY,
+            aws_access_key_id=MICROCEPH_S3_ACCESS_KEY,
+            aws_secret_access_key=MICROCEPH_S3_SECRET_KEY,
             region_name="local",
         )
         s3 = session.resource(
@@ -222,7 +192,7 @@ async def test_given_legacy_root_level_backup_when_restore_backup_then_falls_bac
             ),
         )
         legacy_key = "vault-backup-legacy-root-level"
-        s3.Bucket(S3_BUCKET).put_object(
+        s3.Bucket(MICROCEPH_S3_BUCKET).put_object(
             Key=legacy_key,
             Body=snapshot_bytes,
         )

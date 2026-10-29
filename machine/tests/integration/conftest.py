@@ -13,6 +13,7 @@ from pytest_operator.plugin import OpsTest
 from config import (
     APP_NAME,
     JUJU_FAST_INTERVAL,
+    MICROCEPH_RGW_PORT,
     NUM_VAULT_UNITS,
     S3_INTEGRATOR_APPLICATION_NAME,
     S3_INTEGRATOR_REVISION,
@@ -83,7 +84,7 @@ def skip_deploy(request: pytest.FixtureRequest) -> bool:
 
 @pytest.fixture(scope="module")
 async def host_ip(ops_test: OpsTest) -> str:
-    """Get the gateway IP of the unit, which should be the host IP where minio is running."""
+    """Get the host gateway IP reachable from the LXD units."""
     assert ops_test.model
     return_code, stdout, stderr = await ops_test.juju(
         "exec", "--unit", f"{APP_NAME}/leader", "ip route | grep 'default via' | awk '{print $3}'"
@@ -91,6 +92,12 @@ async def host_ip(ops_test: OpsTest) -> str:
     if return_code != 0:
         raise RuntimeError(f"Failed to get host IP: {stderr}")
     return stdout.strip()
+
+
+@pytest.fixture(scope="module")
+def microceph_endpoint(host_ip: str) -> str:
+    """Get the MicroCeph RGW S3-compatible endpoint reachable from the LXD units."""
+    return f"http://{host_ip}:{MICROCEPH_RGW_PORT}"
 
 
 @pytest.fixture(scope="module")
