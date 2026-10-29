@@ -24,8 +24,12 @@ author = "Canonical Ltd."
 # The year in the copyright statement
 copyright = f"{datetime.date.today().year}"
 
+# Documented charm track; shown instead of the Read the Docs "latest" label
+version = "2.0"
+release = version
+
 # Sidebar documentation title
-html_title = project + " documentation"
+html_title = f"{project} {version} documentation"
 
 # Documentation website URL
 # TODO: once the ubuntu.com/docs/vault-charms proxy is live, READTHEDOCS_CANONICAL_URL
