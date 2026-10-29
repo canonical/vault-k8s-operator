@@ -83,14 +83,8 @@ jobs:
           tox -e integration -- \
             --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
             --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
-            --alluredir allure-results \
             -k "${{ matrix.suite }}"
 
-      - name: Upload Allure results
-        uses: actions/upload-artifact@v7
-        with:
-          name: allure-results-${{ matrix.suite }}
-          path: ${{ inputs.path }}/allure-results
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v7
@@ -111,35 +105,6 @@ jobs:
     needs: [integration-tests]
     if: always()
     steps:
-      - name: Download all Allure results artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: allure-results-*
-          path: allure-results
-          merge-multiple: true
-      - name: Load test report history
-        uses: actions/checkout@v6
-        if: always()
-        continue-on-error: true
-        with:
-          ref: gh-pages
-          path: gh-pages
-      - name: Build test report
-        uses: simple-elf/allure-report-action@v1.13
-        if: always()
-        continue-on-error: true
-        with:
-          gh_pages: gh-pages
-          allure_history: allure-history
-          allure_results: allure-results
-      - name: Publish test report
-        uses: peaceiris/actions-gh-pages@v4
-        if: always()
-        continue-on-error: true
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: allure-history
       - name: Check matrix job results
         run: |
           # The 'needs' context contains the results of the jobs listed in 'needs:'
