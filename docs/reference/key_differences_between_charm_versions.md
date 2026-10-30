@@ -1,6 +1,6 @@
-# Key differences between Vault charm version 1.8 and 1.15
+# Key differences between Vault charm version 1.8 and 1.1x and later
 
-Versions 1.8 (and below) and 1.15 (and beyond) are fundamentally different charms. Here is a list of additions, changes and removals made to the Vault charm 1.15, when compared with 1.8.
+Versions 1.8 (and below) and 1.1x (1.15 and beyond, including 2.0) are fundamentally different charms. Here is a list of additions, changes and removals made to the Vault charm from 1.15 and later, when compared with 1.8.
 
 ## Additions
 
@@ -19,6 +19,6 @@ Versions 1.8 (and below) and 1.15 (and beyond) are fundamentally different charm
 - Providing the snap channel explicitly: Snap revisions are frozen to the charm revision providing reliable deployments.
 - [Loadbalancer](https://charmhub.io/integrations/loadbalancer) integration
 
-## Upgrading from 1.8 to 1.15
+## Upgrading from 1.8
 
-Upgrading from 1.8 to 1.15 is not supported, however you can backup your data on 1.8, and restore it on a new deployment of Vault 1.15.
+Upgrading in place from 1.8 to 1.1x or later is not supported. However, you can back up your data on 1.8 and restore it on a new deployment of Vault 2.0. For upgrades between 1.1x and 2.0, see [Upgrade from 1.1x to 2.0](../how-to/upgrade_1.1x_to_2.0.md).
