@@ -324,3 +324,18 @@ class TestJujuFacade:
     ):
         with pytest.raises(NoSuchStorageError):
             self.facade.get_storage_location("storage")
+
+    def test_given_multiple_network_interfaces_when_get_bind_addresses_then_returns_all_addresses(
+        self,
+    ):
+        relation = Mock()
+        interface_v4 = Mock(address="192.0.2.1")
+        interface_v6 = Mock(address="2001:db8::1")
+        binding = Mock()
+        binding.network.interfaces = [interface_v4, interface_v6]
+        charm = Mock()
+        charm.model = Mock(relations={"test-relation": [relation]})
+        charm.model.get_binding = Mock(return_value=binding)
+        self.facade.charm = charm
+
+        assert self.facade.get_bind_addresses("test-relation") == ["192.0.2.1", "2001:db8::1"]

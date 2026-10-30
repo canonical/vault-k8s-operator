@@ -53,7 +53,6 @@ from charmlibs.interfaces.tls_certificates import (
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
-    chain_has_valid_order,
     generate_ca,
     generate_certificate,
     generate_csr,

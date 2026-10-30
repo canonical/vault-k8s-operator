@@ -154,11 +154,8 @@ class VaultOperatorCharm(CharmBase):
                 access_sans_dns_list = []
             else:
                 access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
-        ip_addresses = set()
-        if self._bind_address:
-            ip_addresses.add(self._bind_address)
-        ingress_addresses = self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME)
-        ip_addresses.update(ingress_addresses)
+        ip_addresses = set(self.juju_facade.get_bind_addresses(PEER_RELATION_NAME))
+        ip_addresses.update(self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME))
         access_sans_ip = self.juju_facade.get_string_config("access_sans_ip")
         if access_sans_ip:
             if not sans_ip_config_is_valid(access_sans_ip):
