@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from charmlibs.interfaces.tls_certificates import KeyAlgorithm
 from charms.data_platform_libs.v0.s3 import S3Requirer
+from ops.pebble import ConnectionError as PebbleConnectionError
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import (
@@ -1471,3 +1472,15 @@ class TestRaftManager:
             '[{"id": "my-node", "address": "my-address"}]',
         )
         self.workload.restart.assert_called_once_with("vault")
+
+    def test_given_workload_not_accessible_when_bootstrap_then_error_raised(self):
+        self.workload.is_accessible.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert str(e.value) == "Workload is not accessible"
+
+    def test_given_pebble_connection_error_when_bootstrap_then_manager_error_raised(self):
+        self.workload.stop.side_effect = PebbleConnectionError("Pebble unavailable")
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert "Failed to bootstrap Vault cluster" in str(e.value)

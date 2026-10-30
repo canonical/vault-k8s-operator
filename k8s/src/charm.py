@@ -521,7 +521,7 @@ class VaultCharm(CharmBase):
                             "restarting to trigger auto-unseal"
                         )
                         self._container.restart(self._service_name)
-            except VaultClientError:
+            except (VaultClientError, pebble.Error):
                 pass
             return
         if not self._authenticate_vault_client(vault):
@@ -552,7 +552,7 @@ class VaultCharm(CharmBase):
         if self._vault_service_is_running():
             try:
                 self._container.stop(self._service_name)
-            except ChangeError:
+            except (ChangeError, pebble.Error):
                 logger.warning("Failed to stop Vault service")
                 pass
         self._delete_vault_data()
@@ -1043,24 +1043,27 @@ class VaultCharm(CharmBase):
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
             logger.info("Removed Vault's main database")
-        except ValueError:
+        except (ValueError, pebble.Error):
             logger.info("No Vault database to remove")
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
             logger.info("Removed Vault's Raft database")
-        except ValueError:
+        except (ValueError, pebble.Error):
             logger.info("No Vault raft database to remove")
 
     def _vault_service_is_running(self) -> bool:
         """Check if the vault service is running."""
         try:
             return self._container.get_service(service_name=self._service_name).is_running()
-        except ModelError:
+        except (ModelError, pebble.Error):
             return False
 
     def _pebble_plan_is_applied(self) -> bool:
         """Check if the pebble plan is applied."""
-        plan = self._container.get_plan()
+        try:
+            plan = self._container.get_plan()
+        except pebble.Error:
+            return False
         layer = self._vault_layer
         return plan.services == layer.services
 
@@ -1100,20 +1103,25 @@ class VaultCharm(CharmBase):
             log_level=self._get_log_level(),
         )
         existing_content = ""
-        if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
-            existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
-            existing_content = existing_content_stringio.read()
+        try:
+            if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
+                existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
+                existing_content = existing_content_stringio.read()
 
-        if not config_file_content_matches(existing_content=existing_content, new_content=content):
-            self._push_config_file_to_workload(content=content)
-            # If the seal type has changed, we need to restart Vault to apply
-            # the changes. SIGHUP is currently only supported as a beta feature
-            # for the enterprise version in Vault 1.16+
-            if seal_type_has_changed(existing_content, content):
-                # Before restarting Vault, check if the pebble plan is applied
-                # If the plan was not applied, the service will restart anyway when applying the new plan
-                if self._vault_service_is_running() and self._pebble_plan_is_applied():
-                    self._container.restart(self._service_name)
+            if not config_file_content_matches(
+                existing_content=existing_content, new_content=content
+            ):
+                self._push_config_file_to_workload(content=content)
+                # If the seal type has changed, we need to restart Vault to apply
+                # the changes. SIGHUP is currently only supported as a beta feature
+                # for the enterprise version in Vault 1.16+
+                if seal_type_has_changed(existing_content, content):
+                    # Before restarting Vault, check if the pebble plan is applied
+                    # If the plan was not applied, the service will restart anyway when applying the new plan
+                    if self._vault_service_is_running() and self._pebble_plan_is_applied():
+                        self._container.restart(self._service_name)
+        except pebble.Error as e:
+            logger.warning("Failed to configure Vault config file: %s", e)
 
     def _get_log_level(self) -> str:
         """Return the log level config."""
@@ -1173,12 +1181,15 @@ class VaultCharm(CharmBase):
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
-        plan: pebble.Plan = self._container.get_plan()
-        layer = self._vault_layer
-        if plan.services != layer.services:
-            self._container.add_layer(self._container_name, layer, combine=True)
-            self._container.replan()
-            logger.info("Pebble layer added")
+        try:
+            plan: pebble.Plan = self._container.get_plan()
+            layer = self._vault_layer
+            if plan.services != layer.services:
+                self._container.add_layer(self._container_name, layer, combine=True)
+                self._container.replan()
+                logger.info("Pebble layer added")
+        except pebble.Error as e:
+            logger.warning("Failed to set Pebble plan: %s", e)
 
     def _get_active_vault_client(self) -> VaultClient | None:
         """Return a client for the _active_ vault service.
