@@ -1,7 +1,7 @@
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from config import MINIO_S3_ACCESS_KEY, MINIO_S3_SECRET_KEY
+from config import MICROCEPH_S3_ACCESS_KEY, MICROCEPH_S3_BUCKET, MICROCEPH_S3_SECRET_KEY
 from helpers import VaultInit, configure_s3_and_create_backup, list_backups, restore_backup
 
 
@@ -9,15 +9,15 @@ from helpers import VaultInit, configure_s3_and_create_backup, list_backups, res
 async def test_given_vault_integrated_with_s3_when_create_backup_then_action_succeeds(
     ops_test: OpsTest,
     deploy: VaultInit,
-    host_ip: str,
+    microceph_endpoint: str,
 ):
     await configure_s3_and_create_backup(
         ops_test,
         root_token=deploy.root_token,
-        s3_endpoint=f"https://{host_ip}:8555",
-        s3_access_key=MINIO_S3_ACCESS_KEY,
-        s3_secret_key=MINIO_S3_SECRET_KEY,
-        s3_bucket="vault-integration-test",
+        s3_endpoint=microceph_endpoint,
+        s3_access_key=MICROCEPH_S3_ACCESS_KEY,
+        s3_secret_key=MICROCEPH_S3_SECRET_KEY,
+        s3_bucket=MICROCEPH_S3_BUCKET,
         s3_region="local",
         kv_secret_value="value",
     )

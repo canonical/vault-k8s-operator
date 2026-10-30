@@ -64,31 +64,24 @@ At this time, each integration test suite must be run separately.
 
 #### Backup tests
 
-To run the backup tests, you will need to have an S3 compatible storage service running, such as MinIO. You can find instructions to configure LXD to manage the MinIO service at <https://documentation.ubuntu.com/lxd/latest/howto/storage_buckets/#howto-storage-buckets>.
+The backup suites require MicroCeph on the test host, with its S3-compatible RGW
+endpoint listening on port `7480` and reachable from the LXD containers. Create
+an S3 user with access key and secret key `vaultmicrocephtest`, and a bucket named
+`vault-microceph-test`.
 
-The following is a summary of the steps, and may not be up to date with the latest LXD documentation or your system. Use with care.
+Follow the "Install MicroCeph and configure RGW for backup tests" step in the
+[machine integration workflow](../.github/workflows/machine-integration-test.yaml)
+to bootstrap MicroCeph, add loop-backed storage, and create the S3 user and bucket.
+Only run the bootstrap and storage setup on a dedicated test host.
 
-```shell
-sudo wget --no-clobber https://dl.min.io/server/minio/release/linux-amd64/minio -O /usr/bin/minio && sudo chmod +x /usr/bin/minio
-sudo wget --no-clobber https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/bin/mc && sudo chmod +x /usr/bin/mc
-snap set lxd minio.path=/usr/bin
-snap restart lxd
-lxc config set core.storage_buckets_address :8555
-```
-
-It would, however, be best to lock down the storage buckets to only allow access from other LXD containers.
+The TLS backup suite (`test_backup_tls.py`) also requires `socat`:
 
 ```shell
-lxd_bridge_ip=$(lxc network list --format yaml | yq -r '.[] | select(.name == "lxdbr0") | .config["ipv4.address"]' | cut -d'/' -f1) && echo "LXD bridge IP: ${lxd_bridge_ip}"
-lxc config set core.storage_buckets_address ${lxd_bridge_ip}:8555
+sudo apt-get install --yes socat
 ```
 
-Finally, create the bucket and the access keys for the integration tests:
-
-```shell
-lxc storage bucket create default vault-integration-test
-lxc storage bucket key create default vault-integration-test vault-integration-test --role admin --access-key vaultintegrationtest --secret-key vaultintegrationtest
-```
+The TLS suite creates a temporary self-signed certificate and proxies HTTPS on
+port `16666` to RGW, verifying the certificate using the configured CA chain.
 
 ## Build the charm
 

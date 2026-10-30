@@ -7,32 +7,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "allure-pytest"
-version = "2.15.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "allure-python-commons" },
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/55/b73c5256d36c4c843a475762eebc90b104527766d4c7e4c4b4d9ed94f118/allure_pytest-2.15.3.tar.gz", hash = "sha256:b6576f8258de44f48ec59cfaee73cdbd1142c2ad6cfdc82d894fd1db8abf22e9", size = 17685, upload-time = "2025-12-30T05:21:55.909Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/1c/a50b21ce93ee95fa198683e09cb709d05079a5b2970cb304f2a5a1986afb/allure_pytest-2.15.3-py3-none-any.whl", hash = "sha256:66711efdc44c7c0d629f4eeab73ca20932f8786c251d61e242449f7b4ec18ca2", size = 12451, upload-time = "2025-12-30T05:21:54.776Z" },
-]
-
-[[package]]
-name = "allure-python-commons"
-version = "2.15.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-    { name = "pluggy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/42/93/609cf76e204567cb618b59208f34468bbd434f34fcdce3d193d8f927abcd/allure_python_commons-2.15.3.tar.gz", hash = "sha256:b42a96d6076fb323c9e43645dfb84c0574f6bad0a0e005d92564015cd172d564", size = 15208, upload-time = "2025-12-30T05:21:46.702Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/2e/a823ab87aa8ed064d7efc817d79eb5f013465514f8d74487f1519849049f/allure_python_commons-2.15.3-py3-none-any.whl", hash = "sha256:50e9b346d8a060c84af8d19f221bd9da6e1aa0002a4e7f770e151167365219d0", size = 16212, upload-time = "2025-12-30T05:21:45.861Z" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2257,7 +2231,6 @@ dev = [
     { name = "types-hvac" },
 ]
 test = [
-    { name = "allure-pytest" },
     { name = "coverage", extra = ["toml"] },
     { name = "hvac" },
     { name = "juju" },
@@ -2294,7 +2267,6 @@ dev = [
     { name = "types-hvac" },
 ]
 test = [
-    { name = "allure-pytest" },
     { name = "coverage", extras = ["toml"] },
     { name = "hvac" },
     { name = "juju" },
