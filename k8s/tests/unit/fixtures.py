@@ -44,6 +44,7 @@ class MockNetwork:
     def __init__(self, bind_address: str, ingress_address: str):
         self.bind_address = bind_address
         self.ingress_address = ingress_address
+        self.ingress_addresses = [ingress_address]
 
 
 class MockBinding:

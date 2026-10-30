@@ -239,6 +239,92 @@ class TestCharmTLS:
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
     @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    def test_given_dual_stack_bind_and_ingress_addresses_when_relation_changed_then_all_ip_sans_are_included(
+        self,
+    ):
+        self.mock_get_assigned_certificate.return_value = None, None
+        ingress_address = "1.2.3.4"
+        ipv6_ingress_address = "2001:db8::2"
+        bind_ipv4 = "192.0.2.1"
+        bind_ipv6 = "2001:db8::1"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            certificates_relation = testing.Relation(
+                endpoint="tls-certificates-access",
+                interface="tls-certificates",
+                remote_app_name="some-tls-provider",
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
+            )
+            certs_mount = testing.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            vault_container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = testing.Storage(
+                name="certs",
+            )
+            config_storage = testing.Storage(
+                name="config",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                relations=[certificates_relation, peer_relation],
+                storages=[certs_storage, config_storage],
+                leader=True,
+                networks={
+                    testing.Network(
+                        "vault-peers",
+                        bind_addresses=[
+                            testing.BindAddress(
+                                [testing.Address(bind_ipv4), testing.Address(bind_ipv6)]
+                            )
+                        ],
+                        ingress_addresses=[ingress_address, ipv6_ingress_address],
+                    )
+                },
+            )
+
+            self.ctx.run(self.ctx.on.relation_changed(certificates_relation), state_in)
+
+            self.mock_get_assigned_certificate.assert_called_once_with(
+                certificate_request=CertificateRequestAttributes(
+                    common_name=ingress_address,
+                    sans_dns=frozenset({self.fqdn}),
+                    sans_ip=frozenset(
+                        {ingress_address, ipv6_ingress_address, bind_ipv4, bind_ipv6}
+                    ),
+                    sans_oid=frozenset(),
+                    email_address=None,
+                    organization=None,
+                    organizational_unit=None,
+                    country_name=None,
+                    state_or_province_name=None,
+                    locality_name=None,
+                    is_ca=False,
+                )
+            )
+
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
     def test_given_certificate_access_relation_and_config_values_when_relation_changed_then_new_request_is_created_with_config_values(  # noqa: E501
         self,
     ):

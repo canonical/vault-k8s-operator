@@ -199,11 +199,8 @@ class VaultCharm(CharmBase):
                 access_sans_dns_list = []
             else:
                 access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
-        ip_addresses: set[str] = set()
-        if self._bind_address:
-            ip_addresses.add(self._bind_address)
-        if self._ingress_address:
-            ip_addresses.add(self._ingress_address)
+        ip_addresses: set[str] = set(self.juju_facade.get_bind_addresses(PEER_RELATION_NAME))
+        ip_addresses.update(self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME))
         self.tls = TLSManager(
             charm=self,
             workload=self._container,  # type: ignore[arg-type]
