@@ -6,6 +6,7 @@
 
 - Upgraded Vault workload from 1.19 to 2.0
 - Updated certificate transfer library to use `charmlibs` interface
+- Added the `receive-ca-cert` integration for receiving trusted CA certificates
 
 ### Upgrade Path
 

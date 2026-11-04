@@ -291,6 +291,64 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
 
         assert state_out.unit_status == WaitingStatus("Waiting for CA certificate secret")
 
+    def test_given_tls_access_relation_and_no_ca_secret_when_collect_unit_status_then_status_is_not_waiting_for_ca_secret(
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": True,
+                "ca_certificate_secret_exists.return_value": False,
+                "tls_file_pushed_to_workload.return_value": False,
+            },
+        )
+        container = testing.Container(
+            name="vault",
+            can_connect=True,
+        )
+        peer_relation = testing.PeerRelation(
+            endpoint="vault-peers",
+        )
+        tls_access_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, tls_access_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == WaitingStatus("Waiting for CA certificate to be shared")
+
+    def test_given_untrusted_access_certificate_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": False,
+                "ca_certificate_secret_exists.return_value": False,
+                "tls_file_pushed_to_workload.return_value": False,
+                "access_certificate_requires_trusted_ca.return_value": True,
+            },
+        )
+        container = testing.Container(name="vault", can_connect=True)
+        peer_relation = testing.PeerRelation(endpoint="vault-peers")
+        tls_access_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+            interface="tls-certificates",
+        )
+        state_in = testing.State(
+            containers=[container],
+            relations=[peer_relation, tls_access_relation],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Access certificate requires a trusted root CA via `receive-ca-cert`"
+        )
+
     def test_given_tls_ca_not_pushed_to_workload_when_collect_unit_status_then_status_is_waiting(
         self,
     ):

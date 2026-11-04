@@ -45,6 +45,7 @@ UNMATCHING_COMMON_NAME = "unmatching-the-requirer.com"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 VAULT_PKI_REQUIRER_CHANNEL = "latest/stable"
 VAULT_PKI_REQUIRER_REVISION = 93
+VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME = "vault-k8s-tls-access-requirer"
 
 
 VAULT_RESOURCES = {"vault-image": METADATA["resources"]["vault-image"]["upstream-source"]}

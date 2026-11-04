@@ -379,7 +379,9 @@ def test_given_role_config_matches_given_config_when_role_config_matches_given_c
 ):
     patch_read_role.return_value = {
         "data": {
+            "key_type": "any",
             "allowed_domains": ["example.com"],
+            "allow_bare_domains": True,
             "allow_subdomains": True,
             "allow_wildcard_certificates": True,
             "allow_any_name": True,
@@ -396,6 +398,7 @@ def test_given_role_config_matches_given_config_when_role_config_matches_given_c
         role="test-role",
         mount="some/path",
         allowed_domains=["example.com"],
+        allow_bare_domains=True,
         allow_subdomains=True,
         allow_wildcard_certificates=True,
         allow_any_name=True,
@@ -565,10 +568,18 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
 ):
     patch_read_role.return_value = {
         "data": {
+            "key_type": "any",
             "allowed_domains": ["example.com"],
+            "allow_bare_domains": True,
             "allow_subdomains": True,
             "allow_wildcard_certificates": True,
             "allow_any_name": True,
+            "allow_ip_sans": True,
+            "organization": "test-organization",
+            "organizational_unit": "test-organizational-unit",
+            "country": "test-country",
+            "province": "test-province",
+            "locality": "test-locality",
         }
     }
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
@@ -576,6 +587,7 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
         role="test-role",
         mount="some/path",
         allowed_domains=allowed_domains,
+        allow_bare_domains=True,
         allow_subdomains=allow_subdomains,
         allow_wildcard_certificates=allow_wildcard_certificates,
         allow_any_name=allow_any_name,
@@ -710,5 +722,3 @@ def test_when_sign_pki_csr_denied_by_vault_then_vault_client_error_raised(
             common_name="example.com",
             ttl="720h",
         )
-
-

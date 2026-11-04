@@ -2,10 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
-    "python_full_version < '3.11' and platform_machine == 's390x'",
     "python_full_version >= '3.11' and platform_machine == 's390x'",
-    "python_full_version < '3.11' and platform_machine != 's390x'",
     "python_full_version >= '3.11' and platform_machine != 's390x'",
+    "python_full_version < '3.11' and platform_machine == 's390x'",
+    "python_full_version < '3.11' and platform_machine != 's390x'",
 ]
 supported-markers = [
     "platform_machine == 's390x'",
@@ -148,15 +148,15 @@ wheels = [
 
 [[package]]
 name = "charmlibs-interfaces-certificate-transfer"
-version = "1.0.0"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/e815e2c9d8ad8e091b31301af54d1cc626bdaf4f25b6e60f33ed52cf7cd7/charmlibs_interfaces_certificate_transfer-1.0.0.tar.gz", hash = "sha256:53f230abb2b42e7c23929a2d99321b1f0e226f20595609105fbd0528fcc3cf24", size = 42167, upload-time = "2026-02-23T18:34:18.971Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/a7/3b221eb0afe89704c79ce1be6ce3975c64a93d0af5d427a7121fdff587ee/charmlibs_interfaces_certificate_transfer-1.1.0.tar.gz", hash = "sha256:eb12e6a802191116d45582f44a46488636b119a21add990c38f839b9ace6f7f0", size = 44863, upload-time = "2026-10-16T15:02:35.588Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/bb/f5ed4a41c154723bd6ea4b983395d6db67d4a3c7dd87bde8ea6848159e63/charmlibs_interfaces_certificate_transfer-1.0.0-py3-none-any.whl", hash = "sha256:21cef05199a9efa459be43207e042be6792605b70e742d8b0fed6f09c0cb232d", size = 8435, upload-time = "2026-02-23T18:34:17.876Z" },
+    { url = "https://files.pythonhosted.org/packages/92/e7/d599686394b6a3d6518de69fb67c43cf19751517d566f526910b8ea0a0d3/charmlibs_interfaces_certificate_transfer-1.1.0-py3-none-any.whl", hash = "sha256:4f9e9c2eba4b0c8f7aabf0d2997a765f40188f0605bd334a76f81ccba7dd7f72", size = 9276, upload-time = "2026-10-16T15:02:34.16Z" },
 ]
 
 [[package]]
@@ -448,11 +448,11 @@ name = "cryptography"
 version = "43.0.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.11' and platform_machine == 's390x'",
     "python_full_version >= '3.11' and platform_machine == 's390x'",
+    "python_full_version < '3.11' and platform_machine == 's390x'",
 ]
 dependencies = [
-    { name = "cffi", marker = "platform_machine == 's390x' and platform_python_implementation != 'PyPy'" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/05/07b55d1fa21ac18c3a8c79f764e2514e6f6a9698f1be44994f5adf0d29db/cryptography-43.0.3.tar.gz", hash = "sha256:315b9001266a492a6ff443b61238f956b214dbec9910a081ba5b6646a055a805", size = 686989, upload-time = "2024-10-18T15:58:32.918Z" }
 wheels = [
@@ -465,11 +465,11 @@ name = "cryptography"
 version = "45.0.7"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.11' and platform_machine != 's390x'",
     "python_full_version >= '3.11' and platform_machine != 's390x'",
+    "python_full_version < '3.11' and platform_machine != 's390x'",
 ]
 dependencies = [
-    { name = "cffi", marker = "platform_machine != 's390x' and platform_python_implementation != 'PyPy'" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/35/c495bffc2056f2dadb32434f1feedd79abde2a7f8363e1974afa9c33c7e2/cryptography-45.0.7.tar.gz", hash = "sha256:4b1654dfc64ea479c242508eb8c724044f1e964a47d1d1cacc5132292d851971", size = 744980, upload-time = "2025-09-01T11:15:03.146Z" }
 wheels = [
@@ -516,7 +516,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1317,7 +1317,7 @@ test = [
 requires-dist = [
     { name = "cffi", marker = "platform_machine == 's390x'", specifier = "<2" },
     { name = "charmlibs-interfaces-certificate-transfer" },
-    { name = "charmlibs-interfaces-tls-certificates", specifier = "~=1.12" },
+    { name = "charmlibs-interfaces-tls-certificates" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "cryptography", marker = "platform_machine == 's390x'", specifier = "<44" },
@@ -1351,6 +1351,8 @@ source = { editable = ".vendored/vault-package" }
 dependencies = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
+    { name = "charmlibs-interfaces-certificate-transfer" },
+    { name = "charmlibs-interfaces-tls-certificates" },
     { name = "cryptography", version = "43.0.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 's390x'" },
     { name = "cryptography", version = "45.0.7", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 's390x'" },
     { name = "hvac" },
@@ -1366,6 +1368,8 @@ dependencies = [
 requires-dist = [
     { name = "boto3" },
     { name = "boto3-stubs", extras = ["s3"] },
+    { name = "charmlibs-interfaces-certificate-transfer" },
+    { name = "charmlibs-interfaces-tls-certificates" },
     { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },

@@ -401,12 +401,23 @@ class VaultCharm(CharmBase):
         if not self._ingress_address:
             event.add_status(WaitingStatus("Waiting for ingress address to be available"))
             return
+        if self.tls.access_certificate_requires_trusted_ca():
+            event.add_status(
+                BlockedStatus(
+                    "Access certificate requires a trusted root CA via `receive-ca-cert`"
+                )
+            )
+            return
         if not self.tls.tls_file_available_in_charm(File.CA):
             event.add_status(
                 WaitingStatus("Waiting for CA certificate to be accessible in the charm")
             )
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
+        if (
+            not self.unit.is_leader()
+            and not self._uses_tls_access_relation
+            and not self.tls.ca_certificate_secret_exists()
+        ):
             event.add_status(WaitingStatus("Waiting for CA certificate secret"))
             return
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
@@ -477,7 +488,7 @@ class VaultCharm(CharmBase):
             return
         if not self._ingress_address:
             return
-        if not self.tls.ca_certificate_secret_exists():
+        if not self._uses_tls_access_relation and not self.tls.ca_certificate_secret_exists():
             return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
             return
@@ -1340,6 +1351,11 @@ class VaultCharm(CharmBase):
             str: Ingress address
         """
         return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
+
+    @property
+    def _uses_tls_access_relation(self) -> bool:
+        """Return whether TLS certificates come from the access relation instead of a self-signed CA."""
+        return self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME)
 
 
 if __name__ == "__main__":  # pragma: no cover

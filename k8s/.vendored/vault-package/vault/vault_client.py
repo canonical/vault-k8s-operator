@@ -490,7 +490,7 @@ class VaultClient:
         csr: str,
         common_name: str,
         ttl: str,
-    ) -> Certificate | None:
+    ) -> Certificate:
         """Sign a certificate signing request for the PKI backend.
 
         Args:
@@ -522,7 +522,13 @@ class VaultClient:
                 ca=response["data"]["issuing_ca"],
                 chain=response["data"]["ca_chain"],
             )
-        except (InvalidRequest, Forbidden, InternalServerError, ConnectionError, RequestException) as e:
+        except (
+            InvalidRequest,
+            Forbidden,
+            InternalServerError,
+            ConnectionError,
+            RequestException,
+        ) as e:
             logger.warning("PKI error while signing certificate: %s", e)
             raise PKICertificateError(e) from e
 
@@ -553,6 +559,7 @@ class VaultClient:
                 Should be a string in the format of a number with a unit such as
                 "120m", "10h" or "90d".
             mount: The mount point of the PKI backend for which the role will be created.
+            allow_bare_domains: Whether to allow issuing certificates for the allowed domains themselves.
             allow_subdomains: Whether to allow issuing certificates for subdomains.
             allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
             allow_any_name: Whether to allow issuing certificates for any name.
@@ -633,6 +640,7 @@ class VaultClient:
                 Should be a string in the format of a number with a unit such as
                 "120m", "10h" or "90d".
             mount: The mount point of the PKI backend for which the role will be created.
+            allow_bare_domains: Whether to allow issuing certificates for the allowed domains themselves.
             allow_subdomains: Whether to allow issuing certificates for subdomains.
             allow_wildcard_certificates: Whether to allow issuing wildcard certificates.
             allow_any_name: Whether to allow issuing certificates for any name.
