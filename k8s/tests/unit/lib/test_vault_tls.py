@@ -19,6 +19,7 @@ from charmlibs.interfaces.tls_certificates import (
     generate_private_key,
 )
 from ops.model import ActiveStatus, WaitingStatus
+from ops.pebble import ConnectionError as PebbleConnectionError
 from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
@@ -911,6 +912,37 @@ class TestCharmTLS:
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             add_certificates.assert_not_called()
+
+    @patch("container.Container.pull")
+    def test_given_pebble_connection_drops_when_certificate_transfer_relation_joins_then_hook_does_not_fail(
+        self, container_pull: MagicMock
+    ):
+        container_pull.side_effect = PebbleConnectionError("Pebble unavailable")
+        cert_transfer_relation = testing.Relation(
+            endpoint="send-ca-cert",
+            interface="certificate_transfer",
+            remote_app_name="whatever",
+        )
+        vault_container = testing.Container(name="vault", can_connect=True)
+        state_in = testing.State(
+            containers=[vault_container],
+            relations=[cert_transfer_relation],
+        )
+
+        self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
+
+        container_pull.assert_called_once()
+
+    @patch(f"{VAULT_MANAGERS_PATH}.TLSManager.pull_tls_file_from_workload")
+    def test_given_pebble_is_unavailable_when_update_status_runs_then_ca_transfer_is_skipped(
+        self, pull_tls_file_from_workload: MagicMock
+    ):
+        vault_container = testing.Container(name="vault", can_connect=False)
+        state_in = testing.State(containers=[vault_container])
+
+        self.ctx.run(self.ctx.on.update_status(), state_in)
+
+        pull_tls_file_from_workload.assert_not_called()
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)

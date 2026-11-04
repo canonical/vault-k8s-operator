@@ -62,7 +62,8 @@ from charmlibs.interfaces.tls_certificates import (
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
 from ops import CharmBase, EventBase, Object, Relation
-from ops.pebble import PathError
+from ops.pebble import ConnectionError, PathError
+from ops.pebble import Error as PebbleError
 
 from vault.juju_facade import (
     FacadeError,
@@ -508,13 +509,21 @@ class TLSManager(Object):
 
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
-        if ca := self.pull_tls_file_from_workload(File.CA):
+        if not self.workload.is_accessible():
+            logger.debug("Workload is not accessible")
+            return
+        try:
+            ca = self.pull_tls_file_from_workload(File.CA)
+        except PebbleError as e:
+            logger.warning("Cannot send CA certificate because workload is unavailable: %s", e)
+            return
+        if ca:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.add_certificates(
                     certificates={ca}, relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
-        else:
+        elif self.workload.is_accessible():
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.remove_all_certificates(relation_id=relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
@@ -592,7 +601,7 @@ class TLSManager(Object):
                 self.get_tls_file_path_in_workload(file),
             ) as file_content:
                 return file_content.read().strip()
-        except (PathError, FileNotFoundError):
+        except (PathError, FileNotFoundError, ConnectionError, PebbleError):
             return ""
 
     def ca_certificate_secret_exists(self) -> bool:
@@ -609,8 +618,11 @@ class TLSManager(Object):
             file: a File object that determines which file to write.
             data: the data to write into that file.
         """
-        self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
-        logger.debug("Pushed %s file to workload", file.name)
+        try:
+            self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
+            logger.debug("Pushed %s file to workload", file.name)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push %s file to workload: %s", file.name, e)
 
     def push_autounseal_ca_cert(self, ca_cert: str) -> None:
         """Push the CA certificate to the workload.
@@ -618,7 +630,10 @@ class TLSManager(Object):
         Args:
             ca_cert: The CA certificate to push to the workload.
         """
-        self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        try:
+            self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push autounseal CA certificate to workload: %s", e)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
         """Remove the certificate files that are used for authentication.
@@ -628,7 +643,7 @@ class TLSManager(Object):
         """
         try:
             self.workload.remove_path(path=self.get_tls_file_path_in_workload(file))
-        except ValueError:
+        except (ValueError, ConnectionError, PebbleError):
             pass
         logger.debug("Removed %s file from workload.", file.name)
 
@@ -641,7 +656,10 @@ class TLSManager(Object):
         Returns:
             bool: True if file exists.
         """
-        return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        try:
+            return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        except (ConnectionError, PebbleError):
+            return False
 
     def _unit_certificate_sans_match_current_request(self, unit_cert_content: str) -> bool:
         """Check if the unit certificate attributes match the current TLS manager configuration.
@@ -2047,10 +2065,15 @@ class RaftManager:
             raise ManagerError("Only the leader unit can bootstrap a Vault cluster")
         if not self._juju_facade.planned_units_for_app == 1:
             raise ManagerError("Bootstrapping a Vault cluster requires exactly one unit")
+        if not self._workload.is_accessible():
+            raise ManagerError("Workload is not accessible")
 
-        self._workload.stop(self._service_name)
-        self._push_peers_json(node_id, address)
-        self._workload.restart(self._service_name)
+        try:
+            self._workload.stop(self._service_name)
+            self._push_peers_json(node_id, address)
+            self._workload.restart(self._service_name)
+        except PebbleError as e:
+            raise ManagerError(f"Failed to bootstrap Vault cluster: {e}") from e
 
         logger.info("Vault cluster bootstrapped in Raft mode")
 
