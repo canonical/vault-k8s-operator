@@ -13,6 +13,6 @@
 
 ## Version-specific upgrade guides
 
-For major version upgrades, consult the version-specific guides:
+All `1.x` tracks are deprecated. To migrate from any `1.x` track to `2.0`, follow the version-specific guide:
 
 - [Upgrade from 1.1x to 2.0](upgrade_1.1x_to_2.0.md)

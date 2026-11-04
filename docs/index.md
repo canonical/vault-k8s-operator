@@ -6,6 +6,12 @@
 
 The operator implements the tls-certificates interface supporting automatic certificate renewal, structured error reporting with standardised codes, and guaranteed responses (every certificate request receives either a certificate or a detailed error).
 
+This documentation covers the Vault charms **2.0** track.
+
+```{note}
+All `1.x` tracks are deprecated. If you are running a `1.x` track, migrate to `2.0` using the [upgrade from 1.1x to 2.0 guide](how-to/upgrade_1.1x_to_2.0.md).
+```
+
 ## In this documentation
 
 ````{grid} 1 1 2 2
