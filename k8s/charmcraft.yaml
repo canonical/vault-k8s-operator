@@ -110,6 +110,12 @@ requires:
       Communication between the vault units and from a client to Vault should 
       be done using the certificates provided by this integration.
     optional: true
+  receive-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Receive CA certificates to trust, such as the root CA of the issuer on
+      `tls-certificates-access` when that issuer is an intermediate CA.
+    optional: true
   tls-certificates-pki:
     interface: tls-certificates
     limit: 1

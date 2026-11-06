@@ -34,6 +34,7 @@ class VaultCharmFixturesBase:
             self.mock_tls = stack.enter_context(
                 patch("charm.TLSManager", autospec=TLSManager)
             ).return_value
+            self.mock_tls.access_certificate_requires_trusted_ca.return_value = False
             self.mock_vault = stack.enter_context(
                 patch("charm.VaultClient", autospec=VaultClient)
             ).return_value

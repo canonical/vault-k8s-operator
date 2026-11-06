@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 import json
 import logging
+import tempfile
 from collections import namedtuple
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from cryptography import x509
 
 from config import (
     APPLICATION_NAME,
+    DEPLOY_TIMEOUT,
     JUJU_FAST_INTERVAL,
     MATCHING_COMMON_NAME,
     NUM_VAULT_UNITS,
@@ -23,17 +25,24 @@ from config import (
     VAULT_PKI_REQUIRER_APPLICATION_NAME,
     VAULT_PKI_REQUIRER_CHANNEL,
     VAULT_PKI_REQUIRER_REVISION,
+    VAULT_RESOURCES,
+    VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME,
 )
 from helpers import (
+    _get_arch_constraint,
+    authorize_charm_and_wait,
+    deploy_if_not_exists,
     deploy_vault,
     fast_forward,
     get_leader_unit_name,
     get_unit_address,
+    get_vault_ca_certificate,
     get_vault_pki_intermediate_ca_common_name,
     get_vault_token_and_unseal_key,
     initialize_unseal_authorize_vault,
     wait_for_status_message,
 )
+from vault_helpers import Vault
 
 logger = logging.getLogger(__name__)
 
@@ -202,3 +211,55 @@ def test_given_vault_pki_relation_and_matching_common_name_configured_when_integ
     assert chain[-1].is_ca
     root = x509.load_pem_x509_certificate(str(chain[-1]).encode())
     root.verify_directly_issued_by(root)
+
+
+@pytest.mark.abort_on_fail
+def test_given_vault_tls_access_requirer_when_root_ca_received_then_status_is_active(
+    juju: jubilant.Juju, deploy: VaultInit, vault_charm_path: Path
+):
+    # The requirer Vault requests a certificate for its ingress IP address.
+    juju.config(APPLICATION_NAME, {"pki_allow_any_name": "true", "pki_allow_ip_sans": "true"})
+    deploy_if_not_exists(
+        juju,
+        app_name=VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME,
+        charm_path=vault_charm_path,
+        resources=VAULT_RESOURCES,
+        constraints=_get_arch_constraint(),
+    )
+    juju.integrate(
+        f"{VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME}:tls-certificates-access",
+        f"{APPLICATION_NAME}:vault-pki",
+    )
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        wait_for_status_message(
+            juju,
+            expected_message="Access certificate requires a trusted root CA via `receive-ca-cert`",
+            app_name=VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME,
+            timeout=DEPLOY_TIMEOUT,
+        )
+
+    juju.integrate(
+        f"{VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME}:receive-ca-cert",
+        f"{SELF_SIGNED_CERTIFICATES_APPLICATION_NAME}:send-ca-cert",
+    )
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        wait_for_status_message(
+            juju,
+            expected_message="Please initialize Vault or integrate with an auto-unseal provider",
+            app_name=VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME,
+            timeout=SHORT_TIMEOUT,
+        )
+
+    leader_name = get_leader_unit_name(juju, VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".pem") as ca_file:
+        ca_file.write(get_vault_ca_certificate(juju, leader_name))
+        ca_file.flush()
+        vault = Vault(
+            url=f"https://{get_unit_address(juju, leader_name)}:8200",
+            ca_file_location=ca_file.name,
+        )
+        root_token, unseal_key = vault.initialize()
+        vault.unseal(unseal_key)
+        vault.wait_for_node_to_be_unsealed()
+
+    authorize_charm_and_wait(juju, root_token, app_name=VAULT_TLS_ACCESS_REQUIRER_APPLICATION_NAME)

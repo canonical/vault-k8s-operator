@@ -20,6 +20,7 @@ class TestCharmIntegrations(VaultCharmFixtures):
         "vault-pki",
         "vault-autounseal-provides",
         "send-ca-cert",
+        "receive-ca-cert",
         "grafana-dashboard",
         "metrics-endpoint",
     ]

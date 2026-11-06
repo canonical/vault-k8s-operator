@@ -589,6 +589,13 @@ class VaultOperatorCharm(CharmBase):
         if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
             event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
             return
+        if self.tls.access_certificate_requires_trusted_ca():
+            event.add_status(
+                BlockedStatus(
+                    "Access certificate requires a trusted root CA via `receive-ca-cert`"
+                )
+            )
+            return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
             return

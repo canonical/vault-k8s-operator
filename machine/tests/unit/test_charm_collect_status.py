@@ -14,6 +14,30 @@ from fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
+    def test_given_untrusted_access_certificate_when_collect_unit_status_then_status_is_blocked(
+        self,
+    ):
+        self.mock_tls.configure_mock(
+            **{
+                "tls_file_available_in_charm.return_value": False,
+                "tls_file_pushed_to_workload.return_value": False,
+                "access_certificate_requires_trusted_ca.return_value": True,
+            },
+        )
+        state_in = testing.State(
+            leader=True,
+            relations=[
+                testing.PeerRelation(endpoint="vault-peers"),
+                testing.Relation(endpoint="tls-certificates-access", interface="tls-certificates"),
+            ],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "Access certificate requires a trusted root CA via `receive-ca-cert`"
+        )
+
     def test_given_invalid_log_level_config_when_collect_unit_status_then_status_is_blocked(
         self,
     ):

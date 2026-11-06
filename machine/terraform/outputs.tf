@@ -13,6 +13,7 @@ output "requires" {
     ingress-per-unit          = "ingress-per-unit"
     tls-certificates-access   = "tls-certificates-access"
     tls-certificates-pki      = "tls-certificates-pki"
+    receive-ca-cert           = "receive-ca-cert"
     logging                   = "logging"
     s3-parameters             = "s3-parameters"
     tracing                   = "tracing"

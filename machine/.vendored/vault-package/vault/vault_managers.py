@@ -32,6 +32,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
@@ -39,7 +40,10 @@ from enum import Enum, auto
 from functools import cached_property
 from typing import FrozenSet, Iterator, Mapping, MutableMapping, TextIO
 
-from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
+from charmlibs.interfaces.certificate_transfer import (
+    CertificateTransferProvides,
+    CertificateTransferRequires,
+)
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
     CertificateError,
@@ -53,6 +57,7 @@ from charmlibs.interfaces.tls_certificates import (
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
+    chain_has_valid_order,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -60,6 +65,8 @@ from charmlibs.interfaces.tls_certificates import (
 )
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import Encoding
 from ops import CharmBase, EventBase, Object, Relation
 from ops.pebble import ConnectionError, PathError
 from ops.pebble import Error as PebbleError
@@ -89,10 +96,14 @@ from vault.vault_client import (
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+RECEIVE_CA_CERT_RELATION_NAME = "receive-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 TLS_CERTIFICATES_ACME_RELATION_NAME = "tls-certificates-acme"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
+_PEM_CERTIFICATE_PATTERN = re.compile(
+    r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", re.DOTALL
+)
 
 VAULT_CA_SUBJECT = "Vault self signed CA"
 AUTOUNSEAL_POLICY = """path "{mount}/encrypt/{key_name}" {{
@@ -121,9 +132,7 @@ _CERTIFICATE_ERROR_MESSAGES = {
     CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED: (
         "Vault PKI role rejected the requested DNS names."
     ),
-    CertificateRequestErrorCode.OTHER: (
-        "Vault PKI role rejected the certificate request."
-    ),
+    CertificateRequestErrorCode.OTHER: ("Vault PKI role rejected the certificate request."),
 }
 
 
@@ -328,6 +337,9 @@ class TLSManager(Object):
         self.email_address = email_address
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
+        self.trusted_ca_transfer = CertificateTransferRequires(
+            charm, RECEIVE_CA_CERT_RELATION_NAME
+        )
         if self.mode == TLSMode.TLS_INTEGRATION:
             self.tls_access = TLSCertificatesRequiresV4(
                 charm=charm,
@@ -336,6 +348,14 @@ class TLSManager(Object):
             )
             self.framework.observe(
                 self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_changed,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificate_set_updated,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificates_removed,
                 self._configure_tls_integration,
             )
         elif self.mode == TLSMode.SELF_SIGNED:
@@ -396,9 +416,10 @@ class TLSManager(Object):
             logger.debug("Workload is not accessible")
             return
         if self.tls_access:
-            logger.warning("TLS access relation found, skipping self signed certificate generation.")
+            logger.warning(
+                "TLS access relation found, skipping self signed certificate generation."
+            )
             return
-        workload_ca_certificate = self.pull_tls_file_from_workload(File.CA)
         try:
             secret_ca_certificate = ca_certificate = self.juju_facade.get_secret_content_values(
                 "certificate",
@@ -407,26 +428,18 @@ class TLSManager(Object):
         except NoSuchSecretError:
             secret_ca_certificate = ca_certificate = None
 
-        if self.charm.unit.is_leader():
-            if not secret_ca_certificate:
-                ca_private_key, ca_certificate = generate_vault_ca_certificate()
-                logger.info("Generated new CA certificate.")
-                self.juju_facade.set_app_secret_content(
-                    {"privatekey": ca_private_key, "certificate": ca_certificate},
-                    CA_CERTIFICATE_JUJU_SECRET_LABEL,
-                )
-        if (
-            workload_ca_certificate
-            and existing_certificate_is_self_signed(
-                ca_certificate=Certificate.from_string(workload_ca_certificate)
+        if self.charm.unit.is_leader() and not secret_ca_certificate:
+            ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            logger.info("Generated new CA certificate.")
+            self.juju_facade.set_app_secret_content(
+                {"privatekey": ca_private_key, "certificate": ca_certificate},
+                CA_CERTIFICATE_JUJU_SECRET_LABEL,
             )
-            and Certificate.from_string(workload_ca_certificate)
-            == Certificate.from_string(secret_ca_certificate)
-        ):
-            workload_unit_cert = self.pull_tls_file_from_workload(File.CERT)
-            if workload_unit_cert and self._unit_certificate_sans_match_current_request(workload_unit_cert):
-                logger.debug("Found existing self signed certificate in workload with matching attributes.")
-                return
+        if self._existing_self_signed_certificate_matches(secret_ca_certificate):
+            logger.debug(
+                "Found existing self signed certificate in workload with matching attributes."
+            )
+            return
         if not self.ca_certificate_secret_exists():
             logger.debug("No CA certificate found.")
             return
@@ -461,6 +474,22 @@ class TLSManager(Object):
         )
         self._restart_vault()
 
+    def _existing_self_signed_certificate_matches(self, secret_ca_certificate: str | None) -> bool:
+        """Return whether the workload certificates match the secret CA and current request."""
+        if not secret_ca_certificate:
+            return False
+        workload_ca_certificate = self.pull_tls_file_from_workload(File.CA)
+        if not workload_ca_certificate:
+            return False
+        ca_certificate = Certificate.from_string(workload_ca_certificate)
+        if not existing_certificate_is_self_signed(
+            ca_certificate
+        ) or ca_certificate != Certificate.from_string(secret_ca_certificate):
+            return False
+        return self._unit_certificate_sans_match_current_request(
+            self.pull_tls_file_from_workload(File.CERT)
+        )
+
     def _configure_tls_integration(self, _: EventBase) -> None:
         """Configure the charm with the TLS integration relation.
 
@@ -493,18 +522,61 @@ class TLSManager(Object):
                 self.charm.unit.name,
             )
             restart = True
-        if str(assigned_certificate.certificate) != self.pull_tls_file_from_workload(File.CERT):
-            self._push_tls_file_to_workload(File.CERT, str(assigned_certificate.certificate))
+        leaf = str(assigned_certificate.certificate)
+        certificate_chain = "\n".join(
+            dict.fromkeys(
+                [leaf]
+                + [
+                    str(certificate)
+                    for certificate in assigned_certificate.chain
+                    if not chain_has_valid_order([str(certificate), str(certificate)])
+                ]
+            )
+        )
+        if certificate_chain != self.pull_tls_file_from_workload(File.CERT):
+            self._push_tls_file_to_workload(File.CERT, certificate_chain)
             logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
             restart = True
-        if self.pull_tls_file_from_workload(File.CA) != str(assigned_certificate.ca):
-            self._push_tls_file_to_workload(File.CA, str(assigned_certificate.ca))
+        ca_bundle = self._get_ca_bundle(str(assigned_certificate.ca))
+        if self.pull_tls_file_from_workload(File.CA) != ca_bundle:
+            self._push_tls_file_to_workload(File.CA, ca_bundle)
             restart = True
         if restart:
             self._restart_vault()
+
+    def _get_ca_bundle(self, ca_certificate: str) -> str:
+        """Return transferred CAs, or the access CA when it is a root CA."""
+        trusted_cas = {cert.strip() for cert in self.trusted_ca_transfer.get_all_certificates()}
+        if chain_has_valid_order([ca_certificate, ca_certificate]):
+            trusted_cas.add(ca_certificate.strip())
+        return "\n".join(sorted(trusted_cas))
+
+    def access_certificate_requires_trusted_ca(self) -> bool:
+        """Return whether the access certificate lacks a matching trusted root CA."""
+        if self.mode != TLSMode.TLS_INTEGRATION:
+            return False
+        certificate_bundle = self.pull_tls_file_from_workload(File.CERT)
+        if not certificate_bundle:
+            return False
+        ca_bundle = self.pull_tls_file_from_workload(File.CA)
+        if not ca_bundle:
+            return True
+        try:
+            certificates = x509.load_pem_x509_certificates(certificate_bundle.encode())
+            trusted_cas = x509.load_pem_x509_certificates(ca_bundle.encode())
+        except ValueError:
+            return True
+        chain = [certificate.public_bytes(Encoding.PEM).decode() for certificate in certificates]
+        for trusted_ca in trusted_cas:
+            root = trusted_ca.public_bytes(Encoding.PEM).decode()
+            if trusted_ca.subject == trusted_ca.issuer and chain_has_valid_order(
+                [*chain, root, root]
+            ):
+                return False
+        return True
 
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
@@ -513,13 +585,14 @@ class TLSManager(Object):
             return
         try:
             ca = self.pull_tls_file_from_workload(File.CA)
+            certificates = set(_PEM_CERTIFICATE_PATTERN.findall(ca))
         except PebbleError as e:
             logger.warning("Cannot send CA certificate because workload is unavailable: %s", e)
             return
         if ca:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.add_certificates(
-                    certificates={ca}, relation_id=relation.id
+                    certificates=certificates, relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
         elif self.workload.is_accessible():
@@ -1522,7 +1595,9 @@ class PKIManager:
             return
         ca_certificate = self._get_ca_certificate()
         if not ca_certificate:
-            logger.debug("No CA certificate available for the PKI backend, cannot sign certificate requests")
+            logger.debug(
+                "No CA certificate available for the PKI backend, cannot sign certificate requests"
+            )
             return
         allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
         try:
@@ -1559,7 +1634,7 @@ class PKIManager:
         )
 
     def _report_certificate_request_error(
-        self, requirer_csr: RequirerCertificateRequest, error: VaultClientError
+        self, requirer_csr: RequirerCertificateRequest, error: PKICertificateError
     ) -> None:
         """Set certificate error for a given certificate request."""
         certificate_error = _map_vault_pki_errors(error)
@@ -1772,7 +1847,9 @@ class KVManager:
         try:
             role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
         except VaultClientError:
-            logger.warning("Failed to read role secret for %s, will re-create credentials", role_name)
+            logger.warning(
+                "Failed to read role secret for %s, will re-create credentials", role_name
+            )
             return False
         if egress_subnets == role_data["cidr_list"]:
             return True

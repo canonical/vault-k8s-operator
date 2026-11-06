@@ -52,9 +52,10 @@ class _OWASPLogger:
             event=event,
             level=str(level_name),
             description=description,
-            labels={"application": self._application, **{k: v for k, v in labels.items() if v is not None}},
+            labels={
+                "application": self._application,
+                **{k: v for k, v in labels.items() if v is not None},
+            },
         )
         payload = {NESTED_JSON_KEY: event_obj.to_dict()}
         self._logger.log(level, json.dumps(payload, ensure_ascii=False))
-
-
