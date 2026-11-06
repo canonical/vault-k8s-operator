@@ -57,6 +57,27 @@ jobs:
           echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
           echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
       - name: Run test_core integration test
+        id: main-step
+        continue-on-error: true
+        working-directory: ${{ inputs.path }}
+        run: |
+          set -o pipefail
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
+            --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
+            -k "test_core.py" 2>&1 | tee "${RUNNER_TEMP}/integration.log"
+
+      - name: Classify integration test failure
+        id: classify-failure
+        if: steps.main-step.outcome == 'failure'
+        uses: ./.github/actions/classify-intermittent-failure
+        with:
+          step-name: Run test_core integration test (K8s ARM)
+          log-path: ${{ runner.temp }}/integration.log
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Retry test_core integration test
+        if: steps.main-step.outcome == 'failure' && steps.classify-failure.outputs.retry == 'true'
         working-directory: ${{ inputs.path }}
         run: |
           tox -e integration -- \

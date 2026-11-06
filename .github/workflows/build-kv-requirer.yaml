@@ -27,9 +27,28 @@ jobs:
         run: sudo snap install charmcraft --classic --revision=8022
 
       - name: Build KV Requirer charm
+        id: main-step
+        continue-on-error: true
         working-directory: ${{ inputs.path }}
         run: |
+          set -o pipefail
           make copy-test-libs
+          charmcraft pack --verbose --project-dir tests/integration/vault_kv_requirer_operator 2>&1 | tee "${RUNNER_TEMP}/build-kv-requirer.log"
+
+      - name: Classify build failure
+        id: classify-failure
+        if: steps.main-step.outcome == 'failure'
+        uses: ./.github/actions/classify-intermittent-failure
+        with:
+          step-name: Build KV Requirer charm
+          log-path: ${{ runner.temp }}/build-kv-requirer.log
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Retry Build KV Requirer charm
+        if: steps.main-step.outcome == 'failure' && steps.classify-failure.outputs.retry == 'true'
+        working-directory: ${{ inputs.path }}
+        run: |
+          lxc --project charmcraft list --format csv -c n | xargs -r -n1 lxc --project charmcraft delete --force || true
           charmcraft pack --verbose --project-dir tests/integration/vault_kv_requirer_operator
 
       - name: Archive KV Requirer Charm
