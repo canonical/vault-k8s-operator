@@ -8,12 +8,13 @@
 import json
 import logging
 import platform
+import signal
 import socket
 import subprocess
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NamedTuple
 
 from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
@@ -45,11 +46,13 @@ from vault.vault_client import (
 )
 from vault.vault_helpers import (
     AutounsealConfiguration,
+    ConfigAction,
     allowed_domains_config_is_valid,
     ca_key_type_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
     get_ca_key_algorithm_and_size,
+    get_config_action,
     get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
@@ -92,6 +95,7 @@ LOGROTATE_DEFAULT_MAXSIZE = "10M"
 MACHINE_TLS_FILE_DIRECTORY_PATH = "/var/snap/vault/common/certs"
 METRICS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PEER_RELATION_NAME = "vault-peers"
+LEADER_NODE_API_ADDRESS_KEY = "leader_node_api_address"
 PKI_RELATION_NAME = "vault-pki"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
@@ -127,6 +131,13 @@ VAULT_SNAP_CHANNELS = {
 VAULT_SNAP_REVISION = VAULT_SNAP_REVISIONS.get(platform.machine(), "")
 VAULT_SNAP_CHANNEL_FOR_ARCH = VAULT_SNAP_CHANNELS.get(platform.machine(), "2.0/stable")
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
+
+
+class ConfigChange(NamedTuple):
+    """How the running Vault must apply a config file change, and the config it replaced."""
+
+    action: ConfigAction
+    previous_content: str
 
 
 class VaultOperatorCharm(CharmBase):
@@ -586,8 +597,8 @@ class VaultOperatorCharm(CharmBase):
         if not self._bind_address:
             event.add_status(WaitingStatus("Waiting for bind address"))
             return
-        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
+        if not self.unit.is_leader() and not self._get_leader_node_api_address():
+            event.add_status(WaitingStatus("Waiting for the leader unit to share its address"))
             return
         if self.tls.access_certificate_requires_trusted_ca():
             event.add_status(
@@ -676,23 +687,30 @@ class VaultOperatorCharm(CharmBase):
         if not self._bind_address:
             return
         if not self.juju_facade.is_leader:
-            if len(self._other_peer_node_api_addresses()) == 0:
+            if not self._get_leader_node_api_address():
                 return
             if not self.tls.ca_certificate_is_saved():
                 return
         if not self._log_level_is_valid(self._get_log_level()):
             return
-        self._generate_vault_config_file()
+        config_change = self._generate_vault_config_file()
         env_changed = self._sync_vault_environment()
 
-        if env_changed and self._vault_service_is_running():
-            self._restart_vault_service()
-        else:
-            try:
+        try:
+            service_running = self._vault_service_is_running()
+            if service_running and (env_changed or config_change.action is ConfigAction.RESTART):
+                logger.info("Restarting Vault to apply configuration changes")
+                self.machine.restart(VAULT_SNAP_NAME)
+            elif service_running and config_change.action is ConfigAction.RELOAD:
+                logger.info("Reloading Vault to apply configuration changes")
+                self.machine.send_signal(signal.SIGHUP, VAULT_SNAP_NAME)
+            else:
                 self._start_vault_service()
-            except snap.SnapError as e:
-                logger.error("Failed to start Vault service: %s", e)
-                return
+        except (snap.SnapError, OSError) as e:
+            logger.error("Failed to start or apply configuration to Vault service: %s", e)
+            if config_change.action is not ConfigAction.NONE:
+                self._push_vault_config_file(config_change.previous_content)
+            return
         self._set_peer_relation_node_api_address()
 
         unauthenticated_vault = self._get_vault_client()
@@ -1411,8 +1429,12 @@ class VaultOperatorCharm(CharmBase):
 
         return True
 
-    def _generate_vault_config_file(self) -> None:
-        """Create the Vault config file and push it to the Machine."""
+    def _generate_vault_config_file(self) -> ConfigChange:
+        """Write the Vault config file and return how the running Vault must apply it.
+
+        If the config change can't be applied yet, the previous config is kept so that a
+        later hook detects and applies the change.
+        """
         assert self._cluster_address
         assert self._api_address
         retry_joins = [
@@ -1420,7 +1442,7 @@ class VaultOperatorCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{MACHINE_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",  # noqa: E501
             }
-            for node_api_address in self._other_peer_node_api_addresses()
+            for node_api_address in self._get_raft_peer_api_addresses()
         ]
 
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
@@ -1447,13 +1469,21 @@ class VaultOperatorCharm(CharmBase):
             existing_content_stringio = self.machine.pull(path=vault_config_file_path)
             existing_content = existing_content_stringio.read()
 
-        if not config_file_content_matches(existing_content=existing_content, new_content=content):
-            self.machine.push(
-                path=vault_config_file_path,
-                source=content,
-            )
-            # If the seal type has changed, vault will be restarted by _sync_vault_environment()
-            # in configure to pick up both config and environment changes together.
+        if config_file_content_matches(existing_content=existing_content, new_content=content):
+            return ConfigChange(ConfigAction.NONE, existing_content)
+        action = ConfigAction.NONE
+        if self._vault_service_is_running():
+            try:
+                action = get_config_action(existing_content, content, self._get_vault_client())
+            except VaultClientError as e:
+                logger.warning("Vault config change will be applied later: %s", e)
+                return ConfigChange(ConfigAction.NONE, existing_content)
+        self._push_vault_config_file(content)
+        return ConfigChange(action, existing_content)
+
+    def _push_vault_config_file(self, content: str) -> None:
+        """Write the Vault config file to the machine."""
+        self.machine.push(path=f"{VAULT_CONFIG_PATH}/{VAULT_CONFIG_FILE_NAME}", source=content)
 
     def _restart_vault_service(self) -> None:
         """Restart the Vault service."""
@@ -1486,12 +1516,35 @@ class VaultOperatorCharm(CharmBase):
         )
 
     def _set_peer_relation_node_api_address(self) -> None:
-        """Set the unit address in the peer relation."""
+        """Set the unit address, and the leader address if leader, in the peer relation."""
         assert self._api_address
         self.juju_facade.set_unit_relation_data(
             data={"node_api_address": self._api_address},
             name=PEER_RELATION_NAME,
         )
+        if self.juju_facade.is_leader:
+            self.juju_facade.set_app_relation_data(
+                data={LEADER_NODE_API_ADDRESS_KEY: self._api_address},
+                name=PEER_RELATION_NAME,
+            )
+
+    def _get_leader_node_api_address(self) -> str | None:
+        """Return the address shared by the leader unit in the peer relation."""
+        return self.juju_facade.get_app_relation_data(name=PEER_RELATION_NAME).get(
+            LEADER_NODE_API_ADDRESS_KEY
+        )
+
+    def _get_raft_peer_api_addresses(self) -> List[str]:
+        """Return the addresses this unit can use to join the raft cluster.
+
+        The leader's address is always included because the cluster is initialized on the
+        leader, even if its unit address isn't shared in the peer relation yet.
+        """
+        addresses = set(self._other_peer_node_api_addresses())
+        leader_address = self._get_leader_node_api_address()
+        if leader_address and leader_address != self._api_address:
+            addresses.add(leader_address)
+        return sorted(addresses)
 
     def _get_peer_relation_node_api_addresses(self) -> List[str]:
         """Return the list of peer unit addresses."""

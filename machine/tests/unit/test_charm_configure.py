@@ -94,6 +94,7 @@ class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_vault_service_is_started(self):
         self.mock_autounseal_requires_get_details.return_value = None
         self.mock_machine.pull.return_value = StringIO("")
+        self.mock_machine.get_service.return_value = None
         vault_snap = MagicMock(spec=Snap)
         snap_cache = {"vault": vault_snap}
         self.mock_snap_cache.return_value = snap_cache
