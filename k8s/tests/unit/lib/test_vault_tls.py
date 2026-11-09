@@ -120,6 +120,7 @@ class TestCharmTLS:
             endpoint="vault-peers",
             interface="vault-peer",
             local_unit_data={"node_api_address": "http://5.2.1.9:8200"},
+            local_app_data={"leader_node_api_address": "https://1.2.3.9:8200"},
         )
         vault_container = testing.Container(
             name="vault",

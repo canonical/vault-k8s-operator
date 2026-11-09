@@ -9,6 +9,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 
 import json
 import logging
+import signal
 import socket
 from itertools import chain
 from typing import Any, Generator
@@ -52,15 +53,16 @@ from vault.vault_client import (
 )
 from vault.vault_helpers import (
     AutounsealConfiguration,
+    ConfigAction,
     allowed_domains_config_is_valid,
     ca_key_type_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
     get_ca_key_algorithm_and_size,
+    get_config_action,
     get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
-    seal_type_has_changed,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
@@ -96,6 +98,7 @@ CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
 LOG_FORWARDING_RELATION_NAME = "logging"
 PEER_RELATION_NAME = "vault-peers"
+LEADER_NODE_API_ADDRESS_KEY = "leader_node_api_address"
 PKI_MOUNT = "charm-pki"
 ACME_MOUNT = "charm-acme"
 PKI_RELATION_NAME = "vault-pki"
@@ -401,6 +404,12 @@ class VaultCharm(CharmBase):
         if not self._ingress_address:
             event.add_status(WaitingStatus("Waiting for ingress address to be available"))
             return
+        if not self.unit.is_leader() and not self._get_leader_node_api_address():
+            event.add_status(WaitingStatus("Waiting for the leader unit to share its address"))
+            return
+        if self._autounseal_details_pending():
+            event.add_status(WaitingStatus("Waiting for auto-unseal details"))
+            return
         if self.tls.access_certificate_requires_trusted_ca():
             event.add_status(
                 BlockedStatus(
@@ -501,10 +510,13 @@ class VaultCharm(CharmBase):
         # If we are not the leader, we need to wait until the leader
         # has shared its address in the peer relation to be able to
         # join the cluster.
-        if not self.juju_facade.is_leader:
-            if next(self._get_peer_relation_node_api_addresses(), None) is None:
-                logger.debug("Not leader and no peers, waiting for a peer")
-                return
+        if not self.juju_facade.is_leader and not self._get_leader_node_api_address():
+            logger.debug("Not leader and the leader has not shared its address yet")
+            return
+        # Starting without the transit seal would make Vault use the Shamir seal.
+        if self._autounseal_details_pending():
+            logger.debug("Waiting for auto-unseal details before starting Vault")
+            return
 
         self._set_peer_relation_node_api_address()
         self._generate_vault_config_file()
@@ -1085,13 +1097,17 @@ class VaultCharm(CharmBase):
         return f"https://{ingress_address}:{self.VAULT_PORT}"
 
     def _generate_vault_config_file(self) -> None:
-        """Handle the creation of the Vault config file."""
+        """Write the Vault config file and apply changes to a running Vault.
+
+        If the config change can't be applied yet, the previous config is kept so that a
+        later hook detects and applies the change.
+        """
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._get_peer_relation_node_api_addresses()
+            for node_api_address in self._get_raft_peer_api_addresses()
         ]
 
         content = render_vault_config_file(
@@ -1116,20 +1132,41 @@ class VaultCharm(CharmBase):
                 existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
                 existing_content = existing_content_stringio.read()
 
-            if not config_file_content_matches(
-                existing_content=existing_content, new_content=content
-            ):
+            if config_file_content_matches(existing_content=existing_content, new_content=content):
+                return
+            # If the plan isn't applied, the service picks up the config when it's applied.
+            if not (self._vault_service_is_running() and self._pebble_plan_is_applied()):
                 self._push_config_file_to_workload(content=content)
-                # If the seal type has changed, we need to restart Vault to apply
-                # the changes. SIGHUP is currently only supported as a beta feature
-                # for the enterprise version in Vault 1.16+
-                if seal_type_has_changed(existing_content, content):
-                    # Before restarting Vault, check if the pebble plan is applied
-                    # If the plan was not applied, the service will restart anyway when applying the new plan
-                    if self._vault_service_is_running() and self._pebble_plan_is_applied():
-                        self._container.restart(self._service_name)
+                return
+            action = get_config_action(existing_content, content, self._get_local_vault_client())
+            self._push_config_file_to_workload(content=content)
+            try:
+                self._apply_config_action(action)
+            except pebble.Error:
+                self._push_config_file_to_workload(content=existing_content)
+                raise
+        except VaultClientError as e:
+            logger.warning("Vault config change will be applied later: %s", e)
         except pebble.Error as e:
             logger.warning("Failed to configure Vault config file: %s", e)
+
+    def _apply_config_action(self, action: ConfigAction) -> None:
+        """Make the running Vault service apply its config file."""
+        if action is ConfigAction.RESTART:
+            logger.info("Restarting Vault to apply configuration changes")
+            self._container.restart(self._service_name)
+        elif action is ConfigAction.RELOAD:
+            logger.info("Reloading Vault to apply configuration changes")
+            self._container.send_signal(signal.SIGHUP, self._service_name)
+
+    def _get_local_vault_client(self) -> VaultClient | None:
+        """Return a client for this unit's Vault, or None if the CA isn't available yet."""
+        try:
+            return VaultClient(
+                url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+            )
+        except (VaultCertsError, TransientJujuError):
+            return None
 
     def _get_log_level(self) -> str:
         """Return the log level config."""
@@ -1294,12 +1331,42 @@ class VaultCharm(CharmBase):
         return layer
 
     def _set_peer_relation_node_api_address(self) -> None:
-        """Set the unit address in the peer relation."""
+        """Set the unit address, and the leader address if leader, in the peer relation."""
         assert self._api_address
         self.juju_facade.set_unit_relation_data(
             data={"node_api_address": self._api_address},
             name=PEER_RELATION_NAME,
         )
+        if self.juju_facade.is_leader:
+            self.juju_facade.set_app_relation_data(
+                data={LEADER_NODE_API_ADDRESS_KEY: self._api_address},
+                name=PEER_RELATION_NAME,
+            )
+
+    def _get_leader_node_api_address(self) -> str | None:
+        """Return the address shared by the leader unit in the peer relation."""
+        return self.juju_facade.get_app_relation_data(name=PEER_RELATION_NAME).get(
+            LEADER_NODE_API_ADDRESS_KEY
+        )
+
+    def _autounseal_details_pending(self) -> bool:
+        """Return whether the auto-unseal relation exists but its details aren't available yet."""
+        return (
+            self.juju_facade.relation_exists(AUTOUNSEAL_REQUIRES_RELATION_NAME)
+            and self.vault_autounseal_requires.get_details() is None
+        )
+
+    def _get_raft_peer_api_addresses(self) -> list[str]:
+        """Return the addresses this unit can use to join the raft cluster.
+
+        The leader's address is always included because the cluster is initialized on the
+        leader, even if its unit address isn't shared in the peer relation yet.
+        """
+        addresses = set(self._get_peer_relation_node_api_addresses())
+        if leader_address := self._get_leader_node_api_address():
+            addresses.add(leader_address)
+        addresses.discard(self._api_address)
+        return sorted(addresses)
 
     def _get_peer_relation_node_api_addresses(self) -> Generator[str, Any, Any]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
