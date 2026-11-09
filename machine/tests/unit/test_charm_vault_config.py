@@ -10,6 +10,7 @@ import hcl
 import ops.testing as testing
 import pytest
 from charms.operator_libs_linux.v2.snap import SnapError
+from ops import WaitingStatus
 from vault.vault_client import VaultClientError
 from vault.vault_helpers import ConfigAction
 
@@ -107,3 +108,33 @@ class TestCharmVaultConfig(VaultCharmFixtures):
 
         self.mock_machine.restart.assert_called_once_with("vault")
         assert self._config_writes()[-1] == EXISTING_CONFIG
+
+    @pytest.mark.parametrize("leader", [True, False])
+    def test_given_autounseal_details_not_available_when_configure_then_vault_not_configured(
+        self, leader: bool
+    ):
+        state_in = testing.State(
+            unit_status=testing.ActiveStatus(),
+            leader=leader,
+            relations=[
+                testing.PeerRelation(
+                    endpoint="vault-peers",
+                    local_app_data={"leader_node_api_address": LEADER_ADDRESS},
+                ),
+                testing.Relation(
+                    endpoint="vault-autounseal-requires", interface="vault-autounseal"
+                ),
+            ],
+            networks={
+                testing.Network(
+                    "vault-peers",
+                    bind_addresses=[testing.BindAddress([testing.Address("1.2.3.4")])],
+                )
+            },
+        )
+
+        state_out = self.ctx.run(self.ctx.on.config_changed(), state_in)
+
+        assert self._config_writes() == []
+        self.mock_snap_cache.return_value.__getitem__.return_value.start.assert_not_called()
+        assert state_out.unit_status == WaitingStatus("Waiting for auto-unseal details")

@@ -407,6 +407,9 @@ class VaultCharm(CharmBase):
         if not self.unit.is_leader() and not self._get_leader_node_api_address():
             event.add_status(WaitingStatus("Waiting for the leader unit to share its address"))
             return
+        if self._autounseal_details_pending():
+            event.add_status(WaitingStatus("Waiting for auto-unseal details"))
+            return
         if self.tls.access_certificate_requires_trusted_ca():
             event.add_status(
                 BlockedStatus(
@@ -509,6 +512,10 @@ class VaultCharm(CharmBase):
         # join the cluster.
         if not self.juju_facade.is_leader and not self._get_leader_node_api_address():
             logger.debug("Not leader and the leader has not shared its address yet")
+            return
+        # Starting without the transit seal would make Vault use the Shamir seal.
+        if self._autounseal_details_pending():
+            logger.debug("Waiting for auto-unseal details before starting Vault")
             return
 
         self._set_peer_relation_node_api_address()
@@ -1340,6 +1347,13 @@ class VaultCharm(CharmBase):
         """Return the address shared by the leader unit in the peer relation."""
         return self.juju_facade.get_app_relation_data(name=PEER_RELATION_NAME).get(
             LEADER_NODE_API_ADDRESS_KEY
+        )
+
+    def _autounseal_details_pending(self) -> bool:
+        """Return whether the auto-unseal relation exists but its details aren't available yet."""
+        return (
+            self.juju_facade.relation_exists(AUTOUNSEAL_REQUIRES_RELATION_NAME)
+            and self.vault_autounseal_requires.get_details() is None
         )
 
     def _get_raft_peer_api_addresses(self) -> list[str]:

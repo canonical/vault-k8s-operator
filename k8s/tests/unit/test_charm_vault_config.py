@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import hcl
 import ops.testing as testing
 import pytest
-from ops import pebble
+from ops import WaitingStatus, pebble
 from vault.vault_client import VaultClientError
 from vault.vault_helpers import ConfigAction
 
@@ -120,3 +120,27 @@ class TestCharmVaultConfig(VaultCharmFixtures):
 
         restart.assert_called_once()
         assert (self.config_dir / "vault.hcl").read_text() == EXISTING_CONFIG
+
+    @pytest.mark.parametrize("leader", [True, False])
+    def test_given_autounseal_details_not_available_when_configure_then_vault_not_configured(
+        self, leader: bool
+    ):
+        state_in = testing.State(
+            containers=[self.container],
+            leader=leader,
+            relations=[
+                testing.PeerRelation(
+                    endpoint="vault-peers",
+                    local_app_data={"leader_node_api_address": LEADER_ADDRESS},
+                ),
+                testing.Relation(
+                    endpoint="vault-autounseal-requires", interface="vault-autounseal"
+                ),
+            ],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.pebble_ready(self.container), state_in)
+
+        assert not (self.config_dir / "vault.hcl").exists()
+        assert list(state_out.containers)[0].layers == {}
+        assert state_out.unit_status == WaitingStatus("Waiting for auto-unseal details")
