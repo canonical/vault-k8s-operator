@@ -1,0 +1,663 @@
+# Confident model decisions select PR validation, subject to prerequisites and labels.
+#
+# Standard checks default to running; confident skips are allowed for any change with
+# complete, revision-verified evidence. Missing parent results disable reuse, not skips
+# for unrelated changes. ARM64/s390x default to skipped on PRs and require a confident
+# run decision or an explicit label. Main/release pushes always run full CI.
+# Failed or uncertain latest main results force the affected standard group to run.
+# Skipped executions do not clear earlier failures; successful reruns do.
+#
+# Ordering: proposals -> confidence policy -> main results/labels -> closure -> outputs.
+# Build labels do not force integration. ARM integration requires KV artifacts; s390x does
+# not. Downstream jobs still enforce prerequisite success and missing-output fallbacks.
+# Prompt: .github/ci/selection-prompt.txt; bump its record revision when editing it.
+# Shared request/validation and security assumptions: .github/actions/ci-model/action.yml.
+#
+# Read-only GitHub permissions do not protect the supplied model key from same-repository
+# contributors who can edit this PR orchestration. Trusted helpers alone cannot fix that
+# exposure. Fork PRs normally lack the key and run standard checks, with extra platforms
+# only when explicitly labeled.
+#
+# ci-selection-* records (including fallbacks) retain 30 days; reusable context retains
+# 5 days, subject to repository limits. Raw patches/workflows/model responses are not
+# uploaded. Join records to attempt-specific jobs by repository, run_id, run_attempt and
+# job_map. Compare decisions with outcomes and runner durations; skipped jobs are not
+# validation and cannot establish the correctness of a skip.
+# The model field is null when the classifier action reports no model identifier.
+# Validate edits with actionlint and representative runs, not a dedicated CI test framework.
+name: CI decision
+
+on:
+  workflow_call:
+    secrets:
+      OPENROUTER_API_KEY:
+        description: Dedicated, spend-limited OpenRouter key for CI decisions.
+        required: false
+    outputs:
+      shared_code:
+        value: ${{ jobs.decide.outputs.shared_code }}
+      k8s_quality:
+        value: ${{ jobs.decide.outputs.k8s_quality }}
+      machine_quality:
+        value: ${{ jobs.decide.outputs.machine_quality }}
+      k8s_build:
+        value: ${{ jobs.decide.outputs.k8s_build }}
+      machine_build:
+        value: ${{ jobs.decide.outputs.machine_build }}
+      k8s_kv:
+        value: ${{ jobs.decide.outputs.k8s_kv }}
+      machine_kv:
+        value: ${{ jobs.decide.outputs.machine_kv }}
+      k8s_integration:
+        value: ${{ jobs.decide.outputs.k8s_integration }}
+      machine_integration:
+        value: ${{ jobs.decide.outputs.machine_integration }}
+      k8s_arm:
+        value: ${{ jobs.decide.outputs.k8s_arm }}
+      machine_arm:
+        value: ${{ jobs.decide.outputs.machine_arm }}
+      k8s_s390x:
+        value: ${{ jobs.decide.outputs.k8s_s390x }}
+      machine_s390x:
+        value: ${{ jobs.decide.outputs.machine_s390x }}
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  decide:
+    name: CI decision
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      shared_code: ${{ steps.final.outputs.shared_code }}
+      k8s_quality: ${{ steps.final.outputs.k8s_quality }}
+      machine_quality: ${{ steps.final.outputs.machine_quality }}
+      k8s_build: ${{ steps.final.outputs.k8s_build }}
+      machine_build: ${{ steps.final.outputs.machine_build }}
+      k8s_kv: ${{ steps.final.outputs.k8s_kv }}
+      machine_kv: ${{ steps.final.outputs.machine_kv }}
+      k8s_integration: ${{ steps.final.outputs.k8s_integration }}
+      machine_integration: ${{ steps.final.outputs.machine_integration }}
+      k8s_arm: ${{ steps.final.outputs.k8s_arm }}
+      machine_arm: ${{ steps.final.outputs.machine_arm }}
+      k8s_s390x: ${{ steps.final.outputs.k8s_s390x }}
+      machine_s390x: ${{ steps.final.outputs.machine_s390x }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions/ci-model
+      - name: Collect revision-bound PR evidence
+        id: evidence
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const repo = context.repo;
+            const pr = context.payload.pull_request;
+            const head = pr?.head.sha || context.sha;
+            const base = pr?.base.sha || null;
+            const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+            const outputPath = path.join(process.env.RUNNER_TEMP, 'ci-selection-evidence.json');
+            const standard = ['shared_code', 'k8s_quality', 'machine_quality',
+              'k8s_integration', 'machine_integration'];
+            const record = {
+              evidence: { revisions_verified: false, complete: false, missing: [], truncated: [] },
+              reason: 'Evidence collection did not complete',
+            };
+            fs.writeFileSync(outputPath, JSON.stringify(record, null, 2));
+            let stage = 'revision verification';
+            let evidence = {};
+            let reusable = Object.fromEntries(standard.map(key => [key, false]));
+            const summarize = files => files.slice(0, 100).map(file => ({
+              path: file.filename, previous_path: file.previous_filename || null,
+              status: file.status, additions: file.additions, deletions: file.deletions,
+              patch: (file.patch || '').slice(0, 2000),
+              patch_missing: !file.patch && !(file.status === 'renamed' &&
+                file.additions === 0 && file.deletions === 0),
+              patch_truncated: (file.patch || '').length > 2000,
+            }));
+            const completeFiles = (files, count) => files.length === count &&
+              files.length < 3000 && files.every(file => file.path &&
+                (file.status !== 'renamed' || file.previous_path) &&
+                !file.patch_missing && !file.patch_truncated);
+            const verifyPR = async () => {
+              const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: pr.number });
+              if (current.state !== 'open' || current.head.sha !== head || current.base.sha !== base) {
+                throw new Error('PR head/base changed or PR closed while collecting evidence');
+              }
+              return current;
+            };
+            try {
+                const current = await verifyPR();
+                const { data: merge } = await github.rest.repos.getCommit({ ...repo, ref: context.sha });
+                if (merge.parents.length !== 2 || merge.parents[0].sha !== base ||
+                    merge.parents[1].sha !== head) throw new Error('Run merge revision does not match PR head/base');
+                record.evidence.revisions_verified = true;
+                fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'ci-validation-context.json'),
+                  JSON.stringify({ schema_version: 1, run_id: context.runId, run_attempt: attempt,
+                    head_sha: head, base_sha: base, merge_sha: context.sha, pr_number: pr.number }));
+                stage = 'PR and latest-commit evidence';
+                const files = await github.paginate(github.rest.pulls.listFiles,
+                  { ...repo, pull_number: pr.number, per_page: 100 });
+                const prFiles = summarize(files);
+                const { data: commit } = await github.rest.repos.getCommit({ ...repo, ref: head });
+                const parent = commit.parents[0]?.sha;
+                record.parent_sha = parent || null;
+                if (!parent) throw new Error('Direct parent revision is missing');
+                const { data: delta } = await github.rest.repos.compareCommits({
+                  ...repo, base: parent, head,
+                });
+                if (delta.base_commit.sha !== parent || delta.commits.length !== 1 ||
+                    delta.commits[0].sha !== head) throw new Error('Latest-commit comparison revisions mismatch');
+                const commitFiles = summarize(delta.files || []);
+                evidence = {
+                  head_sha: head, base_sha: base, direct_parent_sha: parent,
+                  pr_changed_files: prFiles, commit_changed_files: commitFiles,
+                  pr_files_omitted: Math.max(0, current.changed_files - prFiles.length),
+                  commit_files_omitted: Math.max(0, (delta.files || []).length - commitFiles.length),
+                  pr_files_expected: current.changed_files, pr_files_received: files.length,
+                  workflow_definitions: {}, parent_validation: { verified: false },
+                };
+                record.evidence.pr_changes_complete = files.length === current.changed_files &&
+                  completeFiles(prFiles, current.changed_files);
+                record.evidence.commit_changes_complete = (delta.files || []).length < 300 &&
+                  completeFiles(commitFiles, (delta.files || []).length);
+                if ((delta.files || []).length >= 300) {
+                  record.evidence.truncated.push('Latest-commit comparison reached GitHub file limit');
+                }
+                for (const [kind, changed] of [['pr', prFiles], ['commit', commitFiles]]) {
+                  if (evidence[`${kind}_files_omitted`]) record.evidence.truncated.push(`${kind}: omitted files`);
+                  for (const file of changed) {
+                    if (file.patch_missing) record.evidence.missing.push(`${kind}: ${file.path}`);
+                    if (file.patch_truncated) record.evidence.truncated.push(`${kind}: ${file.path}`);
+                  }
+                }
+                stage = 'workflow definitions';
+                let workflowsComplete = true;
+                const workflows = ['main.yaml', 'build-kv-requirer.yaml',
+                  'k8s-integration-test.yaml', 'machine-integration-test.yaml',
+                  'k8s-integration-test-arm.yaml', 'machine-integration-test-arm.yaml',
+                  'k8s-integration-test-s390x.yaml', 'machine-integration-test-s390x.yaml']
+                  .map(name => ({ ...repo, name, ref: head }));
+                // Keep this pinned reference aligned with main.yaml; changed references disable skips below.
+                workflows.push({ owner: 'canonical', repo: 'identity-credentials-workflows',
+                  name: 'charm-build.yaml', ref: 'v3.1.5' });
+                for (const workflow of workflows) {
+                  const { name, ref, owner, repo: repository } = workflow;
+                  const key = `${owner}/${repository}/${name}@${ref}`;
+                  try {
+                    const { data } = await github.rest.repos.getContent({
+                      owner, repo: repository, path: `.github/workflows/${name}`, ref,
+                    });
+                    if (data.type !== 'file' || data.encoding !== 'base64') throw new Error('Missing workflow content');
+                    const text = Buffer.from(data.content, 'base64').toString('utf8');
+                    const truncated = text.length > 24000;
+                    evidence.workflow_definitions[key] = { ref, blob_sha: data.sha,
+                      text: text.slice(0, 24000), truncated };
+                    if (name === 'main.yaml') {
+                      const builds = text.match(/uses: canonical\/identity-credentials-workflows\/\.github\/workflows\/charm-build\.yaml@\S+/g);
+                      if (builds?.length !== 6 || builds.some(line => !line.endsWith('@v3.1.5'))) {
+                        workflowsComplete = false;
+                        record.evidence.missing.push('Build workflow references changed; update evidence mapping');
+                      }
+                    }
+                    if (truncated) {
+                      workflowsComplete = false;
+                      record.evidence.truncated.push(`workflow: ${name}`);
+                    }
+                  } catch {
+                    workflowsComplete = false;
+                    record.evidence.missing.push(`workflow: ${name}`);
+                    core.warning(`Could not collect workflow ${name}; skips disabled`);
+                  }
+                }
+                // Parent results are optional evidence, never an assumed successful baseline.
+                try {
+                  const commits = await github.paginate(github.rest.pulls.listCommits,
+                    { ...repo, pull_number: pr.number, per_page: 100 });
+                  if (!commits.some(item => item.sha === parent)) throw new Error('Parent is not in this PR');
+                  const { data: runs } = await github.rest.actions.listWorkflowRuns({
+                    ...repo, workflow_id: 'main.yaml', event: 'pull_request', head_sha: parent, per_page: 20,
+                  });
+                  const run = runs.workflow_runs.find(item => item.status === 'completed' &&
+                    item.conclusion !== 'cancelled' && item.head_sha === parent &&
+                    item.pull_requests.some(item => item.number === pr.number));
+                  if (!run) throw new Error('No matching parent run');
+                  evidence.parent_validation = { verified: false, run_id: run.id, run_attempt: run.run_attempt };
+                  core.setOutput('parent_run', run.id);
+                  core.setOutput('parent_attempt', run.run_attempt);
+                } catch {
+                  reusable = Object.fromEntries(standard.map(key => [key, false]));
+                  record.evidence.missing.push('Verified parent results unavailable; parent reuse disabled');
+                  core.notice('Verified parent results unavailable; parent reuse disabled');
+                }
+                evidence.prior_validation_reusable = reusable;
+                stage = 'post-collection revision verification';
+                await verifyPR();
+                record.evidence.complete = record.evidence.pr_changes_complete &&
+                  record.evidence.commit_changes_complete && workflowsComplete;
+                evidence.completeness = record.evidence;
+                fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'ci-selection-input.json'), JSON.stringify(evidence));
+                core.setOutput('complete', record.evidence.complete);
+                record.reason = record.evidence.complete ? 'Complete revision-bound evidence collected' :
+                  'Incomplete or truncated evidence';
+            } catch (error) {
+              record.reason = `${stage} failed; standard checks required`;
+              record.evidence.failure = { stage, type: error.name };
+              if (stage.includes('revision verification')) record.evidence.revisions_verified = false;
+              record.evidence.complete = false;
+              core.setFailed(record.reason);
+            } finally {
+              record.prior_validation_reusable = reusable;
+              record.parent_validation = evidence.parent_validation || { verified: false };
+              fs.writeFileSync(outputPath, JSON.stringify(record, null, 2));
+            }
+      - name: Download parent validation context
+        id: parent-context
+        if: steps.evidence.outcome == 'success' && steps.evidence.outputs.parent_run != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.evidence.outputs.parent_run }}
+          name: ci-validation-context-${{ steps.evidence.outputs.parent_attempt }}
+          path: ${{ runner.temp }}/ci-parent-context
+      - name: Verify reusable parent results
+        id: parent
+        if: steps.parent-context.outcome == 'success'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const file = `${process.env.RUNNER_TEMP}/ci-selection-input.json`;
+            const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const recordFile = `${process.env.RUNNER_TEMP}/ci-selection-evidence.json`;
+            const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+            const reusable = { ...state.prior_validation_reusable };
+            try {
+              const contextFile = `${process.env.RUNNER_TEMP}/ci-parent-context/ci-validation-context.json`;
+              if (fs.statSync(contextFile).size > 16384) throw new Error('Oversized validation context');
+              const validation = JSON.parse(fs.readFileSync(contextFile, 'utf8'));
+              const { run_id, run_attempt } = state.parent_validation;
+              if (validation.schema_version !== 1 || validation.run_id !== run_id ||
+                  validation.run_attempt !== run_attempt || validation.head_sha !== state.direct_parent_sha ||
+                  validation.base_sha !== state.base_sha || validation.pr_number !== context.payload.pull_request.number) {
+                throw new Error('Parent context revisions do not match');
+              }
+              const { data: merge } = await github.rest.repos.getCommit({ ...context.repo, ref: validation.merge_sha });
+              if (merge.parents.length !== 2 || merge.parents[0].sha !== state.base_sha ||
+                  merge.parents[1].sha !== state.direct_parent_sha) throw new Error('Parent merge not verified');
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt,
+                { ...context.repo, run_id, attempt_number: run_attempt, per_page: 100 });
+              const successful = prefix => {
+                const matched = jobs.filter(job => prefix.endsWith(' / ') ?
+                  job.name.startsWith(prefix) : job.name === prefix);
+                return matched.length > 0 && matched.every(job =>
+                  job.status === 'completed' && job.conclusion === 'success');
+              };
+              reusable.shared_code = successful('ensure-shared-code-in-sync');
+              for (const stack of ['k8s', 'machine']) {
+                reusable[`${stack}_quality`] = reusable.shared_code && successful(
+                  stack === 'k8s' ? 'K8s Quality' : 'Machine Quality');
+                const prefix = `${stack}-integration-test / `;
+                reusable[`${stack}_integration`] = reusable[`${stack}_quality`] &&
+                  successful(`${stack}-build / `) && successful(`${stack}-build-kv-requirer / `) &&
+                  successful(prefix) && successful(`${prefix}Define Integration tests matrix`) &&
+                  successful(`${prefix}Aggregate integration test results`) &&
+                  jobs.some(job => job.name.startsWith(`${prefix}Integration Tests (`));
+              }
+              state.prior_validation_reusable = reusable;
+              state.parent_validation = { verified: true, run_id, run_attempt,
+                head_sha: state.direct_parent_sha, base_sha: state.base_sha,
+                jobs: jobs.map(({ id, name, conclusion }) => ({ id, name, conclusion })) };
+              record.prior_validation_reusable = reusable;
+              record.parent_validation = state.parent_validation;
+              fs.writeFileSync(file, JSON.stringify(state));
+              core.setOutput('reusable', reusable);
+            } catch {
+              record.evidence.missing.push('Parent context or successful results could not be verified');
+              core.setFailed('Parent validation unavailable; parent-based skips disabled');
+            } finally {
+              fs.writeFileSync(recordFile, JSON.stringify(record, null, 2));
+            }
+      - name: Collect latest main group results
+        id: main-results
+        if: steps.evidence.outcome == 'success'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const file = `${process.env.RUNNER_TEMP}/ci-selection-input.json`;
+            const recordFile = `${process.env.RUNNER_TEMP}/ci-selection-evidence.json`;
+            const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+            const groups = {
+              shared_code: 'ensure-shared-code-in-sync',
+              k8s_quality: 'K8s Quality', machine_quality: 'Machine Quality',
+              k8s_build: 'k8s-build / ', machine_build: 'machine-build / ',
+              k8s_kv: 'k8s-build-kv-requirer / ', machine_kv: 'machine-build-kv-requirer / ',
+              k8s_integration: 'k8s-integration-test / ',
+              machine_integration: 'machine-integration-test / ',
+            };
+            const results = Object.fromEntries(Object.keys(groups).map(key =>
+              [key, { conclusion: 'unknown' }]));
+            try {
+              const { data: runs } = await github.rest.actions.listWorkflowRuns({
+                ...context.repo, workflow_id: 'main.yaml', event: 'push', branch: 'main', per_page: 20,
+              });
+              for (const run of runs.workflow_runs) {
+                const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
+                  { ...context.repo, run_id: run.id, filter: 'all', per_page: 100 });
+                for (const [key, name] of Object.entries(groups)) {
+                  if (results[key].run_id) continue;
+                  const latest = new Map();
+                  for (const job of jobs) {
+                    if (job.conclusion === 'skipped' ||
+                        !(name.endsWith(' / ') ? job.name.startsWith(name) : job.name === name)) continue;
+                    if (!latest.has(job.name) || job.run_attempt > latest.get(job.name).run_attempt) {
+                      latest.set(job.name, job);
+                    }
+                  }
+                  const matched = [...latest.values()];
+                  if (!matched.length) continue;
+                  const failed = matched.some(job => ['failure', 'timed_out'].includes(job.conclusion));
+                  const integrationComplete = !key.endsWith('_integration') ||
+                    (latest.has(`${name}Define Integration tests matrix`) &&
+                     latest.has(`${name}Aggregate integration test results`) &&
+                     matched.some(job => job.name.startsWith(`${name}Integration Tests (`)));
+                  const successful = integrationComplete && matched.every(job =>
+                    job.status === 'completed' && job.conclusion === 'success');
+                  results[key] = {
+                    run_id: run.id, run_attempt: run.run_attempt, head_sha: run.head_sha,
+                    conclusion: failed ? 'failure' : successful ? 'success' : 'unknown',
+                    jobs: matched.map(({ id, name, run_attempt, status, conclusion }) =>
+                      ({ id, name, run_attempt, status, conclusion })),
+                  };
+                }
+                if (Object.values(results).every(result => result.run_id)) break;
+              }
+              const required = Object.keys(results).filter(key => results[key].conclusion !== 'success');
+              if (required.length) core.notice(`Latest main results require: ${required.join(', ')}`);
+              core.setOutput('required', required);
+            } catch {
+              core.setFailed('Could not verify latest main results; standard checks required');
+            } finally {
+              state.main_validation = record.main_validation = { branch: 'main', groups: results };
+              fs.writeFileSync(file, JSON.stringify(state));
+              fs.writeFileSync(recordFile, JSON.stringify(record, null, 2));
+            }
+      - name: Prepare selection questions
+        id: request
+        if: steps.evidence.outcome == 'success'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const prompt = fs.readFileSync('.github/ci/selection-prompt.txt', 'utf8');
+            const keys = ['shared_code', 'k8s_quality', 'machine_quality', 'k8s_integration',
+              'machine_integration', 'k8s_additional_platforms', 'machine_additional_platforms'];
+            const questions = Object.fromEntries(keys.map(key => [key, {
+              type: 'choice', instructions: `${prompt}\nDecide for ${key}.`,
+              criteria: { run: 'This check is affected or required by dependencies.',
+                skip: 'Complete evidence establishes irrelevance or verified parent reuse.',
+                unknown: 'Evidence or classification is uncertain.' },
+            }]));
+            const state = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ci-selection-input.json`, 'utf8'));
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-selection-request.json`, JSON.stringify({ questions, state }));
+      - name: Ask model which checks are needed
+        id: classify
+        if: steps.request.outcome == 'success'
+        continue-on-error: true
+        uses: ./.github/actions/ci-model
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          request-file: ${{ runner.temp }}/ci-selection-request.json
+      - name: Verify final PR revisions and labels
+        id: verify
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const expected = context.payload.pull_request;
+            core.setOutput('labels', expected.labels.map(label => label.name));
+            const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: expected.number });
+            core.setOutput('labels', current.labels.map(label => label.name));
+            if (current.state !== 'open' || current.head.sha !== expected.head.sha ||
+                current.base.sha !== expected.base.sha) {
+              core.setFailed('PR revisions changed or PR closed; skips disabled');
+              return;
+            }
+            core.setOutput('verified', true);
+      - name: Apply confidence policy
+        id: policy
+        if: >-
+          steps.classify.outcome == 'success' &&
+          steps.verify.outcome == 'success' && steps.verify.outputs.verified == 'true'
+        env:
+          DECISION_shared_code: >-
+            ${{ steps.evidence.outputs.complete == 'true' &&
+            steps.main-results.outcome == 'success' &&
+            fromJSON(steps.classify.outputs.choices || '{}').shared_code == 'skip'
+            && 'skip' || 'run' }}
+          DECISION_k8s_quality: >-
+            ${{ steps.evidence.outputs.complete == 'true' &&
+            steps.main-results.outcome == 'success' &&
+            fromJSON(steps.classify.outputs.choices || '{}').k8s_quality == 'skip'
+            && 'skip' || 'run' }}
+          DECISION_machine_quality: >-
+            ${{ steps.evidence.outputs.complete == 'true' &&
+            steps.main-results.outcome == 'success' &&
+            fromJSON(steps.classify.outputs.choices || '{}').machine_quality == 'skip'
+            && 'skip' || 'run' }}
+          DECISION_k8s_integration: >-
+            ${{ steps.evidence.outputs.complete == 'true' &&
+            steps.main-results.outcome == 'success' &&
+            fromJSON(steps.classify.outputs.choices || '{}').k8s_integration == 'skip'
+            && 'skip' || 'run' }}
+          DECISION_machine_integration: >-
+            ${{ steps.evidence.outputs.complete == 'true' &&
+            steps.main-results.outcome == 'success' &&
+            fromJSON(steps.classify.outputs.choices || '{}').machine_integration == 'skip'
+            && 'skip' || 'run' }}
+          DECISION_k8s_additional_platforms: ${{ fromJSON(steps.classify.outputs.choices || '{}').k8s_additional_platforms == 'run' && 'run' || 'skip' }}
+          DECISION_machine_additional_platforms: ${{ fromJSON(steps.classify.outputs.choices || '{}').machine_additional_platforms == 'run' && 'run' || 'skip' }}
+        # This only serializes YAML-computed values; it makes no policy decisions.
+        run: |
+          jq -nr 'env | to_entries[] | select(.key | startswith("DECISION_")) | "\(.key | ltrimstr("DECISION_"))=\(.value)"' >> "$GITHUB_OUTPUT"
+      - name: Apply main-result overrides and force-run labels
+        id: labels
+        if: always()
+        env:
+          DECISION_shared_code: >-
+            ${{ steps.policy.outputs.shared_code != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'shared_code') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-shared-code-sync') }}
+          DECISION_k8s_quality: >-
+            ${{ steps.policy.outputs.k8s_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'k8s_quality') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-k8s-quality') }}
+          DECISION_machine_quality: >-
+            ${{ steps.policy.outputs.machine_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'machine_quality') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-machine-quality') }}
+          DECISION_k8s_build: >-
+            ${{ steps.policy.outputs.k8s_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'k8s_build') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-k8s-build') }}
+          DECISION_machine_build: >-
+            ${{ steps.policy.outputs.machine_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'machine_build') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-machine-build') }}
+          DECISION_k8s_kv: >-
+            ${{ steps.policy.outputs.k8s_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'k8s_kv') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') }}
+          DECISION_machine_kv: >-
+            ${{ steps.policy.outputs.machine_quality != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'machine_kv') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') }}
+          DECISION_k8s_integration: >-
+            ${{ steps.policy.outputs.k8s_integration != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'k8s_integration') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-k8s-integration') }}
+          DECISION_machine_integration: >-
+            ${{ steps.policy.outputs.machine_integration != 'skip' ||
+            contains(fromJSON(steps.main-results.outputs.required || '[]'), 'machine_integration') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-machine-integration') }}
+          DECISION_k8s_arm: >-
+            ${{ github.event_name == 'push' || steps.policy.outputs.k8s_additional_platforms == 'run' ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'test-arm') }}
+          DECISION_machine_arm: >-
+            ${{ github.event_name == 'push' || steps.policy.outputs.machine_additional_platforms == 'run' ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'test-arm') }}
+          DECISION_k8s_s390x: >-
+            ${{ github.event_name == 'push' || steps.policy.outputs.k8s_additional_platforms == 'run' ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'test-s390x') }}
+          DECISION_machine_s390x: >-
+            ${{ github.event_name == 'push' || steps.policy.outputs.machine_additional_platforms == 'run' ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'run-all-ci') ||
+            contains(fromJSON(steps.verify.outputs.labels || '[]'), 'test-s390x') }}
+        run: |
+          jq -nr 'env | to_entries[] | select(.key | startswith("DECISION_")) | "\(.key | ltrimstr("DECISION_"))=\(.value)"' >> "$GITHUB_OUTPUT"
+      - name: Close prerequisites and publish final outputs
+        id: final
+        if: always()
+        env:
+          DECISION_shared_code: ${{ (steps.labels.outcome != 'success' || contains(toJSON(steps.labels.outputs), '"true"')) && 'run' || 'skip' }}
+          DECISION_k8s_quality: >-
+            ${{ (steps.labels.outputs.k8s_quality != 'false' || steps.labels.outputs.k8s_build != 'false' ||
+            steps.labels.outputs.k8s_kv != 'false' || steps.labels.outputs.k8s_integration != 'false' ||
+            steps.labels.outputs.k8s_arm == 'true' || steps.labels.outputs.k8s_s390x == 'true') && 'run' || 'skip' }}
+          DECISION_machine_quality: >-
+            ${{ (steps.labels.outputs.machine_quality != 'false' || steps.labels.outputs.machine_build != 'false' ||
+            steps.labels.outputs.machine_kv != 'false' || steps.labels.outputs.machine_integration != 'false' ||
+            steps.labels.outputs.machine_arm == 'true' || steps.labels.outputs.machine_s390x == 'true') && 'run' || 'skip' }}
+          DECISION_k8s_build: ${{ (steps.labels.outputs.k8s_build != 'false' || steps.labels.outputs.k8s_integration != 'false') && 'run' || 'skip' }}
+          DECISION_machine_build: ${{ (steps.labels.outputs.machine_build != 'false' || steps.labels.outputs.machine_integration != 'false') && 'run' || 'skip' }}
+          DECISION_k8s_kv: ${{ (steps.labels.outputs.k8s_kv != 'false' || steps.labels.outputs.k8s_integration != 'false' || steps.labels.outputs.k8s_arm == 'true') && 'run' || 'skip' }}
+          DECISION_machine_kv: ${{ (steps.labels.outputs.machine_kv != 'false' || steps.labels.outputs.machine_integration != 'false' || steps.labels.outputs.machine_arm == 'true') && 'run' || 'skip' }}
+          DECISION_k8s_integration: ${{ steps.labels.outputs.k8s_integration != 'false' && 'run' || 'skip' }}
+          DECISION_machine_integration: ${{ steps.labels.outputs.machine_integration != 'false' && 'run' || 'skip' }}
+          DECISION_k8s_arm: ${{ (github.event_name == 'push' || steps.labels.outputs.k8s_arm == 'true') && 'run' || 'skip' }}
+          DECISION_machine_arm: ${{ (github.event_name == 'push' || steps.labels.outputs.machine_arm == 'true') && 'run' || 'skip' }}
+          DECISION_k8s_s390x: ${{ (github.event_name == 'push' || steps.labels.outputs.k8s_s390x == 'true') && 'run' || 'skip' }}
+          DECISION_machine_s390x: ${{ (github.event_name == 'push' || steps.labels.outputs.machine_s390x == 'true') && 'run' || 'skip' }}
+        run: |
+          jq -nr 'env | to_entries[] | select(.key | startswith("DECISION_")) | "\(.key | ltrimstr("DECISION_"))=\(.value)"' >> "$GITHUB_OUTPUT"
+      - name: Record selection decisions and fallbacks
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          STEP_RESULTS: ${{ toJSON(steps) }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const steps = JSON.parse(process.env.STEP_RESULTS);
+            const file = `${process.env.RUNNER_TEMP}/ci-selection-evidence.json`;
+            const collected = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) :
+              { evidence: { complete: false }, reason: 'Evidence step unavailable' };
+            const proposed = JSON.parse(steps.classify.outputs.answers || '{}');
+            const effective = steps.final.outcome === 'success' ? steps.final.outputs :
+              'standard_checks_run_extra_platforms_follow_push_or_labels';
+            const policy = steps.policy.outputs;
+            const labels = steps.labels.outputs;
+            const policyDecision = key => policy[key] ||
+              (context.eventName === 'pull_request' && key.endsWith('_additional_platforms') ? 'skip' : 'run');
+            const mainRequired = JSON.parse(steps['main-results'].outputs.required || '[]');
+            const beforeMain = key => policyDecision(key.replace(/_(build|kv)$/, '_quality')
+              .replace(/_(arm|s390x)$/, '_additional_platforms'));
+            const beforeLabels = key => mainRequired.includes(key) ? 'run' : beforeMain(key);
+            const jobMap = { shared_code: ['ensure-shared-code-in-sync'],
+              k8s_quality: ['K8s Quality'], machine_quality: ['Machine Quality'] };
+            for (const stack of ['k8s', 'machine']) {
+              jobMap[`${stack}_build`] = [`${stack}-build / `];
+              jobMap[`${stack}_kv`] = [`${stack}-build-kv-requirer / `];
+              jobMap[`${stack}_integration`] = [`${stack}-integration-test / `];
+              for (const arch of ['arm', 's390x']) {
+                jobMap[`${stack}_${arch}`] = [`${stack}-build-${arch} / `, `${stack}-integration-test-${arch} / `];
+              }
+            }
+            const reason = context.eventName !== 'pull_request' ? 'Push events run full CI' :
+              steps.evidence.outcome !== 'success' ? collected.reason :
+              steps.request.outcome !== 'success' ? 'Model request preparation failed; standard checks required' :
+              steps.classify.outcome !== 'success' ? 'Classification failed; standard checks required' :
+              steps.verify.outcome !== 'success' ? 'Final revision verification failed; standard checks required' :
+              steps['main-results'].outcome !== 'success' ? 'Latest main results unavailable; standard checks required' :
+              !collected.evidence.complete ? 'Incomplete evidence; standard checks required' :
+              'Confidence policy, main results, labels and prerequisites applied in YAML';
+            const record = {
+              ...collected,
+              schema_version: 1, kind: 'selection', repository: `${context.repo.owner}/${context.repo.repo}`,
+              run_id: context.runId, run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              event: context.eventName, pr_number: context.payload.pull_request?.number || null,
+              head_sha: context.payload.pull_request?.head.sha || context.sha,
+              base_sha: context.payload.pull_request?.base.sha || null, merge_sha: context.sha,
+              model: steps.classify.outputs.model || null, prompt_revision: 'selection-v3',
+              proposed, effective, policy_decisions: policy, labeled_decisions: labels,
+              request_preparation: steps.request.outcome,
+              classification: steps.classify.outcome, final_revision_verification: steps.verify.outcome,
+              main_results_collection: steps['main-results'].outcome,
+              parent_context_download: steps['parent-context'].outcome, parent_verification: steps.parent.outcome,
+              outcome: context.eventName !== 'pull_request' ? 'full_ci' :
+                steps.policy.outcome === 'success' && steps.final.outcome === 'success' ? 'classified' : 'fallback',
+              reason, job_map: jobMap,
+              proposal_job_map: Object.fromEntries(Object.keys(proposed).map(key => [key,
+                key.endsWith('_additional_platforms') ?
+                  [...jobMap[`${key.split('_')[0]}_arm`], ...jobMap[`${key.split('_')[0]}_s390x`]] : jobMap[key]])),
+              active_labels: JSON.parse(steps.verify.outputs.labels || '[]'),
+              policy_overrides: Object.entries(proposed).filter(([key, answer]) => answer.choice !== policyDecision(key))
+                .map(([key, answer]) => ({ key, proposed: answer.choice, effective: policyDecision(key) })),
+              main_result_overrides: mainRequired.filter(key => beforeMain(key) === 'skip')
+                .map(key => ({ key, previous: 'skip', effective: 'run',
+                  conclusion: collected.main_validation.groups[key].conclusion })),
+              label_overrides: Object.entries(labels).filter(([key, value]) => value === 'true' && beforeLabels(key) === 'skip')
+                .map(([key]) => ({ key, previous: 'skip', effective: 'run' })),
+              prerequisite_overrides: Object.entries(steps.final.outputs).filter(([key, value]) =>
+                value === 'run' && labels[key] === 'false').map(([key]) => ({ key, previous: 'skip', effective: 'run' })),
+            };
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-selection.json`, JSON.stringify(record, null, 2));
+            await core.summary.addHeading('CI selection').addRaw(`${reason}\n`)
+              .addCodeBlock(JSON.stringify({ effective, labels: record.active_labels,
+                policy_overrides: record.policy_overrides, main_result_overrides: record.main_result_overrides,
+                label_overrides: record.label_overrides,
+                prerequisite_overrides: record.prerequisite_overrides }, null, 2), 'json').write();
+      - name: Upload selection record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-selection.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload reusable validation context
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-validation-context-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-validation-context.json
+          retention-days: 5
+          if-no-files-found: warn
