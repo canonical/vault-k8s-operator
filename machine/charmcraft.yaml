@@ -131,11 +131,17 @@ config:
     default_lease_ttl:
       type: string
       default: "168h"
-      description: Specifies the default lease duration for Vault's tokens and secrets.
+      description: >-
+        Specifies the default lease duration for Vault's tokens and secrets.
+        Changing this option restarts the Vault service, which requires Vault
+        to be unsealed again if manual unsealing is used.
     max_lease_ttl:
       type: string
       default: "720h"
-      description: Specifies the maximum possible lease duration for Vault's tokens and secrets.
+      description: >-
+        Specifies the maximum possible lease duration for Vault's tokens and secrets.
+        Changing this option restarts the Vault service, which requires Vault
+        to be unsealed again if manual unsealing is used.
     log_level:
       type: string
       default: "info"
