@@ -4,10 +4,12 @@ This repository contains the source code for the `vault-k8s` and `vault` charms.
 
 ## Common code between the Machine and K8s charms
 
-The Vault machine and K8s charms share a lot of code. The K8s charm owns this common code and you can fetch this code into the Machine charm using:
+The Vault machine and K8s charms share code. The K8s charm owns the files that are identical on both platforms. From the repository root, copy those files into the machine charm using:
 
 ```shell
 make vendor-libs
 ```
 
-This command will copy the code from the k8s charm's `lib/vault/` directory to the machine charm's `lib/vault/` directory.
+This command copies only the identical files from `k8s/lib/vault/` to `machine/lib/vault/`. The `vault_helpers.py` and `vault_managers.py` files have platform-specific behavior, including auto-unseal configuration. Port changes to those files separately.
+
+Run `make check-vendored-libs` to verify that the identical files are in sync. CI runs this check on every pull request.
