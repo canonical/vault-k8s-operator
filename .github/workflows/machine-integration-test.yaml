@@ -17,8 +17,27 @@ on:
         type: string
 
 jobs:
+  integration-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select integration suites
+        id: suites
+        run: |
+          suites="$(find '${{ inputs.path }}tests/integration' -maxdepth 1 -name 'test_*.py' -printf '%f\n' | sort | sed 's/\.py$//' | { printf 'smoke\n'; cat; } | jq -R . | jq -s -c .)"
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
   integration-tests:
+    name: Machine integration / ${{ matrix.suite }}
+    needs: [integration-matrix]
     runs-on: [self-hosted, linux, X64, jammy, xlarge]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +68,9 @@ jobs:
           provider: lxd
           lxd-channel: 5.21/stable
 
+      - name: Retry transient hook failures
+        run: juju model-defaults automatically-retry-hooks=true
+
       - name: Install UV and Tox
         run: |
           pipx uninstall tox
@@ -60,6 +82,9 @@ jobs:
           mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
           mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
           cd ${{ inputs.path }}
+          selector=(-k "${{ matrix.suite }}")
+          if [ "${{ matrix.suite }}" = smoke ]; then selector=(-m smoke); fi
           tox -e integration -- \
             --charm_path=./vault.charm \
-            --kv_requirer_charm_path=./kv-requirer.charm
+            --kv_requirer_charm_path=./kv-requirer.charm \
+            "${selector[@]}"

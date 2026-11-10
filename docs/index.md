@@ -8,20 +8,14 @@
 
 ````{grid} 1 1 2 2
 
-```{grid-item-card}
+```{grid-item-card} Tutorials
 :link: tutorial/
-
-Tutorials
-^^^
 
 **Start here**: a hands-on introduction to Vault Charms for new users
 ```
 
-```{grid-item-card}
+```{grid-item-card} How-to guides
 :link: how-to/
-
-How-to guides
-^^^
 
 **Step-by-step guides** covering key operations and common tasks
 ```
@@ -31,20 +25,14 @@ How-to guides
 
 ````{grid} 1 1 2 2
 
-```{grid-item-card}
+```{grid-item-card} Reference
 :link: reference/
-
-**Reference**
-^^^
 
 **Technical information** - specifications, APIs, architecture
 ```
 
-```{grid-item-card}
+```{grid-item-card} Explanation
 :link: explanation/
-
-Explanation
-^^^
 
 **Discussion and clarification** of key topics
 ```
