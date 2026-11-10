@@ -54,6 +54,26 @@ class MockBinding:
 
 
 class TestCharmConfigure(VaultCharmFixtures):
+    def test_given_multiple_ingress_addresses_when_initializing_tls_then_all_are_in_sans(self):
+        peer_relation = testing.PeerRelation(endpoint="vault-peers")
+        state_in = testing.State(
+            unit_status=testing.ActiveStatus(),
+            relations=[peer_relation],
+            networks={
+                testing.Network(
+                    "vault-peers",
+                    bind_addresses=[testing.BindAddress([testing.Address("1.2.1.2")])],
+                    ingress_addresses=["1.2.1.3", "1.2.1.4"],
+                )
+            },
+        )
+
+        self.ctx.run(self.ctx.on.config_changed(), state_in)
+
+        assert self.mock_tls_class.call_args.kwargs["sans_ip"] == frozenset(
+            {"1.2.1.2", "1.2.1.3", "1.2.1.4"}
+        )
+
     def test_given_leader_when_configure_then_config_file_is_pushed(self):
         self.mock_socket_fqdn.return_value = "myhostname"
         self.mock_autounseal_requires_get_details.return_value = None
@@ -224,7 +244,9 @@ class TestCharmConfigure(VaultCharmFixtures):
             ingress_address="myhostname",
         )
         relation = MockRelation(id=vault_autounseal_relation.id)
-        self.mock_autounseal_provides_get_relations_without_credentials.return_value = [relation]
+        self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = [
+            relation
+        ]
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},
@@ -303,7 +325,9 @@ class TestCharmConfigure(VaultCharmFixtures):
             ingress_address="myhostname",
         )
         relation = MockRelation(id=vault_autounseal_relation.id)
-        self.mock_autounseal_provides_get_relations_without_credentials.return_value = [relation]
+        self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = [
+            relation
+        ]
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},

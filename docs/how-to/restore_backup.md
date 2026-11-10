@@ -17,6 +17,8 @@ Once the prerequisites are in place you can run the `restore-backup` action on t
 
 `juju run vault/leader restore-backup backup-id=<backup-id> `
 
+If the S3 relation supplies a `path`, new backups are stored under that prefix and `list-backups` returns the full key. The restore action also accepts keys from older backups that were stored without the prefix.
+
 The restored Vault will be unsealed and it will require to be [unsealed](https://charmhub.io/vault-k8s/docs/h-unseal) an authorised using root token and unseal key that were in use at the time of creating the backup.
 
 ## List backups
