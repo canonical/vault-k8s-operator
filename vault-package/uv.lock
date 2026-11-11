@@ -162,6 +162,33 @@ wheels = [
 ]
 
 [[package]]
+name = "charmlibs-interfaces-certificate-transfer"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ops" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/a7/3b221eb0afe89704c79ce1be6ce3975c64a93d0af5d427a7121fdff587ee/charmlibs_interfaces_certificate_transfer-1.1.0.tar.gz", hash = "sha256:eb12e6a802191116d45582f44a46488636b119a21add990c38f839b9ace6f7f0", size = 44863, upload-time = "2026-10-16T15:02:35.588Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/e7/d599686394b6a3d6518de69fb67c43cf19751517d566f526910b8ea0a0d3/charmlibs_interfaces_certificate_transfer-1.1.0-py3-none-any.whl", hash = "sha256:4f9e9c2eba4b0c8f7aabf0d2997a765f40188f0605bd334a76f81ccba7dd7f72", size = 9276, upload-time = "2026-10-16T15:02:34.16Z" },
+]
+
+[[package]]
+name = "charmlibs-interfaces-tls-certificates"
+version = "1.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "ops" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/e0/0a5fde26b3464cbc156f90ad253239c6e838dc6ebfdf4eae99f353256ae6/charmlibs_interfaces_tls_certificates-1.12.0.tar.gz", hash = "sha256:30ea1ca8cc69c7817415ec82612e519810b271d28314e43a4da416dd2c4570ff", size = 139288, upload-time = "2026-09-29T12:47:56.16Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/1e/75c263c0a76ec5a9f7ab769209ff5440fe98b689da88f7db1fc9a13f39be/charmlibs_interfaces_tls_certificates-1.12.0-py3-none-any.whl", hash = "sha256:6fcae560314aab1190e722fcb907bea15a01444c9755ed18ada18f23625814b1", size = 34545, upload-time = "2026-09-29T12:47:54.723Z" },
+]
+
+[[package]]
 name = "charset-normalizer"
 version = "3.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -479,7 +506,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -889,7 +916,7 @@ wheels = [
 
 [[package]]
 name = "pytest"
-version = "9.0.2"
+version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -900,9 +927,9 @@ dependencies = [
     { name = "pygments" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049ddb5ce41d3a49c235bf9ad299b6a25d5780a89f19230f/pytest-9.0.2.tar.gz", hash = "sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11", size = 1568901, upload-time = "2025-12-06T21:30:51.014Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/0d/549bd94f1a0a402dc8cf64563a117c0f3765662e2e668477624baeec44d5/pytest-9.0.3.tar.gz", hash = "sha256:b86ada508af81d19edeb213c681b1d48246c1a91d304c6c81a427674c17eb91c", size = 1572165, upload-time = "2026-04-07T17:16:18.027Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/24/a372aaf5c9b7208e7112038812994107bc65a84cd00e0354a88c2c77a617/pytest-9.0.3-py3-none-any.whl", hash = "sha256:2c5efc453d45394fdd706ade797c0a81091eccd1d6e4bccfcd476e2b8e0ab5d9", size = 375249, upload-time = "2026-04-07T17:16:16.13Z" },
 ]
 
 [[package]]
@@ -1178,6 +1205,8 @@ source = { editable = "." }
 dependencies = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
+    { name = "charmlibs-interfaces-certificate-transfer" },
+    { name = "charmlibs-interfaces-tls-certificates" },
     { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },
@@ -1203,6 +1232,8 @@ test = [
 requires-dist = [
     { name = "boto3" },
     { name = "boto3-stubs", extras = ["s3"] },
+    { name = "charmlibs-interfaces-certificate-transfer" },
+    { name = "charmlibs-interfaces-tls-certificates" },
     { name = "cryptography" },
     { name = "hvac" },
     { name = "jinja2" },

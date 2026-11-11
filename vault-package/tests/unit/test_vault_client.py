@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from hvac.exceptions import Forbidden, InternalServerError
+from hvac.exceptions import Forbidden, InternalServerError, InvalidRequest
 
 from vault.vault_client import (
     AppRole,
@@ -17,6 +17,7 @@ from vault.vault_client import (
     Token,
     VaultAuthenticationError,
     VaultClient,
+    VaultClientError,
 )
 
 TEST_PATH = "./tests/unit"
@@ -378,7 +379,9 @@ def test_given_role_config_matches_given_config_when_role_config_matches_given_c
 ):
     patch_read_role.return_value = {
         "data": {
+            "key_type": "any",
             "allowed_domains": ["example.com"],
+            "allow_bare_domains": True,
             "allow_subdomains": True,
             "allow_wildcard_certificates": True,
             "allow_any_name": True,
@@ -395,6 +398,7 @@ def test_given_role_config_matches_given_config_when_role_config_matches_given_c
         role="test-role",
         mount="some/path",
         allowed_domains=["example.com"],
+        allow_bare_domains=True,
         allow_subdomains=True,
         allow_wildcard_certificates=True,
         allow_any_name=True,
@@ -564,10 +568,18 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
 ):
     patch_read_role.return_value = {
         "data": {
+            "key_type": "any",
             "allowed_domains": ["example.com"],
+            "allow_bare_domains": True,
             "allow_subdomains": True,
             "allow_wildcard_certificates": True,
             "allow_any_name": True,
+            "allow_ip_sans": True,
+            "organization": "test-organization",
+            "organizational_unit": "test-organizational-unit",
+            "country": "test-country",
+            "province": "test-province",
+            "locality": "test-locality",
         }
     }
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
@@ -575,6 +587,7 @@ def test_given_role_config_does_not_match_given_config_when_role_config_matches_
         role="test-role",
         mount="some/path",
         allowed_domains=allowed_domains,
+        allow_bare_domains=True,
         allow_subdomains=allow_subdomains,
         allow_wildcard_certificates=allow_wildcard_certificates,
         allow_any_name=allow_any_name,
@@ -611,6 +624,89 @@ def test_when_sign_pki_csr_succeeds_then_certificate_object_returned(patch_sign:
     assert certificate.chain == ["chain-pem"]
 
 
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_then_returns_certificate_and_key(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.return_value = {
+        "data": {
+            "certificate": "cert-pem",
+            "private_key": "key-pem",
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    cert, key = vault.generate_self_signed_ca(
+        mount="pki",
+        common_name="my-ca",
+        ttl="8760h",
+    )
+
+    assert cert == "cert-pem"
+    assert key == "key-pem"
+    patch_generate_root.assert_called_once_with(
+        type="exported",
+        common_name="my-ca",
+        mount_point="pki",
+        extra_params={"ttl": "8760h"},
+    )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_with_optional_params_then_extra_params_passed(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.return_value = {
+        "data": {
+            "certificate": "cert-pem",
+            "private_key": "key-pem",
+        }
+    }
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    vault.generate_self_signed_ca(
+        mount="pki",
+        common_name="my-ca",
+        ttl="8760h",
+        sans_dns=["example.com", "www.example.com"],
+        country="US",
+        province="CA",
+        locality="San Francisco",
+        organization="Test Org",
+        organizational_unit="Test Unit",
+    )
+
+    patch_generate_root.assert_called_once_with(
+        type="exported",
+        common_name="my-ca",
+        mount_point="pki",
+        extra_params={
+            "ttl": "8760h",
+            "alt_names": "example.com,www.example.com",
+            "country": "US",
+            "province": "CA",
+            "locality": "San Francisco",
+            "organization": "Test Org",
+            "organizational_unit": "Test Unit",
+        },
+    )
+
+
+@patch("hvac.api.secrets_engines.pki.Pki.generate_root")
+def test_when_generate_self_signed_ca_fails_then_vault_client_error_raised(
+    patch_generate_root: MagicMock,
+):
+    patch_generate_root.side_effect = InvalidRequest("some error")
+    vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
+
+    with pytest.raises(VaultClientError):
+        vault.generate_self_signed_ca(
+            mount="pki",
+            common_name="my-ca",
+            ttl="8760h",
+        )
+
+
 @patch("hvac.api.secrets_engines.pki.Pki.sign_certificate")
 def test_when_sign_pki_csr_denied_by_vault_then_vault_client_error_raised(
     patch_sign: MagicMock,
@@ -626,6 +722,3 @@ def test_when_sign_pki_csr_denied_by_vault_then_vault_client_error_raised(
             common_name="example.com",
             ttl="720h",
         )
-
-
-

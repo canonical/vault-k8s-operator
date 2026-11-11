@@ -58,7 +58,7 @@ where `vault a` is the Vault app which will provide the autounseal service, and
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, MutableMapping
+from typing import Any, Dict, MutableMapping
 
 from interface_tester import DataBagSchema
 from ops import (
