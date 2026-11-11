@@ -15,6 +15,8 @@ dependencies = [
     "pytest-interface-tester",  # import interface_tester
     # via tls_certificates
     "cryptography",
+    "charmlibs-interfaces-tls-certificates",
+    "charmlibs-interfaces-certificate-transfer",
 ]
 
 [dependency-groups]

@@ -6,14 +6,11 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 APP_NAME: str = METADATA["name"]
 GRAFANA_AGENT_APPLICATION_NAME = "grafana-agent"
+GRAFANA_AGENT_CHANNEL = "1/stable"
 GRAFANA_AGENT_REVISION = 606
 HAPROXY_APPLICATION_NAME = "haproxy"
 HAPROXY_REVISION = 290
 INGRESS_RELATION_NAME = "ingress"
-MINIO_APPLICATION_NAME = "minio"
-MINIO_S3_ACCESS_KEY = "vaultintegrationtest"
-MINIO_S3_SECRET_KEY = "vaultintegrationtest"
-
 MICROCEPH_S3_ACCESS_KEY = "vaultmicrocephtest"
 MICROCEPH_S3_SECRET_KEY = "vaultmicrocephtest"
 MICROCEPH_S3_BUCKET = "vault-microceph-test"
@@ -21,11 +18,14 @@ MICROCEPH_RGW_PORT = 7480
 NUM_VAULT_UNITS = 3
 PEER_RELATION_NAME = "vault-peers"
 S3_INTEGRATOR_APPLICATION_NAME = "s3-integrator"
+S3_INTEGRATOR_CHANNEL = "stable"
 S3_INTEGRATOR_REVISION = 146
 SELF_SIGNED_CERTIFICATES_APPLICATION_NAME = "self-signed-certificates"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
 SELF_SIGNED_CERTIFICATES_REVISION = 317
 VAULT_KV_REQUIRER_APPLICATION_NAME = "vault-kv-requirer"
 VAULT_PKI_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+VAULT_PKI_REQUIRER_CHANNEL = "latest/stable"
 
 VAULT_KV_LIB_DIR = "lib/charms/vault_k8s/v0/vault_kv.py"
 VAULT_KV_REQUIRER_CHARM_DIR = "tests/integration/vault_kv_requirer_operator"

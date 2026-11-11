@@ -111,6 +111,51 @@ class TestCharmConfigure(VaultCharmFixtures):
                 )
             }
 
+    def test_given_tls_access_relation_and_no_ca_secret_when_configure_then_pebble_layer_is_planned(
+        self,
+    ):
+        self.mock_autounseal_requires_get_details.return_value = None
+        self.mock_tls.ca_certificate_secret_exists.return_value = False
+        with tempfile.TemporaryDirectory() as temp_dir:
+            container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "vault-config": testing.Mount(location="/vault/config", source=temp_dir),
+                },
+            )
+            state_in = testing.State(
+                containers=[container],
+                leader=True,
+                relations=[
+                    testing.PeerRelation(endpoint="vault-peers"),
+                    testing.Relation(
+                        endpoint="tls-certificates-access",
+                        interface="tls-certificates",
+                    ),
+                ],
+            )
+
+            state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
+            assert "vault" in list(state_out.containers)[0].layers
+
+    def test_given_no_tls_access_relation_and_no_ca_secret_when_configure_then_pebble_layer_is_not_planned(
+        self,
+    ):
+        self.mock_autounseal_requires_get_details.return_value = None
+        self.mock_tls.ca_certificate_secret_exists.return_value = False
+        container = testing.Container(name="vault", can_connect=True)
+        state_in = testing.State(
+            containers=[container],
+            leader=True,
+            relations=[testing.PeerRelation(endpoint="vault-peers")],
+        )
+
+        state_out = self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
+        assert list(state_out.containers)[0].layers == {}
+
     # PKI
 
     def test_given_certificate_available_when_configure_then_pki_secrets_engine_is_configured(
