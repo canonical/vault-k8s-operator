@@ -23,10 +23,6 @@ class VaultAutounsealProviderCharm(CharmBase):
         self.framework.observe(
             self.on.set_autounseal_data_action, self._on_set_autounseal_data_action
         )
-        self.framework.observe(
-            self.on.get_relations_without_credentials_action,
-            self._on_get_relations_without_credentials_action,
-        )
 
     def _on_set_autounseal_data_action(self, event: ActionEvent):
         ca_certificate = event.params.get("ca-certificate")
@@ -56,10 +52,6 @@ class VaultAutounsealProviderCharm(CharmBase):
             approle_role_id=approle_role_id,
             approle_secret_id=approle_secret_id,
         )
-
-    def _on_get_relations_without_credentials_action(self, event: ActionEvent):
-        relations = self.interface.get_relations_without_credentials()
-        event.set_results(results={"relations": [relation.id for relation in relations]})
 
 
 class TestVaultAutounsealProvides:
@@ -104,9 +96,6 @@ class TestVaultAutounsealProvides:
                             "description": "The approle secret id",
                         },
                     },
-                },
-                "get-relations-without-credentials": {
-                    "description": "Get any relations which do not have credentials",
                 },
             },
         )
@@ -185,105 +174,6 @@ class TestVaultAutounsealProvides:
 
         assert state_out.get_relation(vault_autounseal_relation.id).local_app_data == {}
         assert len(list(state_out.secrets)) == 0
-
-    def test_given_no_request_when_get_relations_without_credentials_then_empty_list_is_returned(
-        self,
-    ):
-        state_in = testing.State(
-            relations=[],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
-        assert self.ctx.action_results
-        assert self.ctx.action_results["relations"] == []
-
-    def test_given_1_outstanding_request_when_get_relations_without_credentials_then_request_is_returned(
-        self,
-    ):
-        vault_autounseal_relation = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-            local_app_data={"address": "https://vault.example.com"},
-        )
-        state_in = testing.State(
-            relations=[vault_autounseal_relation],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
-        assert self.ctx.action_results
-        assert self.ctx.action_results["relations"] == [vault_autounseal_relation.id]
-
-    def test_given_1_outstanding_and_1_satisfied_request_when_get_relations_without_credentials_then_outstanding_request_is_returned(
-        self,
-    ):
-        vault_autounseal_relation_1_credentials_secret = testing.Secret(
-            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
-            owner="app",
-        )
-        vault_autounseal_relation_1 = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-            local_app_data={
-                "credentials_secret_id": str(vault_autounseal_relation_1_credentials_secret.id)
-            },
-        )
-        vault_autounseal_relation_2 = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-        )
-        state_in = testing.State(
-            relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
-            secrets=[vault_autounseal_relation_1_credentials_secret],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
-        assert self.ctx.action_results
-        assert self.ctx.action_results["relations"] == [vault_autounseal_relation_2.id]
-
-    def test_given_satisfied_request_when_get_relations_without_credentials_then_request_is_not_returned(
-        self,
-    ):
-        vault_autounseal_relation_credentials_secret = testing.Secret(
-            tracked_content={"role-id": "some role id", "secret-id": "some secret id"},
-            owner="app",
-        )
-        vault_autounseal_relation = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-            local_app_data={
-                "credentials_secret_id": str(vault_autounseal_relation_credentials_secret.id)
-            },
-        )
-        state_in = testing.State(
-            relations=[vault_autounseal_relation],
-            secrets=[vault_autounseal_relation_credentials_secret],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
-        assert self.ctx.action_results
-        assert self.ctx.action_results["relations"] == []
-
-    def test_given_2_requests_when_get_relations_without_credentials_then_requests_are_returned(
-        self,
-    ):
-        vault_autounseal_relation_1 = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-        )
-        vault_autounseal_relation_2 = testing.Relation(
-            endpoint="vault-autounseal-provides",
-            interface="vault-autounseal",
-        )
-        state_in = testing.State(
-            relations=[vault_autounseal_relation_1, vault_autounseal_relation_2],
-            leader=True,
-        )
-        self.ctx.run(self.ctx.on.action("get-relations-without-credentials"), state_in)
-        assert self.ctx.action_results
-        assert set(self.ctx.action_results["relations"]) == {
-            vault_autounseal_relation_1.id,
-            vault_autounseal_relation_2.id,
-        }
 
 
 class VaultAutounsealRequirerCharm(CharmBase):

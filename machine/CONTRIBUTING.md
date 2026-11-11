@@ -64,24 +64,33 @@ At this time, each integration test suite must be run separately.
 
 #### Backup tests
 
-The backup suites require MicroCeph on the test host, with its S3-compatible RGW
-endpoint listening on port `7480` and reachable from the LXD containers. Create
-an S3 user with access key and secret key `vaultmicrocephtest`, and a bucket named
-`vault-microceph-test`.
+The backup integration tests use MicroCeph's RADOS Gateway as their S3-compatible
+storage service. Install and initialize MicroCeph before running either backup suite:
 
-Follow the "Install MicroCeph and configure RGW for backup tests" step in the
-[machine integration workflow](../.github/workflows/machine-integration-test.yaml)
-to bootstrap MicroCeph, add loop-backed storage, and create the S3 user and bucket.
-Only run the bootstrap and storage setup on a dedicated test host.
+```shell
+sudo snap install microceph
+sudo microceph cluster bootstrap
+sudo microceph disk add loop,4G,3
+sudo microceph enable rgw --port 7480
+sudo microceph.radosgw-admin user create \
+  --uid=vaultmicrocephtest \
+  --display-name="Vault MicroCeph Test" \
+  --access-key=vaultmicrocephtest \
+  --secret-key=vaultmicrocephtest
+sudo apt-get install --yes s3cmd
+s3cmd --access_key=vaultmicrocephtest \
+  --secret_key=vaultmicrocephtest \
+  --host=127.0.0.1:7480 \
+  --host-bucket="127.0.0.1:7480/%(bucket)" \
+  --no-ssl \
+  mb s3://vault-microceph-test
+```
 
-The TLS backup suite (`test_backup_tls.py`) also requires `socat`:
+The backup suite also requires `socat` for its TLS scenarios:
 
 ```shell
 sudo apt-get install --yes socat
 ```
-
-The TLS suite creates a temporary self-signed certificate and proxies HTTPS on
-port `16666` to RGW, verifying the certificate using the configured CA chain.
 
 ## Build the charm
 

@@ -8,24 +8,33 @@ dependencies = [
     "ops",
     "psutil",
     "vault-package",
-    "charmlibs-interfaces-tls-certificates~=1.8",
+    "charmlibs-interfaces-tls-certificates",
+    "charmlibs-interfaces-certificate_transfer",
     # via cos_agent
     "cosl",
     # via cos_agent and tls_certificates
     "cryptography",
     # via vault_kv
     "pytest-interface-tester",
+    # Defense-in-depth: cffi 2.0.0 may also have calling-convention issues on s390x.
+    "cffi<2; platform_machine == 's390x'",
+    # cryptography >= 44 builds from source on s390x (no wheel) using Rust+aws-lc-rs;
+    # version 43.x uses cffi wrapping system OpenSSL and is confirmed to work.
+    "cryptography<44; platform_machine == 's390x'",
+    # protobuf >= 4.21 uses the upb C extension which crashes on s390x (unaligned
+    # memory access in upb_strtable_lookup2) both at import time and during interpreter
+    # shutdown. Version 4.20.x uses the older implementation that works correctly.
+    "protobuf<4.21; platform_machine == 's390x'",
 ]
 
 [dependency-groups]
 test = [
     "coverage[toml]",
     "hvac",
-    "juju",
+    "jubilant",
     "pyhcl",             # import hcl
     "pytest",
-    "pytest-dependency",
-    "pytest-operator",
+    "pytest-jubilant",
 ]
 dev = ["codespell", "pyright", "ruff"]
 
@@ -60,6 +69,13 @@ ignore = [
     "lib/charms/operator_libs_linux/",
     "lib/charms/traefik_k8s/",
     "lib/charms/vault_k8s/",
+]
+
+[tool.uv]
+# Fork resolution per platform to enforce the cffi<2 defense on s390x.
+environments = [
+    "platform_machine == 's390x'",
+    "platform_machine != 's390x'",
 ]
 
 [tool.uv.sources]

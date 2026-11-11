@@ -9,6 +9,7 @@ For more information on Vault, please visit https://www.vaultproject.io/.
 
 import json
 import logging
+import signal
 import socket
 from itertools import chain
 from typing import Any, Generator
@@ -16,6 +17,7 @@ from typing import Any, Generator
 from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     Mode,
+    ProviderCapabilities,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
 )
@@ -45,18 +47,22 @@ from vault.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
 from vault.vault_helpers import (
     AutounsealConfiguration,
+    ConfigAction,
     allowed_domains_config_is_valid,
+    ca_key_type_config_is_valid,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_ca_key_algorithm_and_size,
+    get_config_action,
     get_env_var,
     render_vault_config_file,
     sans_dns_config_is_valid,
-    seal_type_has_changed,
 )
 from vault.vault_managers import (
     TLS_CERTIFICATE_ACCESS_RELATION_NAME,
@@ -92,6 +98,7 @@ CONTAINER_TLS_FILE_DIRECTORY_PATH = "/vault/certs"
 KV_RELATION_NAME = "vault-kv"
 LOG_FORWARDING_RELATION_NAME = "logging"
 PEER_RELATION_NAME = "vault-peers"
+LEADER_NODE_API_ADDRESS_KEY = "leader_node_api_address"
 PKI_MOUNT = "charm-pki"
 ACME_MOUNT = "charm-acme"
 PKI_RELATION_NAME = "vault-pki"
@@ -132,22 +139,33 @@ class VaultCharm(CharmBase):
         self.vault_pki = TLSCertificatesProvidesV4(
             charm=self,
             relationship_name=PKI_RELATION_NAME,
+            provider_capabilities=self._get_pki_provider_capabilities(),
         )
         pki_certificate_request = self._get_pki_certificate_request()
+        pki_key_algorithm, pki_key_size = get_ca_key_algorithm_and_size(
+            self.juju_facade.get_string_config("pki_ca_key_type")
+        )
         self.tls_certificates_pki = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_PKI_RELATION_NAME,
             certificate_requests=[pki_certificate_request] if pki_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
+            key_algorithm=pki_key_algorithm,
+            key_size=pki_key_size,
         )
         acme_certificate_request = self._get_acme_certificate_request()
+        acme_key_algorithm, acme_key_size = get_ca_key_algorithm_and_size(
+            self.juju_facade.get_string_config("acme_ca_key_type")
+        )
         self.tls_certificates_acme = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name=TLS_CERTIFICATES_ACME_RELATION_NAME,
             certificate_requests=[acme_certificate_request] if acme_certificate_request else [],
             mode=Mode.APP,
             refresh_events=[self.on.config_changed],
+            key_algorithm=acme_key_algorithm,
+            key_size=acme_key_size,
         )
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
         self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
@@ -184,11 +202,8 @@ class VaultCharm(CharmBase):
                 access_sans_dns_list = []
             else:
                 access_sans_dns_list.extend([name.strip() for name in access_sans_dns.split(",")])
-        ip_addresses: set[str] = set()
-        if self._bind_address:
-            ip_addresses.add(self._bind_address)
-        if self._ingress_address:
-            ip_addresses.add(self._ingress_address)
+        ip_addresses: set[str] = set(self.juju_facade.get_bind_addresses(PEER_RELATION_NAME))
+        ip_addresses.update(self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME))
         self.tls = TLSManager(
             charm=self,
             workload=self._container,  # type: ignore[arg-type]
@@ -308,15 +323,17 @@ class VaultCharm(CharmBase):
                     )
                 )
                 return
-        if self.juju_facade.relation_exists(PKI_RELATION_NAME):
-            if not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-                event.add_status(
-                    BlockedStatus(
-                        f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
-                    )
-                )
+        pki_config_needed = self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) or self.juju_facade.relation_exists(PKI_RELATION_NAME)
+        if pki_config_needed:
+            if self.juju_facade.relation_exists(
+                TLS_CERTIFICATES_PKI_RELATION_NAME
+            ) and not ca_key_type_config_is_valid(
+                self.juju_facade.get_string_config("pki_ca_key_type")
+            ):
+                event.add_status(BlockedStatus("pki_ca_key_type config is not valid"))
                 return
-        if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("pki_ca_common_name")
             ):
@@ -343,6 +360,11 @@ class VaultCharm(CharmBase):
                 )
                 return
         if self.juju_facade.relation_exists(TLS_CERTIFICATES_ACME_RELATION_NAME):
+            if not ca_key_type_config_is_valid(
+                self.juju_facade.get_string_config("acme_ca_key_type")
+            ):
+                event.add_status(BlockedStatus("acme_ca_key_type config is not valid"))
+                return
             if not common_name_config_is_valid(
                 self.juju_facade.get_string_config("acme_ca_common_name")
             ):
@@ -382,12 +404,29 @@ class VaultCharm(CharmBase):
         if not self._ingress_address:
             event.add_status(WaitingStatus("Waiting for ingress address to be available"))
             return
+        if not self.unit.is_leader() and not self._get_leader_node_api_address():
+            event.add_status(WaitingStatus("Waiting for the leader unit to share its address"))
+            return
+        if self._autounseal_details_pending():
+            event.add_status(WaitingStatus("Waiting for auto-unseal details"))
+            return
+        if self.tls.access_certificate_requires_trusted_ca():
+            event.add_status(
+                BlockedStatus(
+                    "Access certificate requires a trusted root CA via `receive-ca-cert`"
+                )
+            )
+            return
         if not self.tls.tls_file_available_in_charm(File.CA):
             event.add_status(
                 WaitingStatus("Waiting for CA certificate to be accessible in the charm")
             )
             return
-        if not self.unit.is_leader() and not self.tls.ca_certificate_secret_exists():
+        if (
+            not self.unit.is_leader()
+            and not self._uses_tls_access_relation
+            and not self.tls.ca_certificate_secret_exists()
+        ):
             event.add_status(WaitingStatus("Waiting for CA certificate secret"))
             return
         if not self.unit.is_leader() and not self.tls.tls_file_pushed_to_workload(File.CA):
@@ -417,17 +456,28 @@ class VaultCharm(CharmBase):
                 if vault.needs_migration():
                     event.add_status(BlockedStatus("Please migrate Vault"))
                     return
+                if vault.is_seal_type_transit():
+                    event.add_status(WaitingStatus("Waiting for transit auto-unseal"))
+                    return
                 event.add_status(BlockedStatus("Please unseal Vault"))
                 return
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_approle_auth_secret():
+        if not (approle := self._get_approle_auth_secret()):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
             return
-        self._authenticate_vault_client(vault)
+        try:
+            if not vault.authenticate(approle):
+                event.add_status(WaitingStatus("Waiting for Vault to become available"))
+                return
+        except VaultAuthenticationError:
+            event.add_status(
+                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
+            )
+            return
         if not vault.is_active_or_standby():
             event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
             return
@@ -447,7 +497,7 @@ class VaultCharm(CharmBase):
             return
         if not self._ingress_address:
             return
-        if not self.tls.ca_certificate_secret_exists():
+        if not self._uses_tls_access_relation and not self.tls.ca_certificate_secret_exists():
             return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
             return
@@ -460,10 +510,13 @@ class VaultCharm(CharmBase):
         # If we are not the leader, we need to wait until the leader
         # has shared its address in the peer relation to be able to
         # join the cluster.
-        if not self.juju_facade.is_leader:
-            if next(self._get_peer_relation_node_api_addresses(), None) is None:
-                logger.debug("Not leader and no peers, waiting for a peer")
-                return
+        if not self.juju_facade.is_leader and not self._get_leader_node_api_address():
+            logger.debug("Not leader and the leader has not shared its address yet")
+            return
+        # Starting without the transit seal would make Vault use the Shamir seal.
+        if self._autounseal_details_pending():
+            logger.debug("Waiting for auto-unseal details before starting Vault")
+            return
 
         self._set_peer_relation_node_api_address()
         self._generate_vault_config_file()
@@ -480,6 +533,16 @@ class VaultCharm(CharmBase):
             return
 
         if not vault.is_available_initialized_and_unsealed():
+            try:
+                if vault.is_api_available() and vault.is_initialized() and vault.is_sealed():
+                    if vault.is_seal_type_transit():
+                        logger.info(
+                            "Vault is sealed with transit seal type, "
+                            "restarting to trigger auto-unseal"
+                        )
+                        self._container.restart(self._service_name)
+            except (VaultClientError, pebble.Error):
+                pass
             return
         if not self._authenticate_vault_client(vault):
             return
@@ -509,7 +572,7 @@ class VaultCharm(CharmBase):
         if self._vault_service_is_running():
             try:
                 self._container.stop(self._service_name)
-            except ChangeError:
+            except (ChangeError, pebble.Error):
                 logger.warning("Failed to stop Vault service")
                 pass
         self._delete_vault_data()
@@ -549,6 +612,12 @@ class VaultCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        # Pass tls_certificates_pki only if relation exists; PKIManager derives mode from this
+        tls_certificates_pki = (
+            self.tls_certificates_pki
+            if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
+            else None
+        )
         manager = PKIManager(
             charm=self,
             vault_client=vault,
@@ -556,8 +625,9 @@ class VaultCharm(CharmBase):
             mount_point=PKI_MOUNT,
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
-            tls_certificates_pki=self.tls_certificates_pki,
+            tls_certificates_pki=tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("pki_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
@@ -569,10 +639,41 @@ class VaultCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca_validity_hours=self.juju_facade.get_int_config(
+                "pki_self_signed_ca_validity"
+            )
+            or 87600,
         )
         manager.configure()
 
+    def _get_pki_provider_capabilities(self) -> ProviderCapabilities | None:
+        """Build the capabilities advertised to `vault-pki` requirers.
+
+        Returns None when PKI is not configured (no common name), so requirers
+        see the capabilities as unavailable rather than an assumed default.
+        """
+        common_name = self.juju_facade.get_string_config("pki_ca_common_name")
+        if not common_name_config_is_valid(common_name):
+            return None
+        return PKIManager.build_provider_capabilities(
+            common_name=common_name,
+            allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
+            allow_wildcard_certificates=self.juju_facade.get_bool_config(
+                "pki_allow_wildcard_certificates"
+            ),
+            allow_any_name=self.juju_facade.get_bool_config("pki_allow_any_name"),
+            allow_ip_sans=self.juju_facade.get_bool_config("pki_allow_ip_sans"),
+        )
+
     def _get_pki_certificate_request(self) -> CertificateRequestAttributes | None:
+        if self.juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ) and not ca_key_type_config_is_valid(
+            self.juju_facade.get_string_config("pki_ca_key_type")
+        ):
+            logger.warning("pki_ca_key_type is not valid")
+            return None
         common_name = self.juju_facade.get_string_config("pki_ca_common_name")
         if not common_name:
             logger.warning("pki_ca_common_name is not set in the charm config")
@@ -610,6 +711,9 @@ class VaultCharm(CharmBase):
         )
 
     def _get_acme_certificate_request(self) -> CertificateRequestAttributes | None:
+        if not ca_key_type_config_is_valid(self.juju_facade.get_string_config("acme_ca_key_type")):
+            logger.warning("acme_ca_key_type is not valid")
+            return None
         common_name = self.juju_facade.get_string_config("acme_ca_common_name")
         if not common_name:
             logger.warning("acme_ca_common_name is not set in the charm config")
@@ -678,6 +782,7 @@ class VaultCharm(CharmBase):
             role_name=ACME_ROLE_NAME,
             vault_address=f"https://{self._ingress_address}:{self.VAULT_PORT}",
             allowed_domains=self.juju_facade.get_string_config("acme_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("acme_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("acme_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "acme_allow_wildcard_certificates"
@@ -704,14 +809,12 @@ class VaultCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        relations_without_credentials = (
-            self.vault_autounseal_provides.get_relations_without_credentials()
-        )
-        if relations_without_credentials:
+        outstanding_relations = autounseal_provider_manager.get_outstanding_requests()
+        if outstanding_relations:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in relations_without_credentials:
+        for relation in outstanding_relations:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
@@ -734,6 +837,12 @@ class VaultCharm(CharmBase):
         certificate_request = self._get_pki_certificate_request()
         if not certificate_request:
             return
+        # Pass tls_certificates_pki only if relation exists; PKIManager derives mode from this
+        tls_certificates_pki = (
+            self.tls_certificates_pki
+            if self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME)
+            else None
+        )
         manager = PKIManager(
             charm=self,
             vault_client=vault,
@@ -741,8 +850,9 @@ class VaultCharm(CharmBase):
             mount_point=PKI_MOUNT,
             role_name=PKI_ROLE_NAME,
             vault_pki=self.vault_pki,
-            tls_certificates_pki=self.tls_certificates_pki,
+            tls_certificates_pki=tls_certificates_pki,
             allowed_domains=self.juju_facade.get_string_config("pki_allowed_domains"),
+            allow_bare_domains=self.juju_facade.get_bool_config("pki_allow_bare_domains"),
             allow_subdomains=self.juju_facade.get_bool_config("pki_allow_subdomains"),
             allow_wildcard_certificates=self.juju_facade.get_bool_config(
                 "pki_allow_wildcard_certificates"
@@ -754,6 +864,10 @@ class VaultCharm(CharmBase):
             country=self.juju_facade.get_string_config("pki_country"),
             province=self.juju_facade.get_string_config("pki_province"),
             locality=self.juju_facade.get_string_config("pki_locality"),
+            self_signed_ca_validity_hours=self.juju_facade.get_int_config(
+                "pki_self_signed_ca_validity"
+            )
+            or 87600,
         )
         manager.sync()
 
@@ -784,6 +898,10 @@ class VaultCharm(CharmBase):
             )
 
     def _on_authorize_charm_action(self, event: ActionEvent) -> None:
+        """Handle the authorize-charm action.
+
+        Grants the charm access to interact with Vault
+        """
         if not self.unit.is_leader():
             event.fail("This action must be run on the leader unit.")
             return
@@ -805,7 +923,14 @@ class VaultCharm(CharmBase):
             )
             return
         vault = VaultClient(self._api_address, self.tls.get_tls_file_path_in_charm(File.CA))
-        if not vault.authenticate(Token(token)):
+        try:
+            if not vault.authenticate(Token(token)):
+                logger.error("The token provided is not valid when authorizing charm.")
+                event.fail(
+                    "The token provided is not valid. Please use a Vault token with the appropriate permissions."
+                )
+                return
+        except VaultAuthenticationError:
             logger.error("The token provided is not valid when authorizing charm.")
             event.fail(
                 "The token provided is not valid. Please use a Vault token with the appropriate permissions."
@@ -938,24 +1063,27 @@ class VaultCharm(CharmBase):
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/vault.db")
             logger.info("Removed Vault's main database")
-        except ValueError:
+        except (ValueError, pebble.Error):
             logger.info("No Vault database to remove")
         try:
             self._container.remove_path(path=f"{VAULT_STORAGE_PATH}/raft/raft.db")
             logger.info("Removed Vault's Raft database")
-        except ValueError:
+        except (ValueError, pebble.Error):
             logger.info("No Vault raft database to remove")
 
     def _vault_service_is_running(self) -> bool:
         """Check if the vault service is running."""
         try:
             return self._container.get_service(service_name=self._service_name).is_running()
-        except ModelError:
+        except (ModelError, pebble.Error):
             return False
 
     def _pebble_plan_is_applied(self) -> bool:
         """Check if the pebble plan is applied."""
-        plan = self._container.get_plan()
+        try:
+            plan = self._container.get_plan()
+        except pebble.Error:
+            return False
         layer = self._vault_layer
         return plan.services == layer.services
 
@@ -969,13 +1097,17 @@ class VaultCharm(CharmBase):
         return f"https://{ingress_address}:{self.VAULT_PORT}"
 
     def _generate_vault_config_file(self) -> None:
-        """Handle the creation of the Vault config file."""
+        """Write the Vault config file and apply changes to a running Vault.
+
+        If the config change can't be applied yet, the previous config is kept so that a
+        later hook detects and applies the change.
+        """
         retry_joins = [
             {
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{CONTAINER_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",
             }
-            for node_api_address in self._get_peer_relation_node_api_addresses()
+            for node_api_address in self._get_raft_peer_api_addresses()
         ]
 
         content = render_vault_config_file(
@@ -995,20 +1127,46 @@ class VaultCharm(CharmBase):
             log_level=self._get_log_level(),
         )
         existing_content = ""
-        if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
-            existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
-            existing_content = existing_content_stringio.read()
+        try:
+            if self._container.exists(path=VAULT_CONFIG_FILE_PATH):
+                existing_content_stringio = self._container.pull(path=VAULT_CONFIG_FILE_PATH)
+                existing_content = existing_content_stringio.read()
 
-        if not config_file_content_matches(existing_content=existing_content, new_content=content):
+            if config_file_content_matches(existing_content=existing_content, new_content=content):
+                return
+            # If the plan isn't applied, the service picks up the config when it's applied.
+            if not (self._vault_service_is_running() and self._pebble_plan_is_applied()):
+                self._push_config_file_to_workload(content=content)
+                return
+            action = get_config_action(existing_content, content, self._get_local_vault_client())
             self._push_config_file_to_workload(content=content)
-            # If the seal type has changed, we need to restart Vault to apply
-            # the changes. SIGHUP is currently only supported as a beta feature
-            # for the enterprise version in Vault 1.16+
-            if seal_type_has_changed(existing_content, content):
-                # Before restarting Vault, check if the pebble plan is applied
-                # If the plan was not applied, the service will restart anyway when applying the new plan
-                if self._vault_service_is_running() and self._pebble_plan_is_applied():
-                    self._container.restart(self._service_name)
+            try:
+                self._apply_config_action(action)
+            except pebble.Error:
+                self._push_config_file_to_workload(content=existing_content)
+                raise
+        except VaultClientError as e:
+            logger.warning("Vault config change will be applied later: %s", e)
+        except pebble.Error as e:
+            logger.warning("Failed to configure Vault config file: %s", e)
+
+    def _apply_config_action(self, action: ConfigAction) -> None:
+        """Make the running Vault service apply its config file."""
+        if action is ConfigAction.RESTART:
+            logger.info("Restarting Vault to apply configuration changes")
+            self._container.restart(self._service_name)
+        elif action is ConfigAction.RELOAD:
+            logger.info("Reloading Vault to apply configuration changes")
+            self._container.send_signal(signal.SIGHUP, self._service_name)
+
+    def _get_local_vault_client(self) -> VaultClient | None:
+        """Return a client for this unit's Vault, or None if the CA isn't available yet."""
+        try:
+            return VaultClient(
+                url=self._api_address, ca_cert_path=self.tls.get_tls_file_path_in_charm(File.CA)
+            )
+        except (VaultCertsError, TransientJujuError):
+            return None
 
     def _get_log_level(self) -> str:
         """Return the log level config."""
@@ -1059,7 +1217,7 @@ class VaultCharm(CharmBase):
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL, refresh=True
             )
         except NoSuchSecretError:
             logger.warning("Approle secret not yet created")
@@ -1068,12 +1226,15 @@ class VaultCharm(CharmBase):
 
     def _set_pebble_plan(self) -> None:
         """Set the pebble plan if different from the currently applied one."""
-        plan: pebble.Plan = self._container.get_plan()
-        layer = self._vault_layer
-        if plan.services != layer.services:
-            self._container.add_layer(self._container_name, layer, combine=True)
-            self._container.replan()
-            logger.info("Pebble layer added")
+        try:
+            plan: pebble.Plan = self._container.get_plan()
+            layer = self._vault_layer
+            if plan.services != layer.services:
+                self._container.add_layer(self._container_name, layer, combine=True)
+                self._container.replan()
+                logger.info("Pebble layer added")
+        except pebble.Error as e:
+            logger.warning("Failed to set Pebble plan: %s", e)
 
     def _get_active_vault_client(self) -> VaultClient | None:
         """Return a client for the _active_ vault service.
@@ -1104,13 +1265,28 @@ class VaultCharm(CharmBase):
         """
         if not (approle := self._get_approle_auth_secret()):
             return False
-        if not vault.authenticate(approle):
+        try:
+            if not vault.authenticate(approle):
+                return False
+        except VaultAuthenticationError:
+            logger.warning(
+                "Vault rejected the charm's credentials. "
+                "Removing stored credentials to prevent lockout."
+            )
+            self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             return False
         return True
 
     @property
     def _juju_proxy_environment(self) -> dict[str, str]:
-        """Extract proxy model environment variables."""
+        """Extract proxy model environment variables.
+
+        When any HTTP or HTTPS proxy is configured, `.svc.cluster.local` is
+        always included in NO_PROXY so that internal Kubernetes pod-to-pod
+        traffic (e.g. Vault raft cluster join requests using pod FQDNs) is
+        never routed through a corporate proxy.
+        """
+        cluster_local_domain = ".svc.cluster.local"
         env = {}
 
         if http_proxy := get_env_var("JUJU_CHARM_HTTP_PROXY"):
@@ -1119,6 +1295,14 @@ class VaultCharm(CharmBase):
             env["HTTPS_PROXY"] = https_proxy
         if no_proxy := get_env_var("JUJU_CHARM_NO_PROXY"):
             env["NO_PROXY"] = no_proxy
+
+        if env.get("HTTP_PROXY") or env.get("HTTPS_PROXY"):
+            no_proxy_value = env.get("NO_PROXY", "")
+            no_proxy_entries = [e.strip() for e in no_proxy_value.split(",") if e.strip()]
+            if cluster_local_domain not in no_proxy_entries:
+                no_proxy_entries.append(cluster_local_domain)
+            env["NO_PROXY"] = ",".join(no_proxy_entries)
+
         return env
 
     @property
@@ -1147,12 +1331,42 @@ class VaultCharm(CharmBase):
         return layer
 
     def _set_peer_relation_node_api_address(self) -> None:
-        """Set the unit address in the peer relation."""
+        """Set the unit address, and the leader address if leader, in the peer relation."""
         assert self._api_address
         self.juju_facade.set_unit_relation_data(
             data={"node_api_address": self._api_address},
             name=PEER_RELATION_NAME,
         )
+        if self.juju_facade.is_leader:
+            self.juju_facade.set_app_relation_data(
+                data={LEADER_NODE_API_ADDRESS_KEY: self._api_address},
+                name=PEER_RELATION_NAME,
+            )
+
+    def _get_leader_node_api_address(self) -> str | None:
+        """Return the address shared by the leader unit in the peer relation."""
+        return self.juju_facade.get_app_relation_data(name=PEER_RELATION_NAME).get(
+            LEADER_NODE_API_ADDRESS_KEY
+        )
+
+    def _autounseal_details_pending(self) -> bool:
+        """Return whether the auto-unseal relation exists but its details aren't available yet."""
+        return (
+            self.juju_facade.relation_exists(AUTOUNSEAL_REQUIRES_RELATION_NAME)
+            and self.vault_autounseal_requires.get_details() is None
+        )
+
+    def _get_raft_peer_api_addresses(self) -> list[str]:
+        """Return the addresses this unit can use to join the raft cluster.
+
+        The leader's address is always included because the cluster is initialized on the
+        leader, even if its unit address isn't shared in the peer relation yet.
+        """
+        addresses = set(self._get_peer_relation_node_api_addresses())
+        if leader_address := self._get_leader_node_api_address():
+            addresses.add(leader_address)
+        addresses.discard(self._api_address)
+        return sorted(addresses)
 
     def _get_peer_relation_node_api_addresses(self) -> Generator[str, Any, Any]:
         """Return a list of unit addresses that should be a part of the raft cluster."""
@@ -1204,6 +1418,11 @@ class VaultCharm(CharmBase):
             str: Ingress address
         """
         return self.juju_facade.get_ingress_address(PEER_RELATION_NAME)
+
+    @property
+    def _uses_tls_access_relation(self) -> bool:
+        """Return whether TLS certificates come from the access relation instead of a self-signed CA."""
+        return self.juju_facade.relation_exists(TLS_CERTIFICATE_ACCESS_RELATION_NAME)
 
 
 if __name__ == "__main__":  # pragma: no cover
