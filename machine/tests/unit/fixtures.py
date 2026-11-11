@@ -30,6 +30,7 @@ class VaultCharmFixtures(VaultCharmFixturesBase):
             )
             self.mock_snap_cache = stack.enter_context(patch("charm.snap.SnapCache"))
             self.mock_systemd_creds = stack.enter_context(patch("charm.SystemdCreds"))
+            self.mock_logrotate_path = stack.enter_context(patch("charm.LOGROTATE_PATH"))
             yield
 
     @pytest.fixture(autouse=True)

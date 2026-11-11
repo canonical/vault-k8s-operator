@@ -2,6 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import os
 import tempfile
 from datetime import timedelta
@@ -18,16 +19,62 @@ from charmlibs.interfaces.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from ops.model import ActiveStatus, WaitingStatus
+from ops.pebble import ConnectionError as PebbleConnectionError
 from vault.vault_managers import CA_CERTIFICATE_JUJU_SECRET_LABEL
 
 from charm import VAULT_CHARM_APPROLE_SECRET_LABEL, VaultCharm
 
 TLS_CERTIFICATES_LIB_PATH_V3 = "charms.tls_certificates_interface.v3.tls_certificates"
 TLS_CERTIFICATES_LIB_PATH_V4 = "charmlibs.interfaces.tls_certificates"
-CERTIFICATE_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
+CERTIFICATE_TRANSFER_LIB_PATH = "charmlibs.interfaces.certificate_transfer"
 VAULT_MANAGERS_PATH = "vault.vault_managers"
 VAULT_CA_SUBJECT = "Vault self signed CA"
+
+
+def _generate_intermediate_chain():
+    """Return a root CA, an intermediate CA it signed, and a leaf cert + key from the intermediate."""
+    root_key = generate_private_key()
+    root_ca = generate_ca(common_name="root", private_key=root_key, validity=timedelta(days=365))
+    intermediate_key = generate_private_key()
+    intermediate_ca = generate_certificate(
+        csr=generate_csr(private_key=intermediate_key, common_name="intermediate"),
+        ca=root_ca,
+        ca_private_key=root_key,
+        validity=timedelta(days=365),
+        is_ca=True,
+    )
+    leaf_key = generate_private_key()
+    leaf = generate_certificate(
+        csr=generate_csr(private_key=leaf_key, common_name="my.domain"),
+        ca=intermediate_ca,
+        ca_private_key=intermediate_key,
+        validity=timedelta(days=365),
+    )
+    parsed_leaf = x509.load_pem_x509_certificate(str(leaf).encode())
+    parsed_intermediate = x509.load_pem_x509_certificate(str(intermediate_ca).encode())
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(parsed_leaf.subject)
+        .issuer_name(parsed_intermediate.subject)
+        .public_key(parsed_leaf.public_key())
+        .serial_number(parsed_leaf.serial_number)
+        .not_valid_before(parsed_leaf.not_valid_before_utc)
+        .not_valid_after(parsed_leaf.not_valid_after_utc)
+    )
+    for extension in parsed_leaf.extensions:
+        builder = builder.add_extension(extension.value, critical=extension.critical)
+    signing_key = serialization.load_pem_private_key(str(intermediate_key).encode(), password=None)
+    assert isinstance(signing_key, rsa.RSAPrivateKey)
+    leaf = Certificate.from_string(
+        builder.sign(signing_key, hashes.SHA256())
+        .public_bytes(serialization.Encoding.PEM)
+        .decode()
+    )
+    return root_ca, intermediate_ca, leaf, leaf_key
 
 
 class TestCharmTLS:
@@ -73,6 +120,7 @@ class TestCharmTLS:
             endpoint="vault-peers",
             interface="vault-peer",
             local_unit_data={"node_api_address": "http://5.2.1.9:8200"},
+            local_app_data={"leader_node_api_address": "https://1.2.3.9:8200"},
         )
         vault_container = testing.Container(
             name="vault",
@@ -92,6 +140,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -156,6 +205,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -232,6 +282,93 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
+    @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_raft_cluster_healthy", new=Mock)
+    def test_given_dual_stack_bind_and_ingress_addresses_when_relation_changed_then_all_ip_sans_are_included(
+        self,
+    ):
+        self.mock_get_assigned_certificate.return_value = None, None
+        ingress_address = "1.2.3.4"
+        ipv6_ingress_address = "2001:db8::2"
+        bind_ipv4 = "192.0.2.1"
+        bind_ipv6 = "2001:db8::1"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            certificates_relation = testing.Relation(
+                endpoint="tls-certificates-access",
+                interface="tls-certificates",
+                remote_app_name="some-tls-provider",
+            )
+            peer_relation = testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
+            )
+            certs_mount = testing.Mount(
+                location="/vault/certs",
+                source=temp_dir,
+            )
+            config_mount = testing.Mount(
+                location="/vault/config",
+                source=temp_dir,
+            )
+            vault_container = testing.Container(
+                name="vault",
+                can_connect=True,
+                mounts={
+                    "certs": certs_mount,
+                    "config": config_mount,
+                },
+            )
+            certs_storage = testing.Storage(
+                name="certs",
+            )
+            config_storage = testing.Storage(
+                name="config",
+            )
+            state_in = testing.State(
+                containers=[vault_container],
+                relations=[certificates_relation, peer_relation],
+                storages=[certs_storage, config_storage],
+                leader=True,
+                networks={
+                    testing.Network(
+                        "vault-peers",
+                        bind_addresses=[
+                            testing.BindAddress(
+                                [testing.Address(bind_ipv4), testing.Address(bind_ipv6)]
+                            )
+                        ],
+                        ingress_addresses=[ingress_address, ipv6_ingress_address],
+                    )
+                },
+            )
+
+            self.ctx.run(self.ctx.on.relation_changed(certificates_relation), state_in)
+
+            self.mock_get_assigned_certificate.assert_called_once_with(
+                certificate_request=CertificateRequestAttributes(
+                    common_name=ingress_address,
+                    sans_dns=frozenset({self.fqdn}),
+                    sans_ip=frozenset(
+                        {ingress_address, ipv6_ingress_address, bind_ipv4, bind_ipv6}
+                    ),
+                    sans_oid=frozenset(),
+                    email_address=None,
+                    organization=None,
+                    organizational_unit=None,
+                    country_name=None,
+                    state_or_province_name=None,
+                    locality_name=None,
+                    is_ca=False,
+                )
+            )
+
+    @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -317,6 +454,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -400,8 +538,127 @@ class TestCharmTLS:
             assert open(ca_cert_path).read() == str(ca_certificate)
             assert open(cert_path).read() == str(certificate)
 
+    def _tls_access_state(
+        self, temp_dir: str, receive_ca_relation: testing.Relation | None = None
+    ) -> tuple[testing.State, testing.Relation]:
+        access_relation = testing.Relation(
+            endpoint="tls-certificates-access",
+            interface="tls-certificates",
+            remote_app_name="intermediate-ca",
+        )
+        mounts = {
+            "certs": testing.Mount(location="/vault/certs", source=temp_dir),
+            "config": testing.Mount(location="/vault/config", source=temp_dir),
+        }
+        relations = [
+            testing.PeerRelation(
+                endpoint="vault-peers",
+                interface="vault-peer",
+                local_unit_data={"node_api_address": "http://1.2.3.4"},
+            ),
+            access_relation,
+        ]
+        if receive_ca_relation:
+            relations.append(receive_ca_relation)
+        state = testing.State(
+            containers=[testing.Container(name="vault", can_connect=True, mounts=mounts)],
+            storages=[testing.Storage(name="certs"), testing.Storage(name="config")],
+            leader=True,
+            relations=relations,
+        )
+        return state, access_relation
+
+    @pytest.mark.parametrize("received_ca", ["missing", "unrelated", "matching", "removed"])
+    def test_given_intermediate_access_certificate_when_configured_then_chain_and_trust_are_separate(
+        self,
+        received_ca: str,
+    ):
+        root_ca, intermediate_ca, leaf, leaf_key = _generate_intermediate_chain()
+        trusted_ca = (
+            root_ca
+            if received_ca == "matching"
+            else generate_ca(
+                common_name="root",
+                private_key=generate_private_key(),
+                validity=timedelta(days=365),
+            )
+        )
+        receive_ca_relation = None
+        if received_ca not in {"missing", "removed"}:
+            receive_ca_relation = testing.Relation(
+                endpoint="receive-ca-cert",
+                interface="certificate_transfer",
+                remote_app_name="root-ca",
+                remote_app_data={"certificates": json.dumps([str(trusted_ca)]), "version": "1"},
+            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            if received_ca == "removed":
+                with open(temp_dir + "/ca.pem", "w") as ca_file:
+                    ca_file.write(str(root_ca))
+            state_in, access_relation = self._tls_access_state(temp_dir, receive_ca_relation)
+            self.mock_get_assigned_certificate.return_value = (
+                ProviderCertificate(
+                    certificate_signing_request=generate_csr(
+                        private_key=leaf_key, common_name="my.domain"
+                    ),
+                    relation_id=access_relation.id,
+                    certificate=leaf,
+                    ca=intermediate_ca,
+                    chain=[leaf, intermediate_ca, root_ca],
+                    revoked=False,
+                ),
+                leaf_key,
+            )
+
+            with self.ctx(
+                self.ctx.on.relation_changed(receive_ca_relation or access_relation), state_in
+            ) as manager:
+                manager.run()
+                assert manager.charm.tls.access_certificate_requires_trusted_ca() == (
+                    received_ca != "matching"
+                )
+
+            with open(temp_dir + "/cert.pem") as cert_file:
+                assert cert_file.read() == f"{leaf}\n{intermediate_ca}"
+            if receive_ca_relation:
+                with open(temp_dir + "/ca.pem") as ca_file:
+                    assert ca_file.read() == str(trusted_ca)
+            elif received_ca == "removed":
+                with open(temp_dir + "/ca.pem") as ca_file:
+                    assert ca_file.read() == ""
+            else:
+                assert not os.path.exists(temp_dir + "/ca.pem")
+
+    @pytest.mark.parametrize("ca_content", ["intermediate", "invalid"])
+    def test_given_no_trusted_root_when_checking_access_certificate_then_ca_required(
+        self, ca_content: str
+    ):
+        _, intermediate_ca, leaf, _ = _generate_intermediate_chain()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(temp_dir + "/ca.pem", "w") as ca_file:
+                ca_file.write(str(intermediate_ca) if ca_content == "intermediate" else "invalid")
+            with open(temp_dir + "/cert.pem", "w") as cert_file:
+                cert_file.write(f"{leaf}\n{intermediate_ca}")
+            state_in, _ = self._tls_access_state(temp_dir)
+
+            with self.ctx(self.ctx.on.update_status(), state_in) as manager:
+                assert manager.charm.tls.access_certificate_requires_trusted_ca()
+
+    def test_given_matching_root_ca_when_checking_access_certificate_then_no_ca_required(self):
+        root_ca, intermediate_ca, leaf, _ = _generate_intermediate_chain()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(temp_dir + "/ca.pem", "w") as ca_file:
+                ca_file.write(str(root_ca))
+            with open(temp_dir + "/cert.pem", "w") as cert_file:
+                cert_file.write(f"{leaf}\n{intermediate_ca}")
+            state_in, _ = self._tls_access_state(temp_dir)
+
+            with self.ctx(self.ctx.on.update_status(), state_in) as manager:
+                assert not manager.charm.tls.access_certificate_requires_trusted_ca()
+
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -477,6 +734,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -573,6 +831,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -670,6 +929,7 @@ class TestCharmTLS:
 
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
@@ -783,12 +1043,13 @@ class TestCharmTLS:
     ):
         is_api_available.return_value = True
         is_sealed.return_value = False
+        root_ca, intermediate_ca, _, _ = _generate_intermediate_chain()
         with tempfile.TemporaryDirectory() as temp_dir:
             # Write the CA cert to the temp dir
             ca_cert_path = temp_dir + "/ca.pem"
             cert_path = temp_dir + "/cert.pem"
             with open(ca_cert_path, "w") as f:
-                f.write("some ca")
+                f.write(f"{intermediate_ca}\n{root_ca}")
             with open(cert_path, "w") as f:
                 f.write("some cert")
             peer_relation = testing.PeerRelation(
@@ -844,7 +1105,7 @@ class TestCharmTLS:
             self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
 
             add_certificates.assert_called_once_with(
-                certificates={"some ca"},
+                certificates={str(intermediate_ca), str(root_ca)},
                 relation_id=cert_transfer_relation.id,
             )
 
@@ -904,8 +1165,40 @@ class TestCharmTLS:
 
             add_certificates.assert_not_called()
 
+    @patch("container.Container.pull")
+    def test_given_pebble_connection_drops_when_certificate_transfer_relation_joins_then_hook_does_not_fail(
+        self, container_pull: MagicMock
+    ):
+        container_pull.side_effect = PebbleConnectionError("Pebble unavailable")
+        cert_transfer_relation = testing.Relation(
+            endpoint="send-ca-cert",
+            interface="certificate_transfer",
+            remote_app_name="whatever",
+        )
+        vault_container = testing.Container(name="vault", can_connect=True)
+        state_in = testing.State(
+            containers=[vault_container],
+            relations=[cert_transfer_relation],
+        )
+
+        self.ctx.run(self.ctx.on.relation_joined(cert_transfer_relation), state_in)
+
+        container_pull.assert_called_once()
+
+    @patch(f"{VAULT_MANAGERS_PATH}.TLSManager.pull_tls_file_from_workload")
+    def test_given_pebble_is_unavailable_when_update_status_runs_then_ca_transfer_is_skipped(
+        self, pull_tls_file_from_workload: MagicMock
+    ):
+        vault_container = testing.Container(name="vault", can_connect=False)
+        state_in = testing.State(containers=[vault_container])
+
+        self.ctx.run(self.ctx.on.update_status(), state_in)
+
+        pull_tls_file_from_workload.assert_not_called()
+
     @patch("vault.vault_client.VaultClient.enable_audit_device", new=Mock)
     @patch("vault.vault_client.VaultClient.is_active", new=Mock)
+    @patch("vault.vault_client.VaultClient.is_seal_type_transit", new=Mock(return_value=False))
     @patch("vault.vault_client.VaultClient.is_sealed", new=Mock)
     @patch("vault.vault_client.VaultClient.is_initialized", new=Mock)
     @patch("vault.vault_client.VaultClient.is_api_available", new=Mock)
