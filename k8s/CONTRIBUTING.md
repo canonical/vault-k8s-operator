@@ -32,7 +32,7 @@ tox run -e format        # update your code according to linting rules
 tox run -e lint          # code style
 tox run -e static        # static type checking
 tox run -e unit          # unit tests
-tox                      # runs 'format', 'lint', 'static', and 'unit' environments
+tox                      # runs 'lint', 'static', and 'unit' without editing files
 ```
 
 ### Running the integration tests locally
@@ -40,7 +40,7 @@ tox                      # runs 'format', 'lint', 'static', and 'unit' environme
 To run the integration tests locally, you will need to have a Juju controller
 on `microk8s` active.
 
-First, you need to build the `vault-k8s` charm, as well as the test `vault-kv-requirer` charm. From the project root, run the following commands:
+First, build the `vault-k8s` charm from the `k8s/` directory. Build the test `vault-kv-requirer` charm when running the full suite or KV tests:
 
 ```shell
 charmcraft pack
@@ -52,6 +52,14 @@ Then, you can run the integration tests with:
 ```shell
 tox -e integration -- --charm_path ./vault-k8s_ubuntu-22.04-amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_ubuntu-22.04-amd64.charm
 ```
+
+Run only the deploy, initialize, unseal, and authorize smoke test with:
+
+```shell
+tox -e integration -- -m smoke --charm_path ./vault-k8s_ubuntu-22.04-amd64.charm
+```
+
+To work on one behavior, replace `-m smoke` with a selector such as `-k test_pki_tls`. The integration files cover core behavior, KV, PKI and TLS, backup, COS, auto-unseal, and in-track upgrades. CI runs each file independently.
 
 ## Build the charm
 

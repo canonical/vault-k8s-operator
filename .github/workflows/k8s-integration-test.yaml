@@ -17,8 +17,27 @@ on:
         type: string
 
 jobs:
+  integration-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select integration suites
+        id: suites
+        run: |
+          suites="$(find '${{ inputs.path }}tests/integration' -maxdepth 1 -name 'test_*.py' -printf '%f\n' | sort | sed 's/\.py$//' | { printf 'smoke\n'; cat; } | jq -R . | jq -s -c .)"
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
   integration-test:
+    name: K8s integration / ${{ matrix.suite }}
+    needs: [integration-matrix]
     runs-on: [self-hosted, linux, X64, xlarge, jammy]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
 
     steps:
       - name: Checkout
@@ -73,45 +92,65 @@ jobs:
           mv ${{ steps.charm-path.outputs.charm_path }} ${{ inputs.path }}vault.charm
           mv ${{ steps.kv-requirer-charm-path.outputs.charm_path }} ${{ inputs.path }}kv-requirer.charm
           cd ${{ inputs.path }}
+          selector=(-k "${{ matrix.suite }}")
+          if [ "${{ matrix.suite }}" = smoke ]; then selector=(-m smoke); fi
           tox -e integration -- \
             --charm_path=./vault.charm \
             --kv_requirer_charm_path=./kv-requirer.charm \
-            --alluredir allure-results
+            --alluredir allure-results \
+            "${selector[@]}"
 
-      - name: Load test report history
-        uses: actions/checkout@v4
-        if: always()
-        continue-on-error: true
-        with:
-          ref: gh-pages
-          path: gh-pages
-
-      - name: Build test report
-        uses: simple-elf/allure-report-action@v1.13
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          gh_pages: gh-pages
-          allure_history: allure-history
-          allure_results: allure-results
-
-      - name: Publish test report
-        uses: peaceiris/actions-gh-pages@v4
-        if: always()
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: allure-history
+          name: allure-results-${{ strategy.job-index }}
+          path: ${{ inputs.path }}allure-results
 
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: charmcraft-logs
+          name: charmcraft-logs-${{ strategy.job-index }}
           path: /home/runner/.local/state/charmcraft/log/*.log
 
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: juju-crashdump
-          path: juju-crashdump-*.tar.xz
+          name: juju-crashdump-${{ strategy.job-index }}
+          path: ${{ inputs.path }}juju-crashdump-*.tar.xz
+
+  aggregate-integration-results:
+    runs-on: ubuntu-latest
+    needs: [integration-test]
+    if: always()
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
+      - name: Load test report history
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+      - name: Build test report
+        uses: simple-elf/allure-report-action@v1.13
+        continue-on-error: true
+        with:
+          gh_pages: gh-pages
+          allure_history: allure-history
+          allure_results: allure-results
+      - name: Publish test report
+        uses: peaceiris/actions-gh-pages@v4
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+      - name: Check integration results
+        run: test '${{ needs.integration-test.result }}' = success
