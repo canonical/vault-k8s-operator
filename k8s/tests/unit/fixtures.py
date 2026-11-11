@@ -70,6 +70,9 @@ class VaultCharmFixtures:
             self.mock_vault_autounseal_provider_manager = (
                 mock_autounseal_provider_manager.return_value
             )
+            self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = []
+            self.mock_vault.is_seal_type_transit.return_value = False
+            self.mock_tls.access_certificate_requires_trusted_ca.return_value = False
             self.mock_vault_autounseal_requirer_manager = (
                 mock_autounseal_requirer_manager.return_value
             )

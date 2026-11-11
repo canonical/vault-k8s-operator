@@ -7,10 +7,11 @@
 
 import json
 import logging
+import signal
 import socket
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NamedTuple
 
 from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -44,14 +45,16 @@ from vault.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
 from vault.vault_helpers import (
+    ConfigAction,
     common_name_config_is_valid,
     config_file_content_matches,
+    get_config_action,
     render_vault_config_file,
-    seal_type_has_changed,
 )
 from vault.vault_managers import (
     AutounsealConfigurationDetails,
@@ -82,6 +85,7 @@ KV_SECRET_PREFIX = "kv-creds-"
 MACHINE_TLS_FILE_DIRECTORY_PATH = "/var/snap/vault/common/certs"
 METRICS_ALERT_RULES_PATH = "./src/prometheus_alert_rules"
 PEER_RELATION_NAME = "vault-peers"
+LEADER_NODE_API_ADDRESS_KEY = "leader_node_api_address"
 PKI_RELATION_NAME = "vault-pki"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
@@ -103,6 +107,13 @@ VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 INGRESS_RELATION_NAME = "ingress"
 
 
+class ConfigChange(NamedTuple):
+    """Action needed to apply a config change and the previous file content."""
+
+    action: ConfigAction
+    previous_content: str
+
+
 class VaultOperatorCharm(CharmBase):
     """Machine Charm for Vault."""
 
@@ -119,6 +130,9 @@ class VaultOperatorCharm(CharmBase):
             dashboard_dirs=["./src/grafana_dashboards"],
             metrics_rules_dir=METRICS_ALERT_RULES_PATH,
         )
+        ip_addresses = set(self.juju_facade.get_ingress_addresses(PEER_RELATION_NAME))
+        if self._bind_address:
+            ip_addresses.add(self._bind_address)
         self.tls = TLSManager(
             charm=self,
             workload=self.machine,
@@ -126,7 +140,7 @@ class VaultOperatorCharm(CharmBase):
             tls_directory_path=MACHINE_TLS_FILE_DIRECTORY_PATH,
             common_name=self._bind_address if self._bind_address else "",
             sans_dns=frozenset([socket.getfqdn()]),
-            sans_ip=frozenset([self._bind_address] if self._bind_address else []),
+            sans_ip=frozenset(ip_addresses),
         )
         self.vault_kv = VaultKvProvides(self, KV_RELATION_NAME)
         self.vault_pki = TLSCertificatesProvidesV4(
@@ -171,6 +185,7 @@ class VaultOperatorCharm(CharmBase):
             self.vault_autounseal_requires.on.vault_autounseal_provider_relation_broken,
             self.tls_certificates_pki.on.certificate_available,
             self.on.tls_certificates_pki_relation_joined,
+            self.on.vault_pki_relation_changed,
             self.vault_kv.on.new_vault_kv_client_attached,
         ]
         for event in configure_events:
@@ -207,7 +222,11 @@ class VaultOperatorCharm(CharmBase):
                     return None
                 if not (approle := self._get_vault_approle_secret()):
                     return None
-                if not vault.authenticate(approle):
+                try:
+                    if not vault.authenticate(approle):
+                        return None
+                except VaultAuthenticationError:
+                    self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
                     return None
                 return vault
         return None
@@ -230,7 +249,11 @@ class VaultOperatorCharm(CharmBase):
         approle = self._get_vault_approle_secret()
         if not approle:
             return None
-        if not vault.authenticate(approle):
+        try:
+            if not vault.authenticate(approle):
+                return None
+        except VaultAuthenticationError:
+            self.juju_facade.remove_secret(label=VAULT_CHARM_APPROLE_SECRET_LABEL)
             return None
         if not vault.is_active_or_standby():
             return None
@@ -253,14 +276,12 @@ class VaultOperatorCharm(CharmBase):
             ca_cert=self.tls.pull_tls_file_from_workload(File.CA),
             mount_path=AUTOUNSEAL_MOUNT_PATH,
         )
-        relations_without_credentials = (
-            self.vault_autounseal_provides.get_relations_without_credentials()
-        )
-        if relations_without_credentials:
+        outstanding_relations = autounseal_provider_manager.get_outstanding_requests()
+        if outstanding_relations:
             vault_client.enable_secrets_engine(
                 SecretsBackend.TRANSIT, autounseal_provider_manager.mount_path
             )
-        for relation in relations_without_credentials:
+        for relation in outstanding_relations:
             relation_address = self._get_relation_api_address(relation)
             if not relation_address:
                 logger.warning("Relation address not found for relation %s", relation.id)
@@ -336,7 +357,11 @@ class VaultOperatorCharm(CharmBase):
             logger.warning("Failed to initialize the Vault client when authorizing charm")
             event.fail("Failed to initialize the Vault client")
             return
-        if not vault.authenticate(Token(token)):
+        try:
+            authenticated = vault.authenticate(Token(token))
+        except VaultAuthenticationError:
+            authenticated = False
+        if not authenticated:
             logger.warning("Failed to authenticate with Vault when authorizing charm")
             event.fail("Failed to authenticate with Vault")
             return
@@ -398,6 +423,15 @@ class VaultOperatorCharm(CharmBase):
     def _on_collect_status(self, event: CollectStatusEvent):  # noqa: C901
         """Handle the collect status event."""
         if self.juju_facade.relation_exists(
+            PKI_RELATION_NAME
+        ) and not self.juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+            event.add_status(
+                BlockedStatus(
+                    f"{TLS_CERTIFICATES_PKI_RELATION_NAME} relation is missing, cannot configure PKI secrets engine"
+                )
+            )
+            return
+        if self.juju_facade.relation_exists(
             TLS_CERTIFICATES_PKI_RELATION_NAME
         ) and not common_name_config_is_valid(self.juju_facade.get_string_config("common_name")):
             event.add_status(
@@ -413,8 +447,18 @@ class VaultOperatorCharm(CharmBase):
         if not self._bind_address:
             event.add_status(WaitingStatus("Waiting for bind address"))
             return
-        if not self.unit.is_leader() and len(self._other_peer_node_api_addresses()) == 0:
-            event.add_status(WaitingStatus("Waiting for other units to provide their addresses"))
+        if not self.unit.is_leader() and not self._get_leader_node_api_address():
+            event.add_status(WaitingStatus("Waiting for the leader unit to share its address"))
+            return
+        if self._autounseal_details_pending():
+            event.add_status(WaitingStatus("Waiting for auto-unseal details"))
+            return
+        if self.tls.access_certificate_requires_trusted_ca():
+            event.add_status(
+                BlockedStatus(
+                    "Access certificate requires a trusted root CA via `receive-ca-cert`"
+                )
+            )
             return
         if not self.tls.tls_file_pushed_to_workload(File.CA):
             event.add_status(WaitingStatus("Waiting for CA certificate in workload"))
@@ -449,15 +493,30 @@ class VaultOperatorCharm(CharmBase):
                 if vault.needs_migration():
                     event.add_status(BlockedStatus("Please migrate Vault"))
                     return
+                if vault.is_seal_type_transit():
+                    event.add_status(WaitingStatus("Waiting for transit auto-unseal"))
+                    return
                 event.add_status(BlockedStatus("Please unseal Vault"))
                 return
         except VaultClientError:
             event.add_status(MaintenanceStatus("Seal check failed, waiting for Vault to recover"))
             return
-        if not self._get_vault_approle_secret():
+        if not (approle := self._get_vault_approle_secret()):
             event.add_status(
                 BlockedStatus("Please authorize charm (see `authorize-charm` action)")
             )
+            return
+        try:
+            if not vault.authenticate(approle):
+                event.add_status(WaitingStatus("Waiting for Vault to become available"))
+                return
+        except VaultAuthenticationError:
+            event.add_status(
+                BlockedStatus("Please authorize charm (see `authorize-charm` action)")
+            )
+            return
+        if not vault.is_active_or_standby():
+            event.add_status(WaitingStatus("Waiting for vault to finish raft leader election"))
             return
         event.add_status(ActiveStatus())
 
@@ -480,17 +539,42 @@ class VaultOperatorCharm(CharmBase):
         if not self._bind_address:
             return
         if not self.juju_facade.is_leader:
-            if len(self._other_peer_node_api_addresses()) == 0:
+            if not self._get_leader_node_api_address():
                 return
             if not self.tls.ca_certificate_is_saved():
                 return
-        self._generate_vault_config_file()
+        if self._autounseal_details_pending():
+            return
+        config_change = self._generate_vault_config_file()
         try:
-            self._start_vault_service()
-        except snap.SnapError as e:
-            logger.error("Failed to start Vault service: %s", e)
+            if self._vault_service_is_running():
+                if config_change.action is ConfigAction.RESTART:
+                    self.machine.restart(VAULT_SNAP_NAME)
+                elif config_change.action is ConfigAction.RELOAD:
+                    self.machine.send_signal(signal.SIGHUP, VAULT_SNAP_NAME)
+            else:
+                self._start_vault_service()
+        except (snap.SnapError, OSError) as e:
+            logger.error("Failed to apply Vault configuration: %s", e)
+            if config_change.action is not ConfigAction.NONE:
+                self._push_vault_config_file(config_change.previous_content)
             return
         self._set_peer_relation_node_api_address()
+
+        unauthenticated_vault = self._get_vault_client()
+        if unauthenticated_vault:
+            try:
+                if (
+                    unauthenticated_vault.is_api_available()
+                    and unauthenticated_vault.is_initialized()
+                    and unauthenticated_vault.is_sealed()
+                    and unauthenticated_vault.is_seal_type_transit()
+                ):
+                    logger.info("Restarting sealed Vault to trigger transit auto-unseal")
+                    self.machine.restart(VAULT_SNAP_NAME)
+                    return
+            except VaultClientError:
+                pass
 
         vault = self._get_authenticated_vault_client()
         if not vault:
@@ -623,7 +707,10 @@ class VaultOperatorCharm(CharmBase):
         except VaultClientError as e:
             logger.error("Can't remove node from cluster - Vault status check failed: %s", e)
             return
-        vault.authenticate(approle)
+        try:
+            vault.authenticate(approle)
+        except VaultAuthenticationError:
+            return
         if vault.is_node_in_raft_peers(id=self._node_id) and vault.get_num_raft_peers() > 1:
             vault.remove_raft_node(id=self._node_id)
 
@@ -763,7 +850,7 @@ class VaultOperatorCharm(CharmBase):
         """
         try:
             role_id, secret_id = self.juju_facade.get_secret_content_values(
-                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL
+                "role-id", "secret-id", label=VAULT_CHARM_APPROLE_SECRET_LABEL, refresh=True
             )
         except NoSuchSecretError:
             logger.warning("Apprle secret not yet created")
@@ -803,8 +890,8 @@ class VaultOperatorCharm(CharmBase):
         vault_snap.start(services=["vaultd"])
         logger.debug("Vault service started")
 
-    def _generate_vault_config_file(self) -> None:
-        """Create the Vault config file and push it to the Machine."""
+    def _generate_vault_config_file(self) -> ConfigChange:
+        """Write the Vault config and return how a running service should apply it."""
         assert self._cluster_address
         assert self._api_address
         retry_joins = [
@@ -812,7 +899,7 @@ class VaultOperatorCharm(CharmBase):
                 "leader_api_addr": node_api_address,
                 "leader_ca_cert_file": f"{MACHINE_TLS_FILE_DIRECTORY_PATH}/{File.CA.name.lower()}.pem",  # noqa: E501
             }
-            for node_api_address in self._other_peer_node_api_addresses()
+            for node_api_address in self._get_raft_peer_api_addresses()
         ]
 
         autounseal_configuration_details = self._get_vault_autounseal_configuration()
@@ -838,17 +925,20 @@ class VaultOperatorCharm(CharmBase):
             existing_content_stringio = self.machine.pull(path=vault_config_file_path)
             existing_content = existing_content_stringio.read()
 
-        if not config_file_content_matches(existing_content=existing_content, new_content=content):
-            self.machine.push(
-                path=vault_config_file_path,
-                source=content,
-            )
-            # If the seal type has changed, we need to restart Vault to apply
-            # the changes. SIGHUP is currently only supported as a beta feature
-            # for the enterprise version in Vault 1.16+
-            if seal_type_has_changed(existing_content, content):
-                if self._vault_service_is_running():
-                    self.machine.restart(VAULT_SNAP_NAME)
+        if config_file_content_matches(existing_content=existing_content, new_content=content):
+            return ConfigChange(ConfigAction.NONE, existing_content)
+        action = ConfigAction.NONE
+        if self._vault_service_is_running():
+            try:
+                action = get_config_action(existing_content, content, self._get_vault_client())
+            except VaultClientError as e:
+                logger.warning("Vault config change will be applied later: %s", e)
+                return ConfigChange(ConfigAction.NONE, existing_content)
+        self._push_vault_config_file(content)
+        return ConfigChange(action, existing_content)
+
+    def _push_vault_config_file(self, content: str) -> None:
+        self.machine.push(path=f"{VAULT_CONFIG_PATH}/{VAULT_CONFIG_FILE_NAME}", source=content)
 
     def _get_vault_autounseal_configuration(self) -> AutounsealConfigurationDetails | None:
         autounseal_relation_details = self.vault_autounseal_requires.get_details()
@@ -876,6 +966,30 @@ class VaultOperatorCharm(CharmBase):
             data={"node_api_address": self._api_address},
             name=PEER_RELATION_NAME,
         )
+        if self.juju_facade.is_leader:
+            self.juju_facade.set_app_relation_data(
+                data={LEADER_NODE_API_ADDRESS_KEY: self._api_address}, name=PEER_RELATION_NAME
+            )
+
+    def _get_leader_node_api_address(self) -> str | None:
+        """Return the leader address shared in the peer relation."""
+        return self.juju_facade.get_app_relation_data(name=PEER_RELATION_NAME).get(
+            LEADER_NODE_API_ADDRESS_KEY
+        )
+
+    def _autounseal_details_pending(self) -> bool:
+        return (
+            self.juju_facade.relation_exists(AUTOUNSEAL_REQUIRES_RELATION_NAME)
+            and self.vault_autounseal_requires.get_details() is None
+        )
+
+    def _get_raft_peer_api_addresses(self) -> List[str]:
+        addresses = set(self._other_peer_node_api_addresses())
+        if leader_address := self._get_leader_node_api_address():
+            addresses.add(leader_address)
+        if self._api_address:
+            addresses.discard(self._api_address)
+        return sorted(addresses)
 
     def _get_peer_relation_node_api_addresses(self) -> List[str]:
         """Return the list of peer unit addresses."""

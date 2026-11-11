@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,7 @@ from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import (
     AuthMethod,
     SecretsBackend,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
@@ -47,6 +49,26 @@ def is_error_logged(caplog: pytest.LogCaptureFixture, error_message: str):
 
 
 class TestAutounsealRequirerManager:
+    @patch("vault.vault_managers.VaultClient")
+    @patch("vault.vault_managers.JujuFacade")
+    def test_rejected_stored_token_is_replaced_after_restore(
+        self, juju_facade_mock: MagicMock, vault_client_mock: MagicMock
+    ):
+        juju_facade_mock.return_value.get_secret_content_values.return_value = ("stale-token",)
+        juju_facade_mock.return_value.is_leader = True
+        vault = vault_client_mock.return_value
+        vault.authenticate.side_effect = [VaultAuthenticationError("rejected"), True]
+        vault.token = "replacement-token"
+        details = AutounsealDetails("https://provider", "transit", "key", "role", "secret", "ca")
+
+        token = AutounsealRequirerManager(MagicMock(), MagicMock()).get_provider_vault_token(
+            details, "/ca.pem"
+        )
+
+        assert token == "replacement-token"
+        assert vault.authenticate.call_count == 2
+        juju_facade_mock.return_value.set_app_secret_content.assert_called_once()
+
     @pytest.mark.parametrize(
         "token, token_valid, expected_token",
         [
@@ -98,6 +120,22 @@ class TestAutounsealRequirerManager:
 
 
 class TestAutounsealProviderManager:
+    @patch("vault.vault_managers.JujuFacade")
+    def test_stale_role_secret_is_requested_again(self, juju_facade_mock: MagicMock):
+        relation = MagicMock()
+        relation.id = 7
+        facade = juju_facade_mock.return_value
+        facade.get_active_relations.return_value = [relation]
+        facade.get_app_relation_data.return_value = {"credentials_secret_id": "secret:7"}
+        facade.get_secret_content_values.return_value = ("role-id", "stale-secret-id")
+        vault = MagicMock(spec=VaultClient)
+        vault.read_role_secret.side_effect = VaultClientError("not found")
+        manager = AutounsealProviderManager(
+            MagicMock(), vault, MagicMock(), "ca", AUTOUNSEAL_MOUNT_PATH
+        )
+
+        assert manager.get_outstanding_requests() == [relation]
+
     def test_when_create_credentials_then_vault_client_called_and_key_name_and_credentials_are_returned(
         self,
     ):
@@ -558,6 +596,41 @@ class TestBackupManager:
 
         self.manager = BackupManager(self.charm, self.s3_requirer, "s3-relation")
 
+    def test_backup_uses_path_prefix_and_temporary_s3_ca_bundle(self):
+        parameters = self.s3_requirer.get_s3_connection_info.return_value
+        parameters["path"] = "/vault/backups/"
+        parameters["tls-ca-chain"] = ["first CA", "second CA"]
+        self.s3.create_bucket.return_value = True
+        observed: dict[str, str] = {}
+
+        def inspect_s3(**kwargs: str | None) -> MagicMock:
+            ca_path = kwargs["ca_cert_path"]
+            assert ca_path
+            with open(ca_path) as ca_file:
+                observed["bundle"] = ca_file.read()
+            observed["path"] = ca_path
+            return self.s3
+
+        self.s3_class.side_effect = inspect_s3
+        backup_key = self.manager.create_backup(self.vault_client)
+
+        assert backup_key.startswith("vault/backups/vault-backup-my-model-")
+        assert self.s3.upload_content.call_args.kwargs["key"] == backup_key
+        assert observed["bundle"] == "first CA\nsecond CA"
+        assert not os.path.exists(observed["path"])
+
+    def test_restore_accepts_old_unprefixed_backup_key(self):
+        self.s3_requirer.get_s3_connection_info.return_value["path"] = "vault/backups"
+        self.s3.get_content.side_effect = [None, "snapshot content"]
+
+        self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
+
+        assert [call.kwargs["object_key"] for call in self.s3.get_content.call_args_list] == [
+            "vault/backups/vault-backup-my-model-1",
+            "vault-backup-my-model-1",
+        ]
+        self.vault_client.restore_snapshot.assert_called_once_with(snapshot="snapshot content")
+
     def test_given_non_leader_when_create_backup_then_error_raised(self):
         self.juju_facade.is_leader = False
         with pytest.raises(ManagerError) as e:
@@ -712,7 +785,9 @@ class TestBackupManager:
         self.s3.get_content.return_value = None
         with pytest.raises(ManagerError) as e:
             self.manager.restore_backup(self.vault_client, "vault-backup-my-model-1")
-        assert str(e.value) == "Snapshot not found in S3 bucket"
+        assert (
+            str(e.value) == "Snapshot not found in S3 bucket. (my-bucket/vault-backup-my-model-1)"
+        )
 
     def test_given_vault_client_fails_to_restore_snapshot_when_restore_backup_then_error_raised(
         self,

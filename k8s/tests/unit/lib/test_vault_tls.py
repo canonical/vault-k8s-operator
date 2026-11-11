@@ -39,6 +39,7 @@ class TestCharmTLS:
                 f"{TLS_CERTIFICATES_LIB_PATH_V4}.TLSCertificatesRequiresV4.get_assigned_certificate"
             ) as self.mock_get_assigned_certificate,
             patch("socket.getfqdn") as self.mock_get_fqdn,
+            patch("vault.vault_client.VaultClient.is_seal_type_transit", return_value=False),
         ):
             self.mock_get_fqdn.return_value = self.fqdn
             yield
@@ -53,6 +54,7 @@ class TestCharmTLS:
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
             interface="vault-peer",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
             peers_data={
                 0: {"node_api_address": "http://5.2.1.9:8200"},
             },
@@ -209,7 +211,7 @@ class TestCharmTLS:
                 certificate_request=CertificateRequestAttributes(
                     common_name=ingress_address,
                     sans_dns=frozenset({self.fqdn}),
-                    sans_ip=frozenset({ingress_address}),
+                    sans_ip=frozenset({ingress_address, "192.0.2.1"}),
                     sans_oid=frozenset(),
                     email_address=None,
                     organization=None,
@@ -446,7 +448,7 @@ class TestCharmTLS:
                 private_key=private_key,
                 common_name=ingress_address,
                 sans_dns=frozenset([self.fqdn]),
-                sans_ip=frozenset([ingress_address]),
+                sans_ip=frozenset([ingress_address, "192.0.2.1"]),
             )
             certificate = generate_certificate(
                 csr=csr,

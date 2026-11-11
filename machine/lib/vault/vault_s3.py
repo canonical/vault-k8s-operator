@@ -15,6 +15,7 @@ Add the following dependencies to the charm's requirements.txt file:
 """
 
 import logging
+import os
 from typing import IO, List, MutableMapping, cast
 
 import boto3
@@ -41,6 +42,16 @@ logger = LogAdapter(logging.getLogger(__name__), {})
 AWS_DEFAULT_REGION = "us-east-1"
 
 
+def _juju_proxy_settings() -> dict[str, str]:
+    """Return the proxy settings supplied by Juju for charm traffic."""
+    proxies = {}
+    if http_proxy := os.getenv("JUJU_CHARM_HTTP_PROXY"):
+        proxies["http"] = http_proxy
+    if https_proxy := os.getenv("JUJU_CHARM_HTTPS_PROXY"):
+        proxies["https"] = https_proxy
+    return proxies
+
+
 class S3Error(Exception):
     """Base class for S3 errors."""
 
@@ -56,6 +67,7 @@ class S3:
         secret_key: str,
         endpoint: str,
         region: str | None = AWS_DEFAULT_REGION,
+        ca_cert_path: str | None = None,
     ):
         self.access_key = access_key
         self.secret_key = secret_key
@@ -71,8 +83,13 @@ class S3:
                 retries={
                     "max_attempts": 1,
                 },
+                request_checksum_calculation="when_required",  # pyright: ignore[reportCallIssue]
+                response_checksum_validation="when_required",  # pyright: ignore[reportCallIssue]
+                proxies=_juju_proxy_settings() or None,
             )
-            self.s3 = self.session.resource("s3", endpoint_url=self.endpoint, config=custom_config)
+            self.s3 = self.session.resource(
+                "s3", endpoint_url=self.endpoint, config=custom_config, verify=ca_cert_path or None
+            )
         except (ClientError, BotoCoreError, ValueError) as e:
             raise S3Error(f"Error creating session: {e}")
 
