@@ -9,10 +9,10 @@
 
 - Create a backup of your Vault data following [this guide](create_backup.md) (in case anything goes wrong during the upgrade).
 - Make sure to save your unseal key(s), as this operation will seal all units.
-- Run `juju refresh vault --channel=$VAULT_HIGHER_VERSION`, where VAULT_HIGHER_VERSION is a supported version higher than the one you currently have deployed.
+- If you are upgrading an existing `1.1x` deployment, upgrade directly to `2.0/stable` using the [1.1x to 2.0 upgrade guide](upgrade_1.1x_to_2.0.md).
 
 ## Version-specific upgrade guides
 
-All `1.x` tracks are deprecated. To migrate from any `1.x` track to `2.0`, follow the version-specific guide:
+All `1.x` tracks are deprecated and existing deployments should migrate to `2.0/stable`. For the version-specific procedure, follow:
 
 - [Upgrade from 1.1x to 2.0](upgrade_1.1x_to_2.0.md)

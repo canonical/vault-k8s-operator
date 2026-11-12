@@ -15,13 +15,13 @@ Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:11:19-04:00
 
 App    Version  Status  Scale  Charm  Channel    Rev  Exposed  Message
-vault           active      1  vault  1.19/edge  257  no       
+vault           active      1  vault  2.0/stable  257  no
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
 
 Machine  State    Address         Inst id        Base          AZ  Message
-0        started  10.191.126.116  juju-b8368f-0  ubuntu@22.04      Running
+0        started  10.191.126.116  juju-b8368f-0  ubuntu@24.04      Running
 ```
 
 ## 2. Scale Vault to 3 units
@@ -39,7 +39,7 @@ Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:19:14-04:00
 
 App    Version  Status   Scale  Charm  Channel    Rev  Exposed  Message
-vault           blocked      3  vault  1.19/edge  257  no       Waiting for Vault to be unsealed
+vault           blocked      3  vault  2.0/stable  257  no       Waiting for Vault to be unsealed
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
@@ -47,9 +47,9 @@ vault/1   blocked   idle   1        10.191.126.151         Waiting for Vault to 
 vault/2   blocked   idle   2        10.191.126.90          Waiting for Vault to be unsealed
 
 Machine  State    Address         Inst id        Base          AZ  Message
-0        started  10.191.126.116  juju-b8368f-0  ubuntu@22.04      Running
-1        started  10.191.126.151  juju-b8368f-1  ubuntu@22.04      Running
-2        started  10.191.126.90   juju-b8368f-2  ubuntu@22.04      Running
+0        started  10.191.126.116  juju-b8368f-0  ubuntu@24.04      Running
+1        started  10.191.126.151  juju-b8368f-1  ubuntu@24.04      Running
+2        started  10.191.126.90   juju-b8368f-2  ubuntu@24.04      Running
 
 ```
 
@@ -80,7 +80,7 @@ Model  Controller           Cloud/Region         Version  SLA          Timestamp
 demo   localhost-localhost  localhost/localhost  3.4.0    unsupported  12:24:32-04:00
 
 App    Version  Status  Scale  Charm  Channel    Rev  Exposed  Message
-vault           active      3  vault  1.19/edge  257  no       
+vault           active      3  vault  2.0/stable  257  no
 
 Unit      Workload  Agent  Machine  Public address  Ports  Message
 vault/0*  active    idle   0        10.191.126.116         
@@ -88,9 +88,9 @@ vault/1   active    idle   1        10.191.126.151
 vault/2   active    idle   2        10.191.126.90          
 
 Machine  State    Address         Inst id        Base          AZ  Message
-0        started  10.191.126.116  juju-b8368f-0  ubuntu@22.04      Running
-1        started  10.191.126.151  juju-b8368f-1  ubuntu@22.04      Running
-2        started  10.191.126.90   juju-b8368f-2  ubuntu@22.04      Running
+0        started  10.191.126.116  juju-b8368f-0  ubuntu@24.04      Running
+1        started  10.191.126.151  juju-b8368f-1  ubuntu@24.04      Running
+2        started  10.191.126.90   juju-b8368f-2  ubuntu@24.04      Running
 
 ```
 

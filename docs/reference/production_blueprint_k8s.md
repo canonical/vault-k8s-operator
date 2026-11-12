@@ -43,7 +43,7 @@ The charm defines the following storage volumes:
 You can provision **larger** volumes at deploy time using the `--storage` flag:
 
 ```shell
-juju deploy vault-k8s vault --trust \
+juju deploy vault-k8s vault --channel=2.0/stable --trust \
   --storage vault-raft=50G \
   --storage tmp=10G
 ```
