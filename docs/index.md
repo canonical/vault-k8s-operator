@@ -9,7 +9,9 @@ The operator implements the tls-certificates interface supporting automatic cert
 This documentation covers the Vault charms **2.0** track.
 
 ```{note}
-All `1.x` tracks are deprecated. If you are running a `1.x` track, migrate to `2.0` using the [upgrade from 1.1x to 2.0 guide](how-to/upgrade_1.1x_to_2.0.md).
+**New deployments:** use the `2.0/stable` track. Vault charms 2.0 is the current LTS branch.
+
+**Existing deployments:** all `1.x` tracks are deprecated; migrate to `2.0/stable` using the [upgrade from 1.1x to 2.0 guide](how-to/upgrade_1.1x_to_2.0.md). Security patches will be provided for existing deployments on the `1.16` and `1.19` tracks. See the [supported releases policy](reference/supported_releases.md) for details.
 ```
 
 ## In this documentation

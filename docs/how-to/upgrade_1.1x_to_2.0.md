@@ -1,9 +1,9 @@
 # Upgrade from 1.1x to 2.0
 
-This guide covers the upgrade path from any Vault charm 1.1x version (1.15, 1.16, 1.17, 1.18, 1.19) to 2.0. For general upgrade instructions, see the [upgrade guide](upgrade.md).
+This guide covers direct upgrades from any Vault charm 1.1x version (1.15, 1.16, 1.17, 1.18, or 1.19) to 2.0. You do not need to upgrade through an intermediate 1.x release first. For general upgrade instructions, see the [upgrade guide](upgrade.md).
 
 ```{note}
-All `1.x` tracks are deprecated. Migrate to `2.0` as soon as possible.
+All `1.x` tracks are deprecated. Existing deployments should migrate to `2.0/stable`. Security patches will be provided for existing deployments on the `1.16` and `1.19` tracks while operators plan their migration. See the [supported releases policy](../reference/supported_releases.md).
 ```
 
 ```{important}
