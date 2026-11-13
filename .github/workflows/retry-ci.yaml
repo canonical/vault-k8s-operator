@@ -1,0 +1,385 @@
+# workflow_run executes trusted default-branch orchestration, never PR code.
+#
+# Active after merging to the default branch. The helper and prompt are checked out at
+# this workflow's trusted workflow_sha; never load PR-controlled code or artifacts here.
+# Actions write permission is confined to retry handling.
+#
+# At most one automatic retry, only if every independent mapped build/integration failure
+# is confidently transient. Deterministic, mixed, cancelled, uncertain or incomplete
+# failures decline retry; classification errors are failures, not successful validation.
+# Ignore an aggregate only when its sole failed result-check step and logs demonstrate
+# failure from included matrix children. Bounded step excerpts and hints are observations;
+# remove hints if excerpts suffice rather than expanding the regex taxonomy.
+#
+# Recheck run status/attempt and current PR head/base or branch immediately before rerun.
+# GitHub also reruns dependent jobs. The check-to-request race cannot be eliminated, and
+# a branch advancing during a retry may still allow existing publishing of an older commit.
+# Prompt: .github/ci/retry-prompt.txt; bump its record revision when editing it.
+# Shared request/validation and security assumptions: .github/actions/ci-model/action.yml.
+#
+# ci-retry-* records include declines/errors, retain 30 days subject to repository limits,
+# and omit raw logs/model responses. Join accepted requests to actual attempt 2 on the
+# same repository/run_id to measure recovery; distinguish manual/unconfirmed reruns.
+# Later-attempt completions are recorded without another retry. Validate with actionlint
+# and representative runs; do not request live reruns merely to test policy.
+# The model field is null when the classifier action reports no model identifier.
+name: Retry intermittent CI failures
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  classify-and-retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    concurrency:
+      group: ci-retry-${{ github.event.workflow_run.id }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout trusted classifier helper and prompt
+        uses: actions/checkout@v7
+        with:
+          # workflow_sha is the revision of THIS default-branch workflow, not the failed PR.
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions/ci-model
+      - name: Collect eligible independent failures
+        id: evidence
+        if: >-
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.status == 'completed' &&
+          (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') &&
+          github.event.workflow_run.path == '.github/workflows/main.yaml' &&
+          (github.event.workflow_run.event == 'pull_request' ||
+          github.event.workflow_run.event == 'push' &&
+          (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'release-')))
+        uses: actions/github-script@v8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          retries: 0
+          script: |
+            const fs = require('node:fs');
+            const { execFileSync } = require('node:child_process');
+            const repo = context.repo;
+            const eventRun = context.payload.workflow_run;
+            const failed = job => ['failure', 'timed_out'].includes(job.conclusion);
+            const failedSteps = job => (job.steps || []).filter(failed);
+            const record = {
+              schema_version: 1, kind: 'retry', repository: `${repo.owner}/${repo.repo}`,
+              run_id: eventRun.id, run_attempt: eventRun.run_attempt,
+              handler_run_id: context.runId, handler_run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              head_sha: eventRun.head_sha, base_sha: eventRun.pull_requests?.[0]?.base.sha || null,
+              model: null, prompt_revision: 'retry-v2', evidence: { complete: false },
+              proposed: {}, effective: 'decline', outcome: 'declined', ignored_aggregates: [],
+              reason: 'Retry evaluation did not complete', jobs: [],
+              // Join attempt 2 to the request record by repository + run_id + run_attempt.
+              retry_link: { run_id: eventRun.id, from_attempt: 1, to_attempt: 2 },
+            };
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-retry.json`, JSON.stringify(record, null, 2));
+            let stage = 'run eligibility and freshness verification';
+            const decline = reason => { record.reason = reason; };
+            const eligible = new Map();
+            for (const stack of ['k8s', 'machine']) {
+              eligible.set(`${stack}-build / Build (amd64)`, 'build');
+              eligible.set(`${stack}-build-arm / Build (arm64)`, 'build');
+              eligible.set(`${stack}-build-s390x / Build (s390x)`, 'build');
+              eligible.set(`${stack}-build-kv-requirer / build-kv-requirer`, 'build');
+              eligible.set(`${stack}-integration-test-arm / Integration Test Core (ARM)`, 'integration');
+              eligible.set(`${stack}-integration-test-s390x / Integration Test ${stack === 'k8s' ? 'Core' : 'Deploy'} (s390x)`, 'integration');
+              eligible.set(`${stack}-integration-test / Aggregate integration test results`, 'aggregate');
+            }
+            const kind = name => eligible.get(name) ||
+              (/^(k8s|machine)-integration-test \/ Integration Tests \([^\r\n]+\)$/.test(name) ?
+                'integration' : null);
+            const excerptsFor = job => {
+              const steps = failedSteps(job);
+              if (!steps.length) throw new Error('No identifiable failed steps');
+              let log;
+              try {
+                log = execFileSync('gh', ['api',
+                  `repos/${repo.owner}/${repo.repo}/actions/jobs/${job.id}/logs`],
+                  { timeout: 60000, maxBuffer: 8 * 1024 * 1024,
+                    env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+              } catch {
+                throw new Error('Failed-step logs unavailable or exceed collection limit');
+              }
+              const lines = log.trimEnd().split('\n').map(text => ({
+                text, time: Date.parse(text.split(' ')[0]),
+              }));
+              if (!lines.length || lines.some(line => !Number.isFinite(line.time))) {
+                throw new Error('Job logs do not have reliable timestamps');
+              }
+              return steps.map(step => {
+                const start = Date.parse(step.started_at);
+                const end = Date.parse(step.completed_at);
+                if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+                  throw new Error('Failed step has no reliable time window');
+                }
+                // API step times have second precision; include the entire final second.
+                const text = lines.filter(line => line.time >= start && line.time < end + 1000)
+                  .map(line => line.text).join('\n');
+                if (!text.trim()) throw new Error('A failed step has no log evidence');
+                return { number: step.number, name: step.name, conclusion: step.conclusion,
+                  started_at: step.started_at, completed_at: step.completed_at,
+                  attribution: 'step timestamp window; boundary lines may include adjacent steps',
+                  excerpt: text.slice(-4000), truncated: text.length > 4000, total_characters: text.length };
+              });
+            };
+            // One small source of hints; no separate signal/event regex taxonomies.
+            const hintPatterns = {
+              timeout: /timed? out|timeout (error|exceeded|expired)|deadline exceeded/i,
+              dns_failure: /temporary failure in name resolution|name or service not known|could not resolve/i,
+              connection_failure: /connection (reset|refused|aborted)|network is unreachable/i,
+              rate_limited: /(^|[^0-9])429([^0-9]|$)|too many requests/i,
+              server_error: /(http|status|error)[^0-9]*(500|502|503|504)([^0-9]|$)|service unavailable/i,
+              readiness_failure: /(vault|juju|microk8s|lxd|service).*(not (yet )?ready|not available)|vault is sealed/i,
+              assertion_error: /AssertionError|assertion failed/i,
+              syntax_error: /SyntaxError|IndentationError/i,
+              missing_file_or_permission_error: /ModuleNotFoundError|No such file or directory|permission denied/i,
+            };
+            const hintsFor = steps => steps.flatMap(step => step.excerpt.split('\n').flatMap((line, index) =>
+              Object.entries(hintPatterns).filter(([, pattern]) => pattern.test(line))
+                .map(([hint]) => ({ step_number: step.number, excerpt_line: index + 1, hint })))).slice(-40);
+            async function collect() {
+              const { data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: eventRun.id });
+              if (run.run_attempt !== 1 || run.head_sha !== eventRun.head_sha ||
+                  run.status !== 'completed' || !failed(run) ||
+                  run.path !== eventRun.path || run.event !== eventRun.event) {
+                return decline('Completion event is stale; run attempt or commit changed');
+              }
+              record.run_conclusion = run.conclusion;
+              let prNumber = null;
+              let base = null;
+              if (run.event === 'pull_request') {
+                let prs = run.pull_requests || [];
+                if (prs.length !== 1) {
+                  prs = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit,
+                    { ...repo, commit_sha: run.head_sha, per_page: 100 });
+                  prs = prs.filter(pr => pr.state === 'open' && pr.head.sha === run.head_sha);
+                }
+                if (prs.length !== 1) return decline('Could not identify one current PR');
+                prNumber = prs[0].number;
+                base = prs[0].base.sha;
+                record.pr_number = prNumber;
+                record.base_sha = base;
+              }
+              record.evidence.revisions_verified = true;
+              stage = 'failed-job collection';
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt,
+                { ...repo, run_id: run.id, attempt_number: 1, per_page: 100 });
+              const { data: count } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                ...repo, run_id: run.id, attempt_number: 1, per_page: 1,
+              });
+              record.jobs = jobs.filter(job => !['success', 'skipped', 'neutral'].includes(job.conclusion)).map(job => ({
+                id: job.id, name: job.name, conclusion: job.conclusion, kind: kind(job.name),
+                failed_steps: failedSteps(job).map(({ number, name, conclusion, started_at, completed_at }) =>
+                  ({ number, name, conclusion, started_at, completed_at })),
+              }));
+              if (jobs.length !== count.total_count || !jobs.length || jobs.some(job =>
+                  job.status !== 'completed' ||
+                  !['success', 'failure', 'timed_out', 'skipped', 'neutral'].includes(job.conclusion))) {
+                return decline('Job evidence incomplete, cancelled, or uncertain');
+              }
+              const failures = jobs.filter(failed);
+              if (!failures.length || failures.some(job => !kind(job.name))) {
+                return decline('No independent failures or failures outside the explicit build/integration mapping');
+              }
+              const candidates = [];
+              stage = 'aggregate failure attribution';
+              for (const job of failures) {
+                if (kind(job.name) !== 'aggregate') {
+                  candidates.push(job);
+                  continue;
+                }
+                const prefix = job.name.split(' / ')[0] + ' / Integration Tests (';
+                const children = jobs.filter(child => child.name.startsWith(prefix));
+                const steps = failedSteps(job);
+                if (job.conclusion !== 'failure' || steps.length !== 1 ||
+                    steps[0].name !== 'Check matrix job results' || !children.some(failed) ||
+                    children.some(child => !['success', 'failure', 'timed_out'].includes(child.conclusion))) {
+                  return decline('Aggregate failure is not demonstrably derived from failed matrix children');
+                }
+                const excerpts = excerptsFor(job);
+                if (!excerpts[0].excerpt.includes("Jobs concluded with 'failure'.")) {
+                  return decline('Aggregate logs do not confirm a failed matrix result');
+                }
+                record.ignored_aggregates.push({ id: job.id, derived_from: children.filter(failed).map(child => child.id),
+                  reason: 'Only result-check step failed and logs confirm failed matrix children' });
+              }
+              if (!candidates.length) return decline('No independently failed jobs to classify');
+              // Bound model spend and evidence size; large incidents need a maintainer.
+              if (candidates.length > 12) return decline('More than 12 independent failures; manual review required');
+              record.evidence.expected_job_ids = candidates.map(job => job.id);
+              record.evidence.collected_job_ids = [];
+              const independentFailures = [];
+              for (const job of candidates) {
+                stage = `failed-step log collection for job ${job.id}`;
+                if (failedSteps(job).length > 8) {
+                  record.evidence.complete = false;
+                  return decline('Too many failed steps for bounded classification');
+                }
+                const excerpts = excerptsFor(job);
+                record.evidence.collected_job_ids.push(job.id);
+                record.evidence.complete = record.evidence.collected_job_ids.length === candidates.length;
+                const jobRecord = record.jobs.find(item => item.id === job.id);
+                jobRecord.log_evidence = excerpts.map(({ number, truncated, total_characters }) =>
+                  ({ number, truncated, total_characters }));
+                independentFailures.push({ job: jobRecord, failed_steps: excerpts, hints: hintsFor(excerpts) });
+              }
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-retry-input.json`, JSON.stringify({
+                run: { id: run.id, attempt: 1, head_sha: run.head_sha, base_sha: base },
+                independent_failures: independentFailures,
+                evidence: { all_failed_steps_identified: true, excerpts_bounded: true },
+              }));
+              record.reason = 'Complete independent-failure evidence collected';
+              core.setOutput('ready', true);
+            }
+            try {
+              await collect();
+            } catch {
+              record.reason = `${stage} failed; no retry requested`;
+              record.outcome = 'error';
+              core.setFailed(record.reason);
+            } finally {
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-retry.json`, JSON.stringify(record, null, 2));
+            }
+      - name: Prepare retry questions
+        id: request
+        if: steps.evidence.outputs.ready == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const prompt = fs.readFileSync('.github/ci/retry-prompt.txt', 'utf8');
+            const state = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ci-retry-input.json`, 'utf8'));
+            const questions = Object.fromEntries(state.independent_failures.map(({ job }) => [`job_${job.id}`, {
+              type: 'choice', instructions: `${prompt}\nEvaluate job ${job.id} in independent_failures.`,
+              criteria: { retry: 'Every failed step is confidently transient.',
+                do_not_retry: 'A failed step is deterministic code, configuration, or test failure.',
+                unknown: 'Mixed, ambiguous, or insufficient evidence.' },
+            }]));
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/ci-retry-request.json`, JSON.stringify({ questions, state }));
+      - name: Classify every independent failure
+        id: classify
+        if: steps.request.outcome == 'success'
+        uses: ./.github/actions/ci-model
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          request-file: ${{ runner.temp }}/ci-retry-request.json
+      - name: Recheck freshness and request one retry
+        id: retry
+        if: >-
+          steps.evidence.outputs.ready == 'true' && steps.classify.outcome == 'success' &&
+          contains(fromJSON(steps.classify.outputs.choices || '{}').*, 'retry') &&
+          !contains(fromJSON(steps.classify.outputs.choices || '{}').*, 'do_not_retry') &&
+          !contains(fromJSON(steps.classify.outputs.choices || '{}').*, 'unknown')
+        uses: actions/github-script@v8
+        with:
+          retries: 0
+          script: |
+            const fs = require('node:fs');
+            const file = `${process.env.RUNNER_TEMP}/ci-retry.json`;
+            const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const expected = context.payload.workflow_run;
+            record.reason = 'Final freshness check rejected a stale, closed or already rerun commit';
+            record.evidence.final_freshness_verified = false;
+            try {
+              const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: expected.id });
+              if (run.status !== 'completed' || !['failure', 'timed_out'].includes(run.conclusion) ||
+                  run.run_attempt !== 1 || run.head_sha !== expected.head_sha ||
+                  run.head_branch !== expected.head_branch || run.path !== expected.path || run.event !== expected.event) return;
+              if (run.event === 'pull_request') {
+                const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: record.pr_number });
+                if (pr.state !== 'open' || pr.head.sha !== run.head_sha || pr.base.sha !== record.base_sha) return;
+              } else {
+                const { data: commit } = await github.rest.repos.getCommit({ ...context.repo, ref: run.head_branch });
+                if (commit.sha !== run.head_sha) return;
+              }
+              record.evidence.final_freshness_verified = true;
+              record.retry_request = { run_id: run.id, from_attempt: 1, expected_attempt: 2,
+                requested_at: new Date().toISOString(), status: 'pending' };
+              fs.writeFileSync(file, JSON.stringify(record, null, 2));
+              // Keep the freshness check and write adjacent; never gather more model evidence here.
+              await github.rest.actions.reRunWorkflowFailedJobs({ ...context.repo, run_id: run.id,
+                request: { retries: 0 } });
+              record.retry_request.status = 'accepted';
+              record.effective = 'retry';
+              record.outcome = 'requested';
+              record.reason = 'Every independent failure was confidently transient; one retry requested';
+            } catch {
+              if (record.retry_request) record.retry_request.status = 'unconfirmed';
+              record.outcome = 'error';
+              record.reason = record.retry_request ? 'Rerun request acceptance unconfirmed; inspect run manually' :
+                'Final freshness verification failed; no retry requested';
+              core.setFailed(record.reason);
+            } finally {
+              fs.writeFileSync(file, JSON.stringify(record, null, 2));
+            }
+      - name: Record retry decisions and declined outcomes
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          STEP_RESULTS: ${{ toJSON(steps) }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const file = `${process.env.RUNNER_TEMP}/ci-retry.json`;
+            const run = context.payload.workflow_run;
+            const steps = JSON.parse(process.env.STEP_RESULTS);
+            const record = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {
+                schema_version: 1, kind: 'retry', repository: `${context.repo.owner}/${context.repo.repo}`,
+                run_id: run.id, run_attempt: run.run_attempt, handler_run_id: context.runId,
+                handler_run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+                head_sha: run.head_sha, base_sha: run.pull_requests?.[0]?.base.sha || null,
+                model: null, prompt_revision: 'retry-v2',
+                evidence: { complete: false }, proposed: {}, effective: 'decline', outcome: 'declined',
+                retry_link: { run_id: run.id, from_attempt: 1, to_attempt: 2 },
+                reason: 'Event is not an eligible first failed CI attempt',
+            };
+            record.run_conclusion = run.conclusion;
+            record.model = steps.classify.outputs.model || null;
+            record.proposed = Object.fromEntries(Object.entries(JSON.parse(steps.classify.outputs.answers || '{}'))
+              .map(([key, answer]) => [key.slice('job_'.length), answer]));
+            record.request_preparation = steps.request.outcome;
+            record.classification = steps.classify.outcome;
+            if (steps.evidence.outcome === 'skipped' && run.run_attempt > 1) {
+              record.outcome = 'observed_later_attempt';
+              record.reason = 'Single automatic retry limit reached; recorded subsequent attempt outcome';
+            } else if (steps.request.outcome === 'failure' || steps.classify.outcome === 'failure') {
+              record.outcome = 'error';
+              record.reason = 'Model request preparation or classification failed; no retry requested';
+            } else if (steps.classify.outcome === 'success' && steps.retry.outcome === 'skipped') {
+              record.reason = 'An independent failure is deterministic, mixed, or not confidently transient';
+            } else if (steps.evidence.outcome === 'skipped' && Object.values(steps).some(step => step.outcome === 'failure')) {
+              record.outcome = 'error';
+              record.reason = 'Retry setup failed; no retry requested';
+            }
+            fs.writeFileSync(file, JSON.stringify(record, null, 2));
+            await core.summary.addHeading('CI retry').addRaw(`${record.reason}\n`)
+              .addCodeBlock(JSON.stringify({ run_id: record.run_id, run_attempt: record.run_attempt,
+                proposed: record.proposed, effective: record.effective,
+                ignored_aggregates: record.ignored_aggregates, retry_request: record.retry_request }, null, 2),
+                'json').write();
+      - name: Upload retry decision record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-retry-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-retry.json
+          retention-days: 30
+          if-no-files-found: error

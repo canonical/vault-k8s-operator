@@ -22,3 +22,38 @@ Serve the documentation locally with:
 cd docs
 make run
 ```
+
+## CI and Pull Request Labels
+
+On PRs, standard checks run by default and can be skipped for any change when the model
+chooses `skip` with at least 0.8 confidence and choice probability, using complete,
+revision-verified evidence. Required prerequisites still run even if proposed for skipping.
+An AMD64 group whose latest execution on `main` failed or timed out is forced to run,
+regardless of the model's skip decision. Successful reruns clear this override; skipped
+executions do not. Missing or uncertain main results also require the affected group.
+CI checks up to the latest 20 main CI runs to find each group's latest execution.
+ARM64 and s390x are skipped by default, including when classification fails or is uncertain;
+they run only for a confident model `run` decision or an explicit force-run label.
+Pushes to `main` and release branches always run full CI on all architectures.
+New PR runs cancel superseded runs for the same PR; main and release push runs remain
+independent. Selection-dependent job conditions must remain cancellable (`!cancelled()`,
+not `always()`), including when falling back after a failed decision.
+
+Maintainers can force CI checks with these PR labels. Required prerequisites are included.
+
+| Label | Runs |
+| --- | --- |
+| `run-all-ci` | All checks on all architectures |
+| `run-shared-code-sync` | Shared-code synchronization |
+| `run-k8s-quality` | Kubernetes lint, static analysis, and unit tests |
+| `run-machine-quality` | Machine lint, static analysis, and unit tests |
+| `run-k8s-build` | Kubernetes AMD64 build |
+| `run-machine-build` | Machine AMD64 build |
+| `run-k8s-integration` | Kubernetes AMD64 integration tests |
+| `run-machine-integration` | Machine AMD64 integration tests |
+| `test-arm` | ARM64 builds and integration tests |
+| `test-s390x` | s390x builds and integration tests |
+
+Selection, retry, and maintenance details live alongside their implementations:
+[CI selection](.github/workflows/ci-decision.yaml) and
+[intermittent-failure retries](.github/workflows/retry-ci.yaml).
