@@ -31,17 +31,17 @@ VAULT_CA_SUBJECT = "Vault self signed CA"
 
 
 class TestCharmTLS:
-    patcher_get_assigned_certificate = patch(
-        f"{TLS_CERTIFICATES_LIB_PATH_V4}.TLSCertificatesRequiresV4.get_assigned_certificate"
-    )
-    patcher_socket_get_fqdn = patch("socket.getfqdn")
-
     @pytest.fixture(autouse=True)
     def setup(self):
         self.fqdn = "my-fqdn"
-        self.mock_get_assigned_certificate = TestCharmTLS.patcher_get_assigned_certificate.start()
-        self.mock_get_fqdn = TestCharmTLS.patcher_socket_get_fqdn.start()
-        self.mock_get_fqdn.return_value = self.fqdn
+        with (
+            patch(
+                f"{TLS_CERTIFICATES_LIB_PATH_V4}.TLSCertificatesRequiresV4.get_assigned_certificate"
+            ) as self.mock_get_assigned_certificate,
+            patch("socket.getfqdn") as self.mock_get_fqdn,
+        ):
+            self.mock_get_fqdn.return_value = self.fqdn
+            yield
 
     @pytest.fixture(autouse=True)
     def context(self):

@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "allure-pytest",
     "boto3",
     "boto3-stubs[s3]",
     "cosl>0.0.50",
@@ -49,6 +48,7 @@ show_missing = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
+markers = ["smoke: minimal deploy, initialize, unseal, and authorize check"]
 
 # Linting tools configuration
 [tool.ruff]
@@ -92,4 +92,5 @@ skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
 [tool.pyright]
 include = ["src/", "lib/charms/vault_k8s/", "lib/vault/"]
+pythonVersion = "3.10"
 reportMissingParameterType = true

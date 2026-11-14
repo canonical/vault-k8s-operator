@@ -4,6 +4,7 @@
 
 import logging
 import time
+from asyncio import sleep
 from base64 import b64decode
 from pathlib import Path
 from typing import List
@@ -14,6 +15,7 @@ from juju.errors import JujuError
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
+from requests.exceptions import ConnectionError as RequestsConnectionError
 from vault import Vault  # type: ignore[import]
 
 # Vault status codes, see
@@ -118,7 +120,16 @@ async def unseal_all_vault_units(
         unit_address = unit.public_address
         assert unit_address
         vault = Vault(url=f"https://{unit_address}:8200", ca_file_location=ca_file_name)
-        if vault.is_sealed():
+        deadline = time.monotonic() + 300
+        while True:
+            try:
+                sealed = vault.is_sealed()
+                break
+            except RequestsConnectionError as exc:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Timed out waiting for Vault on {unit.name}") from exc
+                await sleep(5)
+        if sealed:
             vault.unseal(unseal_key)
         vault.wait_for_node_to_be_unsealed()
 

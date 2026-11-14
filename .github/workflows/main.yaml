@@ -11,13 +11,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-shared-libs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make check-vendored-libs
+
   k8s-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1
     with:
       path: ./k8s/
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.5
     with:
       path: ./k8s/src/grafana_dashboards/*
 
@@ -33,6 +39,7 @@ jobs:
 
   k8s-build:
     needs:
+      - check-shared-libs
       - k8s-lint-report
       - k8s-static-analysis
       - k8s-unit-tests-with-coverage
@@ -110,7 +117,7 @@ jobs:
       path: ./machine/
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.5
     with:
       path: ./machine/src/grafana_dashboards/*
 
@@ -126,6 +133,7 @@ jobs:
 
   machine-build:
     needs:
+      - check-shared-libs
       - machine-lint-report
       - machine-static-analysis
       - machine-unit-tests-with-coverage
