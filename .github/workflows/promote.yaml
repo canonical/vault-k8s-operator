@@ -25,6 +25,9 @@ env:
 jobs:
   scan:
     name: Secscan
+    permissions:
+      contents: read
+      issues: write
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-secscan.yaml@v3.1.5
     with:
       charm: ${{ inputs.charm == 'k8s' && 'vault-k8s' || inputs.charm == 'machine' && 'vault' || '' }}
@@ -37,6 +40,8 @@ jobs:
 
   promote:
     name: Promote Charm
+    permissions:
+      contents: write
     needs: scan
     runs-on: ubuntu-26.04
     steps:
