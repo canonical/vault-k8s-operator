@@ -6,9 +6,11 @@
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import hcl
 import ops.testing as testing
+from ops import pebble
 from ops.pebble import Layer
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import (
@@ -27,6 +29,21 @@ class MockRelation:
 
 
 class TestCharmConfigure(VaultCharmFixtures):
+    def test_given_pebble_config_write_fails_when_configure_then_hook_does_not_fail(self):
+        self.mock_autounseal_requires_get_details.return_value = None
+        container = testing.Container(name="vault", can_connect=True)
+        state_in = testing.State(
+            containers=[container],
+            leader=True,
+            relations=[testing.PeerRelation(endpoint="vault-peers")],
+        )
+
+        with patch(
+            "charm.VaultCharm._push_config_file_to_workload",
+            side_effect=pebble.Error("connection lost"),
+        ):
+            self.ctx.run(self.ctx.on.pebble_ready(container), state_in)
+
     def test_given_leader_when_configure_then_config_file_is_pushed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             self.mock_socket_fqdn.return_value = "myhostname"
@@ -241,7 +258,9 @@ class TestCharmConfigure(VaultCharmFixtures):
             ingress_address="myhostname",
         )
         relation = MockRelation(id=vault_autounseal_relation.id)
-        self.mock_autounseal_provides_get_relations_without_credentials.return_value = [relation]
+        self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = [
+            relation
+        ]
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},

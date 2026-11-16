@@ -54,15 +54,15 @@ charmcraft pack --project-dir tests/integration/vault_kv_requirer_operator/
 Run the full suite with:
 
 ```shell
-tox -e integration -- --charm_path ./vault_ubuntu-22.04-amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_ubuntu-22.04-amd64.charm
+tox -e integration -- tests/integration --charm_path ./vault_ubuntu-22.04-amd64.charm --kv_requirer_charm_path ./vault-kv-requirer_ubuntu-22.04-amd64.charm
 ```
 
 For a quick deploy, initialize, unseal, and authorize check, run:
 
 ```shell
-tox -e integration -- -m smoke --charm_path ./vault_ubuntu-22.04-amd64.charm
+tox -e integration -- tests/integration -m smoke --charm_path ./vault_ubuntu-22.04-amd64.charm
 ```
 
-You can also run one feature, such as `-k test_backup`, in place of `-m smoke`. CI runs each feature file independently.
+To run one feature, replace `tests/integration` with its file path, such as `tests/integration/test_backup.py`. CI runs each feature file independently.
 
 <!-- You may want to include any contribution/style guidelines in this document>

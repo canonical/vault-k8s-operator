@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import io
+import os
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
@@ -19,6 +20,32 @@ class TestS3(unittest.TestCase):
         "region": "REGION",
         "endpoint": "http://ENDPOINT",
     }
+
+    @patch.dict(
+        os.environ,
+        {
+            "JUJU_CHARM_HTTP_PROXY": "http://proxy:8080",
+            "JUJU_CHARM_HTTPS_PROXY": "http://secure-proxy:8080",
+        },
+    )
+    @patch("boto3.session.Session")
+    def test_s3_uses_juju_proxies_and_relation_ca(self, session: MagicMock):
+        S3(
+            access_key="access",
+            secret_key="secret",
+            endpoint="https://s3.example.com",
+            ca_cert_path="/tmp/s3-ca.pem",
+        )
+
+        resource_args = session.return_value.resource.call_args.kwargs
+        self.assertEqual(
+            resource_args["config"].proxies,
+            {
+                "http": "http://proxy:8080",
+                "https": "http://secure-proxy:8080",
+            },
+        )
+        self.assertEqual(resource_args["verify"], "/tmp/s3-ca.pem")
 
     def test_given_valid_s3_parameters_when_create_s3_session_then_session_is_created(self):
         s3 = S3(

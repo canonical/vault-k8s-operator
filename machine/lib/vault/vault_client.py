@@ -109,6 +109,10 @@ class VaultClientError(Exception):
     """Base class for exceptions raised by the Vault client."""
 
 
+class VaultAuthenticationError(VaultClientError):
+    """Vault explicitly rejected authentication credentials."""
+
+
 class VaultClient:
     """Class to interact with Vault through its API."""
 
@@ -124,7 +128,10 @@ class VaultClient:
         try:
             auth_details.login(self._client)
             self._client.auth.token.lookup_self()
-        except (VaultError, ConnectionError, Forbidden) as e:
+        except (Forbidden, InvalidRequest) as e:
+            logger.warning("Vault rejected authentication credentials: %s", e)
+            raise VaultAuthenticationError(str(e)) from e
+        except (VaultError, ConnectionError) as e:
             logger.warning("Failed login to Vault: %s", e)
             return False
         return True
@@ -365,7 +372,10 @@ class VaultClient:
 
     def read_role_secret(self, name: str, id: str) -> dict:
         """Get definition of a secret tied to an AppRole."""
-        response = self._client.auth.approle.read_secret_id(name, id)
+        try:
+            response = self._client.auth.approle.read_secret_id(name, id)
+        except (VaultError, KeyError) as e:
+            raise VaultClientError(e) from e
         return response["data"]
 
     def enable_secrets_engine(self, backend_type: SecretsBackend, path: str) -> None:

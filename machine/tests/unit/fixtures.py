@@ -25,9 +25,10 @@ class VaultCharmFixtures:
     @pytest.fixture(autouse=True)
     def setup(self):
         with ExitStack() as stack:
-            self.mock_tls = stack.enter_context(
+            self.mock_tls_class = stack.enter_context(
                 patch("charm.TLSManager", autospec=TLSManager)
-            ).return_value
+            )
+            self.mock_tls = self.mock_tls_class.return_value
             self.mock_vault = stack.enter_context(
                 patch("charm.VaultClient", autospec=VaultClient)
             ).return_value
@@ -83,6 +84,10 @@ class VaultCharmFixtures:
                 patch("charm.VaultKvProvides.set_kv_data")
             )
             self.mock_snap_cache = stack.enter_context(patch("charm.snap.SnapCache"))
+            self.mock_vault.is_seal_type_transit.return_value = False
+            self.mock_tls.access_certificate_requires_trusted_ca.return_value = False
+            self.mock_machine.get_service.return_value = None
+            self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = []
             yield
 
     @pytest.fixture(autouse=True)

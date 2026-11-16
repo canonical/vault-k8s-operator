@@ -1,8 +1,8 @@
-alert: VaultFailureToleranceRule
-expr: vault_autopilot_failure_tolerance <= 1
+alert: VaultNoFailureTolerance
+expr: vault_autopilot_failure_tolerance == 0
 for: 2m
 labels:
     severity: critical
 annotations:
-    summary: "Vault cluster has low failure tolerance and the quorum could be lost."
-    description: "Vault autopilot reports that the cluster has 1 or fewer extra healthy nodes in excess of quorum."
+    summary: "Vault cluster has no failure tolerance and the quorum could be lost."
+    description: "Vault autopilot reports that losing any healthy node would cause loss of quorum."
