@@ -33,9 +33,11 @@ jobs:
       channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
       arch: amd64
       create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
+      fail-on-cve: ${{ inputs.promotion != 'edge -> beta' }}
 
   promote:
     name: Promote Charm
+    needs: scan
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
