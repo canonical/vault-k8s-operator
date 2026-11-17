@@ -11,6 +11,7 @@ import platform
 import signal
 import socket
 import subprocess
+import time
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
@@ -99,6 +100,8 @@ LEADER_NODE_API_ADDRESS_KEY = "leader_node_api_address"
 PKI_RELATION_NAME = "vault-pki"
 REQUIRED_S3_PARAMETERS = ["bucket", "access-key", "secret-key", "endpoint"]
 S3_RELATION_NAME = "s3-parameters"
+SNAP_LOOKUP_ATTEMPTS = 6
+SNAP_LOOKUP_RETRY_DELAY_SECONDS = 10
 SYSTEMD_DROP_IN_DIR = "/etc/systemd/system/snap.vault.vaultd.service.d"
 SYSTEMD_DROP_IN_FILE_PATH = f"{SYSTEMD_DROP_IN_DIR}/10-charm.conf"
 SYSTEMD_CRED_EXTERNAL_VAULT_TOKEN_NAME = "external_vault_token"
@@ -1301,11 +1304,34 @@ class VaultOperatorCharm(CharmBase):
             env["NO_PROXY"] = no_proxy
         return env
 
+    def _get_vault_snap(self) -> snap.Snap:
+        """Look up the Vault snap, retrying transient snapd server errors.
+
+        When Vault is not installed yet, the lookup queries the Snap Store
+        through snapd. snapd can briefly return 5xx responses, or be
+        unreachable while it restarts, on freshly provisioned machines.
+        The snap library reports those as SnapNotFoundError.
+        """
+        for attempt in range(1, SNAP_LOOKUP_ATTEMPTS):
+            try:
+                return snap.SnapCache()[VAULT_SNAP_NAME]
+            except (snap.SnapAPIError, snap.SnapNotFoundError) as e:
+                api_error = e if isinstance(e, snap.SnapAPIError) else e.__cause__
+                if not (isinstance(api_error, snap.SnapAPIError) and api_error.code >= 500):
+                    raise
+                logger.warning(
+                    "Failed to look up the Vault snap (attempt %d/%d), retrying: %r",
+                    attempt,
+                    SNAP_LOOKUP_ATTEMPTS,
+                    api_error,
+                )
+                time.sleep(SNAP_LOOKUP_RETRY_DELAY_SECONDS)
+        return snap.SnapCache()[VAULT_SNAP_NAME]
+
     def _install_vault_snap(self) -> None:
         """Installs the Vault snap in the machine."""
         try:
-            snap_cache = snap.SnapCache()
-            vault_snap = snap_cache[VAULT_SNAP_NAME]
+            vault_snap = self._get_vault_snap()
             if VAULT_SNAP_REVISION == vault_snap.revision and vault_snap.state in [
                 snap.SnapState.Latest,
                 snap.SnapState.Present,
