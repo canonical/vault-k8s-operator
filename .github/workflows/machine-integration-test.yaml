@@ -149,11 +149,13 @@ jobs:
           sudo microceph status
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
         run: |
           tox -e integration -- \
             --charm_path=${{ steps.charm-path.outputs.vault-charm }} \
             --kv_requirer_charm_path=${{ steps.charm-path.outputs.kv-charm }} \
-            -k "${{ matrix.suite }}"
+            -k "$TEST_SUITE"
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v7
@@ -180,8 +182,8 @@ jobs:
 
           echo "Result of $job_result"
 
-          if [ "$job_result" == "success" ] || [ "$job_result" == "skipped" ]; then
-            echo "Jobs concluded with success or skips."
+          if [ "$job_result" == "success" ]; then
+            echo "Integration tests succeeded."
             exit 0
           else
             echo "Jobs concluded with '$job_result'."

@@ -1,0 +1,92 @@
+# Shared transport, timeout, confidence threshold and response validation only; callers
+# own their prompts and policy. Invalid answers must fail, never imply validation.
+#
+# Supply a dedicated, spend-limited OPENROUTER_API_KEY; keep credentials out of logs,
+# summaries and artifacts. Public-repository patches, workflow definitions, job metadata
+# and bounded failed-step logs are intentionally sent to OpenRouter as untrusted data.
+# This external-data exposure is accepted. GitHub's log masking is not a guarantee of
+# removing arbitrary sensitive data; do not log it. No extra redaction layer is provided.
+name: Classify CI evidence
+description: Request and strictly validate CI model answers. Requires OPENROUTER_API_KEY in the environment.
+inputs:
+  request-file:
+    description: JSON file containing the workflow's questions and evidence state.
+    required: true
+outputs:
+  model:
+    description: Model identifier used for the classifier request; absent before request preparation succeeds.
+    value: ${{ steps.request.outputs.model }}
+  answers:
+    description: Validated answers with confidence and probability.
+    value: ${{ steps.request.outputs.answers }}
+  choices:
+    description: Validated choices by decision key; low-confidence answers become unknown.
+    value: ${{ steps.request.outputs.choices }}
+runs:
+  using: composite
+  steps:
+    - id: request
+      uses: actions/github-script@v8
+      env:
+        REQUEST_FILE: ${{ inputs.request-file }}
+      with:
+        script: |
+          const fs = require('node:fs');
+          const MODEL = 'typesafe/jev-1.14';
+          const CONFIDENCE = 0.8;
+          const TIMEOUT_MS = 45_000;
+          const apiKey = process.env.OPENROUTER_API_KEY;
+          if (!apiKey) throw new Error('Classifier key unavailable');
+          const { questions, state } = JSON.parse(fs.readFileSync(process.env.REQUEST_FILE, 'utf8'));
+          core.setOutput('model', MODEL);
+          let response;
+          try {
+            response = await fetch('https://openrouter.ai/api/alpha/decisions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'X-Title': 'Vault CI decisions',
+              },
+              body: JSON.stringify({ model: MODEL, questions, state }),
+              signal: AbortSignal.timeout(TIMEOUT_MS),
+            });
+          } catch {
+            throw new Error('Classifier transport failed or timed out');
+          }
+          if (!response.ok) throw new Error(`Classifier HTTP status ${response.status}`);
+          let answers;
+          try {
+            const body = await response.text();
+            if (body.length > 65_536) throw new Error('Oversized response');
+            answers = JSON.parse(body).answers;
+          } catch {
+            throw new Error('Classifier response is not bounded JSON');
+          }
+          const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+          const probability = value => Number.isFinite(value) && value >= 0 && value <= 1;
+          if (!object(answers) ||
+              JSON.stringify(Object.keys(answers).sort()) !== JSON.stringify(Object.keys(questions).sort())) {
+            throw new Error('Classifier returned unexpected decision keys');
+          }
+          const result = {};
+          for (const [key, answer] of Object.entries(answers)) {
+            const choices = Object.keys(questions[key].criteria);
+            if (!object(answer) || answer.type !== 'choice' ||
+                !choices.includes(answer.choice) || !probability(answer.confidence) ||
+                !object(answer.probabilities) || !probability(answer.probabilities[answer.choice]) ||
+                !Object.entries(answer.probabilities).every(([choice, value]) =>
+                  choices.includes(choice) && probability(value))) {
+              throw new Error('Classifier returned an invalid choice or confidence');
+            }
+            result[key] = {
+              choice: answer.choice,
+              confidence: answer.confidence,
+              probability: answer.probabilities[answer.choice],
+              confident: answer.confidence >= CONFIDENCE &&
+                answer.probabilities[answer.choice] >= CONFIDENCE,
+            };
+          }
+          core.setOutput('answers', result);
+          core.setOutput('choices', Object.fromEntries(Object.entries(result).map(([key, answer]) =>
+            [key, answer.confident ? answer.choice : 'unknown'])));
