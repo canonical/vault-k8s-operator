@@ -800,7 +800,7 @@ name = "importlib-metadata"
 version = "8.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "platform_machine == 's390x'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c0/bd/fa8ce65b0a7d4b6d143ec23b0f5fd3f7ab80121078c465bc02baeaab22dc/importlib_metadata-8.4.0.tar.gz", hash = "sha256:9a547d3bc3608b025f93d403fdd1aae741c24fbb8314df4b155675742ce303c5", size = 54320, upload-time = "2024-08-20T17:11:42.348Z" }
 wheels = [
@@ -2182,6 +2182,7 @@ dependencies = [
     { name = "cosl" },
     { name = "cryptography", version = "43.0.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 's390x'" },
     { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 's390x'" },
+    { name = "importlib-metadata" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "lightkube" },
@@ -2227,6 +2228,7 @@ requires-dist = [
     { name = "cosl", specifier = ">0.0.50" },
     { name = "cryptography", marker = "platform_machine != 's390x'", specifier = ">=50.0.0" },
     { name = "cryptography", marker = "platform_machine == 's390x'", specifier = "<44" },
+    { name = "importlib-metadata" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "lightkube" },

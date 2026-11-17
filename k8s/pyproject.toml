@@ -15,6 +15,9 @@ dependencies = [
     # selected when the s390x protobuf constraint forces resolver backtracking.
     "opentelemetry-exporter-otlp-proto-http>=1.45.2; platform_machine != 's390x'",
     "opentelemetry-exporter-otlp-proto-http==1.27.0; platform_machine == 's390x'",
+    # charm_tracing imports importlib_metadata on upgrade-charm; OpenTelemetry
+    # no longer pulls it in transitively.
+    "importlib-metadata",
     # via ingress_per_unit
     "jsonschema",
     # via grafana_dashboard
