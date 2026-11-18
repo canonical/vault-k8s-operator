@@ -4,12 +4,14 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "ops>=3.7.0",
+    # ops 3.9 passes a new `deferred` argument that charm_tracing (up to 0.14)
+    # does not accept. Lift this cap once charm_tracing supports it.
+    "ops>=3.8.3,<3.9",
     "vault-package",
     "charmlibs-interfaces-tls-certificates",
     "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
-    "pydantic==2.13.0",
+    "pydantic==2.14.3",
     # via charm_tracing
     # Keep the exporter/API/SDK compatible; older exporters can otherwise be
     # selected when the s390x protobuf constraint forces resolver backtracking.
@@ -23,10 +25,11 @@ dependencies = [
     # via grafana_dashboard
     "jinja2",
     # via grafana_dashboard, loki_push_api and prometheus_scrape
-    "cosl>0.0.50",
+    # cosl>=1.10.2 depends on diskcache, which has an unfixed CVE (CVE-2025-69872).
+    "cosl>0.0.50,<1.10.2",
     # via tls_certificates
-    "cryptography>=50.0.0; platform_machine != 's390x'",
-    "protobuf>=5.29.6; platform_machine != 's390x'",
+    "cryptography>=50.0.2; platform_machine != 's390x'",
+    "protobuf>=7.36.2; platform_machine != 's390x'",
     # via vault_kv
     "pytest-interface-tester",
     "lightkube",
