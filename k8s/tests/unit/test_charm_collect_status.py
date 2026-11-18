@@ -11,6 +11,16 @@ from tests.unit.fixtures import VaultCharmFixtures
 
 
 class TestCharmCollectUnitStatus(VaultCharmFixtures):
+    def test_given_pki_relation_without_tls_provider_when_collect_status_then_blocked(self):
+        pki_relation = testing.Relation(endpoint="vault-pki", interface="tls-certificates")
+        state_in = testing.State(relations=[pki_relation])
+
+        state_out = self.ctx.run(self.ctx.on.collect_unit_status(), state_in)
+
+        assert state_out.unit_status == BlockedStatus(
+            "tls-certificates-pki relation is missing, cannot configure PKI secrets engine"
+        )
+
     def test_given_cant_connect_when_collect_unit_status_then_status_is_waiting(self):
         container = testing.Container(
             name="vault",
@@ -53,6 +63,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
 
         state_in = testing.State(
@@ -82,6 +93,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -108,6 +120,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -137,6 +150,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -168,6 +182,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         pki_relation = testing.Relation(
             endpoint="tls-certificates-pki",
@@ -204,6 +219,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -235,6 +251,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -269,6 +286,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -301,6 +319,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -333,6 +352,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -369,6 +389,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -408,6 +429,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],
@@ -448,6 +470,7 @@ class TestCharmCollectUnitStatus(VaultCharmFixtures):
         )
         peer_relation = testing.PeerRelation(
             endpoint="vault-peers",
+            local_app_data={"leader_node_api_address": "https://1.2.3.4:8200"},
         )
         state_in = testing.State(
             containers=[container],

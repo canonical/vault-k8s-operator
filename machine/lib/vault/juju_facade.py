@@ -171,7 +171,7 @@ class JujuFacade:
         return self._get_secret_content(label=label, id=id, refresh=True)
 
     def get_secret_content_values(
-        self, *keys: str, label: str | None = None, id: str | None = None
+        self, *keys: str, label: str | None = None, id: str | None = None, refresh: bool = False
     ) -> tuple[str | None, ...]:
         """Get secret content values by keys.
 
@@ -179,6 +179,7 @@ class JujuFacade:
             keys: Keys of the requested values
             label: The secret label
             id: The secret id
+            refresh: Fetch the latest secret revision when true
 
         Returns:
             tuple[str | None, ...]: The secret content values,
@@ -189,7 +190,7 @@ class JujuFacade:
             NoSuchSecretError
             SecretRemovedError
         """
-        secret_content = self._get_secret_content(label=label, id=id)
+        secret_content = self._get_secret_content(label=label, id=id, refresh=refresh)
         for key in keys:
             if key not in secret_content:
                 logger.warning("Secret %s does not have key %s", label or id, key)
@@ -257,6 +258,7 @@ class JujuFacade:
                 return secret
             logger.info("Setting secret content to %s", label or secret.id)
             secret.set_content(content)
+            secret.get_content(refresh=True)
             return secret
         except ModelError as e:
             raise TransientJujuError(e) from e
@@ -686,6 +688,24 @@ class JujuFacade:
         if not binding or not binding.network.ingress_address:
             return None
         return str(binding.network.ingress_address)
+
+    def get_ingress_addresses(
+        self,
+        relation_name: str | None = None,
+        relation: Relation | None = None,
+        relation_id: int | None = None,
+    ) -> List[str]:
+        """Return every ingress address for the relation binding."""
+        binding = self.get_binding(
+            relation_name=relation_name, relation_id=relation_id, relation=relation
+        )
+        if not binding:
+            return []
+        addresses = getattr(binding.network, "ingress_addresses", None)
+        if addresses is None:
+            address = binding.network.ingress_address
+            return [str(address)] if address else []
+        return [str(address) for address in addresses]
 
     def get_bind_address(
         self,

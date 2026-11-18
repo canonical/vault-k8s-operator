@@ -14,6 +14,7 @@ from vault.vault_client import (
     AuditDeviceType,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
 )
 
@@ -43,8 +44,8 @@ def test_given_invalid_token_as_auth_details_when_authenticate_then_authenticati
 ):
     patch_lookup.side_effect = Forbidden()
     vault = VaultClient(url="http://whatever-url", ca_cert_path="whatever path")
-    vault.authenticate(Token("some token"))
-    assert not vault.authenticate(Token("some token"))
+    with pytest.raises(VaultAuthenticationError):
+        vault.authenticate(Token("some token"))
 
 
 @patch("hvac.api.auth_methods.token.Token.lookup_self")

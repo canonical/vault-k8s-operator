@@ -28,14 +28,23 @@ Feature managers should not:
 - Depend on each other unless the features explicitly require the dependency.
 """
 
+import contextlib
 import json
 import logging
 import os
+import re
+import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from typing import FrozenSet, MutableMapping, TextIO
+from typing import FrozenSet, Iterator, Mapping, MutableMapping, TextIO
 
+from charmlibs.interfaces.certificate_transfer import (
+    CertificateTransferProvides as CertificateTransferProvidesV1,
+)
+from charmlibs.interfaces.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferProvides,
 )
@@ -55,14 +64,19 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.serialization import Encoding
 from ops import CharmBase, EventBase, Object, Relation
-from ops.pebble import PathError
+from ops.pebble import ConnectionError, PathError
+from ops.pebble import Error as PebbleError
 
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
+    SecretRemovedError,
     TransientJujuError,
 )
 from vault.vault_autounseal import (
@@ -74,12 +88,17 @@ from vault.vault_client import (
     AppRole,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+RECEIVE_CA_CERT_RELATION_NAME = "receive-ca-cert"
+_PEM_CERTIFICATE_PATTERN = re.compile(
+    r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", re.DOTALL
+)
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
@@ -240,6 +259,12 @@ class TLSManager(Object):
         self.sans_ip = sans_ip
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
+        self.certificate_transfer_v1 = CertificateTransferProvidesV1(
+            charm, SEND_CA_CERT_RELATION_NAME
+        )
+        self.trusted_ca_transfer = CertificateTransferRequires(
+            charm, RECEIVE_CA_CERT_RELATION_NAME
+        )
         if self.mode == TLSMode.TLS_INTEGRATION:
             self.tls_access = TLSCertificatesRequiresV4(
                 charm=charm,
@@ -248,6 +273,14 @@ class TLSManager(Object):
             )
             self.framework.observe(
                 self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_changed,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificate_set_updated,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificates_removed,
                 self._configure_tls_integration,
             )
         elif self.mode == TLSMode.SELF_SIGNED:
@@ -380,30 +413,97 @@ class TLSManager(Object):
                 self.charm.unit.name,
             )
             restart = True
-        if str(assigned_certificate.certificate) != self.pull_tls_file_from_workload(File.CERT):
-            self._push_tls_file_to_workload(File.CERT, str(assigned_certificate.certificate))
+        leaf = str(assigned_certificate.certificate)
+        certificate_chain = "\n".join(
+            dict.fromkeys(
+                [leaf]
+                + [
+                    str(certificate)
+                    for certificate in assigned_certificate.chain
+                    if not self._is_self_signed(str(certificate))
+                ]
+            )
+        )
+        if certificate_chain != self.pull_tls_file_from_workload(File.CERT):
+            self._push_tls_file_to_workload(File.CERT, certificate_chain)
             logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
             restart = True
-        if self.pull_tls_file_from_workload(File.CA) != str(assigned_certificate.ca):
-            self._push_tls_file_to_workload(File.CA, str(assigned_certificate.ca))
+        ca_bundle = self._get_ca_bundle(str(assigned_certificate.ca))
+        if self.pull_tls_file_from_workload(File.CA) != ca_bundle:
+            self._push_tls_file_to_workload(File.CA, ca_bundle)
             restart = True
         if restart:
             self._restart_vault()
 
+    @staticmethod
+    def _is_self_signed(certificate: str) -> bool:
+        """Return whether the PEM certificate is a self signed root CA."""
+        try:
+            parsed = x509.load_pem_x509_certificate(certificate.encode())
+            parsed.verify_directly_issued_by(parsed)
+            return True
+        except (ValueError, TypeError, InvalidSignature):
+            return False
+
+    def _get_ca_bundle(self, access_ca: str) -> str:
+        """Build the trusted CA bundle from the access root or transferred roots."""
+        trusted_cas = {cert.strip() for cert in self.trusted_ca_transfer.get_all_certificates()}
+        if self._is_self_signed(access_ca):
+            trusted_cas.add(access_ca.strip())
+        return "\n".join(sorted(trusted_cas))
+
+    def access_certificate_requires_trusted_ca(self) -> bool:
+        """Return whether the access certificate lacks a trusted issuing root."""
+        if self.mode != TLSMode.TLS_INTEGRATION:
+            return False
+        certificate_bundle = self.pull_tls_file_from_workload(File.CERT)
+        if not certificate_bundle:
+            return False
+        ca_bundle = self.pull_tls_file_from_workload(File.CA)
+        if not ca_bundle:
+            return True
+        try:
+            chain = x509.load_pem_x509_certificates(certificate_bundle.encode())
+            trusted_cas = x509.load_pem_x509_certificates(ca_bundle.encode())
+            for child, issuer in zip(chain, chain[1:]):
+                child.verify_directly_issued_by(issuer)
+            for root in trusted_cas:
+                if self._is_self_signed(root.public_bytes(Encoding.PEM).decode()):
+                    try:
+                        chain[-1].verify_directly_issued_by(root)
+                        return False
+                    except (ValueError, InvalidSignature):
+                        continue
+        except (ValueError, TypeError, IndexError, InvalidSignature):
+            return True
+        return True
+
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
-        if ca := self.pull_tls_file_from_workload(File.CA):
+        if not self.workload.is_accessible():
+            return
+        try:
+            ca = self.pull_tls_file_from_workload(File.CA)
+        except PebbleError as e:
+            logger.warning("Cannot send CA certificate because workload is unavailable: %s", e)
+            return
+        if ca:
+            certificates = set(_PEM_CERTIFICATE_PATTERN.findall(ca))
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.set_certificate(
                     certificate="", ca=ca, chain=[], relation_id=relation.id
+                )
+                self.certificate_transfer_v1.add_certificates(
+                    certificates=certificates, relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
         else:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.remove_certificate(relation.id)
+                self.certificate_transfer_v1.remove_all_certificates(relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
 
     def get_tls_file_path_in_workload(self, file: File) -> str:
@@ -479,7 +579,7 @@ class TLSManager(Object):
                 self.get_tls_file_path_in_workload(file),
             ) as file_content:
                 return file_content.read().strip()
-        except (PathError, FileNotFoundError):
+        except (PathError, FileNotFoundError, ConnectionError, PebbleError):
             return ""
 
     def ca_certificate_secret_exists(self) -> bool:
@@ -496,8 +596,11 @@ class TLSManager(Object):
             file: a File object that determines which file to write.
             data: the data to write into that file.
         """
-        self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
-        logger.debug("Pushed %s file to workload", file.name)
+        try:
+            self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
+            logger.debug("Pushed %s file to workload", file.name)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push %s file to workload: %s", file.name, e)
 
     def push_autounseal_ca_cert(self, ca_cert: str) -> None:
         """Push the CA certificate to the workload.
@@ -505,7 +608,10 @@ class TLSManager(Object):
         Args:
             ca_cert: The CA certificate to push to the workload.
         """
-        self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        try:
+            self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push autounseal CA certificate to workload: %s", e)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
         """Remove the certificate files that are used for authentication.
@@ -515,7 +621,7 @@ class TLSManager(Object):
         """
         try:
             self.workload.remove_path(path=self.get_tls_file_path_in_workload(file))
-        except PathError:
+        except (PathError, ConnectionError, PebbleError):
             pass
         logger.debug("Removed %s file from workload.", file.name)
 
@@ -528,7 +634,10 @@ class TLSManager(Object):
         Returns:
             bool: True if file exists.
         """
-        return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        try:
+            return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        except (ConnectionError, PebbleError):
+            return False
 
     def _unit_certificate_sans_match_current_request(self, unit_cert_content: str) -> bool:
         """Check if the unit certificate attributes match the current TLS manager configuration.
@@ -816,6 +925,38 @@ class AutounsealProviderManager:
         )
         return key_name, role_id, secret_id
 
+    def get_outstanding_requests(self) -> list[Relation]:
+        """Return new requests and requests whose Vault credentials became stale."""
+        outstanding: list[Relation] = []
+        for relation in self._juju_facade.get_active_relations(self._provides.relation_name):
+            try:
+                credentials_secret_id = self._juju_facade.get_app_relation_data(
+                    self._provides.relation_name, relation.id
+                ).get("credentials_secret_id")
+            except FacadeError:
+                outstanding.append(relation)
+                continue
+            if not credentials_secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                _, secret_id = self._juju_facade.get_secret_content_values(
+                    "role-id", "secret-id", id=credentials_secret_id
+                )
+            except (NoSuchSecretError, SecretRemovedError):
+                outstanding.append(relation)
+                continue
+            if not secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                self._client.read_role_secret(
+                    Naming.autounseal_approle_name(relation.id), secret_id
+                )
+            except VaultClientError:
+                outstanding.append(relation)
+        return outstanding
+
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
 
@@ -871,7 +1012,11 @@ class AutounsealRequirerManager:
             existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
-        if not existing_token or not external_vault.authenticate(Token(existing_token)):
+        try:
+            token_valid = existing_token and external_vault.authenticate(Token(existing_token))
+        except VaultAuthenticationError:
+            token_valid = False
+        if not token_valid:
             external_vault.authenticate(
                 AppRole(autounseal_details.role_id, autounseal_details.secret_id)
             )
@@ -1095,13 +1240,17 @@ class PKIManager:
         if not certificate:
             logger.debug("Failed to sign the certificate")
             return
+        chain = [Certificate.from_string(certificate.certificate)] + [
+            Certificate.from_string(cert) for cert in certificate.chain
+        ]
+        if provider_certificate.ca not in chain:
+            chain.append(provider_certificate.ca)
         provider_certificate = ProviderCertificate(
             relation_id=requirer_csr.relation_id,
             certificate=Certificate.from_string(certificate.certificate),
             certificate_signing_request=requirer_csr.certificate_signing_request,
             ca=Certificate.from_string(certificate.ca),
-            chain=[Certificate.from_string(certificate.certificate)]
-            + [Certificate.from_string(cert) for cert in certificate.chain],
+            chain=chain,
         )
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
@@ -1283,7 +1432,10 @@ class KVManager:
             return False
         if not role_secret_id:
             return False
-        role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        try:
+            role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        except VaultClientError:
+            return False
         if egress_subnets == role_data["cidr_list"]:
             return True
         return False
@@ -1324,44 +1476,50 @@ class BackupManager:
 
         Stores the backup in the S3 bucket provided by the S3 relation.
 
+        Args:
+            vault_client: The Vault client to use for creating the snapshot
+
         Returns:
             The S3 key of the backup.
         """
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error as e:
+                logger.error("Failed to create S3 session. %s", e)
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
+            if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
+                raise ManagerError("Failed to create S3 bucket")
+            backup_key = f"{path_prefix}{Naming.backup_s3_key_name(self._charm.model.name)}"
+
+            response = vault_client.create_snapshot()
+            content_uploaded = s3.upload_content(
+                content=response.raw,  # type: ignore[reportArgumentType]
+                bucket_name=s3_parameters["bucket"],
+                key=backup_key,
             )
-        except S3Error as e:
-            logger.error("Failed to create S3 session. %s", e)
-            raise ManagerError("Failed to create S3 session")
-
-        if not (s3.create_bucket(bucket_name=s3_parameters["bucket"])):
-            raise ManagerError("Failed to create S3 bucket")
-        backup_key = Naming.backup_s3_key_name(self._charm.model.name)
-
-        response = vault_client.create_snapshot()
-        content_uploaded = s3.upload_content(
-            content=response.raw,  # type: ignore[reportArgumentType]
-            bucket_name=s3_parameters["bucket"],
-            key=backup_key,
-        )
-        if not content_uploaded:
-            raise ManagerError("Failed to upload backup to S3 bucket")
-        logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
-        return backup_key
+            if not content_uploaded:
+                raise ManagerError("Failed to upload backup to S3 bucket")
+            logger.info("Backup uploaded to S3 bucket %s", s3_parameters["bucket"])
+            return backup_key
 
     def list_backups(self) -> list[str]:
         """List all the backups available in the S3 bucket.
 
         Backups are identified by the key prefix from
-        ``Naming.backup_s3_key_prefix``.
+        ``Naming.backup_s3_key_prefix``, prepended with the S3 relation
+        ``path`` when one is configured.
 
         Returns:
             A list of backup keys with the prefix.
@@ -1369,24 +1527,27 @@ class BackupManager:
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error:
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error:
-            raise ManagerError("Failed to create S3 session")
-
-        try:
-            backup_ids = s3.get_object_key_list(
-                bucket_name=s3_parameters["bucket"], prefix=Naming.backup_s3_key_prefix
-            )
-        except S3Error as e:
-            raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
-        return backup_ids
+            try:
+                backup_ids = s3.get_object_key_list(
+                    bucket_name=s3_parameters["bucket"],
+                    prefix=f"{path_prefix}{Naming.backup_s3_key_prefix}",
+                )
+            except S3Error as e:
+                raise ManagerError(f"Failed to list backups in S3 bucket: {e}")
+            return backup_ids
 
     def restore_backup(self, vault_client: VaultClient, backup_key: str) -> None:
         """Restore the Vault data from the backup using the ``vault_client`` provided.
@@ -1398,31 +1559,48 @@ class BackupManager:
         self._validate_s3_prerequisites()
 
         s3_parameters = self._get_s3_parameters()
+        path_prefix = self._normalize_path(s3_parameters)
+        with self._ca_cert_bundle(s3_parameters) as ca_cert_path:
+            try:
+                s3 = S3(
+                    access_key=s3_parameters["access-key"],
+                    secret_key=s3_parameters["secret-key"],
+                    endpoint=s3_parameters["endpoint"],
+                    region=s3_parameters.get("region"),
+                    ca_cert_path=ca_cert_path,
+                )
+            except S3Error:
+                raise ManagerError("Failed to create S3 session")
 
-        try:
-            s3 = S3(
-                access_key=s3_parameters["access-key"],
-                secret_key=s3_parameters["secret-key"],
-                endpoint=s3_parameters["endpoint"],
-                region=s3_parameters.get("region"),
-            )
-        except S3Error:
-            raise ManagerError("Failed to create S3 session")
+            # If the supplied key is already prefixed, fetch it directly.
+            # Otherwise try the path-prefixed key first and fall back to the raw key.
+            if path_prefix and backup_key.startswith(path_prefix):
+                candidates = [backup_key]
+            else:
+                prefixed_key = f"{path_prefix}{backup_key}"
+                candidates = (
+                    [prefixed_key] if prefixed_key == backup_key else [prefixed_key, backup_key]
+                )
+            try:
+                snapshot = None
+                for candidate in candidates:
+                    snapshot = s3.get_content(
+                        bucket_name=s3_parameters["bucket"],
+                        object_key=candidate,
+                    )
+                    if snapshot:
+                        break
+            except S3Error as e:
+                raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
+            if not snapshot:
+                raise ManagerError(
+                    f"Snapshot not found in S3 bucket. ({s3_parameters['bucket']}/{backup_key})"
+                )
 
-        try:
-            snapshot = s3.get_content(
-                bucket_name=s3_parameters["bucket"],
-                object_key=backup_key,
-            )
-        except S3Error as e:
-            raise ManagerError(f"Failed to retrieve snapshot from S3: {e}")
-        if not snapshot:
-            raise ManagerError("Snapshot not found in S3 bucket")
-
-        try:
-            vault_client.restore_snapshot(snapshot=snapshot)
-        except VaultClientError as e:
-            raise ManagerError(f"Failed to restore snapshot: {e}")
+            try:
+                vault_client.restore_snapshot(snapshot=snapshot)
+            except VaultClientError as e:
+                raise ManagerError(f"Failed to restore snapshot: {e}")
 
     def _validate_s3_prerequisites(self) -> str | None:
         """Validate the S3 pre-requisites are met.
@@ -1460,6 +1638,53 @@ class BackupManager:
                 s3_parameters[key] = value.strip()
         return s3_parameters
 
+    def _normalize_path(self, s3_parameters: Mapping[str, object]) -> str:
+        """Return the S3 relation ``path`` as a normalized key prefix.
+
+        Strips leading and trailing slashes from the ``path`` field and
+        appends a trailing slash so it can be prepended to object keys.
+        Returns an empty string when no path is configured, so it is a no-op
+        when ``path`` is absent.
+
+        Args:
+            s3_parameters: S3 relation parameters.
+
+        Returns:
+            A prefix such as ``"vault/"`` or an empty string.
+        """
+        path = s3_parameters.get("path")
+        if not path or not isinstance(path, str):
+            return ""
+        stripped = path.strip("/")
+        if not stripped:
+            return ""
+        return f"{stripped}/"
+
+    @contextlib.contextmanager
+    def _ca_cert_bundle(self, s3_parameters: Mapping[str, object]) -> Iterator[str | None]:
+        """Extract the S3 relation ``tls-ca-chain`` to a temporary PEM file.
+
+        The s3-integrator relation provides ``tls-ca-chain`` as a JSON list of
+        PEM strings. boto3's ``verify`` parameter accepts a path to a CA bundle
+        file, so the chain is written to a temporary file and its path yielded.
+        The file is removed once the enclosing ``with`` block exits.
+
+        Yields:
+            The path to the temporary CA bundle file, or ``None`` when the
+            relation does not provide a ``tls-ca-chain`` or it is malformed.
+        """
+        tls_ca_chain = s3_parameters.get("tls-ca-chain")
+        if not tls_ca_chain or not isinstance(tls_ca_chain, list):
+            yield None
+            return
+        fd, path = tempfile.mkstemp(suffix=".pem")
+        try:
+            with os.fdopen(fd, "w") as ca_file:
+                ca_file.write("\n".join(tls_ca_chain))
+            yield path
+        finally:
+            os.unlink(path)
+
 
 class RaftManager:
     """Encapsulates the business logic for managing the bootstrap of a Vault cluster in Raft mode."""
@@ -1489,9 +1714,14 @@ class RaftManager:
         if not self._juju_facade.planned_units_for_app == 1:
             raise ManagerError("Bootstrapping a Vault cluster requires exactly one unit")
 
-        self._workload.stop(self._service_name)
-        self._push_peers_json(node_id, address)
-        self._workload.restart(self._service_name)
+        if not self._workload.is_accessible():
+            raise ManagerError("Workload is not accessible")
+        try:
+            self._workload.stop(self._service_name)
+            self._push_peers_json(node_id, address)
+            self._workload.restart(self._service_name)
+        except PebbleError as e:
+            raise ManagerError(f"Failed to bootstrap Vault cluster: {e}") from e
 
         logger.info("Vault cluster bootstrapped in Raft mode")
 
