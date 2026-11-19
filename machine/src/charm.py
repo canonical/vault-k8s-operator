@@ -9,6 +9,7 @@ import json
 import logging
 import signal
 import socket
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, NamedTuple
@@ -103,6 +104,8 @@ VAULT_PORT = 8200
 VAULT_SNAP_CHANNEL = "1.16/stable"
 VAULT_SNAP_NAME = "vault"
 VAULT_SNAP_REVISION = "2300"
+SNAP_LOOKUP_ATTEMPTS = 6
+SNAP_LOOKUP_RETRY_DELAY_SECONDS = 10
 VAULT_STORAGE_PATH = "/var/snap/vault/common/raft"
 INGRESS_RELATION_NAME = "ingress"
 
@@ -860,11 +863,28 @@ class VaultOperatorCharm(CharmBase):
             return None
         return AppRole(role_id, secret_id) if role_id and secret_id else None
 
+    def _get_vault_snap(self) -> snap.Snap:
+        """Look up Vault, retrying transient snapd server errors."""
+        for attempt in range(1, SNAP_LOOKUP_ATTEMPTS):
+            try:
+                return snap.SnapCache()[VAULT_SNAP_NAME]
+            except (snap.SnapAPIError, snap.SnapNotFoundError) as error:
+                api_error = error if isinstance(error, snap.SnapAPIError) else error.__cause__
+                if not (isinstance(api_error, snap.SnapAPIError) and api_error.code >= 500):
+                    raise
+                logger.warning(
+                    "Failed to look up the Vault snap (attempt %d/%d), retrying: %r",
+                    attempt,
+                    SNAP_LOOKUP_ATTEMPTS,
+                    api_error,
+                )
+                time.sleep(SNAP_LOOKUP_RETRY_DELAY_SECONDS)
+        return snap.SnapCache()[VAULT_SNAP_NAME]
+
     def _install_vault_snap(self) -> None:
         """Installs the Vault snap in the machine."""
         try:
-            snap_cache = snap.SnapCache()
-            vault_snap = snap_cache[VAULT_SNAP_NAME]
+            vault_snap = self._get_vault_snap()
             if VAULT_SNAP_REVISION == vault_snap.revision:
                 return
             with self.temp_maintenance_status("Installing Vault"):
