@@ -16,6 +16,12 @@ on:
         options:
           - k8s
           - machine
+      arch:
+        type: choice
+        description: Architecture
+        options:
+          - amd64
+          - arm64
 
 env:
   PROMOTE_FROM: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
@@ -34,7 +40,7 @@ jobs:
       # We have to compute the channel here again because we can't pass env variables to a reusable workflow
       track: "2.0"
       channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
-      arch: amd64
+      arch: ${{ inputs.arch }}
       create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
       fail-on-cve: ${{ inputs.promotion != 'edge -> beta' }}
 
@@ -51,6 +57,7 @@ jobs:
         with:
           charm-path: ./${{ inputs.charm }}
           base-channel: 24.04
+          base-architecture: ${{ inputs.arch }}
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           destination-channel: ${{ env.TRACK }}/${{ env.PROMOTE_TO }}
