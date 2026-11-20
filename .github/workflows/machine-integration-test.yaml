@@ -24,7 +24,7 @@ jobs:
       suites: ${{ steps.suites.outputs.suites }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Generate matrix list
         id: suites
         run: |
@@ -43,7 +43,7 @@ jobs:
         suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
@@ -76,22 +76,30 @@ jobs:
           echo "vault-charm=${VAULT_CHARM}" >> "$GITHUB_OUTPUT"
           echo "kv-charm=${KV_CHARM}" >> "$GITHUB_OUTPUT"
       - name: Install TLS proxy for backup tests
-        if: ${{ matrix.suite == 'test_backup_tls.py' }}
+        if: ${{ matrix.suite == 'test_backup.py' }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes socat
       - name: Install MicroCeph and configure RGW for backup tests
-        if: ${{ matrix.suite == 'test_backup.py' || matrix.suite == 'test_backup_tls.py' }}
+        if: ${{ matrix.suite == 'test_backup.py' }}
         run: |
+          echo "Installing MicroCeph snap..."
           sudo snap install microceph
           sudo snap refresh --hold microceph
+
+          echo "Bootstrapping MicroCeph cluster..."
           sudo microceph cluster bootstrap
+
+          echo "Adding loop-file backed OSDs..."
           sudo microceph disk add loop,4G,3
 
+          echo "Waiting for MicroCeph cluster to be healthy..."
+          sudo microceph.ceph status
           health=""
           for i in $(seq 1 30); do
             health=$(sudo microceph.ceph health --format json | jq -r '.status')
             if [ "$health" = "HEALTH_OK" ]; then
+              echo "Cluster is healthy."
               break
             fi
             echo "Waiting for cluster health... (attempt $i/30, current: $health)"
@@ -102,11 +110,14 @@ jobs:
             exit 1
           fi
 
+          echo "Enabling RGW (S3-compatible gateway) on port 7480..."
           sudo microceph enable rgw --port 7480
 
+          echo "Waiting for RGW to be ready..."
           rgw_ready=false
           for i in $(seq 1 30); do
             if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7480 | grep -q "200\|403"; then
+              echo "RGW is responding."
               rgw_ready=true
               break
             fi
@@ -118,20 +129,24 @@ jobs:
             exit 1
           fi
 
+          echo "Creating S3 user for Vault integration tests..."
           sudo microceph.radosgw-admin user create \
             --uid=vaultmicrocephtest \
             --display-name="Vault MicroCeph Test" \
             --access-key=vaultmicrocephtest \
             --secret-key=vaultmicrocephtest
 
-          sudo apt-get update
-          sudo apt-get install --yes s3cmd
+          echo "Creating S3 bucket..."
+          sudo apt-get install -y -qq s3cmd > /dev/null
           s3cmd --access_key=vaultmicrocephtest \
             --secret_key=vaultmicrocephtest \
             --host=127.0.0.1:7480 \
             --host-bucket="127.0.0.1:7480/%(bucket)" \
             --no-ssl \
             mb s3://vault-microceph-test
+
+          echo "MicroCeph RGW setup complete."
+          sudo microceph status
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
         run: |

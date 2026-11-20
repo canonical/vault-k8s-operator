@@ -2,7 +2,9 @@ from datetime import timedelta
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from charmlibs.interfaces.tls_certificates import KeyAlgorithm
 from charms.data_platform_libs.v0.s3 import S3Requirer
+from ops.pebble import ConnectionError as PebbleConnectionError
 from vault.juju_facade import NoSuchSecretError, SecretRemovedError
 from vault.vault_autounseal import AutounsealDetails
 from vault.vault_client import (
@@ -25,6 +27,7 @@ from vault.vault_managers import (
     ManagerError,
     PKIManager,
     PrivateKey,
+    ProviderCapabilities,
     ProviderCertificate,
     RaftManager,
     TLSCertificatesProvidesV4,
@@ -369,7 +372,12 @@ class TestPKIManager:
         self.role_name = "role_name"
         self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
         self.tls_certificates_pki = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.tls_certificates_pki.private_key = None
+        self.tls_certificates_pki.key_algorithm = KeyAlgorithm.RSA
+        self.tls_certificates_pki.key_size = 2048
+        self.tls_certificates_pki.relationship_name = "tls-certificates-pki"
         self.allowed_domains = "common_name"
+        self.allow_bare_domains = True
         self.allow_subdomains = False
         self.allow_wildcard_certificates = True
         self.allow_any_name = False
@@ -389,6 +397,7 @@ class TestPKIManager:
             vault_pki=self.vault_pki,
             tls_certificates_pki=self.tls_certificates_pki,
             allowed_domains=self.allowed_domains,
+            allow_bare_domains=self.allow_bare_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
@@ -440,6 +449,18 @@ class TestPKIManager:
         self.pki_manager.make_latest_pki_issuer_default()
 
         assert is_error_logged(caplog, "Failed to get the first issuer")
+
+    def test_given_private_key_type_changed_when_configure_then_private_key_is_regenerated(self):
+        self.tls_certificates_pki.private_key = PrivateKey.generate(
+            key_algorithm=KeyAlgorithm.RSA, key_size=2048
+        )
+        self.tls_certificates_pki.key_algorithm = KeyAlgorithm.ECDSA
+        self.tls_certificates_pki.key_size = 256
+
+        self.pki_manager.configure()
+
+        self.tls_certificates_pki.regenerate_private_key.assert_called_once_with()
+        self.tls_certificates_pki.get_assigned_certificate.assert_not_called()
 
     def test_given_existing_pki_issuers_when_make_latest_pki_issuer_default_then_config_written_to_path(
         self, issuer_is_not_default: None
@@ -501,6 +522,7 @@ class TestPKIManager:
             mount=self.mount_point,
             role=self.role_name,
             max_ttl=f"{12 * SECONDS_IN_HOUR}s",
+            allow_bare_domains=self.allow_bare_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
@@ -527,8 +549,7 @@ class TestPKIManager:
         cert = VaultClientCertificate(
             certificate=str(signed_certificate),
             ca=str(provider_certificate.certificate),
-            chain=[str(provider_certificate.certificate)]
-            + [str(cert) for cert in provider_certificate.chain],
+            chain=[str(provider_certificate.certificate)],
         )
 
         self.vault.sign_pki_certificate_signing_request.return_value = cert
@@ -618,6 +639,229 @@ class TestPKIManager:
         assert provider_error.error.code == CertificateRequestErrorCode.OTHER
 
 
+class TestPKIManagerProviderCapabilities:
+    def test_given_config_values_when_build_provider_capabilities_then_values_reflect_role_config(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com,sub.example.com",
+            allow_subdomains=True,
+            allow_wildcard_certificates=False,
+            allow_any_name=False,
+            allow_ip_sans=True,
+        )
+
+        assert capabilities == ProviderCapabilities(
+            supports_ip_sans=True,
+            supports_wildcard_dns=False,
+            supports_subdomain=True,
+            supports_ca_certificates=False,
+            allowed_domains=["example.com", "sub.example.com"],
+            provider_type="vault",
+        )
+
+    def test_given_no_allowed_domains_when_build_provider_capabilities_then_common_name_is_used(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains=None,
+            allow_subdomains=False,
+            allow_wildcard_certificates=True,
+            allow_any_name=False,
+            allow_ip_sans=False,
+        )
+
+        assert capabilities.allowed_domains == ["example.com"]
+
+    def test_given_allow_any_name_when_build_provider_capabilities_then_allowed_domains_is_none(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com",
+            allow_subdomains=False,
+            allow_wildcard_certificates=True,
+            allow_any_name=True,
+            allow_ip_sans=False,
+        )
+
+        assert capabilities.allowed_domains is None
+
+    def test_given_unset_bool_config_when_build_provider_capabilities_then_advertised_as_unspecified(
+        self,
+    ):
+        capabilities = PKIManager.build_provider_capabilities(
+            common_name="example.com",
+            allowed_domains="example.com",
+            allow_subdomains=None,
+            allow_wildcard_certificates=None,
+            allow_any_name=None,
+            allow_ip_sans=None,
+        )
+
+        assert capabilities.supports_subdomain is None
+        assert capabilities.supports_wildcard_dns is None
+        assert capabilities.supports_ip_sans is None
+        assert capabilities.provider_type == "vault"
+
+
+class TestPKIManagerSelfSigned:
+    @pytest.fixture(autouse=True)
+    @patch("vault.vault_managers.JujuFacade")
+    def setup(self, juju_facade_mock: MagicMock):
+        self.juju_facade = juju_facade_mock.return_value
+        self.juju_facade.is_leader = True
+        self.charm = MagicMock(spec=VaultCharm)
+        self.vault = MagicMock(spec=VaultClient)
+        self.certificate_request_attributes = CertificateRequestAttributes(
+            common_name="common_name",
+            is_ca=True,
+        )
+        self.mount_point = "mount_point"
+        self.role_name = "role_name"
+        self.vault_pki = MagicMock(spec=TLSCertificatesProvidesV4)
+        self.allowed_domains = "common_name"
+        self.allow_bare_domains = True
+        self.allow_subdomains = False
+        self.allow_wildcard_certificates = True
+        self.allow_any_name = False
+        self.allow_ip_sans = False
+        self.organization = "test-organization"
+        self.organizational_unit = "test-organizational-unit"
+        self.country = "test-country"
+        self.province = "test-province"
+        self.locality = "test-locality"
+
+        self.pki_manager = PKIManager(
+            charm=self.charm,
+            vault_client=self.vault,
+            certificate_request_attributes=self.certificate_request_attributes,
+            mount_point=self.mount_point,
+            role_name=self.role_name,
+            vault_pki=self.vault_pki,
+            tls_certificates_pki=None,  # None triggers self-signed CA mode
+            allowed_domains=self.allowed_domains,
+            allow_bare_domains=self.allow_bare_domains,
+            allow_subdomains=self.allow_subdomains,
+            allow_wildcard_certificates=self.allow_wildcard_certificates,
+            allow_any_name=self.allow_any_name,
+            allow_ip_sans=self.allow_ip_sans,
+            organization=self.organization,
+            organizational_unit=self.organizational_unit,
+            country=self.country,
+            province=self.province,
+            locality=self.locality,
+        )
+
+    def test_given_no_existing_self_signed_ca_when_configure_then_ca_generated_and_stored(
+        self,
+    ):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (None, None)
+        self.vault.generate_self_signed_ca.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.role_config_matches_given_config.return_value = True
+        self.vault.get_role_max_ttl.return_value = 43200
+
+        self.pki_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_called_once_with(
+            SecretsBackend.PKI, self.mount_point
+        )
+        self.vault.generate_self_signed_ca.assert_called_once_with(
+            mount=self.mount_point,
+            common_name=self.certificate_request_attributes.common_name,
+            ttl="87600h",
+            sans_dns=None,
+            country=None,
+            province=None,
+            locality=None,
+            organization=None,
+            organizational_unit=None,
+        )
+        self.vault.import_ca_certificate_and_key.assert_not_called()
+        self.juju_facade.set_app_secret_content.assert_called_once_with(
+            {
+                "certificate": str(provider_certificate.certificate),
+                "privatekey": str(private_key),
+            },
+            label=PKIManager.SELF_SIGNED_CA_SECRET_LABEL,
+        )
+
+    def test_given_existing_self_signed_ca_in_secret_when_configure_then_ca_reused(
+        self,
+    ):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.get_intermediate_ca.return_value = str(provider_certificate.certificate)
+        self.vault.role_config_matches_given_config.return_value = True
+        self.vault.get_role_max_ttl.return_value = 43200
+
+        self.pki_manager.configure()
+
+        self.vault.generate_self_signed_ca.assert_not_called()
+        self.vault.import_ca_certificate_and_key.assert_not_called()
+        self.juju_facade.set_app_secret_content.assert_not_called()
+
+    def test_given_self_signed_ca_when_sync_then_certificates_issued(self):
+        provider_certificate, private_key = generate_example_provider_certificate(
+            self.certificate_request_attributes.common_name, 1, validity=timedelta(hours=24)
+        )
+        self.juju_facade.get_secret_content_values.return_value = (
+            str(provider_certificate.certificate),
+            str(private_key),
+        )
+        self.vault.is_pki_role_created.return_value = True
+        csr = generate_example_requirer_csr(self.certificate_request_attributes.common_name, 1)
+        self.vault_pki.get_outstanding_certificate_requests.return_value = [csr]
+
+        signed_certificate = sign_certificate(
+            provider_certificate.certificate, private_key, csr.certificate_signing_request
+        )
+        cert = VaultClientCertificate(
+            certificate=str(signed_certificate),
+            ca=str(provider_certificate.certificate),
+            chain=[str(provider_certificate.certificate)],
+        )
+        self.vault.sign_pki_certificate_signing_request.return_value = cert
+
+        self.pki_manager.sync()
+
+        self.vault.sign_pki_certificate_signing_request.assert_called_once_with(
+            mount=self.mount_point,
+            role=self.role_name,
+            csr=str(csr.certificate_signing_request),
+            common_name=self.certificate_request_attributes.common_name,
+            ttl=f"{12 * SECONDS_IN_HOUR}s",
+        )
+        self.vault_pki.set_relation_certificate.assert_called_once()
+
+    def test_given_non_leader_when_configure_then_no_action(self):
+        self.juju_facade.is_leader = False
+
+        self.pki_manager.configure()
+
+        self.vault.enable_secrets_engine.assert_not_called()
+
+    def test_given_non_leader_when_sync_then_no_action(self):
+        self.juju_facade.is_leader = False
+
+        self.pki_manager.sync()
+
+        self.vault_pki.get_outstanding_certificate_requests.assert_not_called()
+
+
 class TestACMEManager:
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -625,6 +869,10 @@ class TestACMEManager:
         self.vault = MagicMock(spec=VaultClient)
         self.mount_point = "acme-charm"
         self.tls_certificates_acme = MagicMock(spec=TLSCertificatesRequiresV4)
+        self.tls_certificates_acme.private_key = None
+        self.tls_certificates_acme.key_algorithm = KeyAlgorithm.RSA
+        self.tls_certificates_acme.key_size = 2048
+        self.tls_certificates_acme.relationship_name = "tls-certificates-acme"
         self.certificate_request_attributes = CertificateRequestAttributes(
             common_name="common_name",
             is_ca=True,
@@ -650,6 +898,7 @@ class TestACMEManager:
             role_name=self.role_name,
             vault_address=self.vault_address,
             allowed_domains=self.allowed_domains,
+            allow_bare_domains=True,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
             allow_any_name=self.allow_any_name,
@@ -788,6 +1037,7 @@ class TestACMEManager:
             role=self.role_name,
             max_ttl=f"{max_ttl}s",
             mount=self.mount_point,
+            allow_bare_domains=True,
             allowed_domains=self.allowed_domains,
             allow_subdomains=self.allow_subdomains,
             allow_wildcard_certificates=self.allow_wildcard_certificates,
@@ -1222,3 +1472,15 @@ class TestRaftManager:
             '[{"id": "my-node", "address": "my-address"}]',
         )
         self.workload.restart.assert_called_once_with("vault")
+
+    def test_given_workload_not_accessible_when_bootstrap_then_error_raised(self):
+        self.workload.is_accessible.return_value = False
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert str(e.value) == "Workload is not accessible"
+
+    def test_given_pebble_connection_error_when_bootstrap_then_manager_error_raised(self):
+        self.workload.stop.side_effect = PebbleConnectionError("Pebble unavailable")
+        with pytest.raises(ManagerError) as e:
+            self.manager.bootstrap("my-node", "my-address")
+        assert "Failed to bootstrap Vault cluster" in str(e.value)

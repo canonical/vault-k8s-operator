@@ -64,8 +64,14 @@ requires:
     interface: tls-certificates
     limit: 1
     description: |
-      Communication between the vault units and from a client to Vault should 
+      Communication between the vault units and from a client to Vault should
       be done using the certificates provided by this integration.
+    optional: true
+  receive-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Receive CA certificates to trust, such as the root CA of the issuer on
+      `tls-certificates-access` when that issuer is an intermediate CA.
     optional: true
   tls-certificates-pki:
     interface: tls-certificates
@@ -93,6 +99,16 @@ type: charm
 platforms:
   ubuntu@24.04:amd64:
 
+charm-libs:
+  - lib: data_platform_libs.s3
+    version: "0.5"
+  - lib: grafana_agent.cos_agent
+    version: "0.20"
+  - lib: operator_libs_linux.snap
+    version: "2.10"
+  - lib: traefik_k8s.ingress
+    version: "2.15"
+
 parts:
   charm:
     source: .
@@ -113,17 +129,27 @@ config:
     default_lease_ttl:
       type: string
       default: "168h"
-      description: Specifies the default lease duration for Vault's tokens and secrets.
+      description: >-
+        Specifies the default lease duration for Vault's tokens and secrets.
+        Changing this option restarts the Vault service, which requires Vault
+        to be unsealed again if manual unsealing is used.
     max_lease_ttl:
       type: string
       default: "720h"
-      description: Specifies the maximum possible lease duration for Vault's tokens and secrets.
+      description: >-
+        Specifies the maximum possible lease duration for Vault's tokens and secrets.
+        Changing this option restarts the Vault service, which requires Vault
+        to be unsealed again if manual unsealing is used.
     log_level:
       type: string
       default: "info"
       description: >-
         The log verbosity level. Supported values (in order of descending detail) are trace, debug, info, warn, and error.
-     # Access interface options
+    logrotate_frequency:
+      type: string
+      default: "daily"
+      description: "How often to rotate syslog (daily, weekly, monthly)"
+    # Access interface options
     access_sans_dns:
       type: string
       description: >-
@@ -230,6 +256,13 @@ config:
         A comma-separated list of domain names for which the Vault charm can sign certificates.
         The Vault charm will use this configuration option in the context of acting as an intermediate CA.
         Certificate requests for charms integrating with Vault using the `vault-pki` integration will need to use a domain name from this list.
+    pki_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the exact value of the domains listed in `pki_allowed_domains` (or `pki_ca_common_name` if not set).
+        For example, if `pki_allowed_domains` is `example.com`, this option allows issuing a certificate for `example.com` itself.
+        When disabled, only subdomains (if `pki_allow_subdomains` is true) can be issued, not the base domain.
     pki_allow_subdomains:
       type: boolean
       default: false
@@ -285,9 +318,26 @@ config:
       description: >-
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
+    pki_self_signed_ca_validity:
+      type: int
+      default: 87600
+      description: >-
+        The validity period in hours for the self-signed CA certificate when using Vault's built-in PKI
+        without an external CA relation (tls-certificates-pki). Default is 87600 hours (10 years).
+        This option is only used when the `tls-certificates-pki` relation is not present and
+        `pki_ca_common_name` is configured.
+    pki_ca_key_type:
+      type: string
+      default: rsa-2048
+      description: >-
+        The private key algorithm and size for the PKI CA certificate.
+        Supported values are: rsa-2048, rsa-3072, rsa-4096, ecdsa-p256, ecdsa-p384.
+        Changing this option will rotate the private key on the next configuration change,
+        and the PKI CA certificate will be re-issued with the new key type.
+        This option is used when requesting a CA certificate from a TLS provider using the
+        `tls-certificates-pki` charm relation interface.
 
-
-# ACME engine options
+    # ACME engine options
     acme_ca_common_name:
       type: string
       description: >-
@@ -350,6 +400,12 @@ config:
         Specifies if clients can request certificates with common names that are subdomains of the common name in the `allowed_domains` list.
         This includes wildcard subdomains.
         For example, an allowed_domains value of `example.com` with this option set to `true` will allow `foo.example.com` and `fou.bar.example.com` as well as `*.example.com`.
+    acme_allow_bare_domains:
+      type: boolean
+      default: true
+      description: >-
+        Specifies if clients can request certificates matching the value of the actual domains themselves.
+        For example, if `allowed_domains` contains `example.com`, setting this to `true` allows clients to actually request a certificate for `example.com`.
     acme_allow_wildcard_certificates:
       type: boolean
       default: true
@@ -398,6 +454,16 @@ config:
       description: >-
         This value specifies the L (Locality) value in the Subject field of the certificate issued by Vault PKI.
         If not set the issued certificate will not have an L value in the Subject field.
+    acme_ca_key_type:
+      type: string
+      default: rsa-2048
+      description: >-
+        The private key algorithm and size for the ACME CA certificate.
+        Supported values are: rsa-2048, rsa-3072, rsa-4096, ecdsa-p256, ecdsa-p384.
+        Changing this option will rotate the private key on the next configuration change,
+        and the ACME CA certificate will be re-issued with the new key type.
+        This option is used when requesting a CA certificate from a TLS provider using the
+        `tls-certificates-acme` charm relation interface.
 
 actions:
   authorize-charm:
@@ -410,8 +476,8 @@ actions:
       secret-id:
         type: string
         description: >-
-          A secret id from juju that contains a token for Vault that can create 
-          new policies, such as the root token that is provided upon initializing 
+          A secret id from juju that contains a token for Vault that can create
+          new policies, such as the root token that is provided upon initializing
           Vault. Used to create the app role and policy for the charm. It is not
           stored by the charm.
     required: [secret-id]

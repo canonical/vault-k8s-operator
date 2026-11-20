@@ -1,15 +1,31 @@
 """This library contains helper function used when configuring the Vault service."""
 
-import logging
-from dataclasses import dataclass
-import os
-from typing import Dict, List
 import ipaddress
+import logging
+import os
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List
 
 import hcl
+from hvac.exceptions import VaultError
 from jinja2 import Environment, FileSystemLoader
+from requests.exceptions import RequestException
+
+from vault.vault_client import VaultClient, VaultClientError
 
 logger = logging.getLogger(__name__)
+
+# Settings Vault applies on SIGHUP. Changes to any other setting take effect only on restart.
+RELOADABLE_CONFIG_KEYS = frozenset({"log_level"})
+
+
+class ConfigAction(Enum):
+    """Action required for a running Vault to apply a configuration change."""
+
+    NONE = "none"
+    RELOAD = "reload"
+    RESTART = "restart"
 
 
 @dataclass
@@ -20,6 +36,29 @@ class AutounsealConfiguration:
     mount_path: str
     key_name: str
     ca_cert_path: str
+
+
+DEFAULT_CA_KEY_TYPE = "rsa-2048"
+CA_KEY_TYPES: Dict[str, tuple[str, int]] = {
+    "rsa-2048": ("rsa", 2048),
+    "rsa-3072": ("rsa", 3072),
+    "rsa-4096": ("rsa", 4096),
+    "ecdsa-p256": ("ecdsa", 256),
+    "ecdsa-p384": ("ecdsa", 384),
+}
+
+
+def ca_key_type_config_is_valid(key_type: str) -> bool:
+    """Return whether the config value for a CA private key type is supported."""
+    return key_type in CA_KEY_TYPES
+
+
+def get_ca_key_algorithm_and_size(key_type: str) -> tuple[str, int]:
+    """Return the key algorithm and size for a CA private key type config value.
+
+    Falls back to the default key type if the value is not supported.
+    """
+    return CA_KEY_TYPES.get(key_type, CA_KEY_TYPES[DEFAULT_CA_KEY_TYPE])
 
 
 def common_name_config_is_valid(common_name: str) -> bool:
@@ -110,20 +149,13 @@ def render_vault_config_file(
     return content
 
 
-def seal_type_has_changed(content_a: str, content_b: str) -> bool:
-    """Check if the seal type has changed between two versions of the Vault configuration file.
-
-    Currently only checks if the transit stanza is present or not, since this
-    is all we support. This function will need to be extended to support
-    alternate cases if and when we support them.
-    """
-    config_a = hcl.loads(content_a)
-    config_b = hcl.loads(content_b)
-    return _contains_transit_stanza(config_a) != _contains_transit_stanza(config_b)
-
-
-def _contains_transit_stanza(config: dict) -> bool:
-    return "seal" in config and "transit" in config["seal"]
+def _split_retry_join_addresses(config: dict) -> tuple[dict, set[str]]:
+    """Remove the retry_join stanzas from a parsed config and return their leader addresses."""
+    retry_joins = config.get("storage", {}).get("raft", {}).pop("retry_join", [])
+    # If there is only one retry join, it is a dict
+    if isinstance(retry_joins, dict):
+        retry_joins = [retry_joins]
+    return config, {retry_join["leader_api_addr"] for retry_join in retry_joins}
 
 
 def config_file_content_matches(existing_content: str, new_content: str) -> bool:
@@ -144,28 +176,54 @@ def config_file_content_matches(existing_content: str, new_content: str) -> bool
         logger.info("New config file is empty")
         return existing_config_hcl == new_content_hcl
 
-    new_retry_joins = new_content_hcl["storage"]["raft"].pop("retry_join", [])
-
-    try:
-        existing_retry_joins = existing_config_hcl["storage"]["raft"].pop("retry_join", [])
-    except KeyError:
-        existing_retry_joins = []
-
-    # If there is only one retry join, it is a dict
-    if isinstance(new_retry_joins, dict):
-        new_retry_joins = [new_retry_joins]
-    if isinstance(existing_retry_joins, dict):
-        existing_retry_joins = [existing_retry_joins]
-
-    new_retry_join_api_addresses = {address["leader_api_addr"] for address in new_retry_joins}
-    existing_retry_join_api_addresses = {
-        address["leader_api_addr"] for address in existing_retry_joins
-    }
-
-    return (
-        new_retry_join_api_addresses == existing_retry_join_api_addresses
-        and new_content_hcl == existing_config_hcl
+    return _split_retry_join_addresses(existing_config_hcl) == _split_retry_join_addresses(
+        new_content_hcl
     )
+
+
+def get_config_action(
+    existing_content: str, new_content: str, vault: VaultClient | None
+) -> ConfigAction:
+    """Return the action a running Vault needs to apply a configuration change.
+
+    Vault reads retry_join only while it has no initialized local data and has not yet
+    reached a leader. Once it has, Vault ignores retry_join, so a restart would only
+    reseal it. The local Vault client is queried only when the decision depends on it.
+
+    Raises:
+        VaultClientError: If the decision depends on Vault's state and it can't be read.
+    """
+    existing_config, existing_addresses = _split_retry_join_addresses(hcl.loads(existing_content))
+    new_config, new_addresses = _split_retry_join_addresses(hcl.loads(new_content))
+    changed_keys = {
+        key
+        for key in existing_config.keys() | new_config.keys()
+        if existing_config.get(key) != new_config.get(key)
+    }
+    if changed_keys - RELOADABLE_CONFIG_KEYS:
+        return ConfigAction.RESTART
+    if existing_addresses != new_addresses and _vault_uses_retry_join(vault):
+        return ConfigAction.RESTART
+    if changed_keys:
+        return ConfigAction.RELOAD
+    return ConfigAction.NONE
+
+
+def _vault_uses_retry_join(vault: VaultClient | None) -> bool:
+    """Return whether Vault is still trying to join a cluster using retry_join.
+
+    Vault reports itself as initialized once it has initialized local data, has reached
+    a leader and is waiting to be unsealed to complete the join, or has joined.
+
+    Raises:
+        VaultClientError: If Vault's initialization status can't be read.
+    """
+    if not vault or not vault.is_api_available():
+        raise VaultClientError("Vault API is not available")
+    try:
+        return not vault.is_initialized()
+    except (VaultError, RequestException) as e:
+        raise VaultClientError(f"Failed to read Vault initialization status: {e}") from e
 
 
 def get_env_var(env_var: str) -> str | None:
