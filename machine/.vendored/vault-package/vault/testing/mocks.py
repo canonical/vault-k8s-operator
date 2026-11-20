@@ -34,9 +34,11 @@ class VaultCharmFixturesBase:
             self.mock_tls = stack.enter_context(
                 patch("charm.TLSManager", autospec=TLSManager)
             ).return_value
+            self.mock_tls.access_certificate_requires_trusted_ca.return_value = False
             self.mock_vault = stack.enter_context(
                 patch("charm.VaultClient", autospec=VaultClient)
             ).return_value
+            self.mock_vault.generate_self_signed_ca.return_value = ("cert-pem", "key-pem")
             self.mock_vault_autounseal_provider_manager = stack.enter_context(
                 patch("charm.AutounsealProviderManager", autospec=AutounsealProviderManager)
             ).return_value

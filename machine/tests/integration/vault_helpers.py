@@ -4,7 +4,6 @@
 
 """Vault helper functions."""
 
-import asyncio
 import logging
 import time
 from os.path import abspath
@@ -60,7 +59,7 @@ class Vault:
         response = self.client.sys.read_health_status()
         return response.status_code == VAULT_STATUS_ACTIVE
 
-    async def wait_for_node_to_be_unsealed(self) -> None:
+    def wait_for_node_to_be_unsealed(self) -> None:
         """Wait for the vault unit to be unsealed.
 
         Args:
@@ -70,7 +69,7 @@ class Vault:
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            await asyncio.sleep(5)
+            time.sleep(5)
             try:
                 if not self.is_sealed():
                     logger.info("Vault unit is unsealed.")
@@ -154,7 +153,7 @@ class Vault:
         self.client.delete(path=path)
         logger.info("Deleted data from Vault at path: %s", path)
 
-    async def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
+    def wait_for_raft_nodes(self, expected_num_nodes: int) -> None:
         """Wait for the specified number of units to join the raft cluster.
 
         Args:
@@ -166,7 +165,7 @@ class Vault:
         timeout = 300
         t0 = time.time()
         while time.time() < t0 + timeout:
-            await asyncio.sleep(5)
+            time.sleep(5)
             response = self.client.sys.read_raft_config()
             servers = response["data"]["config"]["servers"]
             current_num_voters = sum(1 for server in servers if server.get("voter", False))
