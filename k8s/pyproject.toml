@@ -29,7 +29,7 @@ dependencies = [
     "cosl>0.0.50,<1.10.2",
     # via tls_certificates
     "cryptography>=50.0.2; platform_machine != 's390x'",
-    "protobuf>=7.36.2; platform_machine != 's390x'",
+    "protobuf>=5.29.6; platform_machine != 's390x'",
     # via vault_kv
     "pytest-interface-tester",
     "lightkube",
