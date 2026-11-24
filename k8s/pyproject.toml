@@ -4,25 +4,48 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 dependencies = [
-    "ops>=3.7.0",
+    # ops 3.9 passes a new `deferred` argument that charm_tracing (up to 0.14)
+    # does not accept. Lift this cap once charm_tracing supports it.
+    "ops>=3.8.3,<3.9",
     "vault-package",
-    "charmlibs-interfaces-tls-certificates~=1.8",
+    "charmlibs-interfaces-tls-certificates",
+    "charmlibs-interfaces-certificate_transfer",
     # via certificate_transfer, ingress, tls_certificates, tracing and vault_kv
-    "pydantic==2.13.0",
+    "pydantic==2.14.3",
     # via charm_tracing
-    "opentelemetry-exporter-otlp-proto-http",
+    # Keep the exporter/API/SDK compatible; older exporters can otherwise be
+    # selected when the s390x protobuf constraint forces resolver backtracking.
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2; platform_machine != 's390x'",
+    "opentelemetry-exporter-otlp-proto-http==1.27.0; platform_machine == 's390x'",
+    # charm_tracing imports importlib_metadata on upgrade-charm; OpenTelemetry
+    # no longer pulls it in transitively.
+    "importlib-metadata",
     # via ingress_per_unit
     "jsonschema",
     # via grafana_dashboard
     "jinja2",
     # via grafana_dashboard, loki_push_api and prometheus_scrape
-    "cosl>0.0.50",
+    # cosl>=1.10.2 depends on diskcache, which has an unfixed CVE (CVE-2025-69872).
+    "cosl>0.0.50,<1.10.2",
     # via tls_certificates
-    "cryptography",
+    "cryptography>=50.0.2; platform_machine != 's390x'",
+    "protobuf>=7.36.2; platform_machine != 's390x'",
     # via vault_kv
     "pytest-interface-tester",
     "lightkube",
     "lightkube-models",
+    # Defense-in-depth: cffi 2.0.0 may also have calling-convention issues on s390x.
+    "cffi<2; platform_machine == 's390x'",
+    # cryptography >= 44 builds from source on s390x (no wheel) using Rust+aws-lc-rs;
+    # version 43.x uses cffi wrapping system OpenSSL and is confirmed to work.
+    "cryptography<44; platform_machine == 's390x'",
+    # protobuf >= 4.21 uses the upb C extension which crashes on s390x (unaligned
+    # memory access in upb_strtable_lookup2) both at import time and during interpreter
+    # shutdown. Version 4.20.x uses the older implementation that works correctly.
+    "protobuf<4.21; platform_machine == 's390x'",
+    # PyNaCl's security fix requires cffi>=2, which still needs s390x validation.
+    "pynacl>=1.6.2; platform_machine != 's390x'",
+    "pynacl<1.7; platform_machine == 's390x'",
 ]
 
 [dependency-groups]
@@ -30,13 +53,13 @@ test = [
     "allure-pytest",
     "coverage[toml]",
     "hvac",
-    "juju",
+    "jubilant",
     "lightkube",
     "lightkube-models",
     "ops[testing]",
     "pyhcl",  # import hcl
     "pytest",
-    "pytest-operator",
+    "pytest-jubilant",
     "requests",
 ]
 dev = ["codespell", "pyright", "ruff", "types-hvac"]
@@ -71,6 +94,13 @@ ignore = [
     "lib/charms/tempo_coordinator_k8s/",
     "lib/charms/traefik_k8s/",
     "lib/charms/observability_libs"
+]
+
+[tool.uv]
+# Fork resolution per platform to enforce the cffi<2 defense on s390x.
+environments = [
+    "platform_machine == 's390x'",
+    "platform_machine != 's390x'",
 ]
 
 [tool.uv.sources]

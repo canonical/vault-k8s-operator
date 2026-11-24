@@ -14,16 +14,3 @@ groups:
 
             Note, this alert can be silenced if the deployment is not HA (e.g. total number of node
             is <= 2).
-      - alert: VaultLowFailureTolerance
-        expr: vault_autopilot_failure_tolerance == 1
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Vault cluster has LOW failure tolerance and the quorum could be lost."
-          description: |
-            Vault autopilot reports that the cluster can only tolerate losing ONE healthy node.
-            Losing more than one healthy nodes will lead to the loss of quorum.
-
-            Note, this alert can be silenced if the deployment is not HA (e.g. total number of node
-            is <= 2).

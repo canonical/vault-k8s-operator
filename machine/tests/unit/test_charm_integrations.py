@@ -17,6 +17,7 @@ class TestCharmIntegrations:
         "vault-pki",
         "cos-agent",
         "send-ca-cert",
+        "receive-ca-cert",
     ]
 
     def test_given_integrations_when_start_then_integrations_are_complete(self):
