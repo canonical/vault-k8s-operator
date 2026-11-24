@@ -46,19 +46,32 @@ def test_given_first_stable_revision_in_track_when_refresh_then_status_is_active
             ),
             timeout=SHORT_TIMEOUT,
         )
+        unit_idle_since_before_refresh = {
+            unit_name: unit.juju_status.since
+            for unit_name, unit in juju.status().apps[APP_NAME].units.items()
+        }
         logger.info("Refreshing vault from built charm")
         refresh_application(juju, APP_NAME, vault_charm_path)
 
-    logger.info("Waiting for vault to be blocked after refresh")
-    juju.wait(
+    logger.info("Waiting for the refreshed charm to settle")
+    status = juju.wait(
         lambda s: (
-            jubilant.all_blocked(s, APP_NAME) and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            APP_NAME in s.apps
+            and s.apps[APP_NAME].charm_origin == "local"
+            and len(s.apps[APP_NAME].units) == NUM_VAULT_UNITS
+            and jubilant.all_agents_idle(s, APP_NAME)
+            and all(
+                unit.juju_status.since != unit_idle_since_before_refresh[unit_name]
+                for unit_name, unit in s.apps[APP_NAME].units.items()
+            )
+            and (jubilant.all_active(s, APP_NAME) or jubilant.all_blocked(s, APP_NAME))
         ),
         timeout=REFRESH_TIMEOUT,
     )
 
     with fast_forward(juju, JUJU_FAST_INTERVAL):
-        unseal_all_vault_units(juju, unseal_key)
+        if jubilant.all_blocked(status, APP_NAME):
+            unseal_all_vault_units(juju, unseal_key)
 
         logger.info("Waiting for vault to be active after refresh")
         juju.wait(
