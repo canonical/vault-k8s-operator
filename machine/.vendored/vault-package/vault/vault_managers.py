@@ -32,42 +32,51 @@ import contextlib
 import json
 import logging
 import os
+import re
 import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from functools import cached_property
-from typing import FrozenSet, Iterator, List, Mapping, MutableMapping, TextIO
+from typing import FrozenSet, Iterator, Mapping, MutableMapping, TextIO
 
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
+from charmlibs.interfaces.certificate_transfer import (
     CertificateTransferProvides,
+    CertificateTransferRequires,
 )
-from charms.data_platform_libs.v0.s3 import S3Requirer
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
     CertificateError,
     CertificateRequestAttributes,
     CertificateRequestErrorCode,
     PrivateKey,
+    ProviderCapabilities,
     ProviderCertificate,
     ProviderCertificateError,
     RequirerCertificateRequest,
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
+    chain_has_valid_order,
     generate_ca,
     generate_certificate,
     generate_csr,
     generate_private_key,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.vault_k8s.v0.vault_kv import VaultKvProvides
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import Encoding
 from ops import CharmBase, EventBase, Object, Relation
-from ops.pebble import PathError
+from ops.pebble import ConnectionError, PathError
+from ops.pebble import Error as PebbleError
+
 from vault.juju_facade import (
     FacadeError,
     JujuFacade,
     NoSuchSecretError,
     NoSuchStorageError,
+    SecretRemovedError,
     TransientJujuError,
 )
 from vault.vault_autounseal import (
@@ -80,16 +89,21 @@ from vault.vault_client import (
     PKICertificateError,
     SecretsBackend,
     Token,
+    VaultAuthenticationError,
     VaultClient,
     VaultClientError,
 )
 from vault.vault_s3 import S3, S3Error
 
 SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+RECEIVE_CA_CERT_RELATION_NAME = "receive-ca-cert"
 TLS_CERTIFICATE_ACCESS_RELATION_NAME = "tls-certificates-access"
 TLS_CERTIFICATES_PKI_RELATION_NAME = "tls-certificates-pki"
 TLS_CERTIFICATES_ACME_RELATION_NAME = "tls-certificates-acme"
 CA_CERTIFICATE_JUJU_SECRET_LABEL = "self-signed-vault-ca-certificate"
+_PEM_CERTIFICATE_PATTERN = re.compile(
+    r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", re.DOTALL
+)
 
 VAULT_CA_SUBJECT = "Vault self signed CA"
 AUTOUNSEAL_POLICY = """path "{mount}/encrypt/{key_name}" {{
@@ -118,9 +132,7 @@ _CERTIFICATE_ERROR_MESSAGES = {
     CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED: (
         "Vault PKI role rejected the requested DNS names."
     ),
-    CertificateRequestErrorCode.OTHER: (
-        "Vault PKI role rejected the certificate request."
-    ),
+    CertificateRequestErrorCode.OTHER: ("Vault PKI role rejected the certificate request."),
 }
 
 
@@ -137,7 +149,7 @@ def _map_vault_pki_errors(
         the error cannot be classified into a specific category.
     """
     error_text = str(error).lower()
-    
+
     # Use mutually exclusive conditions to avoid order dependency
     is_ip_error = (
         "ip_san" in error_text
@@ -150,14 +162,14 @@ def _map_vault_pki_errors(
         or "common name" in error_text
         or ("subject alternative name" in error_text and not is_ip_error)
     )
-    
+
     if is_ip_error:
         code = CertificateRequestErrorCode.IP_NOT_ALLOWED
     elif is_domain_error:
         code = CertificateRequestErrorCode.DOMAIN_NOT_ALLOWED
     else:
         code = CertificateRequestErrorCode.OTHER
-    
+
     return CertificateError(
         code=code,
         name=code.name,
@@ -325,6 +337,9 @@ class TLSManager(Object):
         self.email_address = email_address
         self.mode = self._get_mode()
         self.certificate_transfer = CertificateTransferProvides(charm, SEND_CA_CERT_RELATION_NAME)
+        self.trusted_ca_transfer = CertificateTransferRequires(
+            charm, RECEIVE_CA_CERT_RELATION_NAME
+        )
         if self.mode == TLSMode.TLS_INTEGRATION:
             self.tls_access = TLSCertificatesRequiresV4(
                 charm=charm,
@@ -333,6 +348,14 @@ class TLSManager(Object):
             )
             self.framework.observe(
                 self.charm.on[TLS_CERTIFICATE_ACCESS_RELATION_NAME].relation_changed,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificate_set_updated,
+                self._configure_tls_integration,
+            )
+            self.framework.observe(
+                self.trusted_ca_transfer.on.certificates_removed,
                 self._configure_tls_integration,
             )
         elif self.mode == TLSMode.SELF_SIGNED:
@@ -393,9 +416,10 @@ class TLSManager(Object):
             logger.debug("Workload is not accessible")
             return
         if self.tls_access:
-            logger.warning("TLS access relation found, skipping self signed certificate generation.")
+            logger.warning(
+                "TLS access relation found, skipping self signed certificate generation."
+            )
             return
-        workload_ca_certificate = self.pull_tls_file_from_workload(File.CA)
         try:
             secret_ca_certificate = ca_certificate = self.juju_facade.get_secret_content_values(
                 "certificate",
@@ -404,26 +428,18 @@ class TLSManager(Object):
         except NoSuchSecretError:
             secret_ca_certificate = ca_certificate = None
 
-        if self.charm.unit.is_leader():
-            if not secret_ca_certificate:
-                ca_private_key, ca_certificate = generate_vault_ca_certificate()
-                logger.info("Generated new CA certificate.")
-                self.juju_facade.set_app_secret_content(
-                    {"privatekey": ca_private_key, "certificate": ca_certificate},
-                    CA_CERTIFICATE_JUJU_SECRET_LABEL,
-                )
-        if (
-            workload_ca_certificate
-            and existing_certificate_is_self_signed(
-                ca_certificate=Certificate.from_string(workload_ca_certificate)
+        if self.charm.unit.is_leader() and not secret_ca_certificate:
+            ca_private_key, ca_certificate = generate_vault_ca_certificate()
+            logger.info("Generated new CA certificate.")
+            self.juju_facade.set_app_secret_content(
+                {"privatekey": ca_private_key, "certificate": ca_certificate},
+                CA_CERTIFICATE_JUJU_SECRET_LABEL,
             )
-            and Certificate.from_string(workload_ca_certificate)
-            == Certificate.from_string(secret_ca_certificate)
-        ):
-            workload_unit_cert = self.pull_tls_file_from_workload(File.CERT)
-            if workload_unit_cert and self._unit_certificate_sans_match_current_request(workload_unit_cert):
-                logger.debug("Found existing self signed certificate in workload with matching attributes.")
-                return
+        if self._existing_self_signed_certificate_matches(secret_ca_certificate):
+            logger.debug(
+                "Found existing self signed certificate in workload with matching attributes."
+            )
+            return
         if not self.ca_certificate_secret_exists():
             logger.debug("No CA certificate found.")
             return
@@ -458,6 +474,22 @@ class TLSManager(Object):
         )
         self._restart_vault()
 
+    def _existing_self_signed_certificate_matches(self, secret_ca_certificate: str | None) -> bool:
+        """Return whether the workload certificates match the secret CA and current request."""
+        if not secret_ca_certificate:
+            return False
+        workload_ca_certificate = self.pull_tls_file_from_workload(File.CA)
+        if not workload_ca_certificate:
+            return False
+        ca_certificate = Certificate.from_string(workload_ca_certificate)
+        if not existing_certificate_is_self_signed(
+            ca_certificate
+        ) or ca_certificate != Certificate.from_string(secret_ca_certificate):
+            return False
+        return self._unit_certificate_sans_match_current_request(
+            self.pull_tls_file_from_workload(File.CERT)
+        )
+
     def _configure_tls_integration(self, _: EventBase) -> None:
         """Configure the charm with the TLS integration relation.
 
@@ -490,28 +522,80 @@ class TLSManager(Object):
                 self.charm.unit.name,
             )
             restart = True
-        if str(assigned_certificate.certificate) != self.pull_tls_file_from_workload(File.CERT):
-            self._push_tls_file_to_workload(File.CERT, str(assigned_certificate.certificate))
+        leaf = str(assigned_certificate.certificate)
+        certificate_chain = "\n".join(
+            dict.fromkeys(
+                [leaf]
+                + [
+                    str(certificate)
+                    for certificate in assigned_certificate.chain
+                    if not chain_has_valid_order([str(certificate), str(certificate)])
+                ]
+            )
+        )
+        if certificate_chain != self.pull_tls_file_from_workload(File.CERT):
+            self._push_tls_file_to_workload(File.CERT, certificate_chain)
             logger.info(
                 "Certificate from access relation saved for unit %s.",
                 self.charm.unit.name,
             )
             restart = True
-        if self.pull_tls_file_from_workload(File.CA) != str(assigned_certificate.ca):
-            self._push_tls_file_to_workload(File.CA, str(assigned_certificate.ca))
+        ca_bundle = self._get_ca_bundle(str(assigned_certificate.ca))
+        if self.pull_tls_file_from_workload(File.CA) != ca_bundle:
+            self._push_tls_file_to_workload(File.CA, ca_bundle)
             restart = True
         if restart:
             self._restart_vault()
 
+    def _get_ca_bundle(self, ca_certificate: str) -> str:
+        """Return transferred CAs, or the access CA when it is a root CA."""
+        trusted_cas = {cert.strip() for cert in self.trusted_ca_transfer.get_all_certificates()}
+        if chain_has_valid_order([ca_certificate, ca_certificate]):
+            trusted_cas.add(ca_certificate.strip())
+        return "\n".join(sorted(trusted_cas))
+
+    def access_certificate_requires_trusted_ca(self) -> bool:
+        """Return whether the access certificate lacks a matching trusted root CA."""
+        if self.mode != TLSMode.TLS_INTEGRATION:
+            return False
+        certificate_bundle = self.pull_tls_file_from_workload(File.CERT)
+        if not certificate_bundle:
+            return False
+        ca_bundle = self.pull_tls_file_from_workload(File.CA)
+        if not ca_bundle:
+            return True
+        try:
+            certificates = x509.load_pem_x509_certificates(certificate_bundle.encode())
+            trusted_cas = x509.load_pem_x509_certificates(ca_bundle.encode())
+        except ValueError:
+            return True
+        chain = [certificate.public_bytes(Encoding.PEM).decode() for certificate in certificates]
+        for trusted_ca in trusted_cas:
+            root = trusted_ca.public_bytes(Encoding.PEM).decode()
+            if trusted_ca.subject == trusted_ca.issuer and chain_has_valid_order(
+                [*chain, root, root]
+            ):
+                return False
+        return True
+
     def send_ca_cert(self):
         """Send the existing CA cert in the workload to all relations."""
-        if ca := self.pull_tls_file_from_workload(File.CA):
+        if not self.workload.is_accessible():
+            logger.debug("Workload is not accessible")
+            return
+        try:
+            ca = self.pull_tls_file_from_workload(File.CA)
+            certificates = set(_PEM_CERTIFICATE_PATTERN.findall(ca))
+        except PebbleError as e:
+            logger.warning("Cannot send CA certificate because workload is unavailable: %s", e)
+            return
+        if ca:
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.add_certificates(
-                    certificates={ca}, relation_id=relation.id
+                    certificates=certificates, relation_id=relation.id
                 )
                 logger.info("Sent CA certificate to relation %s", relation.id)
-        else:
+        elif self.workload.is_accessible():
             for relation in self.juju_facade.get_relations(SEND_CA_CERT_RELATION_NAME):
                 self.certificate_transfer.remove_all_certificates(relation_id=relation.id)
                 logger.info("Removed CA cert from relation %s", relation.id)
@@ -589,7 +673,7 @@ class TLSManager(Object):
                 self.get_tls_file_path_in_workload(file),
             ) as file_content:
                 return file_content.read().strip()
-        except (PathError, FileNotFoundError):
+        except (PathError, FileNotFoundError, ConnectionError, PebbleError):
             return ""
 
     def ca_certificate_secret_exists(self) -> bool:
@@ -606,8 +690,11 @@ class TLSManager(Object):
             file: a File object that determines which file to write.
             data: the data to write into that file.
         """
-        self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
-        logger.debug("Pushed %s file to workload", file.name)
+        try:
+            self.workload.push(path=self.get_tls_file_path_in_workload(file), source=data)
+            logger.debug("Pushed %s file to workload", file.name)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push %s file to workload: %s", file.name, e)
 
     def push_autounseal_ca_cert(self, ca_cert: str) -> None:
         """Push the CA certificate to the workload.
@@ -615,7 +702,10 @@ class TLSManager(Object):
         Args:
             ca_cert: The CA certificate to push to the workload.
         """
-        self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        try:
+            self.workload.push(self.get_tls_file_path_in_workload(File.AUTOUNSEAL_CA), ca_cert)
+        except (ConnectionError, PebbleError) as e:
+            logger.warning("Failed to push autounseal CA certificate to workload: %s", e)
 
     def _remove_tls_file_from_workload(self, file: File) -> None:
         """Remove the certificate files that are used for authentication.
@@ -625,7 +715,7 @@ class TLSManager(Object):
         """
         try:
             self.workload.remove_path(path=self.get_tls_file_path_in_workload(file))
-        except ValueError:
+        except (ValueError, ConnectionError, PebbleError):
             pass
         logger.debug("Removed %s file from workload.", file.name)
 
@@ -638,7 +728,10 @@ class TLSManager(Object):
         Returns:
             bool: True if file exists.
         """
-        return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        try:
+            return self.workload.exists(path=f"{self.tls_directory_path}/{file.name.lower()}.pem")
+        except (ConnectionError, PebbleError):
+            return False
 
     def _unit_certificate_sans_match_current_request(self, unit_cert_content: str) -> bool:
         """Check if the unit certificate attributes match the current TLS manager configuration.
@@ -651,12 +744,12 @@ class TLSManager(Object):
         """
         try:
             unit_cert = Certificate.from_string(unit_cert_content)
-            
+
             cert_sans_dns = set(unit_cert.sans_dns) if unit_cert.sans_dns else set()
             cert_sans_ip = set(unit_cert.sans_ip) if unit_cert.sans_ip else set()
             current_sans_dns = set(self.sans_dns) if self.sans_dns else set()
             current_sans_ip = set(self.sans_ip) if self.sans_ip else set()
-            
+
             return (
                 cert_sans_dns == current_sans_dns
                 and cert_sans_ip == current_sans_ip
@@ -788,6 +881,40 @@ class _PKIUtils:
     def __init__(self, vault_client: VaultClient, mount_point: str):
         self._vault_client = vault_client
         self._mount_point = mount_point
+
+    @staticmethod
+    def regenerate_private_key_if_type_changed(requirer: TLSCertificatesRequiresV4) -> bool:
+        """Regenerate the requirer's private key if it doesn't match the configured key type.
+
+        The TLS library keeps an existing private key when the requested key algorithm or size
+        changes, so the key has to be regenerated explicitly. Regenerating it also sends a new
+        certificate request to the provider.
+
+        Returns:
+            True if the private key was regenerated, False otherwise.
+        """
+        private_key = requirer.private_key
+        if not private_key:
+            return False
+        try:
+            if (
+                private_key.algorithm == requirer.key_algorithm
+                and private_key.key_size == requirer.key_size
+            ):
+                return False
+            logger.info(
+                "Private key for %s is %s-%s but %s-%s is configured, regenerating it",
+                requirer.relationship_name,
+                private_key.algorithm.value,
+                private_key.key_size,
+                requirer.key_algorithm.value,
+                requirer.key_size,
+            )
+            requirer.regenerate_private_key()
+        except TLSCertificatesError as e:
+            logger.error("Failed to regenerate private key: %s", e)
+            return False
+        return True
 
     def get_vault_service_ca_certificate(self) -> Certificate | None:
         """Get the current intermediate CA certificate from the Vault service."""
@@ -1003,6 +1130,53 @@ class AutounsealProviderManager:
         )
         return key_name, role_id, secret_id
 
+    def get_outstanding_requests(self) -> list[Relation]:
+        """Get relations that need credentials created or re-created.
+
+        This includes relations that:
+        - Have no credentials issued yet (new requests)
+        - Have credentials in Juju that are stale in Vault (e.g. after a
+          Raft snapshot restore)
+
+        Returns:
+            A list of relations that need credentials to be (re-)created.
+        """
+        outstanding: list[Relation] = []
+        all_relations = self._juju_facade.get_active_relations(self._provides.relation_name)
+        for relation in all_relations:
+            try:
+                credentials_secret_id = self._juju_facade.get_app_relation_data(
+                    self._provides.relation_name, relation.id
+                ).get("credentials_secret_id")
+            except FacadeError:
+                outstanding.append(relation)
+                continue
+            if not credentials_secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                _, secret_id = self._juju_facade.get_secret_content_values(
+                    "role-id",
+                    "secret-id",
+                    id=credentials_secret_id,
+                )
+            except (NoSuchSecretError, SecretRemovedError):
+                outstanding.append(relation)
+                continue
+            if not secret_id:
+                outstanding.append(relation)
+                continue
+            try:
+                approle_name = Naming.autounseal_approle_name(relation.id)
+                self._client.read_role_secret(approle_name, secret_id)
+            except VaultClientError:
+                logger.warning(
+                    "Autounseal credentials for relation %s are stale, will re-create",
+                    relation.id,
+                )
+                outstanding.append(relation)
+        return outstanding
+
     def _get_existing_keys(self) -> list[str]:
         return self._client.list(f"{self.mount_path}/keys")
 
@@ -1058,7 +1232,11 @@ class AutounsealRequirerManager:
             existing_token = None
         # If we don't already have a token, or if the existing token is invalid,
         # authenticate with the AppRole details to generate a new token.
-        if not existing_token or not external_vault.authenticate(Token(existing_token)):
+        try:
+            token_valid = existing_token and external_vault.authenticate(Token(existing_token))
+        except VaultAuthenticationError:
+            token_valid = False
+        if not token_valid:
             external_vault.authenticate(
                 AppRole(autounseal_details.role_id, autounseal_details.secret_id)
             )
@@ -1076,6 +1254,8 @@ class AutounsealRequirerManager:
 class PKIManager:
     """Encapsulates the business logic for managing PKI certificates in Vault from a Charm."""
 
+    SELF_SIGNED_CA_SECRET_LABEL = "vault-pki-self-signed-ca"
+
     def __init__(
         self,
         charm: CharmBase,
@@ -1084,6 +1264,7 @@ class PKIManager:
         mount_point: str,
         role_name: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1094,7 +1275,8 @@ class PKIManager:
         province: str | None,
         locality: str | None,
         vault_pki: TLSCertificatesProvidesV4,
-        tls_certificates_pki: TLSCertificatesRequiresV4,
+        tls_certificates_pki: TLSCertificatesRequiresV4 | None = None,
+        self_signed_ca_validity_hours: int = 87600,
     ):
         """Create a new PKIManager object.
 
@@ -1107,8 +1289,10 @@ class PKIManager:
             mount_point: The mount point in Vault for the PKI backend
             role_name: The role name for the PKI backend
             vault_pki: The vault_pki provider relation helper library
-            tls_certificates_pki: The tls_certificates_pki requirer relation helper library
+            tls_certificates_pki: The tls_certificates_pki requirer relation helper library.
+                If provided, external CA mode is used. If None, self-signed CA mode is used.
             allowed_domains: The domains that the PKI engine will allow certificates to be issued for
+            allow_bare_domains: Whether the PKI engine will allow the exact domains in allowed_domains
             allow_subdomains: Whether the PKI engine will allow subdomains to be issued for
             allow_wildcard_certificates: Whether the PKI engine will allow wildcard certificates to be issued
             allow_any_name: Whether the PKI engine will allow any name to be issued for
@@ -1118,6 +1302,8 @@ class PKIManager:
             country: The country to be included in the issued certificate
             province: The province to be included in the issued certificate
             locality: The locality to be included in the issued certificate
+            self_signed_ca_validity_hours: The validity period in hours for self-signed CA.
+                Only used when tls_certificates_pki is None. Defaults to 87600 (10 years).
         """
         self._vault_client = vault_client
         self._juju_facade = JujuFacade(charm)
@@ -1130,6 +1316,7 @@ class PKIManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1143,6 +1330,12 @@ class PKIManager:
         self._country = country if country is not None else None
         self._province = province if province is not None else None
         self._locality = locality if locality is not None else None
+        self._self_signed_ca_validity_hours = self_signed_ca_validity_hours
+
+    @property
+    def _self_signed_ca(self) -> bool:
+        """Return True if self-signed CA mode should be used (no external CA relation)."""
+        return self._tls_certificates_pki is None
 
     def _get_pki_intermediate_ca_from_relation(
         self,
@@ -1151,6 +1344,8 @@ class PKIManager:
 
         This is the CA certificate that the provider charm has issued to Vault.
         """
+        if not self._tls_certificates_pki:
+            return None, None
         provider_certificate, private_key = self._tls_certificates_pki.get_assigned_certificate(
             certificate_request=self._certificate_request_attributes
         )
@@ -1172,16 +1367,26 @@ class PKIManager:
         Additionally, this method ensures that the intermediate CA certificate
         is renewed if necessary.
         """
-        update_ca_certificate = True
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki certificate requests")
-            return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
-            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
             return
         self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
         logger.info("Enabled PKI secrets engine at %s", self._mount_point)
 
+        if self._self_signed_ca:
+            self._configure_self_signed_ca()
+        else:
+            self._configure_external_ca()
+
+    def _configure_external_ca(self):
+        """Configure the PKI backend using an external CA from the relation."""
+        if not self._tls_certificates_pki:
+            logger.debug("No PKI relation exists: `%s`", TLS_CERTIFICATES_PKI_RELATION_NAME)
+            return
+        if self._pki_utils.regenerate_private_key_if_type_changed(self._tls_certificates_pki):
+            logger.info("Waiting for a new PKI intermediate CA certificate")
+            return
+        update_ca_certificate = True
         certificate_from_provider, private_key = self._get_pki_intermediate_ca_from_relation()
         if not certificate_from_provider or not private_key:
             return
@@ -1213,11 +1418,110 @@ class PKIManager:
         issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(
             certificate_from_provider.certificate
         )
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
 
+    def _configure_self_signed_ca(self):
+        """Configure the PKI backend using a Vault self-signed CA."""
+        ca_certificate = self._ensure_self_signed_ca_in_vault()
+        issued_certificates_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
+        self._create_or_update_pki_role(issued_certificates_validity)
+        self.make_latest_pki_issuer_default()
+
+    def _ensure_self_signed_ca_in_vault(self) -> Certificate:
+        """Ensure a self-signed CA exists in both Juju secrets and Vault.
+
+        Handles three scenarios:
+        1. CA exists in secret and Vault - no action needed (idempotent)
+        2. CA exists in secret but not Vault - re-import (e.g. after Raft restore)
+        3. No CA or config changed - generate a new one
+
+        Returns:
+            The CA certificate that is now active in Vault.
+        """
+        existing_cert, existing_key = self._get_self_signed_ca_from_secret()
+
+        if existing_cert and existing_key:
+            # Config changed (e.g. common_name rotation) - regenerate
+            if existing_cert.common_name != self._certificate_request_attributes.common_name:
+                logger.info(
+                    "Self-signed CA common name changed from %s to %s, regenerating",
+                    existing_cert.common_name,
+                    self._certificate_request_attributes.common_name,
+                )
+                return self._generate_and_store_self_signed_ca()
+
+            # CA in secret matches Vault - nothing to do
+            vault_service_ca_certificate = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_service_ca_certificate and vault_service_ca_certificate == existing_cert:
+                logger.debug("Self-signed CA already configured in the PKI secrets engine")
+                return existing_cert
+
+            # CA exists in secret but not in Vault (e.g. after Raft snapshot restore)
+            self._vault_client.import_ca_certificate_and_key(
+                certificate=str(existing_cert),
+                private_key=str(existing_key),
+                mount=self._mount_point,
+            )
+            return existing_cert
+
+        # No CA exists yet - generate a new one
+        return self._generate_and_store_self_signed_ca()
+
+    def _generate_and_store_self_signed_ca(self) -> Certificate:
+        """Generate a new self-signed CA, store in Juju secret, and return the certificate."""
+        new_cert, new_key = self._generate_self_signed_ca()
+        # generate_root already creates the issuer in Vault, no need to import
+        self._juju_facade.set_app_secret_content(
+            {"certificate": new_cert, "privatekey": new_key},
+            label=self.SELF_SIGNED_CA_SECRET_LABEL,
+        )
+        return Certificate.from_string(new_cert)
+
+    def _generate_self_signed_ca(self) -> tuple[str, str]:
+        """Generate a new self-signed CA using Vault.
+
+        Returns:
+            tuple: (certificate_pem, private_key_pem)
+        """
+        attrs = self._certificate_request_attributes
+        return self._vault_client.generate_self_signed_ca(
+            mount=self._mount_point,
+            common_name=attrs.common_name,
+            ttl=f"{self._self_signed_ca_validity_hours}h",
+            sans_dns=list(attrs.sans_dns) if attrs.sans_dns else None,
+            country=attrs.country_name,
+            province=attrs.state_or_province_name,
+            locality=attrs.locality_name,
+            organization=attrs.organization,
+            organizational_unit=attrs.organizational_unit,
+        )
+
+    def _get_self_signed_ca_from_secret(self) -> tuple[Certificate | None, str | None]:
+        """Retrieve the self-signed CA from Juju secrets.
+
+        Returns:
+            tuple: (certificate, private_key) or (None, None) if not found.
+        """
+        try:
+            cert_pem, key_pem = self._juju_facade.get_secret_content_values(
+                "certificate",
+                "privatekey",
+                label=self.SELF_SIGNED_CA_SECRET_LABEL,
+            )
+            if cert_pem and key_pem:
+                return Certificate.from_string(cert_pem), key_pem
+        except (FacadeError, SecretRemovedError, NoSuchSecretError, TLSCertificatesError):
+            logger.debug("Self-signed CA secret not found or incomplete")
+        return None, None
+
+    def _create_or_update_pki_role(self, issued_certificates_validity: int) -> None:
+        """Create or update the PKI role if the configuration has changed."""
         if not self._vault_client.role_config_matches_given_config(
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -1235,6 +1539,7 @@ class PKIManager:
                 mount=self._mount_point,
                 role=self._role_name,
                 max_ttl=f"{issued_certificates_validity}s",
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
@@ -1245,7 +1550,6 @@ class PKIManager:
                 province=self._province,
                 locality=self._locality,
             )
-        self.make_latest_pki_issuer_default()
 
     def make_latest_pki_issuer_default(self):
         """Make the latest issuer the default issuer."""
@@ -1259,7 +1563,9 @@ class PKIManager:
         if not self._juju_facade.is_leader:
             logger.debug("Only leader unit can handle a vault-pki request")
             return
-        if not self._juju_facade.relation_exists(TLS_CERTIFICATES_PKI_RELATION_NAME):
+        if not self._self_signed_ca and not self._juju_facade.relation_exists(
+            TLS_CERTIFICATES_PKI_RELATION_NAME
+        ):
             logger.debug("TLS Certificates PKI relation not created")
             return
         outstanding_pki_requests = self._vault_pki.get_outstanding_certificate_requests()
@@ -1268,18 +1574,32 @@ class PKIManager:
                 requirer_csr=pki_request,
             )
 
+    def _get_ca_certificate(self) -> Certificate | None:
+        """Get the CA certificate for signing, from relation or self-signed secret."""
+        if self._self_signed_ca:
+            cert, _ = self._get_self_signed_ca_from_secret()
+            if cert:
+                return cert
+            vault_ca = self._pki_utils.get_vault_service_ca_certificate()
+            if vault_ca:
+                return vault_ca
+            return None
+        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
+        return provider_certificate.certificate if provider_certificate else None
+
     def _generate_pki_certificate_for_requirer(self, requirer_csr: RequirerCertificateRequest):
         if not self._vault_client.is_pki_role_created(
             role=self._role_name, mount=self._mount_point
         ):
             logger.debug("PKI role not created")
             return
-        provider_certificate, _ = self._get_pki_intermediate_ca_from_relation()
-        if not provider_certificate:
+        ca_certificate = self._get_ca_certificate()
+        if not ca_certificate:
+            logger.debug(
+                "No CA certificate available for the PKI backend, cannot sign certificate requests"
+            )
             return
-        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(
-            provider_certificate.certificate
-        )
+        allowed_cert_validity = self._pki_utils.calculate_certificates_ttl(ca_certificate)
         try:
             certificate = self._vault_client.sign_pki_certificate_signing_request(
                 mount=self._mount_point,
@@ -1295,19 +1615,26 @@ class PKIManager:
             )
             self._report_certificate_request_error(requirer_csr, error)
             return
+        chain = [Certificate.from_string(certificate.certificate)] + [
+            Certificate.from_string(cert) for cert in certificate.chain
+        ]
+        if not self._self_signed_ca:
+            external_ca, _ = self._get_pki_intermediate_ca_from_relation()
+            if external_ca and external_ca.ca not in chain:
+                chain.append(external_ca.ca)
         provider_certificate = ProviderCertificate(
             relation_id=requirer_csr.relation_id,
             certificate=Certificate.from_string(certificate.certificate),
             certificate_signing_request=requirer_csr.certificate_signing_request,
             ca=Certificate.from_string(certificate.ca),
-            chain=[Certificate.from_string(certificate.certificate)] + [Certificate.from_string(cert) for cert in certificate.chain],
+            chain=chain,
         )
         self._vault_pki.set_relation_certificate(
             provider_certificate=provider_certificate,
         )
 
     def _report_certificate_request_error(
-        self, requirer_csr: RequirerCertificateRequest, error: VaultClientError
+        self, requirer_csr: RequirerCertificateRequest, error: PKICertificateError
     ) -> None:
         """Set certificate error for a given certificate request."""
         certificate_error = _map_vault_pki_errors(error)
@@ -1323,6 +1650,35 @@ class PKIManager:
     def _allowed_domains_list(self) -> list[str]:
         """Return the allowed domains for the ACME server in Vault as a list."""
         return [domain.strip() for domain in self._allowed_domains.split(",")]
+
+    @staticmethod
+    def build_provider_capabilities(
+        *,
+        common_name: str,
+        allowed_domains: str | None,
+        allow_subdomains: bool | None,
+        allow_wildcard_certificates: bool | None,
+        allow_any_name: bool | None,
+        allow_ip_sans: bool | None,
+    ) -> ProviderCapabilities:
+        """Build the capabilities advertised to `vault-pki` requirers.
+
+        This is the single source of truth for the capabilities: it maps the
+        exact same config values used to configure the Vault PKI role, so the
+        advertised capabilities can never drift out of sync with what the role
+        actually enforces. Values are advertised as-is; an unset config option
+        is advertised as unspecified (``None``) rather than an assumed default.
+        """
+        resolved_domains = allowed_domains if allowed_domains else common_name
+        allowed_domains_list = [domain.strip() for domain in resolved_domains.split(",")]
+        return ProviderCapabilities(
+            supports_ip_sans=allow_ip_sans,
+            supports_wildcard_dns=allow_wildcard_certificates,
+            supports_subdomain=allow_subdomains,
+            supports_ca_certificates=False,
+            allowed_domains=None if allow_any_name else allowed_domains_list,
+            provider_type="vault",
+        )
 
 
 class KVManager:
@@ -1488,7 +1844,13 @@ class KVManager:
             return False
         if not role_secret_id:
             return False
-        role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        try:
+            role_data = self._vault_client.read_role_secret(role_name, role_secret_id)
+        except VaultClientError:
+            logger.warning(
+                "Failed to read role secret for %s, will re-create credentials", role_name
+            )
+            return False
         if egress_subnets == role_data["cidr_list"]:
             return True
         return False
@@ -1779,10 +2141,15 @@ class RaftManager:
             raise ManagerError("Only the leader unit can bootstrap a Vault cluster")
         if not self._juju_facade.planned_units_for_app == 1:
             raise ManagerError("Bootstrapping a Vault cluster requires exactly one unit")
+        if not self._workload.is_accessible():
+            raise ManagerError("Workload is not accessible")
 
-        self._workload.stop(self._service_name)
-        self._push_peers_json(node_id, address)
-        self._workload.restart(self._service_name)
+        try:
+            self._workload.stop(self._service_name)
+            self._push_peers_json(node_id, address)
+            self._workload.restart(self._service_name)
+        except PebbleError as e:
+            raise ManagerError(f"Failed to bootstrap Vault cluster: {e}") from e
 
         logger.info("Vault cluster bootstrapped in Raft mode")
 
@@ -1819,6 +2186,7 @@ class ACMEManager:
         role_name: str,
         vault_address: str,
         allowed_domains: str | None,
+        allow_bare_domains: bool | None,
         allow_subdomains: bool | None,
         allow_wildcard_certificates: bool | None,
         allow_any_name: bool | None,
@@ -1841,6 +2209,7 @@ class ACMEManager:
         self._allowed_domains = (
             allowed_domains if allowed_domains else certificate_request_attributes.common_name
         )
+        self._allow_bare_domains = allow_bare_domains if allow_bare_domains is not None else True
         self._allow_subdomains = allow_subdomains if allow_subdomains is not None else False
         self._allow_wildcard_certificates = (
             allow_wildcard_certificates if allow_wildcard_certificates is not None else True
@@ -1912,6 +2281,7 @@ class ACMEManager:
             role=self._role_name,
             mount=self._mount_point,
             allowed_domains=self._allowed_domains_list,
+            allow_bare_domains=self._allow_bare_domains,
             allow_subdomains=self._allow_subdomains,
             allow_wildcard_certificates=self._allow_wildcard_certificates,
             allow_any_name=self._allow_any_name,
@@ -1928,6 +2298,7 @@ class ACMEManager:
                 role=self._role_name,
                 max_ttl=f"{max_ttl}s",
                 mount=self._mount_point,
+                allow_bare_domains=self._allow_bare_domains,
                 allow_subdomains=self._allow_subdomains,
                 allow_wildcard_certificates=self._allow_wildcard_certificates,
                 allow_any_name=self._allow_any_name,
@@ -1958,6 +2329,9 @@ class ACMEManager:
                 "No TLS relation exists to configure ACME server: `%s`",
                 TLS_CERTIFICATES_ACME_RELATION_NAME,
             )
+            return
+        if self._pki_utils.regenerate_private_key_if_type_changed(self._tls_certificates_acme):
+            logger.info("Waiting for a new ACME intermediate CA certificate")
             return
         self._vault_client.enable_secrets_engine(SecretsBackend.PKI, self._mount_point)
 

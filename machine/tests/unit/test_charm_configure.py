@@ -94,6 +94,7 @@ class TestCharmConfigure(VaultCharmFixtures):
     def test_given_leader_when_configure_then_vault_service_is_started(self):
         self.mock_autounseal_requires_get_details.return_value = None
         self.mock_machine.pull.return_value = StringIO("")
+        self.mock_machine.get_service.return_value = None
         vault_snap = MagicMock(spec=Snap)
         snap_cache = {"vault": vault_snap}
         self.mock_snap_cache.return_value = snap_cache
@@ -415,7 +416,9 @@ class TestCharmConfigure(VaultCharmFixtures):
             ingress_address="myhostname",
         )
         relation = MockRelation(id=vault_autounseal_relation.id)
-        self.mock_autounseal_provides_get_relations_without_credentials.return_value = [relation]
+        self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = [
+            relation
+        ]
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},
@@ -504,7 +507,9 @@ class TestCharmConfigure(VaultCharmFixtures):
             ingress_address="myhostname",
         )
         relation = MockRelation(id=vault_autounseal_relation.id)
-        self.mock_autounseal_provides_get_relations_without_credentials.return_value = [relation]
+        self.mock_vault_autounseal_provider_manager.get_outstanding_requests.return_value = [
+            relation
+        ]
         approle_secret = testing.Secret(
             label="vault-approle-auth-details",
             tracked_content={"role-id": "role id", "secret-id": "secret id"},

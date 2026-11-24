@@ -12,6 +12,7 @@ class TestCharmConfig:
         "default_lease_ttl": "168h",
         "max_lease_ttl": "720h",
         "log_level": "info",
+        "logrotate_frequency": "daily",
         "access_sans_dns": "example.com",
         "access_sans_ip": "10.0.0.1",
         "access_country_name": "US",
@@ -29,6 +30,7 @@ class TestCharmConfig:
         "pki_ca_organizational_unit": "IT",
         "pki_ca_email_address": "info@example.com",
         "pki_allowed_domains": "example.com",
+        "pki_allow_bare_domains": True,
         "pki_allow_subdomains": False,
         "pki_allow_wildcard_certificates": True,
         "pki_allow_any_name": False,
@@ -38,6 +40,8 @@ class TestCharmConfig:
         "pki_country": "US",
         "pki_province": "CA",
         "pki_locality": "San Francisco",
+        "pki_self_signed_ca_validity": 87600,
+        "pki_ca_key_type": "rsa-2048",
         "acme_ca_common_name": "example.com",
         "acme_ca_sans_dns": "example.com",
         "acme_ca_country_name": "US",
@@ -47,6 +51,7 @@ class TestCharmConfig:
         "acme_ca_organizational_unit": "IT",
         "acme_ca_email_address": "info@example.com",
         "acme_allowed_domains": "example.com",
+        "acme_allow_bare_domains": True,
         "acme_allow_subdomains": False,
         "acme_allow_wildcard_certificates": True,
         "acme_allow_any_name": False,
@@ -56,6 +61,7 @@ class TestCharmConfig:
         "acme_country": "US",
         "acme_province": "CA",
         "acme_locality": "San Francisco",
+        "acme_ca_key_type": "rsa-2048",
     }
 
     def test_given_config_with_defaults_then_default_config_values_are_correct(self):
@@ -66,6 +72,7 @@ class TestCharmConfig:
             assert manager.charm.model.config.get("default_lease_ttl") == "168h"
             assert manager.charm.model.config.get("max_lease_ttl") == "720h"
             assert manager.charm.model.config.get("log_level") == "info"
+            assert manager.charm.model.config.get("logrotate_frequency") == "daily"
             assert not manager.charm.model.config.get("pki_allow_subdomains")
             assert manager.charm.model.config.get("pki_allow_wildcard_certificates")
             assert not manager.charm.model.config.get("pki_allow_any_name")
