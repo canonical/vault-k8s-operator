@@ -7,6 +7,7 @@ on:
     forks: ["*"]
 if: github.event.pull_request.merged == true
 engine: copilot
+max-ai-credits: 500
 permissions:
   contents: read
   pull-requests: read
