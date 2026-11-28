@@ -28,7 +28,7 @@ dependencies = [
     # cosl>=1.10.2 depends on diskcache, which has an unfixed CVE (CVE-2025-69872).
     "cosl>0.0.50,<1.10.2",
     # via tls_certificates
-    "cryptography>=50.0.2; platform_machine != 's390x'",
+    "cryptography>=49.0.0; platform_machine != 's390x'",
     "protobuf>=7.36.2; platform_machine != 's390x'",
     # via vault_kv
     "pytest-interface-tester",
